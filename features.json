@@ -1,7 +1,7 @@
 {
   "$schema": "本文件为 T8-penguin-canvas 节点清单防丢失锁,任何节点删减都需要在 roadmap.md 中说明并更新本文件。",
-  "version": "1.0.4",
-  "lastUpdated": "2026-05-22",
+  "version": "1.0.5",
+  "lastUpdated": "2026-05-21",
   "layout": {
     "mode": "single-column-sidebar",
     "description": "画布管理 + 节点列表合并为一列 Sidebar，主体变为两栏布局(Sidebar + Canvas)，紧凑化节省约 96px 横向空间。",
@@ -47,7 +47,7 @@
     "htmlAttrs": ["data-theme-style", "data-theme-mode"]
   },
   "repository": "https://github.com/T8mars/T8-penguin-canvas",
-  "totalNodes": 24,
+  "totalNodes": 25,
   "phases": {
     "phase0": { "label": "基础设施", "status": "complete", "items": ["Vite + React 19 + TS", "Tailwind", "前端 5180 / 后端 18766 代理", "Express 后端骨架"] },
     "phase1": { "label": "画布主体", "status": "complete", "items": ["xyflow 画布", "Sidebar 节点添加", "画布 CRUD", "三套 API Key 设置"] },
@@ -58,9 +58,17 @@
     "phase6": { "label": "批量执行 + 对齐辅助", "status": "complete", "items": ["运行总线 zustand store", "useRunTrigger 节点接入", "拓扑排序串行批量运行", "snap-to-grid + 智能对齐辅助线"] },
     "phase7": { "label": "侧边栏合并", "status": "complete", "items": ["CanvasManager 收纳到 Sidebar 顶部可折叠区", "移除独立画布管理列", "三栏→两栏布局"] },
     "phase8": { "label": "像素糖果风主题", "status": "complete", "items": ["theme store 扩展 themeStyle(tech|pixel) 双轨", "theme-pixel.css 全套 CSS 变量 + 工具类(px-card/px-btn/px-chip/px-input/px-row/px-modal-mask)", "Sidebar / CanvasToolbar / ApiSettings 框架级像素化", "24 节点零侵入 CSS 兜底层(react-flow__node 全局覆盖)", "ReactFlow 背景点 / 边线 / 对齐辅助线 像素化校色", "顶部 Sparkles/Cpu 切换按钮 + localStorage 持久化"] },
-    "phase9": { "label": "侧边栏分类重整", "status": "complete", "items": ["图像节点 label 从 'ZhenzhenMagic' 改为 '图像生成' 避免误解", "runninghub + rh-config 从 core 抽出,新建独立 'RH' 分类", "NodeCategory 类型增加 'rh' 枚举值", "ImageNode 模型选择从 select 重构为 3 TAB 胶囊切换(GPT2 / 香蕉2 / 香蕉Pro),对应主项目 gpt-image-2-web Tab 0/1/2"] }
+    "phase9": { "label": "侧边栏分类重整", "status": "complete", "items": ["图像节点 label 从 'ZhenzhenMagic' 改为 '图像生成' 避免误解", "runninghub + rh-config 从 core 抽出,新建独立 'RH' 分类", "NodeCategory 类型增加 'rh' 枚举值", "ImageNode 模型选择从 select 重构为 3 TAB 胶囊切换(GPT2 / 香蕉2 / 香蕉Pro),对应主项目 gpt-image-2-web Tab 0/1/2"] },
+    "phase10": { "label": "上传节点 + 节点间联动(连接类型校验)", "status": "complete", "items": ["新增 UploadNode 上传素材节点(图像/视频/音频三合一,动态输出端口色)", "创建端口语义注册表 src/config/portTypes.ts(7 种 PortType + 25 节点 inputs/outputs 声明)", "ReactFlow 接入 isValidConnection ⏱ 预览阶段拦截不兼容连接(如文本不能连到文本、音频不能连到图像节点的 image 入口)", "连线按上游输出类型自动染色(文本=sky / 图像=amber / 视频=rose / 音频=violet / metadata=cyan / config=indigo / any=slate)", "upload 节点 outputs 动态依赖 data.uploadType,未选择类型时不可连出", "relay 中继节点以 'any' 透传,可接任何输入 / 输出任何类型"] }
   },
   "categories": {
+    "input": {
+      "label": "输入素材",
+      "count": 1,
+      "nodes": [
+        { "type": "upload", "label": "上传素材节点", "description": "图像 / 视频 / 音频 三合一上传(选型后输出端口自适应染色 + 只能连到同类型入口)" }
+      ]
+    },
     "core": {
       "label": "核心节点",
       "count": 6,
@@ -125,6 +133,25 @@
         { "type": "cinematic", "label": "电影感工具箱", "description": "影视化效果" },
         { "type": "video-motion", "label": "视频运镜工具箱", "description": "运镜参数" }
       ]
+    }
+  },
+  "portTypes": {
+    "description": "节点端口语义类型定义 ⏱ src/config/portTypes.ts 。所有连接都需严格匹配 source.outputs 与 target.inputs 的交集;'any' 透传仅限 relay 节点使用。",
+    "types": ["text", "image", "video", "audio", "metadata", "config", "any"],
+    "colorMapping": {
+      "text": "#7dd3fc",
+      "image": "#fcd34d",
+      "video": "#fda4af",
+      "audio": "#c4b5fd",
+      "metadata": "#67e8f9",
+      "config": "#a5b4fc",
+      "any": "#cbd5e1"
+    },
+    "validation": {
+      "runtime": "ReactFlow isValidConnection (Canvas.tsx onIsValidConnection)",
+      "core": "isConnectionValid(src, tgt) ⏱ src.outputs ∩ tgt.inputs ≠ ∅",
+      "selfLoop": "禁止 source.id === target.id",
+      "uploadDynamic": "upload 节点输出以 data.uploadType 动态决定(image/video/audio),未选型时输出为空,任何连接均被拒绝。"
     }
   },
   "removed": {
@@ -229,6 +256,15 @@
     "resize", "upscale", "grid-crop", "remove-bg", "combine",
     "frame-extractor"
   ],
+  "nonExecutableNodeTypes": {
+    "description": "不参与批量运行的节点(输入 / 纯展示 / 参数谷 / 工具箱提示)",
+    "nodes": [
+      "upload", "text", "idea", "bp", "relay",
+      "portrait-metadata", "storyboard-grid", "image-compare", "video-output",
+      "drawing-board", "browser", "rh-config",
+      "cinematic", "video-motion"
+    ]
+  },
   "shortcuts": {
     "Ctrl+Z": "撤销",
     "Ctrl+Shift+Z / Ctrl+Y": "重做",

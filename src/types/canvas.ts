@@ -3,7 +3,7 @@
  * 与 features.json 节点清单严格对齐(24 节点 + 4 已弃)
  */
 
-// 节点类型(24 种保留)
+// 节点类型(25 种保留 = 24 + upload)
 export type NodeType =
   // Core (8)
   | 'text'
@@ -38,7 +38,9 @@ export type NodeType =
   | 'video-output'
   // Toolbox (2)
   | 'cinematic'
-  | 'video-motion';
+  | 'video-motion'
+  // Input (1) - 上传素材(图像/视频/音频三合一)
+  | 'upload';
 
 // 节点分类
 export type NodeCategory =
@@ -47,7 +49,8 @@ export type NodeCategory =
   | 'special'
   | 'utility'
   | 'auxiliary'
-  | 'toolbox';
+  | 'toolbox'
+  | 'input';
 
 // 节点元数据(用于 Sidebar 展示)
 export interface NodeMeta {

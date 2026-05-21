@@ -6,6 +6,9 @@ import type { NodeMeta } from '../types/canvas';
  * 图标使用 lucide-react 名称(运行时由 Sidebar 动态查找)
  */
 export const NODE_REGISTRY: NodeMeta[] = [
+  // ========== Input 输入素材(1) ==========
+  { type: 'upload', label: '上传素材', category: 'input', description: '图像 / 视频 / 音频 三合一上传(自适应输出端口)', icon: 'Upload', color: 'emerald' },
+
   // ========== Core 核心节点(6) ==========
   { type: 'text', label: '文本', category: 'core', description: '提示词文本节点', icon: 'Type', color: 'sky' },
   { type: 'image', label: '图像生成', category: 'core', description: 'GPT Image 2 / Nano Banana Pro / Nano Banana 2 (多 TAB 模型切换)', icon: 'Image', color: 'amber' },
@@ -50,6 +53,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
 
 // 按分类分组,便于 Sidebar 渲染
 export const NODE_GROUPS: Record<string, { label: string; nodes: NodeMeta[] }> = {
+  input: { label: '输入素材', nodes: NODE_REGISTRY.filter((n) => n.category === 'input') },
   core: { label: '核心节点', nodes: NODE_REGISTRY.filter((n) => n.category === 'core') },
   rh: { label: 'RH', nodes: NODE_REGISTRY.filter((n) => n.category === 'rh') },
   special: { label: '特殊节点', nodes: NODE_REGISTRY.filter((n) => n.category === 'special') },

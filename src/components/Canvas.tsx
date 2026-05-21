@@ -50,8 +50,10 @@ import PresetImageNode from './nodes/PresetImageNode';
 import DrawingBoardNode from './nodes/DrawingBoardNode';
 import BrowserNode from './nodes/BrowserNode';
 import FrameExtractorNode from './nodes/FrameExtractorNode';
+import UploadNode from './nodes/UploadNode';
 import { NODE_REGISTRY } from '../config/nodeRegistry';
 import type { NodeType } from '../types/canvas';
+import { isConnectionValid, getNodeOutputs, getNodeInputs, PORT_COLOR } from '../config/portTypes';
 
 // Phase 4 阶段:全部 24 个节点均已实现业务逻辑
 const SPECIFIC_NODES: Record<string, any> = {
@@ -89,6 +91,8 @@ const SPECIFIC_NODES: Record<string, any> = {
   // Toolbox (2)
   cinematic: ToolboxParamNode,
   'video-motion': ToolboxParamNode,
+  // Input (1) - 上传素材
+  upload: UploadNode,
 };
 
 // 节点初始 data(用于区分共享组件的 kind/preset/model 等)
@@ -100,6 +104,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
   'panorama-720': { preset: 'panorama-720' },
   'penguin-portrait': { preset: 'penguin-portrait' },
   edit: { mode: 'edit' },
+  upload: { uploadType: null },
 };
 
 // 可被“批量运行”调起的节点类型集合
@@ -534,8 +539,38 @@ function CanvasInner({ onAddNodeRef }: CanvasInnerProps) {
     []
   );
   const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge(params, eds)),
-    []
+    (params: Connection) => {
+      // 连接有效性校验(防止绕过 isValidConnection 的底层调用)
+      const src = nodes.find((n) => n.id === params.source);
+      const tgt = nodes.find((n) => n.id === params.target);
+      if (!isConnectionValid(src, tgt)) return;
+      // 根据上游输出类型染色连线
+      const outs = src ? getNodeOutputs(src) : [];
+      const ins = tgt ? getNodeInputs(tgt) : [];
+      const matched = outs.find((o) => ins.includes(o) || o === 'any' || ins.includes('any'));
+      const color = matched && matched !== 'any' ? PORT_COLOR[matched] : undefined;
+      setEdges((eds) =>
+        addEdge(
+          {
+            ...params,
+            ...(color ? { style: { stroke: color, strokeWidth: 2 } } : {}),
+            data: { portType: matched ?? 'any' },
+          },
+          eds
+        )
+      );
+    },
+    [nodes]
+  );
+
+  // ReactFlow 拖线连接时的实时校验(在连线处于“预览”阶段就拦截不兼容连接)
+  const onIsValidConnection = useCallback(
+    (params: Connection | Edge) => {
+      const src = nodes.find((n) => n.id === (params as Connection).source);
+      const tgt = nodes.find((n) => n.id === (params as Connection).target);
+      return isConnectionValid(src, tgt);
+    },
+    [nodes]
   );
 
   // ===== 全局快捷键 =====
@@ -649,6 +684,7 @@ function CanvasInner({ onAddNodeRef }: CanvasInnerProps) {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        isValidConnection={onIsValidConnection}
         onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
         snapToGrid={snapEnabled}
