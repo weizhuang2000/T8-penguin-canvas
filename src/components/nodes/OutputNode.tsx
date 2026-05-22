@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Handle,
   Position,
@@ -12,10 +12,10 @@ import { useThemeStore } from '../../stores/theme';
 import { PORT_COLOR } from '../../config/portTypes';
 
 /**
- * OutputNode - 通用输出素材节点
+ * OutputNode - 通用输出素材节点 (中继展示型)
  *
  * 设计:
- *   1. 终端展示节点(无 source handle), 接收上游任意 文本/图像/视频/音频 类型连入
+ *   1. 输入: 接收上游任意 文本/图像/视频/音频 连入 (target handle, 左侧)
  *   2. 自动遍历上游节点的 data, 抽取所有可识别的:
  *      - 文本: prompt / reply / text / outputText
  *      - 图像: imageUrl / imageUrls[] / urls[] / generatedImages[]
@@ -24,12 +24,15 @@ import { PORT_COLOR } from '../../config/portTypes';
  *   3. 分区显示, 图像/视频按原始宽高比 (object-contain + maxHeight) 不强制裁剪
  *   4. 文本双击进入可编辑状态, 编辑保存到 data.outputText (覆盖上游 live 文本)
  *      置空 outputText 时再次显示上游原文
- *   5. 不向下游输出 (终端节点)
+ *   5. 输出: 收集到的 文本/图像/视频/音频 同时透传到本节点自身 data 的
+ *      prompt / imageUrl / imageUrls / urls / videoUrl / audioUrl 字段上,
+ *      下游节点能像读上游一样读到 (source handle, 右侧, any)
  *
  * 渲染联动机制(重要):
- *   - 使用 xyflow 官方 useNodeConnections + useNodesData 订阅上游连接变化
- *     和上游节点 data 变化; useReactFlow().getNodes/getEdges 是稳定回调
- *     本身不会触发重渲染, 在 React.memo 节点里会造成不刷新。
+ *   - 上游订阅: useNodeConnections + useNodesData (xyflow 官方 hook)
+ *   - 下游透传: useEffect 监听 collected + displayText 变化,
+ *     写不同字段避免踩 outputText (后者是「用户编辑覆盖」标记),
+ *     同时手式比较 cur/next, 一致时不调 update 以免产生循环。
  */
 
 const isVideoUrl = (u: string) => /\.(mp4|webm|mov|m4v|mkv)(\?|$)/i.test(u);
@@ -141,6 +144,43 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
 
   const total = collected.texts.length + collected.images.length + collected.videos.length + collected.audios.length;
 
+  // === 下游透传: 将 collected + displayText 写到自身 data 供下游节点读取 ===
+  // 仅在生成的输出实际变化时调用 update, 避免 setNode 风暴。
+  // 不踩 outputText (保留 「用户编辑覆盖」 语义), 文本透传到 prompt/text/reply.
+  useEffect(() => {
+    const next: any = {
+      prompt: displayText || '',
+      text: displayText || '',
+      reply: displayText || '',
+      imageUrl: collected.images[0] || '',
+      imageUrls: collected.images.slice(),
+      urls: collected.images.slice(),
+      videoUrl: collected.videos[0] || '',
+      audioUrl: collected.audios[0] || '',
+    };
+    const cur: any = {
+      prompt: d.prompt || '',
+      text: d.text || '',
+      reply: d.reply || '',
+      imageUrl: d.imageUrl || '',
+      imageUrls: Array.isArray(d.imageUrls) ? d.imageUrls : [],
+      urls: Array.isArray(d.urls) ? d.urls : [],
+      videoUrl: d.videoUrl || '',
+      audioUrl: d.audioUrl || '',
+    };
+    const changed =
+      cur.prompt !== next.prompt ||
+      cur.text !== next.text ||
+      cur.reply !== next.reply ||
+      cur.imageUrl !== next.imageUrl ||
+      cur.videoUrl !== next.videoUrl ||
+      cur.audioUrl !== next.audioUrl ||
+      JSON.stringify(cur.imageUrls) !== JSON.stringify(next.imageUrls) ||
+      JSON.stringify(cur.urls) !== JSON.stringify(next.urls);
+    if (changed) update(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayText, collected]);
+
   return (
     <div
       className="relative rounded-xl border-2 transition-colors"
@@ -151,7 +191,7 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
         borderColor: selected ? accent : isDark ? 'rgba(255,255,255,.15)' : 'rgba(0,0,0,.1)',
       }}
     >
-      {/* 仅有 target handle (终端节点不向下游输出) */}
+      {/* target handle (左侧) - 上游任意类型可连入 */}
       <Handle
         type="target"
         position={Position.Left}
@@ -167,6 +207,23 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
           transform: 'translateY(-50%)',
         }}
         title="文本 / 图像 / 视频 / 音频 任意类型可连入"
+      />
+      {/* source handle (右侧) - 作为中继节点可继续向下游透传 (any) */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        className="!border-0"
+        style={{
+          background: HANDLE,
+          width: 10,
+          height: 10,
+          minWidth: 10,
+          minHeight: 10,
+          top: '50%',
+          right: -5,
+          transform: 'translateY(-50%)',
+        }}
+        title="透传 文本 / 图像 / 视频 / 音频 到下游"
       />
 
       {/* 头部 */}
