@@ -32,7 +32,6 @@ import { installGlobalWheelBlockObserver } from '../utils/wheelBlock';
 import * as api from '../services/api';
 import CanvasToolbar from './CanvasToolbar';
 import TerminalPanel from './TerminalPanel';
-import NodeActionBar from './NodeActionBar';
 import { useCanvasHistory } from '../hooks/useCanvasHistory';
 import type { CanvasTemplate } from '../config/canvasTemplates';
 import PlaceholderNode from './nodes/PlaceholderNode';
@@ -752,8 +751,8 @@ function CanvasInner({ onAddNodeRef }: CanvasInnerProps) {
         draggable: true,
         selectable: true,
         deletable: true,
-        // 可连接: 右侧 source handle 能把「组内所有节点的聚合输出」传给组外
-        connectable: true,
+        // 不参与连接校验(本身无 Handle)
+        connectable: false,
       } as Node;
       // 插入到最前面,确保渲染顺序在底(配合 zIndex 负值)
       setNodes((prev) => [groupNode, ...prev.map((n) => ({ ...n, selected: false }))]);
@@ -1103,25 +1102,6 @@ function CanvasInner({ onAddNodeRef }: CanvasInnerProps) {
       const src = curNodes.find((n) => n.id === params.source);
       let tgt = curNodes.find((n) => n.id === params.target);
       if (!isConnectionValid(src, tgt)) return;
-
-      // ⚡ 组容器连出去重: 如果 source 是 groupBox, 并且组内成员已经独立连到同一个下游 target,
-      // 则自动断开那些「成员 → target」的重复边, 只保留 group → target
-      // (避免同一源头重复传输 + 防止潜在循环依赖)
-      if (src && src.type === 'groupBox' && tgt && params.target) {
-        const memberIds: string[] = Array.isArray((src.data as any)?.memberIds)
-          ? ((src.data as any).memberIds as string[])
-          : [];
-        if (memberIds.length > 0) {
-          const memberSet = new Set(memberIds);
-          const dupEdges = curEdges.filter(
-            (e) => memberSet.has(e.source) && e.target === params.target
-          );
-          if (dupEdges.length > 0) {
-            const dupIds = new Set(dupEdges.map((e) => e.id));
-            setEdges((eds) => eds.filter((e) => !dupIds.has(e.id)));
-          }
-        }
-      }
 
       // ⚡ 输出素材节点单输入约束:若目标是 output 且已有连入,
       // 自动派生一个新的 output 节点并把本次连接转向它。
@@ -1662,6 +1642,101 @@ function CanvasInner({ onAddNodeRef }: CanvasInnerProps) {
     [picker, nodes]
   );
 
+  // ===== 自动创建输出素材节点 =====
+  // 生成类节点 (image/video/audio/seedance/llm/runninghub 等) 输出字段有值后,
+  // 自动创建对应数量的 OutputNode 并连线。
+  // 防循环: 以 nodeId -> sig(输出项列表哈希) 记忆已处理状态,
+  // 同 sig 不重复创建; 且跳过本身就是 OutputNode 的节点避免链式爆炸.
+  const autoOutputProcessedRef = useRef<Map<string, string>>(new Map());
+  useEffect(() => {
+    if (!loaded) return;
+    const SKIP_TYPES = new Set(['output', 'groupBox', 'bulkPhantom', 'upload']);
+
+    const toAddNodes: Node[] = [];
+    const toAddEdges: Edge[] = [];
+    const newSigPatches: Array<[string, string]> = [];
+
+    for (const n of nodes) {
+      const t = n.type as string;
+      if (!t || SKIP_TYPES.has(t)) continue;
+      const d = (n.data as any) || {};
+
+      // 提取输出项 (去重 + 过滤)
+      const seen = new Set<string>();
+      const items: Array<{ kind: 'image' | 'video' | 'audio'; url: string }> = [];
+      const pushImg = (u: any) => {
+        if (typeof u !== 'string' || !u || seen.has(u)) return;
+        seen.add(u);
+        items.push({ kind: 'image', url: u });
+      };
+      const pushVid = (u: any) => {
+        if (typeof u !== 'string' || !u || seen.has(u)) return;
+        seen.add(u);
+        items.push({ kind: 'video', url: u });
+      };
+      const pushAud = (u: any) => {
+        if (typeof u !== 'string' || !u || seen.has(u)) return;
+        seen.add(u);
+        items.push({ kind: 'audio', url: u });
+      };
+      pushImg(d.imageUrl);
+      if (Array.isArray(d.imageUrls)) d.imageUrls.forEach(pushImg);
+      if (Array.isArray(d.urls)) d.urls.forEach(pushImg);
+      if (Array.isArray(d.generatedImages)) d.generatedImages.forEach(pushImg);
+      pushVid(d.videoUrl);
+      pushAud(d.audioUrl);
+      if (items.length === 0) continue;
+
+      const sig = items.map((x) => `${x.kind}:${x.url}`).join('|');
+      const lastSig = autoOutputProcessedRef.current.get(n.id);
+      if (lastSig === sig) continue;
+
+      // 统计已连的下游 OutputNode 数量
+      const existingOutputCount = edges
+        .filter((e) => e.source === n.id)
+        .map((e) => nodes.find((x) => x.id === e.target))
+        .filter((x) => x && x.type === 'output').length;
+
+      const needCount = items.length - existingOutputCount;
+      newSigPatches.push([n.id, sig]);
+      if (needCount <= 0) continue;
+
+      const srcW = (n as any).width || (n as any).measured?.width || 320;
+      const baseX = (n.position?.x ?? 0) + srcW + 80;
+      const baseY = n.position?.y ?? 0;
+
+      for (let i = 0; i < needCount; i++) {
+        const offsetIndex = existingOutputCount + i;
+        const newId = `output-auto-${n.id}-${Date.now()}-${offsetIndex}-${Math.random()
+          .toString(36)
+          .slice(2, 6)}`;
+        toAddNodes.push({
+          id: newId,
+          type: 'output',
+          position: {
+            x: baseX,
+            y: baseY + offsetIndex * 360,
+          },
+          data: {},
+          selected: false,
+        } as Node);
+        toAddEdges.push({
+          id: `e-auto-${newId}`,
+          source: n.id,
+          target: newId,
+          type: 'deletable',
+        } as Edge);
+      }
+    }
+
+    // 先写 ref 避免下次 useEffect 重进入重复创建
+    for (const [id, sig] of newSigPatches) autoOutputProcessedRef.current.set(id, sig);
+    if (toAddNodes.length > 0) {
+      setNodes((prev) => [...prev, ...toAddNodes]);
+      setEdges((prev) => [...prev, ...toAddEdges]);
+    }
+  }, [nodes, edges, loaded]);
+
   // ===== 全局快捷键 =====
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1908,8 +1983,6 @@ function CanvasInner({ onAddNodeRef }: CanvasInnerProps) {
           maskColor={isDark ? 'rgba(0,0,0,.6)' : 'rgba(255,255,255,.6)'}
           nodeColor={() => (isDark ? '#a1a1aa' : '#52525b')}
         />
-        {/* 选中可执行节点时的浮动操作栏 (执行 / 中止 / 关闭) */}
-        <NodeActionBar />
       </ReactFlow>
 
       {/* 拖线到空白处弹出的候选节点菜单 */}

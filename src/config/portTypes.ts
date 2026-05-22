@@ -93,11 +93,6 @@ export const NODE_PORTS: Record<string, NodePorts> = {
   // ========== 输出素材节点 (NEW) ==========
   // 任意上游节点的 文本/图像/视频/音频 都可连入；同时作为中继节点可继续向下游透传 (any)。
   output: { inputs: ['text', 'image', 'video', 'audio', 'any'], outputs: ['any'] },
-
-  // ========== 组容器 (NEW) ==========
-  // groupBox 自身不接收外部输入(无 target handle),
-  // 但右侧 source handle 可以把「组内所有节点的聚合输出 (any)」一次性传给组外节点。
-  groupBox: { inputs: [], outputs: ['any'] },
 };
 
 /**
