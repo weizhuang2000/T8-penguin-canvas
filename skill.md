@@ -956,7 +956,9 @@ SSE 按行 `split('\n')` 解析；`data: [DONE]` 立即 return；`delta.content`
 
 * `buildMjPrompt(parts)`：纯函数，按 §11.11.2 顺序拼接。
 * `submitMjImagine(req)`：调 `/mj/imagine`，校验 `code===1`，返 `{ taskId, raw }`。
-* `queryMjTask(taskId, speed)`：调 `/mj/task/:id`，解析 `image_urls` JSON string，返 `{ status, progress, imageUrl, imageUrls, failReason, raw }`。
+* `queryMjTask(taskId, speed)`：调 `/mj/task/:id`，返 `{ status, progress, imageUrl, imageUrls, failReason, raw }`。
+  * **字段全兼容**：`d.image_url || d.imageUrl`，`d.image_urls ?? d.imageUrls`（上游 snake_case 与 camelCase 均可）。
+  * **image_urls 三种形态**均可解：JSON 字符串 / 对象数组 `[{url:'...'}]` / 字符串数组 `['...']`，对齐主项目 `runMJ` 的 `x.url || x` 写法（另兼容 `x.image_url / x.imageUrl`）。
 * `uploadMjImage(file, speed)`：先 `fileToDataUrl`，再调 `/mj/upload` 取 URL。
 
 #### 11.11.7 ImageNode 节点 UI 范式
@@ -981,7 +983,7 @@ SSE 按行 `split('\n')` 解析；`data: [DONE]` 立即 return；`delta.content`
 | 坑 | 现象 | 防御 |
 | --- | --- | --- |
 | sref/oref 走错通道 | 把 sref/oref 直接进 base64Array 导致提示词无 `--sref / --oref` | 严格区分：垫图→base64Array；sref/oref→先 upload 取 URL 再拼 prompt |
-| `image_urls` 是字符串 | 直接 `.map` 报错 | `JSON.parse` 失败时降级为 `[image_url]` |
+| `image_urls` 是字符串 / 对象数组 / camelCase | 误报 “MJ 任务完成但未返回图片” | `queryMjTask` 同时读 `image_urls/imageUrls`，对象元素取 `x.url \|\| x.image_url \|\| x.imageUrl \|\| x`；失败时 `ImageNode` 会 `logBus.warn` 输出 `raw` 报文便于定位 |
 | `--sv 1` 多余 | 上游不识别报错 | `sv === '0' \|\| sv === '1'` 时 **不** 输出 `--sv` |
 | URL 仍是 `ai.comfly.chat` | 浏览器图片加载失败（鉴权域不同） | 后端代理一次性 `replace('ai.comfly.chat','ai.t8star.cn')` |
 | FAL 子模型混入 | 误以为 MJ 也有 FAL | MJ **无 FAL**，模型注册表中无 `midjourney-fal` |
