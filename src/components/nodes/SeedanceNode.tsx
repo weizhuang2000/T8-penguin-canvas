@@ -72,13 +72,13 @@ const SeedanceNode = ({ id, data, selected }: NodeProps) => {
   } => {
     const edges = getEdges();
     const nodes = getNodes();
-    const upstreamIds = edges.filter((e) => e.target === id).map((e) => e.source);
+    const incomingEdges = edges.filter((e) => e.target === id);
     const prompts: string[] = [];
     const imageUrls: string[] = [];
     const videoUrls: string[] = [];
     const audioUrls: string[] = [];
-    for (const uid of upstreamIds) {
-      const n = nodes.find((x) => x.id === uid);
+    for (const edge of incomingEdges) {
+      const n = nodes.find((x) => x.id === edge.source);
       const dn = (n?.data as any) || {};
       const p = dn.prompt;
       if (p && typeof p === 'string') prompts.push(p.trim());
@@ -92,9 +92,13 @@ const SeedanceNode = ({ id, data, selected }: NodeProps) => {
       if (vu && typeof vu === 'string') videoUrls.push(vu);
       const vus = dn.videoUrls;
       if (Array.isArray(vus)) for (const x of vus) if (typeof x === 'string') videoUrls.push(x);
-      // 音频 (audio 节点 / upload-audio)
-      const au = dn.audioUrl;
-      if (au && typeof au === 'string') audioUrls.push(au);
+      // 音频 (audio 节点 / upload-audio) —— 支持双输出口 sourceHandle
+      if (edge.sourceHandle === 'audio-1' && typeof dn.audioUrl_1 === 'string') {
+        audioUrls.push(dn.audioUrl_1);
+      } else {
+        const au = dn.audioUrl;
+        if (au && typeof au === 'string') audioUrls.push(au);
+      }
       const aus = dn.audioUrls;
       if (Array.isArray(aus)) for (const x of aus) if (typeof x === 'string') audioUrls.push(x);
     }

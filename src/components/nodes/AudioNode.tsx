@@ -56,18 +56,25 @@ const AudioNode = ({ id, data, selected }: NodeProps) => {
   useEffect(() => () => stopPoll(), []);
 
   // 收集上游: prompt + audioUrl(用于 cover/extend 兑底)
+  // 支持双输出口: 如上游是 AudioNode 且 sourceHandle='audio-1' 则取 audioUrl_1
   const collectUpstream = (): { prompt: string; audioUrl: string } => {
     const edges = getEdges();
     const nodes = getNodes();
-    const upstreamIds = edges.filter((e) => e.target === id).map((e) => e.source);
+    const incomingEdges = edges.filter((e) => e.target === id);
     const prompts: string[] = [];
     let audioUrl = '';
-    for (const uid of upstreamIds) {
-      const n = nodes.find((x) => x.id === uid);
+    for (const edge of incomingEdges) {
+      const n = nodes.find((x) => x.id === edge.source);
       const dn = (n?.data as any) || {};
       const p = dn.prompt;
       if (p && typeof p === 'string') prompts.push(p.trim());
-      if (!audioUrl && typeof dn.audioUrl === 'string') audioUrl = dn.audioUrl;
+      if (!audioUrl) {
+        if (edge.sourceHandle === 'audio-1' && typeof dn.audioUrl_1 === 'string') {
+          audioUrl = dn.audioUrl_1;
+        } else if (typeof dn.audioUrl === 'string') {
+          audioUrl = dn.audioUrl;
+        }
+      }
     }
     return { prompt: prompts.join('\n').trim(), audioUrl };
   };
@@ -131,11 +138,12 @@ const AudioNode = ({ id, data, selected }: NodeProps) => {
         const r = await queryAudio(clipIds, true);
         if (r.status === 'SUCCESS' && r.tracks.length > 0) {
           stopPoll();
-          // 主输出采用第一轨 audioUrl
+          // 双输出口: audioUrl=轨1, audioUrl_1=轨2
           update({
             status: 'success',
             tracks: r.tracks,
-            audioUrl: r.tracks[0].audioUrl,
+            audioUrl: r.tracks[0]?.audioUrl || '',
+            audioUrl_1: r.tracks[1]?.audioUrl || '',
             progress: `${r.completed}/${r.total}`,
           });
           logBus.success(`完成 ${r.tracks.length} 轨: ${r.tracks.map((t) => t.audioUrl).join(' | ')}`, src);
@@ -216,7 +224,12 @@ const AudioNode = ({ id, data, selected }: NodeProps) => {
       style={{ background: 'rgba(20,20,22,.92)', backdropFilter: 'blur(8px)' }}
     >
       <Handle type="target" position={Position.Left} style={{ background: audioColor, border: 0 }} />
-      <Handle type="source" position={Position.Right} style={{ background: audioColor, border: 0 }} />
+      {/* 双输出口: 轨道 1 / 轨道 2 */}
+      <Handle type="source" id="audio-0" position={Position.Right} style={{ background: audioColor, border: 0, top: '38%' }} />
+      <Handle type="source" id="audio-1" position={Position.Right} style={{ background: audioColor, border: 0, top: '62%' }} />
+      {/* 轨道标签 */}
+      <div className="absolute right-[-2px] text-[8px] font-bold text-violet-300/70 pointer-events-none" style={{ top: '35%', transform: 'translateX(100%) translateY(-50%)' }}>♪1</div>
+      <div className="absolute right-[-2px] text-[8px] font-bold text-violet-300/70 pointer-events-none" style={{ top: '62%', transform: 'translateX(100%) translateY(-50%)' }}>♪2</div>
 
       <div className="flex items-center gap-2 px-3 py-2 border-b border-white/10">
         <div
