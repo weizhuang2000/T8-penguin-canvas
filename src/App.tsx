@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Moon, Settings, Sun, Wifi, WifiOff, Sparkles, Cpu, Cloud, ExternalLink, Copy, Check, Gift, Heart, Youtube, PlayCircle, Bell } from 'lucide-react';
+import { Moon, Settings, Sun, Wifi, WifiOff, Sparkles, Cpu, Cloud, ExternalLink, Copy, Check, Gift, Heart, Youtube, PlayCircle, Bell, Wand2, Globe, MessageCircle, CalendarDays, Rocket, Key } from 'lucide-react';
 import { useThemeStore } from './stores/theme';
 import { useApiKeysStore } from './stores/apiKeys';
 import Sidebar from './components/Sidebar';
@@ -25,6 +25,12 @@ function App() {
   // 「视频教程」推广浮层开关
   const [videoOpen, setVideoOpen] = useState(false);
   const videoWrapRef = useRef<HTMLDivElement>(null);
+  // 「贞贞工坊」推广浮层开关
+  const [zhenOpen, setZhenOpen] = useState(false);
+  const zhenWrapRef = useRef<HTMLDivElement>(null);
+  // 「最新应用」推广浮层开关
+  const [appOpen, setAppOpen] = useState(false);
+  const appWrapRef = useRef<HTMLDivElement>(null);
   // 画布接收节点添加的 ref(从 Sidebar -> Canvas)
   const addNodeRef = useRef<((type: NodeType) => void) | null>(null);
 
@@ -63,6 +69,42 @@ function App() {
       document.removeEventListener('keydown', onKey);
     };
   }, [videoOpen]);
+
+  // 「贞贞工坊」浮层: 点击容器外部 / 按 ESC 自动关闭
+  useEffect(() => {
+    if (!zhenOpen) return;
+    const onDocDown = (e: MouseEvent) => {
+      if (!zhenWrapRef.current) return;
+      if (!zhenWrapRef.current.contains(e.target as Node)) setZhenOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setZhenOpen(false);
+    };
+    document.addEventListener('mousedown', onDocDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [zhenOpen]);
+
+  // 「最新应用」浮层: 点击容器外部 / 按 ESC 自动关闭
+  useEffect(() => {
+    if (!appOpen) return;
+    const onDocDown = (e: MouseEvent) => {
+      if (!appWrapRef.current) return;
+      if (!appWrapRef.current.contains(e.target as Node)) setAppOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setAppOpen(false);
+    };
+    document.addEventListener('mousedown', onDocDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [appOpen]);
 
   const handleCopyWx = async () => {
     try {
@@ -206,6 +248,267 @@ function App() {
           )}
         </div>
         <div className="flex items-center gap-1">
+          {/* 「最新应用」推广按钮: 同款胶囊, 主调 橙桃色(区分于 violet/mint/yellow/pink) */}
+          <div ref={appWrapRef} className="relative">
+            <button
+              onClick={() => setAppOpen((v) => !v)}
+              className={
+                isPixel
+                  ? `px-btn px-btn--sm px-btn--peach`
+                  : `flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all border ${
+                      isDark
+                        ? appOpen
+                          ? 'bg-orange-500/20 border-orange-400/50 text-orange-200 shadow-[0_0_12px_rgba(249,115,22,0.35)]'
+                          : 'bg-orange-500/10 border-orange-500/30 text-orange-300 hover:bg-orange-500/20'
+                        : appOpen
+                          ? 'bg-orange-100 border-orange-400 text-orange-800'
+                          : 'bg-orange-50 border-orange-300 text-orange-700 hover:bg-orange-100'
+                    }`
+              }
+              title="最新应用 · RunningHub 工作流 / API"
+            >
+              <Rocket size={14} />
+              <span className="text-[11px]">最新应用</span>
+            </button>
+
+            {/* 推广浮层 */}
+            {appOpen && (
+              <div
+                className={
+                  isPixel
+                    ? 'absolute right-0 top-full mt-2 z-[60] w-[360px] px-panel p-3 animate-[fadeIn_.18s_ease-out]'
+                    : `absolute right-0 top-full mt-2 z-[60] w-[360px] rounded-xl p-3 border shadow-2xl backdrop-blur-md animate-[fadeIn_.18s_ease-out] ${
+                        isDark
+                          ? 'bg-zinc-900/95 border-orange-400/20 shadow-orange-500/10'
+                          : 'bg-white/95 border-orange-200 shadow-orange-500/10'
+                      }`
+                }
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                {/* 标题 */}
+                <div className={`flex items-center gap-2 ${isPixel ? '' : isDark ? 'text-orange-300' : 'text-orange-700'}`}>
+                  <Rocket size={16} className={isPixel ? '' : 'shrink-0'} />
+                  <span className={`text-sm font-bold ${isPixel ? 'px-title' : ''}`}>最新应用 · RunningHub</span>
+                </div>
+
+                {/* 副标 */}
+                <div
+                  className={`mt-2 text-[12px] leading-relaxed ${
+                    isPixel ? '' : isDark ? 'text-white/80' : 'text-zinc-700'
+                  }`}
+                >
+                  T8 每日教学必用平台，每日同步更新最新工作流、AI 应用、节点、模型，免费教学！强烈推荐 ✨
+                </div>
+
+                {/* 国内站跳转按钮 */}
+                <a
+                  href="https://www.runninghub.cn/user-center/1819214514410942465/webapp?inviteCode=rh-v1121"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setAppOpen(false)}
+                  className={
+                    isPixel
+                      ? 'mt-3 px-btn px-btn--peach w-full justify-center'
+                      : `mt-3 flex items-center justify-center gap-1.5 w-full py-2 rounded-lg text-xs font-semibold transition-all border ${
+                          isDark
+                            ? 'bg-gradient-to-r from-orange-500/20 to-amber-500/20 border-orange-400/40 text-orange-200 hover:from-orange-500/30 hover:to-amber-500/30 hover:border-orange-400/60 hover:shadow-[0_0_16px_rgba(249,115,22,0.35)]'
+                            : 'bg-gradient-to-r from-orange-500 to-amber-500 border-amber-600 text-white hover:from-orange-600 hover:to-amber-600 hover:shadow-lg'
+                        }`
+                  }
+                >
+                  <Globe size={14} className={isPixel ? '' : 'shrink-0'} />
+                  <span>国内站 RunningHub.cn</span>
+                  <ExternalLink size={11} className="opacity-70" />
+                </a>
+
+                {/* 海外站跳转按钮 */}
+                <a
+                  href="https://www.runninghub.ai/user-center/1907375370302308353/webapp?inviteCode=rh-v1121"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setAppOpen(false)}
+                  className={
+                    isPixel
+                      ? 'mt-2 px-btn px-btn--yellow w-full justify-center'
+                      : `mt-2 flex items-center justify-center gap-1.5 w-full py-2 rounded-lg text-xs font-semibold transition-all border ${
+                          isDark
+                            ? 'bg-gradient-to-r from-amber-500/20 to-yellow-500/20 border-amber-400/40 text-amber-200 hover:from-amber-500/30 hover:to-yellow-500/30 hover:border-amber-400/60 hover:shadow-[0_0_16px_rgba(245,158,11,0.35)]'
+                            : 'bg-gradient-to-r from-amber-400 to-yellow-400 border-amber-500 text-amber-900 hover:from-amber-500 hover:to-yellow-500 hover:shadow-lg'
+                        }`
+                  }
+                >
+                  <Globe size={14} className={isPixel ? '' : 'shrink-0'} />
+                  <span>海外站 RunningHub.ai</span>
+                  <ExternalLink size={11} className="opacity-70" />
+                </a>
+
+                {/* RH ApiKey 获取按钮 */}
+                <a
+                  href="https://www.runninghub.cn/enterprise-api/consumerApi"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setAppOpen(false)}
+                  className={
+                    isPixel
+                      ? 'mt-2 px-btn px-btn--ghost w-full justify-center'
+                      : `mt-2 flex items-center justify-center gap-1.5 w-full py-2 rounded-lg text-xs font-semibold transition-all border ${
+                          isDark
+                            ? 'bg-zinc-800/60 border-zinc-600/60 text-zinc-200 hover:bg-zinc-700/60 hover:border-zinc-500/80'
+                            : 'bg-zinc-50 border-zinc-300 text-zinc-700 hover:bg-zinc-100'
+                        }`
+                  }
+                >
+                  <Key size={14} className={isPixel ? '' : 'shrink-0'} />
+                  <span>获取 RH ApiKey</span>
+                  <ExternalLink size={11} className="opacity-70" />
+                </a>
+
+                {/* 推荐标语 */}
+                <div
+                  className={`mt-3 flex items-start gap-1.5 text-[11px] leading-relaxed ${
+                    isPixel
+                      ? 'px-chip px-chip--mint w-full justify-start py-1.5 px-2'
+                      : isDark
+                        ? 'text-emerald-200/90 bg-emerald-500/10 border border-emerald-500/30 rounded-md px-2 py-1.5'
+                        : 'text-emerald-800 bg-emerald-50 border border-emerald-300 rounded-md px-2 py-1.5'
+                  }`}
+                >
+                  <Sparkles
+                    size={12}
+                    className={`mt-0.5 shrink-0 ${
+                      isPixel ? '' : isDark ? 'text-emerald-300' : 'text-emerald-600'
+                    }`}
+                  />
+                  <span>
+                    使用邀请码
+                    <span className={isPixel ? 'font-bold' : `font-semibold ${isDark ? 'text-emerald-200' : 'text-emerald-900'}`}> rh-v1121 </span>
+                    注册，免费领取1000积分！
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 「贞贞工坊」推广按钮: 同款胶囊, 主调 紫色(区分于 mint/yellow/pink) */}
+          <div ref={zhenWrapRef} className="relative">
+            <button
+              onClick={() => setZhenOpen((v) => !v)}
+              className={
+                isPixel
+                  ? `px-btn px-btn--sm px-btn--violet`
+                  : `flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all border ${
+                      isDark
+                        ? zhenOpen
+                          ? 'bg-violet-500/20 border-violet-400/50 text-violet-200 shadow-[0_0_12px_rgba(139,92,246,0.35)]'
+                          : 'bg-violet-500/10 border-violet-500/30 text-violet-300 hover:bg-violet-500/20'
+                        : zhenOpen
+                          ? 'bg-violet-100 border-violet-400 text-violet-800'
+                          : 'bg-violet-50 border-violet-300 text-violet-700 hover:bg-violet-100'
+                    }`
+              }
+              title="贞贞工坊 · 海外站与 Discord"
+            >
+              <Wand2 size={14} />
+              <span className="text-[11px]">贞贞工坊</span>
+            </button>
+
+            {/* 推广浮层 */}
+            {zhenOpen && (
+              <div
+                className={
+                  isPixel
+                    ? 'absolute right-0 top-full mt-2 z-[60] w-[340px] px-panel p-3 animate-[fadeIn_.18s_ease-out]'
+                    : `absolute right-0 top-full mt-2 z-[60] w-[340px] rounded-xl p-3 border shadow-2xl backdrop-blur-md animate-[fadeIn_.18s_ease-out] ${
+                        isDark
+                          ? 'bg-zinc-900/95 border-violet-400/20 shadow-violet-500/10'
+                          : 'bg-white/95 border-violet-200 shadow-violet-500/10'
+                      }`
+                }
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                {/* 标题 */}
+                <div className={`flex items-center gap-2 ${isPixel ? '' : isDark ? 'text-violet-300' : 'text-violet-700'}`}>
+                  <Wand2 size={16} className={isPixel ? '' : 'shrink-0'} />
+                  <span className={`text-sm font-bold ${isPixel ? 'px-title' : ''}`}>贞贞工坊 · AI 创作社区</span>
+                </div>
+
+                {/* 副标 */}
+                <div
+                  className={`mt-2 text-[12px] leading-relaxed ${
+                    isPixel ? '' : isDark ? 'text-white/80' : 'text-zinc-700'
+                  }`}
+                >
+                  访问海外站点，加入 Discord 社区，与全球创作者一起玩转 AI。
+                </div>
+
+                {/* 海外站跳转按钮 */}
+                <a
+                  href="https://ai.t8star.org/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setZhenOpen(false)}
+                  className={
+                    isPixel
+                      ? 'mt-3 px-btn px-btn--violet w-full justify-center'
+                      : `mt-3 flex items-center justify-center gap-1.5 w-full py-2 rounded-lg text-xs font-semibold transition-all border ${
+                          isDark
+                            ? 'bg-gradient-to-r from-violet-500/20 to-purple-500/20 border-violet-400/40 text-violet-200 hover:from-violet-500/30 hover:to-purple-500/30 hover:border-violet-400/60 hover:shadow-[0_0_16px_rgba(139,92,246,0.35)]'
+                            : 'bg-gradient-to-r from-violet-500 to-purple-500 border-purple-600 text-white hover:from-violet-600 hover:to-purple-600 hover:shadow-lg'
+                        }`
+                  }
+                >
+                  <Globe size={14} className={isPixel ? '' : 'shrink-0'} />
+                  <span>海外站 ai.t8star.org</span>
+                  <ExternalLink size={11} className="opacity-70" />
+                </a>
+
+                {/* Discord 跳转按钮 */}
+                <a
+                  href="https://discord.gg/sAK2THPWhZ"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setZhenOpen(false)}
+                  className={
+                    isPixel
+                      ? 'mt-2 px-btn px-btn--sky w-full justify-center'
+                      : `mt-2 flex items-center justify-center gap-1.5 w-full py-2 rounded-lg text-xs font-semibold transition-all border ${
+                          isDark
+                            ? 'bg-indigo-500/10 border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/20 hover:border-indigo-400/60 hover:shadow-[0_0_16px_rgba(99,102,241,0.3)]'
+                            : 'bg-indigo-50 border-indigo-400 text-indigo-700 hover:bg-indigo-100'
+                        }`
+                  }
+                >
+                  <MessageCircle size={14} className={isPixel ? '' : 'shrink-0'} />
+                  <span>Discord 社区群组</span>
+                  <ExternalLink size={11} className="opacity-70" />
+                </a>
+
+                {/* 公告 */}
+                <div
+                  className={`mt-3 flex items-start gap-1.5 text-[11px] leading-relaxed ${
+                    isPixel
+                      ? 'px-chip px-chip--yellow w-full justify-start py-1.5 px-2'
+                      : isDark
+                        ? 'text-amber-200/90 bg-amber-500/10 border border-amber-500/30 rounded-md px-2 py-1.5'
+                        : 'text-amber-800 bg-amber-50 border border-amber-300 rounded-md px-2 py-1.5'
+                  }`}
+                >
+                  <CalendarDays
+                    size={12}
+                    className={`mt-0.5 shrink-0 ${
+                      isPixel ? '' : isDark ? 'text-amber-300' : 'text-amber-600'
+                    }`}
+                  />
+                  <span>
+                    贞贞的 AI 工坊预计于
+                    <span className={isPixel ? 'font-bold' : `font-semibold ${isDark ? 'text-amber-200' : 'text-amber-900'}`}> 5月27日 — 5月29日 </span>
+                    开始恢复注册！
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* 「视频教程」推广按钮: 与右侧【在线画布/主题/风格】同款胶囊, 主调 红色(B 站 / Youtube 调性) */}
           <div ref={videoWrapRef} className="relative">
             <button
