@@ -7,6 +7,10 @@ import { useUpdateNodeData } from './useUpdateNodeData';
 import { useHasAutoOutput } from './useHasAutoOutput';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { logBus } from '../../stores/logs';
+import { useThemeStore } from '../../stores/theme';
+import { useUpstreamMaterials } from './useUpstreamMaterials';
+import { useOrderedMaterials } from './useOrderedMaterials';
+import MaterialPreviewSection from './MaterialPreviewSection';
 
 /**
  * VideoNode - 异步视频生成(完全对齐 gpt-image-2-web)
@@ -23,6 +27,11 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
   const [error, setError] = useState<string | null>(null);
   const pollTimer = useRef<number | null>(null);
   const src = `video:${id.slice(0, 6)}`;
+
+  // 主题适配 (默认科技风深色, 传递给聚合预览区)
+  const { theme, style: themeStyle } = useThemeStore();
+  const isDark = theme === 'dark';
+  const isPixel = themeStyle === 'pixel';
 
   const d = data as any;
   // 主模型 id (对应 VIDEO_MODELS 项)
@@ -58,23 +67,25 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
   const progress: string = d?.progress || '';
   const localPrompt: string = d?.prompt || '';
 
-  // 收集上游 prompt + 参考图
+  // === 上游素材聚合 (跨节点统一机制) ===
+  const upstream = useUpstreamMaterials(id);
+  const materialOrder: string[] = Array.isArray(d?.materialOrder) ? d.materialOrder : [];
+  const orderedTexts = useOrderedMaterials(upstream.texts, materialOrder);
+  const orderedImages = useOrderedMaterials(upstream.images, materialOrder);
+  const orderedVideos = useOrderedMaterials(upstream.videos, materialOrder);
+  const orderedAudios = useOrderedMaterials(upstream.audios, materialOrder);
+  const setMaterialOrder = (newOrder: string[]) => update({ materialOrder: newOrder });
+
+  // 分组动态跟随子模型: seedance 支持 image/video/audio, 其他 (grok/veo) 仅 image
+  const previewGroups = useMemo<ReadonlyArray<'text' | 'image' | 'video' | 'audio'>>(
+    () => (modelDef.kind === 'seedance' ? ['text', 'image', 'video', 'audio'] : ['text', 'image']),
+    [modelDef.kind],
+  );
+
+  // 收集上游 prompt + 参考图 (按用户拖拽顺序)
   const collectUpstream = (): { prompt: string; imageUrls: string[] } => {
-    const edges = getEdges();
-    const nodes = getNodes();
-    const upstreamIds = edges.filter((e) => e.target === id).map((e) => e.source);
-    const prompts: string[] = [];
-    const imageUrls: string[] = [];
-    for (const uid of upstreamIds) {
-      const n = nodes.find((x) => x.id === uid);
-      const p = (n?.data as any)?.prompt;
-      if (p && typeof p === 'string') prompts.push(p.trim());
-      // 上游个别节点使用 imageUrl 字段;ImageNode 则使用 imageUrls/imageUrl(success)
-      const u = (n?.data as any)?.imageUrl;
-      if (u && typeof u === 'string') imageUrls.push(u);
-      const us = (n?.data as any)?.imageUrls;
-      if (Array.isArray(us)) for (const x of us) if (typeof x === 'string') imageUrls.push(x);
-    }
+    const prompts = orderedTexts.map((t) => t.url).filter((s) => !!s);
+    const imageUrls = orderedImages.map((m) => m.url).filter((s) => !!s);
     return { prompt: prompts.join('\n').trim(), imageUrls };
   };
 
@@ -315,7 +326,7 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
   });
 
   const isBusy = status === 'submitting' || status === 'polling';
-  const refsCount = useMemo(() => collectUpstream().imageUrls.length, [getEdges, getNodes, id]); // eslint-disable-line
+  const refsCount = orderedImages.length;
 
   return (
     <div
@@ -520,11 +531,21 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
         </div>
         )}
 
-        {/* 参考图计数 */}
+        {/* 上游素材聚合预览区 (代替原「参考图(上游)」计数提示) */}
         {modelDef.supportImages && (
-          <div className="text-[10px] text-white/50">
-            参考图(上游): <span className={refsCount > modelDef.maxRefImages ? 'text-amber-300' : 'text-white/80'}>{Math.min(refsCount, modelDef.maxRefImages)}/{modelDef.maxRefImages}</span>
-          </div>
+          <MaterialPreviewSection
+            texts={orderedTexts}
+            images={orderedImages}
+            videos={orderedVideos}
+            audios={orderedAudios}
+            order={materialOrder}
+            onReorder={setMaterialOrder}
+            selected={!!selected}
+            isDark={isDark}
+            isPixel={isPixel}
+            groups={previewGroups}
+            title={`上游素材 · 参考图 ${Math.min(refsCount, modelDef.maxRefImages)}/${modelDef.maxRefImages}`}
+          />
         )}
 
         {/* Prompt */}
