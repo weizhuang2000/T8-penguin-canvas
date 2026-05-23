@@ -129,6 +129,28 @@ const RunningHubNode = ({ id, data, selected }: NodeProps) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [upstreamNodes, appInfo]);
 
+  // ========== 以当前 upstreamNodes + appInfo + paramValues 为输入，同步重算最新 paramValues ==========
+  // 用途：handleRun 产业路径上跳过 React state 异步更新陷阱。用户刚连上传视频节点后立刻点
+  // 运行， useEffect 同步上游 url 到 paramValues 还未生效；this fn 返回一份实时快照，避免用过期 state。
+  const computeFreshValuesNow = (
+    list: any[] | undefined,
+  ): Record<string, { value: string; sourceFromUpstream?: boolean }> => {
+    const next: Record<string, { value: string; sourceFromUpstream?: boolean }> = { ...paramValues };
+    if (!Array.isArray(list)) return next;
+    for (const it of list) {
+      const vt = inferValueType(it?.fieldType);
+      if (vt !== 'image' && vt !== 'video' && vt !== 'audio') continue;
+      const k = paramKey(it.nodeId, it.fieldName);
+      const cur = next[k];
+      if (cur?.sourceFromUpstream === false) continue; // 用户主动关闭
+      const upUrl = findUpstreamUrl(vt);
+      if (!upUrl) continue;
+      // sourceFromUpstream === true 或 undefined（初次看到上游）都采用上游实时 url
+      next[k] = { value: upUrl, sourceFromUpstream: true };
+    }
+    return next;
+  };
+
   // ========== 收集上游 RhConfig nodeInfoList（保留向后兼容）==========
   const collectUpstreamConfigList = () => {
     const list: any[] = [];
@@ -228,6 +250,7 @@ const RunningHubNode = ({ id, data, selected }: NodeProps) => {
       }
       try {
         const r = await queryRh(tid);
+        console.log('[RH/poll] taskId=', tid, 'status=', r.status, 'code=', r.code, 'urls=', r.urls?.length || 0);
         if (r.status === 'SUCCESS') {
           stopPoll();
           // 按后缀分流到 imageUrl/videoUrl/audioUrl，避免视频 url 被填到 imageUrl 导致
@@ -245,6 +268,7 @@ const RunningHubNode = ({ id, data, selected }: NodeProps) => {
           if (firstAud) patch.audioUrl = firstAud;
           // 都不匹配时退回原逻辑（首个当 imageUrl）以保证向后兼容
           if (!firstImg && !firstVid && !firstAud && list[0]) patch.imageUrl = list[0];
+          console.log('[RH/done] taskId=', tid, 'urls=', list);
           update(patch);
         } else if (r.status === 'FAILED') {
           stopPoll();
@@ -348,19 +372,30 @@ const RunningHubNode = ({ id, data, selected }: NodeProps) => {
         }
       }
     }
+    // 关键：无论 appInfo 是否已存在，进入 handleRun 都以当前 upstreamNodes 为准重算
+    // 一次 paramValues，避免 React state 异步更新陷阱（刚连上游立刻运行，state 还没生效）。
+    const effectiveList = freshList ?? appInfo?.nodeInfoList ?? [];
+    const effectiveValues = computeFreshValuesNow(effectiveList);
+    // 同步一份到 state，避免 UI 显示与提交不一致
+    if (Object.keys(effectiveValues).length > 0) {
+      update({ paramValues: effectiveValues });
+    }
     update({ status: 'submitting', error: null, urls: [], taskId: null });
     try {
-      const rawList = buildRawNodeInfoList(freshList ?? undefined, freshValues ?? undefined);
+      const rawList = buildRawNodeInfoList(effectiveList, effectiveValues);
       // 提交前：把媒体类 url 转成 RH 内部 fileName
       const nodeInfoList = await resolveNodeInfoList(rawList);
+      console.log('[RH/submit] webappId=', webappId, 'nodeInfoList=', JSON.parse(JSON.stringify(nodeInfoList)));
       const r = await submitRh({
         webappId,
         nodeInfoList,
         instanceType: instanceType || undefined,
       });
+      console.log('[RH/submit] taskId=', r.taskId);
       update({ status: 'polling', taskId: r.taskId });
       startPolling(r.taskId);
     } catch (e: any) {
+      console.error('[RH/submit] error:', e);
       setError(e?.message || '提交失败');
       update({ status: 'error', error: e?.message });
     }
