@@ -1,7 +1,11 @@
 # T8-penguin-canvas · skill.md
 
 > 项目能力 / 接口 / 文件用途速查手册。
-> 版本：v1.2.0 ｜ 仓库：<https://github.com/T8mars/T8-penguin-canvas>
+> 版本：v1.4.0 ｜ 仓库：<https://github.com/T8mars/T8-penguin-canvas>
+>
+> v1.4.0 增量：输出图片双击编辑·裁剪+宫格切分+自定义切线+gap 边缘去缝(32)
+>
+> v1.3.0 增量：组容器输出口连接修复(27) · Video/Seedance/Audio 接入素材聚合预览区(28) · 三处用户反馈修复(29) · Handle 光标语义化+命中区外扩 8px(30) · SHIFT+空白拖动剪刀划线断连(31)
 
 ---
 
@@ -2233,6 +2237,472 @@ git commit -m "fix: 恢复 xxx 功能(被 <bad-commit> 误回退)"
 - `46e3b4c` - NodeActionBar 浮动操作栏（被回退原始版本）
 - `5656721` - **事故 commit**：名义「自动外挂 OutputNode」实际夹带 4 项回退（−661 行）
 - `9a486e3` - 修复事故，恢复 GroupBoxNode 聚合输出口 + 取消 MaterialPreviewSection 折叠
+
+---
+
+## 27. 组容器聚合输出口·连接侧二次修复（4a2cc3d）
+
+> 起因：第 26 章 `9a486e3` 仅恢复了 GroupBoxNode 组件层与右侧 source Handle UI，但 portTypes / Canvas 创建路径 / 历史画布持久化 三处「连接侧逻辑」也是被 `5656721` 一并误回退的，导致即便 UI 出现也无法连出。`4a2cc3d` 把这条链路彻底补齐。
+
+### 27.1 修复点（四处协同）
+
+| 位置 | 修复内容 | 作用 |
+|---|---|---|
+| [`portTypes.ts`](file:///e:/PenguinPravite/T8-penguin-canvas/src/config/portTypes.ts) | 补回 `groupBox: { inputs: [], outputs: ['any'] }` | `getNodeOutputs(group)` 才能返回 `any`，进而通过 `isConnectionValid` |
+| [`Canvas.tsx`](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/Canvas.tsx) Ctrl+G 创建组 | 新建 groupBox 节点显式 `connectable: true` | xyflow 不会因 fallback `false` 而禁掉右侧 handle |
+| [`Canvas.tsx`](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/Canvas.tsx) `onConnect` | source 是 groupBox 时，自动断开「成员→同 target」的重复边 | 防止「组级聚合输出 + 成员独立输出」同时存在导致下游重复或循环 |
+| [`Canvas.tsx`](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/Canvas.tsx) 加载画布 | 加载时 `n.type === 'groupBox' && n.connectable === false ? { ...n, connectable: true } : n` | 兜底修复 5656721 事故期间生成的旧画布 JSON |
+
+### 27.2 onConnect 去重核心代码
+
+```ts
+if (src && src.type === 'groupBox' && tgt && params.target) {
+  const memberIds: string[] = Array.isArray((src.data as any)?.memberIds)
+    ? ((src.data as any).memberIds as string[])
+    : [];
+  if (memberIds.length > 0) {
+    const memberSet = new Set(memberIds);
+    const dupEdges = curEdges.filter(
+      (e) => memberSet.has(e.source) && e.target === params.target,
+    );
+    if (dupEdges.length > 0) {
+      const dupIds = new Set(dupEdges.map((e) => e.id));
+      setEdges((eds) => eds.filter((e) => !dupIds.has(e.id)));
+    }
+  }
+}
+```
+
+### 27.3 验证清单
+
+- [ ] Ctrl+G 打组后右侧 source handle 可拖出连线
+- [ ] 组→下游连接成立后，组成员→同一下游的旧边自动消失
+- [ ] 加载历史画布（含 5656721 期间的 connectable:false 老 group）后，右侧出口可用
+- [ ] portTypes.groupBox.outputs 包含 `'any'`，匹配任意目标
+
+### 27.4 关键 Commit 索引
+
+- `e065970` - 首次实现组聚合输出口（含 portTypes + Canvas + GroupBoxNode）
+- `5656721` - 事故 commit 把 portTypes / Canvas 部分回退
+- `9a486e3` - 仅恢复 GroupBoxNode UI 部分
+- `4a2cc3d` - 本章修复：补齐 portTypes + Canvas 创建/加载/onConnect 四处连接侧逻辑
+
+---
+
+## 28. 上游素材聚合预览区·全节点接入（3eeacda · 5867b3e · 8732968）
+
+> 第 21d5d5b 提出了 ImageNode 的 [`MaterialPreviewSection`](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/MaterialPreviewSection.tsx) MVP，本阶段把同一机制接入 VideoNode / SeedanceNode / AudioNode，实现 **「上游 + 本地」按用户拖拽顺序统一呈现** 的体验闭环。
+
+### 28.1 共通改造模板
+
+生成节点接入时的标准 5 步：
+
+1. `import` [`useUpstreamMaterials`](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/useUpstreamMaterials.ts) + [`useOrderedMaterials`](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/useOrderedMaterials.ts) + [`MaterialPreviewSection`](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/MaterialPreviewSection.tsx)
+2. 用 `materialOrder: string[]` 字段保存用户拖拽顺序，`update({ materialOrder })` 持久化
+3. **上游字段读取改用 `ordered`**：原来 `upstream.images.map(...)` 直接拼，现改为 `orderedImages.map(...)`，提交给 API 的顺序就是用户拖拽顺序
+4. 渲染替换：删除原始「参考图计数 / 上游列表」UI，统一渲染 `<MaterialPreviewSection ... />`
+5. 移除冗余的 `useReactFlow` 解构（聚合预览区 hook 已封装订阅）
+
+### 28.2 各节点 groups 配置
+
+| 节点 | groups | 说明 |
+|---|---|---|
+| ImageNode | `['text', 'image']` | 文本提示词 + 参考图（含 MJ sref/oref） |
+| VideoNode（grok / veo 子模型） | `['image']` | 仅图生视频时显示参考图 |
+| VideoNode（seedance 子模型） | `['text', 'image', 'video', 'audio']` | seedance 全模态参考 |
+| SeedanceNode | `['text', 'image', 'video', 'audio']` | 独立 Seedance 节点全开 |
+| AudioNode（generate） | `['text']` | 歌词提示纯文本 |
+| AudioNode（cover / extend） | `['text', 'audio']` | 文本 + 参考音频 |
+
+### 28.3 AudioNode 双输出口的 audio 副轨支持
+
+[`useUpstreamMaterials`](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/useUpstreamMaterials.ts) 同时收集 `data.audioUrl`（主轨）和 `data.audioUrl_1`（副轨），来源为 AudioNode 的双 source handle。任一非空都会作为独立 Material 推入 `audios[]`，供下游聚合预览或参考音频使用。
+
+```ts
+// 音频 (audioUrl 主轨, audioUrl_1 副轨——AudioNode 双输出口)
+pushUrl(sid, 'audio', ud.audioUrl, audios);
+pushUrl(sid, 'audio', ud.audioUrl_1, audios);
+```
+
+### 28.4 关键 Commit 索引
+
+- `21d5d5b` - 首版 ImageNode 接入 MaterialPreviewSection（MVP）
+- `3eeacda` - VideoNode 接入聚合预览区，groups 跟随子模型
+- `5867b3e` - SeedanceNode 接入聚合预览区，全模态全开
+- `8732968` - AudioNode 接入聚合预览区 + audioUrl_1 副轨
+
+---
+
+## 29. 用户反馈三连修复（a72ef9a）
+
+本章是 28 章接入完成后的微调，源自实际使用反馈。
+
+### 29.1 ImageNode 聚合区补 text 组
+
+问题：ImageNode 的 `groups` 仅 `['image']`，导致上游 LLM 节点输出的提示词无法在聚合区呈现，与 VideoNode 行为不一致。
+
+修复：[`ImageNode.tsx`](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/ImageNode.tsx) 第 1052 行 `groups={['text', 'image']}`。提示词以「文本卡」形式与参考图同列呈现，可被一并拖拽排序。
+
+### 29.2 OutputNode 双层 div 修复 handle 截断
+
+问题：`OutputNode` 外层容器使用 `overflow: hidden + 圆角` 来获得卡片裁切效果，但是 xyflow `Handle` 是相对于最外层 `.react-flow__node` 定位的子元素，被 `overflow: hidden` 一起裁掉了左右各 6px，导致圆点 handle 看起来「被切了一半」，不利点击。
+
+修复结构调整为 **外层 relative 不裁切 + 内层 rounded + overflow:hidden 容器**：
+
+```tsx
+<div className="relative" style={{ width: 320 }}>
+  <Handle type="target" position={Position.Left}  ... />
+  <Handle type="source" position={Position.Right} ... />
+  {/* 内层裁切容器: 圆角 + 越界裁切, 不影响外层 handle */}
+  <div className="rounded-xl border-2" style={{ overflow: 'hidden', ... }}>
+    {/* 头部 / body */}
+  </div>
+</div>
+```
+
+Handle 留在外层 div 内，不会被内层 overflow 截断；视觉裁切移交给内层。
+
+### 29.3 OutputNode 透传过滤：含图视音时清空文本字段
+
+问题：OutputNode 作为中继时，会把上游 collected 全量透传到自身 `data.{prompt,text,reply}`。当上游同时含「图 + 提示词」时，下游生成节点（图生图 / 图生视频）会把上下文提示词当作新的 prompt 强行拼到生成调用，污染参数。
+
+修复 [`OutputNode.tsx`](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/OutputNode.tsx)（约第 176-189 行）：
+
+```ts
+const hasNonText =
+  collected.images.length > 0 ||
+  collected.videos.length > 0 ||
+  collected.audios.length > 0;
+const passText = hasNonText ? '' : (displayText || '');
+const next: any = {
+  prompt: passText,
+  text: passText,
+  reply: passText,
+  // imageUrl/imageUrls/urls/videoUrl/audioUrl 照常透传
+};
+```
+
+规则归纳：
+- **混合模态**：仅透传非文本资源，文本字段置空（避免污染）
+- **纯文本输出**：仍透传到 prompt/text/reply
+- 始终不踩 `outputText`，保留「用户编辑覆盖」语义
+
+### 29.4 关键 Commit 索引
+
+- `a72ef9a` - 三处用户反馈一并修复
+
+---
+
+## 30. Handle 光标语义化 + 命中区外扩 8px（be7c2a3）
+
+### 30.1 设计目标
+
+生产实测中用户常把 handle 误识别为「拖动节点本体」，且圆点视觉直径仅 12px，命中精度差。
+
+### 30.2 双主题光标策略
+
+| 主题 | handle 光标 | 含义 |
+|---|---|---|
+| 科技风 | `crosshair`（十字准星） | 强调精准拖拽起点 |
+| 像素风 | `cell`（方格 + 十字） | 8-bit 风的「像素格选取」隐喻 |
+
+实现位置：
+- 科技风：[`index.css`](file:///e:/PenguinPravite/T8-penguin-canvas/src/styles/index.css) `.react-flow__handle { cursor: crosshair !important; }` + `:hover` 同样保持
+- 像素风：[`theme-pixel.css`](file:///e:/PenguinPravite/T8-penguin-canvas/src/styles/theme-pixel.css) 用 `html[data-theme-style="pixel"]` 选择器覆盖为 `cell`
+
+### 30.3 ::before 透明伪元素扩大命中区 8px
+
+核心思路：handle 视觉本体不变，但用 `position:absolute` 的透明 `::before` 把可点击区域向四周扩 8px，鼠标在视觉边缘外也能触发拖拽。
+
+```css
+.react-flow__handle::before {
+  content: '';
+  position: absolute;
+  inset: -8px;          /* 上下左右各 -8px */
+  border-radius: 50%;   /* 科技风圆形 */
+}
+/* 像素风升级为方形命中区 */
+html[data-theme-style="pixel"] .react-flow__handle::before {
+  border-radius: 0 !important;
+}
+```
+
+效果：
+- 视觉直径仍 12px，保持节点紧凑
+- 实际命中区直径 28px，类似主流画布软件「魔法点击」体验
+- `pointer-events` 自然继承自父 handle，无需额外 JS
+
+### 30.4 关键 Commit 索引
+
+- `be7c2a3` - handle cursor 双主题 + ::before 外扩 8px 感应区
+
+---
+
+## 31. SHIFT+空白拖动·剪刀划线批量断连（aadb6cc · 50ecd23）
+
+> 解决「多条连线想一次性删除」的痛点，沿用主流节点编辑器（Blender / TouchDesigner）的剪刀手势：按住 SHIFT 在画布空白拖动，鼠标轨迹划过的所有 edge 一次性删除。
+
+### 31.1 交互三阶段
+
+| 阶段 | body class | 鼠标光标 | 触发条件 | 视觉反馈 |
+|---|---|---|---|---|
+| 预览态 | `shift-mode` | 剪刀（彩色） | 仅按住 SHIFT，光标悬停画布空白 / GroupBoxNode 空白 | 提示「在这里拖动可断连」 |
+| 划线态 | `cut-mode` | 剪刀（彩色） | 预览态基础上按下左键并拖动 | SVG 红色虚线轨迹 + 命中 edge 标记 `.cut-marked` 高亮 |
+| 提交 | （清除） | 默认 | mouseup 或 SHIFT 释放 | 批量从 `edges` 状态删除 cutSet 中所有 id |
+
+双主题剪刀：
+- 科技风：红色（`#EF4444`）矢量剪刀，`stroke-linejoin: round`
+- 像素风：黄色填充 + 黑边（`#FFE066` / `#1A1410`）8-bit 剪刀，`shape-rendering: crispEdges`
+
+### 31.2 触发条件白名单
+
+[`Canvas.tsx`](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/Canvas.tsx) `onCutMouseDownCapture` 严格筛选：
+
+```ts
+// 排除: handle / button / input / textarea / [contenteditable] / edge 本体
+if (
+  targetEl.closest('.react-flow__handle') ||
+  targetEl.closest('button') ||
+  targetEl.closest('input') ||
+  targetEl.closest('textarea') ||
+  targetEl.closest('[contenteditable="true"]') ||
+  targetEl.closest('.react-flow__edge')
+) return;
+
+// 仅允许: 画布空白 (.react-flow__pane) 或 GroupBoxNode 内部空白
+const onPane = !!targetEl.closest('.react-flow__pane');
+const groupNode = targetEl.closest('.react-flow__node-groupBox');
+const inOtherNode = !!targetEl.closest('.react-flow__node') && !groupNode;
+if (!onPane && !groupNode) return;
+if (inOtherNode) return;
+```
+
+关键点：
+- 普通业务节点 **不触发剪刀**，避免与节点拖动冲突
+- 组节点空白区 **触发剪刀**，因为组内成员节点的连线常需局部清理
+- handle / 按钮 / 输入框 / 编辑态 全部豁免
+
+### 31.3 命中检测：mousemove + elementsFromPoint
+
+```ts
+const onCutMove = (mv: MouseEvent) => {
+  cutPoints.push([mv.clientX, mv.clientY]);
+  if (cutPoints.length > 200) cutPoints = cutPoints.slice(-200); // 限长防 polyline 膨胀
+  cutPath.setAttribute('points', cutPoints.map((p) => p.join(',')).join(' '));
+  // 命中检测: 鼠标下所有元素
+  const els = document.elementsFromPoint(mv.clientX, mv.clientY);
+  for (const el of els) {
+    const edgeEl = el.closest?.('.react-flow__edge');
+    if (!edgeEl) continue;
+    const id = edgeEl.getAttribute('data-id') || '';
+    if (!id || cutSet.has(id)) continue;
+    cutSet.add(id);
+    edgeEl.classList.add('cut-marked'); // 红色 / 粉色 高亮
+  }
+};
+```
+
+说明：
+- 用 `elementsFromPoint` 而非 `elementFromPoint`，可穿透到下层 edge（避免 SVG overlay 遮挡）
+- `cutSet` 累积所有划过的 edge id，去重 + 添加 `cut-marked` class
+- 提交时 `setEdges((prev) => prev.filter((ed) => !idsToCut.has(ed.id)))` 一次完成
+
+### 31.4 拦截 ReactFlow 默认 panning
+
+ReactFlow 默认 SHIFT + 空白拖动会触发 panning。剪刀模式必须 **完全接管**：
+
+```ts
+const onCutMouseDownCapture = (e: MouseEvent) => {
+  // ...白名单筛选...
+  e.preventDefault();
+  e.stopPropagation();
+  e.stopImmediatePropagation();   // 三连阻断, capture 阶段抢在 ReactFlow 之前
+  // ...开始划线...
+};
+```
+
+注册时使用 capture 阶段：`window.addEventListener('mousedown', onCutMouseDownCapture, true)`。
+
+### 31.5 中断收尾
+
+两种中断路径都必须清理：
+
+1. `mouseup` → `finishCut()` 提交删除 + 清 DOM
+2. SHIFT 键松开（拖动中途）→ `onCutKeyUp` → `finishCut()`
+
+收尾动作：
+- 删除 SVG overlay（移除 `cutSvg` DOM 节点）
+- 移除 `body.cut-mode`
+- 清除所有 `.cut-marked` class
+- 解绑 `mousemove` / `mouseup` 监听
+
+### 31.6 双主题 CSS 资产清单
+
+| Class | 主题 | 视觉 |
+|---|---|---|
+| `body.shift-mode .react-flow__pane / .react-flow__node-groupBox` | 通用 | 仅按住 SHIFT 时画布空白 + 组空白 显示剪刀光标 |
+| `body.cut-mode, body.cut-mode *` | 科技风 | 全局红色矢量剪刀 |
+| `html[data-theme-style="pixel"] body.cut-mode` | 像素风 | 全局黄色 8-bit 剪刀 |
+| `.react-flow__edge.cut-marked .react-flow__edge-path` | 科技风 | 红色 + 加粗 + 虚线 |
+| `html[data-theme-style="pixel"] .react-flow__edge.cut-marked` | 像素风 | px-pink-deep 粉色 + 均匀虚线 |
+| `.cut-overlay-svg .cut-overlay-path` | 科技风 | 红色半透明轨迹（`rgba(239,68,68,.85)`） |
+| `html[data-theme-style="pixel"] .cut-overlay-svg .cut-overlay-path` | 像素风 | px-ink 黑色方虚线 |
+
+### 31.7 验证清单
+
+- [ ] 仅按住 SHIFT 不拖动：画布空白 / 组空白 显示剪刀；普通节点 / handle / 按钮显示原光标
+- [ ] SHIFT + 空白拖动：进入 cut-mode，全局剪刀，划过的 edge 实时高亮
+- [ ] 鼠标松开：被高亮的 edge 一次性消失
+- [ ] 拖动途中松开 SHIFT：同样收尾删除
+- [ ] 在普通业务节点内 SHIFT+拖动：不触发剪刀（仍可正常拖动节点）
+- [ ] 在组节点空白处 SHIFT+拖动：触发剪刀（可清理组内连线）
+- [ ] 切换像素风：剪刀 / 高亮 / 轨迹颜色全部跟随主题
+- [ ] 划过 200 点以上：polyline 自动截断保留近 200 点（不卡顿）
+
+### 31.8 关键 Commit 索引
+
+- `aadb6cc` - SHIFT+空白拖动剪刀划线断连（双主题剪刀 + 实时高亮 + 轨迹覆盖）
+- `50ecd23` - SHIFT 按下即预览剪刀光标（画布空白 + 组节点空白）双主题
+
+---
+
+## 32. 输出图片双击编辑 (裁剪 / 宫格切分)
+
+需求：在 OutputNode 展示的任意图片上双击弹出编辑窗口，提供：
+
+1. **裁剪**：可拖动框选区、三个角缩放。
+2. **宫格切分**：等分模式（可调 rows/cols）与自定义切线模式（点布横/纵线、拖动、撤销、清空）。
+3. **gap 边缘去缝**：多宫格拼图间隔色偏走时，手动调 gap（0-240 px）微调 halfGap 收缩两侧。
+
+**产物营业原则**：**不修改原素材**，裁剪/切分后的 N 张图以独立 OutputNode 落在当前节点右侧 (3 列网格)，手动连接下游仍可透传。
+
+### 32.1 后端能力补齐 - `backend/src/routes/imageOps.js`
+
+```js
+// 1) 新增 精确裁剪
+router.post('/crop', async (req, res) => {
+  const { imageUrl, x, y, w, h } = req.body || {};
+  // ... fetch + sharp.extract({ left:x, top:y, width:w, height:h })
+});
+
+// 2) 扩展宫格切分
+router.post('/grid-crop', async (req, res) => {
+  const { imageUrl, rows, cols, gap, rectsPx } = req.body || {};
+  // 分支 A: rectsPx[] 优先 (外部计算好的自定义切线矩形)
+  // 分支 B: 等分 + halfGap 收缩内部边缘
+  // 均调 sharp(buf).extract(...) 并序输出 N 个 saveBuffer
+});
+```
+
+返回：`{ urls: string[], rows, cols, gap, layout: { rows, cols, gap } }`。
+
+### 32.2 前端 service - `src/services/imageOps.ts`
+
+```ts
+export const opCrop = (imageUrl, x, y, w, h) =>
+  postOp<{ imageUrl: string }>('crop', { imageUrl, x, y, w, h });
+
+export const opGridCrop = (imageUrl, rows, cols, gap?, rectsPx?) =>
+  postOp<{ urls; rows; cols; gap; layout }>(
+    'grid-crop',
+    { imageUrl, rows, cols, gap, rectsPx },
+  );
+```
+
+### 32.3 弹窗组件 - `src/components/nodes/ImageEditModal.tsx`
+
+状态机：
+
+| 状态 | 含义 |
+|---|---|
+| `mode: 'crop' \| 'grid'` | 顶部 tab 切换 |
+| `gridMode: 'preset' \| 'custom'` | 宫格子模式 |
+| `crop: {x,y,w,h}` (0..1) | 裁剪框 fraction |
+| `rows/cols/gap` | 预设等分参数 |
+| `customLines: Line[]` | `{type:'h'\|'v', pos:0..1}` |
+| `history: Line[][]` | 撤销栈 |
+| `naturalSize: {w,h}` | onLoad 后记录原图 natural 像素 |
+
+关键函数：
+
+- `computeRects(W,H,rows,cols,gap,customLines)` — 判断 customLines 是否使用、合并 0/H 边界、输出 N 个 `{x,y,w,h,row,col}` (natural 像素)
+- `lineHit(fx,fy,W,H)` — 阈值 `max(8, min(W,H)/80)` 像素转 fraction 判拖拽
+- crop 拖拽五种模式：`move / tl / tr / bl / br`，拖动中实时 setCrop
+- 应用：`applyCrop` 调 opCrop, `applyGrid` 调 opGridCrop（useCustom 时传 rectsPx）后 `onProduce(urls, meta)`
+
+双主题适配：
+
+- 科技风：`accent='#22d3ee'`、圆角、深底+青色 accent
+- 像素风：`accent='#C73B6B'`、零圆角 + 2px 黑描边 + 8-bit 阴影 (`6px 6px 0 #1A1410`)
+- SVG 预览线：像素风 `shape-rendering=crispEdges` + 2px 尚线
+
+### 32.4 OutputNode 接入 - `src/components/nodes/OutputNode.tsx`
+
+```tsx
+// 1) 双击触发
+<img src={u} onDoubleClick={(e) => { e.stopPropagation(); setEditingUrl(u); }} />
+
+// 2) 产物回调 — 在本节点右侧 3 列网格创建 N 个独立 OutputNode
+const handleProduce = (urls, _meta) => {
+  const me = rf.getNode(id);
+  const baseX = me.position.x + (me.measured?.width || 320) + 80;
+  const baseY = me.position.y;
+  const newNodes = urls.map((u, i) => ({
+    id: `output-auto-edit-${id}-${Date.now()}-${i}-${rand}`,
+    type: 'output',
+    position: { x: baseX + (i % 3) * 350, y: baseY + Math.floor(i / 3) * 360 },
+    data: { directImageUrl: u, imageUrl: u },
+  }));
+  rf.addNodes(newNodes);
+};
+```
+
+**独立模式**：产物 OutputNode 不连边、不依赖上游，通过新字段 `data.directImageUrl` 独立展示。
+OutputNode 的 collected 计算中增加分支：
+
+```ts
+if (typeof d.directImageUrl === 'string' && d.directImageUrl) {
+  pushUnique(out.images, d.directImageUrl);
+}
+if (Array.isArray(d.directImageUrls)) {
+  d.directImageUrls.forEach((u) => pushUnique(out.images, u));
+}
+```
+
+### 32.5 ID 前缀与网格重排不冲突
+
+- 产物 id 前缀 `output-auto-edit-`，区别于原生 `output-auto-`。
+- 必要原因：重排 useEffect 仅同时匹配 `id.startsWith('output-auto-')` **且**连边 `id.startsWith('e-auto-')`。产物节点不创建 edge，因此不会被重排接管，位置以创建时为准。
+- 依然占用 `output-auto-` 前缀是为了：如果产物被手动拖动，会被 Canvas 的 `userMoved` 标记逻辑包括在内，表现一致。
+
+### 32.6 双主题样式补丁
+
+| 选择器 | 作用 |
+|---|---|
+| `.img-edit-overlay` (index.css) | fixed 全屏 + blur(4px) + fade-in 180ms |
+| `.img-edit-modal` | min(1180px, 92vw) + max-height 90vh |
+| `.img-edit-stage img` (像素风) | `image-rendering: pixelated` + 2px 黑描边 + 零圆角 |
+| `.crop-box / .crop-handle` (像素风) | 零圆角 + 1px 黑色硬阴影 |
+
+### 32.7 验证清单
+
+- [ ] 任何含图 OutputNode 双击图片→弹窗出现、ESC 关闭
+- [ ] 裁剪模式：拖动框体/4 角缩放都生效，出图为原图裁剪后尺寸
+- [ ] 宫格等分：rows/cols 可调，gap 为 0 时无边缘收缩，增加 gap 可去缝
+- [ ] 宫格自定义：可加横线+纵线混合，拖动跳动平滑，撤销/清空生效
+- [ ] 产物 N 张节点出现在右侧 (3 列网格)，各节点独立可裁剪×N
+- [ ] 产物节点上充当上游连接下游 generator，下游 imageUrl 能读到产物图
+- [ ] 原节点 imageUrl 保持不变（不修改原素材）
+- [ ] 像素风下弹窗为零圆角 + 8-bit 硬阴影 + crispEdges
+- [ ] 科技风下弹窗为圆角 + 青色 accent + 背景模糊
+
+### 32.8 关键文件清单
+
+- 后端：[backend/src/routes/imageOps.js](file:///e:/PenguinPravite/T8-penguin-canvas/backend/src/routes/imageOps.js)
+- service：[src/services/imageOps.ts](file:///e:/PenguinPravite/T8-penguin-canvas/src/services/imageOps.ts)
+- 弹窗组件：[src/components/nodes/ImageEditModal.tsx](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/ImageEditModal.tsx)
+- 节点接入：[src/components/nodes/OutputNode.tsx](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/OutputNode.tsx)
+- 样式：[src/styles/index.css](file:///e:/PenguinPravite/T8-penguin-canvas/src/styles/index.css) + [src/styles/theme-pixel.css](file:///e:/PenguinPravite/T8-penguin-canvas/src/styles/theme-pixel.css)
 
 ---
 
