@@ -657,3 +657,27 @@ html[data-theme-style="pixel"] .px-clickable {
   transition: transform 80ms ease, box-shadow 80ms ease,
     background-color 120ms ease, color 120ms ease;
 }
+
+/* === 图像编辑弹窗 · 像素风重塪 === */
+html[data-theme-style="pixel"] .img-edit-overlay {
+  background: rgba(26, 20, 16, 0.55);
+  backdrop-filter: none;
+}
+html[data-theme-style="pixel"] .img-edit-modal {
+  font-family: var(--px-font-rounded);
+  border-radius: 0 !important;
+}
+html[data-theme-style="pixel"] .img-edit-stage img {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border: 2px solid var(--px-ink);
+  border-radius: 0 !important;
+}
+html[data-theme-style="pixel"] .img-edit-stage .crop-box {
+  border-radius: 0 !important;
+  box-shadow: 0 0 0 9999px rgba(26, 20, 16, 0.55), 2px 2px 0 var(--px-ink) !important;
+}
+html[data-theme-style="pixel"] .img-edit-stage .crop-handle {
+  border-radius: 0 !important;
+  box-shadow: 1px 1px 0 var(--px-ink);
+}

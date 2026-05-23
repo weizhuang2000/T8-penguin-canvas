@@ -200,3 +200,43 @@ body.cut-mode * {
   pointer-events: none !important;
   opacity: 0;
 }
+
+/* === 图像编辑弹窗 (ImageEditModal) === */
+/* OutputNode 中图片双击 → 裁剪 / 宫格切分 弹窗
+   科技风默认样式; 像素风升级在 theme-pixel.css */
+.img-edit-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: img-edit-fade-in 0.18s ease-out;
+}
+@keyframes img-edit-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.img-edit-modal {
+  width: min(1280px, 94vw);
+  height: min(860px, 94vh);
+  max-height: 94vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.img-edit-stage {
+  /* 滚动条美化, 长图也能查看 */
+  scrollbar-width: thin;
+}
+.img-edit-stage .crop-box {
+  user-select: none;
+  touch-action: none;
+}
+.img-edit-stage .crop-handle {
+  user-select: none;
+  touch-action: none;
+  z-index: 2;
+}
