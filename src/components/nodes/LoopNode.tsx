@@ -237,55 +237,79 @@ const LoopNode = (p: NodeProps) => {
       if (result) okCount++; else failCount++;
       update({ outputs: [...collected], progress: { done: i + 1, total: items.length, ok: okCount, fail: failCount } });
 
-      // v1.2.8.5: 本轮收尾——不再仅拿 directs[0] 的 result 单值, 而是读每个子图末端 OutputNode
-      //           本轮实际显示的 imageUrl + imageUrls / videoUrl + videoUrls / audioUrl + audioUrls / outputText
-      //           增量合并到自身 direct*Urls (去重) 。 这样无论上游是单字段节点还是 FramePair 这种
-      //           一轮产 N 张的多端口节点, 都能正确累积 (OutputNode 自己已按 sourceHandle 过滤到应该显示的子集)
+      // v1.2.8.6: 本轮收尾——直接读每个 OutputNode 的上游源头节点 data（按 sourceHandle 过滤）
+      //           以避免依赖 OutputNode 透传 useEffect 的异步时序 —— 上轮的 awaitNode 返回后,
+      //           生成节点 (如 FramePair) 的 firstFrameUrl/lastFrameUrl 已落盘, 源头字段就是本轮产物。
+      //           这样无论 OutputNode 透传是否到位, LoopNode 都能拿到本轮真实快照。
       if (outputNodeIds.size > 0) {
-        // 等 awaitNode 完成后上游节点 data 已落盘, 再等 100ms 让 OutputNode useEffect 透传从 collected 写到自身 data
-        await new Promise<void>((r) => setTimeout(() => r(), 100));
+        // 小额等待 (40ms) 让上游节点 update() 后的 setNodes 提交到 xyflow store, rf.getNode 能读到新值
+        await new Promise<void>((r) => setTimeout(() => r(), 40));
+        const liveByOutput = new Map<string, string[]>();
+        for (const outId of outputNodeIds) {
+          const inbound = rf.getEdges().filter((e) => e.target === outId);
+          const live: string[] = [];
+          const pushUniq = (arr: string[], v: any) => {
+            if (typeof v !== 'string') return;
+            const s = v.trim();
+            if (!s) return;
+            if (arr.indexOf(s) === -1) arr.push(s);
+          };
+          for (const e of inbound) {
+            const upNode = rf.getNode(e.source);
+            if (!upNode) continue;
+            const ud: any = upNode.data || {};
+            const sh: string | null = (e as any).sourceHandle ?? null;
+            // FramePair: 按 sourceHandle 过滤
+            const isFramePair =
+              Object.prototype.hasOwnProperty.call(ud, 'firstFrameUrl') &&
+              Object.prototype.hasOwnProperty.call(ud, 'lastFrameUrl');
+            if (isFramePair) {
+              if (sh === 'first') pushUniq(live, ud.firstFrameUrl);
+              else if (sh === 'last') pushUniq(live, ud.lastFrameUrl);
+              else { pushUniq(live, ud.firstFrameUrl); pushUniq(live, ud.lastFrameUrl); }
+              continue;
+            }
+            // 通用节点: 按 kind 读对应字段
+            if (kind === 'image') {
+              pushUniq(live, ud.imageUrl);
+              if (Array.isArray(ud.imageUrls)) ud.imageUrls.forEach((u: any) => pushUniq(live, u));
+              if (Array.isArray(ud.urls)) ud.urls.forEach((u: any) => pushUniq(live, u));
+              if (Array.isArray(ud.generatedImages)) ud.generatedImages.forEach((u: any) => pushUniq(live, u));
+            } else if (kind === 'video') {
+              pushUniq(live, ud.videoUrl);
+              if (Array.isArray(ud.videoUrls)) ud.videoUrls.forEach((u: any) => pushUniq(live, u));
+            } else if (kind === 'audio') {
+              pushUniq(live, ud.audioUrl);
+              pushUniq(live, ud.audioUrl_1);
+              if (Array.isArray(ud.audioUrls)) ud.audioUrls.forEach((u: any) => pushUniq(live, u));
+            }
+          }
+          liveByOutput.set(outId, live);
+        }
         rf.setNodes((prev) => prev.map((nd) => {
           if (!outputNodeIds.has(nd.id)) return nd;
+          const live = liveByOutput.get(nd.id) || [];
+          if (live.length === 0) return nd;
           const od: any = nd.data || {};
           const next: any = { ...od };
-          const collectLive = (single: any, multi: any): string[] => {
-            const out: string[] = [];
-            if (typeof single === 'string' && single) out.push(single);
-            if (Array.isArray(multi)) {
-              for (const u of multi) {
-                if (typeof u === 'string' && u && out.indexOf(u) === -1) out.push(u);
-              }
-            }
-            return out;
-          };
           if (kind === 'image') {
-            const live = collectLive(od.imageUrl, od.imageUrls);
             const cur = Array.isArray(od.directImageUrls) ? od.directImageUrls.slice() : [];
             for (const u of live) if (cur.indexOf(u) === -1) cur.push(u);
             next.directImageUrls = cur;
           } else if (kind === 'video') {
-            const live = collectLive(od.videoUrl, od.videoUrls);
             const cur = Array.isArray(od.directVideoUrls) ? od.directVideoUrls.slice() : [];
             for (const u of live) if (cur.indexOf(u) === -1) cur.push(u);
             next.directVideoUrls = cur;
           } else if (kind === 'audio') {
-            const live = collectLive(od.audioUrl, od.audioUrls);
-            // audioUrl_1 也归入 (Suno 双轨副轨)
-            if (typeof od.audioUrl_1 === 'string' && od.audioUrl_1 && live.indexOf(od.audioUrl_1) === -1) live.push(od.audioUrl_1);
             const cur = Array.isArray(od.directAudioUrls) ? od.directAudioUrls.slice() : [];
             for (const u of live) if (cur.indexOf(u) === -1) cur.push(u);
             next.directAudioUrls = cur;
           } else {
-            const liveText = (typeof od.outputText === 'string' && od.outputText)
-              ? od.outputText
-              : (typeof od.reply === 'string' && od.reply ? od.reply : (typeof od.text === 'string' ? od.text : ''));
-            if (liveText) {
-              const sep = '\n\n\u2500\u2500\u2500\u2500\u2500\u2500\n\n';
-              // outputText 是 OutputNode 的「用户覆盖」字段, 不再写它 (避免跳实时透传路径)
-              // 改写到 directOutputText 字段——OutputNode 下一轮接受 (如果存在)
-              const prev2: string = typeof next.directOutputText === 'string' ? next.directOutputText : '';
-              next.directOutputText = prev2 ? prev2 + sep + liveText : liveText;
-            }
+            // text 入 directOutputText (拼接)
+            const liveText = live.join('\n\n');
+            const sep = '\n\n\u2500\u2500\u2500\u2500\u2500\u2500\n\n';
+            const prev2: string = typeof od.directOutputText === 'string' ? od.directOutputText : '';
+            next.directOutputText = prev2 ? prev2 + sep + liveText : liveText;
           }
           return { ...nd, data: next };
         }));
