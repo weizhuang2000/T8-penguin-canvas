@@ -71,3 +71,17 @@ export async function uploadDataUrl(dataUrl: string, prefix: string = 'edit'): P
   if (!r.ok || !json.success) throw new Error(json?.error || `HTTP ${r.status}`);
   return json.data.url as string;
 }
+
+/**
+ * 将 File / Blob 上传 (multipart) → 返回本地 url
+ * 用于：图像编辑器 compose 模式 拖入文件 / Ctrl+V 粘贴文件 作为新图层
+ */
+export async function uploadFileBlob(file: File | Blob, filename?: string): Promise<string> {
+  const fd = new FormData();
+  const fname = filename || (file instanceof File ? file.name : `compose-${Date.now()}.png`);
+  fd.append('file', file, fname);
+  const r = await fetch('/api/files/upload', { method: 'POST', body: fd });
+  const json = await r.json();
+  if (!r.ok || !json.success) throw new Error(json?.error || `HTTP ${r.status}`);
+  return json.data.url as string;
+}

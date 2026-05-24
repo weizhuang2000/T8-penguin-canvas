@@ -17,9 +17,24 @@ import {
   Square as SquareIcon,
   Circle as CircleIcon,
   ListOrdered,
+  Layers as LayersIcon,
+  Lock as LockIcon,
+  Unlock as UnlockIcon,
+  Eye as EyeIcon,
+  EyeOff as EyeOffIcon,
+  ArrowUp,
+  ArrowDown,
+  ChevronsUp,
+  ChevronsDown,
+  Copy as CopyIcon,
+  Trash2,
+  FlipHorizontal2,
+  FlipVertical2,
+  Image as ImageIconLucide,
+  RotateCw,
 } from 'lucide-react';
 import { useThemeStore } from '../../stores/theme';
-import { opCrop, opGridCrop, uploadDataUrl } from '../../services/imageOps';
+import { opCrop, opGridCrop, uploadDataUrl, uploadFileBlob } from '../../services/imageOps';
 
 /**
  * ImageEditModal
@@ -41,7 +56,8 @@ export type ImageEditProduceMeta =
       rects: Array<{ x: number; y: number; w: number; h: number; row: number; col: number }>;
     }
   | { type: 'mask'; strokeCount: number }
-  | { type: 'brush'; strokeCount: number };
+  | { type: 'brush'; strokeCount: number }
+  | { type: 'compose'; layerCount: number; canvasW: number; canvasH: number };
 
 interface Props {
   srcUrl: string;
@@ -50,9 +66,29 @@ interface Props {
   onProduce: (urls: string[], meta: ImageEditProduceMeta) => void;
 }
 
-type EditMode = 'crop' | 'mask' | 'brush' | 'grid';
+type EditMode = 'crop' | 'mask' | 'brush' | 'grid' | 'compose';
 type GridSubMode = 'preset' | 'custom';
 type BrushTool = 'free' | 'rect' | 'ellipse' | 'label';
+
+// ---- compose v2 图层类型 ----
+interface ImageLayer {
+  id: string;
+  kind: 'image';
+  name: string;
+  src: string;
+  /** 画布 px 坐标 (不用 fraction) */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  rotation: number; // 度
+  flipX: boolean;
+  flipY: boolean;
+  opacity: number; // 0..1
+  visible: boolean;
+  locked: boolean;
+}
+type Layer = ImageLayer;
 
 interface Pt {
   x: number; // 0..1 fraction of natural size
@@ -174,6 +210,41 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
   const [labelCounter, setLabelCounter] = useState(1);
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
 
+  // ---- compose v2 ----
+  const [composeLayers, setComposeLayers] = useState<Layer[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [canvasW, setCanvasW] = useState(1024);
+  const [canvasH, setCanvasH] = useState(1024);
+  const [composeInited, setComposeInited] = useState(false);
+  const [composeHistory, setComposeHistory] = useState<
+    Array<{ layers: Layer[]; selectedIds: string[]; canvasW: number; canvasH: number }>
+  >([]);
+  const [composeFuture, setComposeFuture] = useState<
+    Array<{ layers: Layer[]; selectedIds: string[]; canvasW: number; canvasH: number }>
+  >([]);
+  const [composeStageBox, setComposeStageBox] = useState({ w: 800, h: 500 });
+  const composeStageRef = useRef<HTMLDivElement | null>(null);
+  const composeFileInputRef = useRef<HTMLInputElement | null>(null);
+  const composeFitRef = useRef<{ scale: number; offsetX: number; offsetY: number }>({
+    scale: 1,
+    offsetX: 0,
+    offsetY: 0,
+  });
+  const composeDragRef = useRef<{
+    pointerId: number;
+    startCx: number;
+    startCy: number;
+    op: 'move' | 'scale' | 'rotate';
+    handle?: 'tl' | 'tr' | 'bl' | 'br';
+    startLayers: Map<string, ImageLayer>;
+    activeId: string;
+    centerX?: number;
+    centerY?: number;
+    startAngle?: number;
+    shift?: boolean;
+    alt?: boolean;
+  } | null>(null);
+
   const stageRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const drawCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -275,6 +346,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
         else if (e.key === '2') setMode('mask');
         else if (e.key === '3') setMode('brush');
         else if (e.key === '4') setMode('grid');
+        else if (e.key === '5') setMode('compose');
         else if (e.key === '[') {
           if (mode === 'mask') setMaskBrushSize((s) => Math.max(2, s - 4));
           else if (mode === 'brush') setBrushSize((s) => Math.max(2, s - 2));
@@ -511,6 +583,501 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
       setBusy(false);
     }
   }
+
+  // ==================== compose v2: 图层组合 ====================
+  const pushComposeHistory = useCallback(() => {
+    setComposeHistory((h) =>
+      [...h, { layers: composeLayers, selectedIds, canvasW, canvasH }].slice(-50),
+    );
+    setComposeFuture([]);
+  }, [composeLayers, selectedIds, canvasW, canvasH]);
+
+  const composeUndo = useCallback(() => {
+    setComposeHistory((h) => {
+      if (!h.length) return h;
+      const prev = h[h.length - 1];
+      setComposeFuture((f) =>
+        [...f, { layers: composeLayers, selectedIds, canvasW, canvasH }].slice(-50),
+      );
+      setComposeLayers(prev.layers);
+      setSelectedIds(prev.selectedIds);
+      setCanvasW(prev.canvasW);
+      setCanvasH(prev.canvasH);
+      return h.slice(0, -1);
+    });
+  }, [composeLayers, selectedIds, canvasW, canvasH]);
+
+  const composeRedo = useCallback(() => {
+    setComposeFuture((f) => {
+      if (!f.length) return f;
+      const next = f[f.length - 1];
+      setComposeHistory((h) =>
+        [...h, { layers: composeLayers, selectedIds, canvasW, canvasH }].slice(-50),
+      );
+      setComposeLayers(next.layers);
+      setSelectedIds(next.selectedIds);
+      setCanvasW(next.canvasW);
+      setCanvasH(next.canvasH);
+      return f.slice(0, -1);
+    });
+  }, [composeLayers, selectedIds, canvasW, canvasH]);
+
+  const genLayerId = () => `L${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
+  const addImageLayerFromUrl = useCallback(
+    async (url: string, name?: string) => {
+      try {
+        const im = await loadImage(url);
+        const W = im.naturalWidth;
+        const H = im.naturalHeight;
+        // 默认放在画布中央，最大不超过画布 70%
+        const fit = Math.min(1, (canvasW * 0.7) / W, (canvasH * 0.7) / H);
+        const w = Math.round(W * fit);
+        const h = Math.round(H * fit);
+        const layer: ImageLayer = {
+          id: genLayerId(),
+          kind: 'image',
+          name: name || `图层 ${composeLayers.length + 1}`,
+          src: url,
+          x: Math.round((canvasW - w) / 2),
+          y: Math.round((canvasH - h) / 2),
+          w,
+          h,
+          rotation: 0,
+          flipX: false,
+          flipY: false,
+          opacity: 1,
+          visible: true,
+          locked: false,
+        };
+        pushComposeHistory();
+        setComposeLayers((arr) => [...arr, layer]);
+        setSelectedIds([layer.id]);
+      } catch (e: any) {
+        setErrMsg(e?.message || '加载图像失败');
+      }
+    },
+    [canvasW, canvasH, composeLayers.length, pushComposeHistory],
+  );
+
+  const addImageLayerFromFile = useCallback(
+    async (file: File | Blob, filename?: string) => {
+      try {
+        const url = await uploadFileBlob(file, filename);
+        await addImageLayerFromUrl(url, filename);
+      } catch (e: any) {
+        setErrMsg(e?.message || '上传失败');
+      }
+    },
+    [addImageLayerFromUrl],
+  );
+
+  const moveLayer = (id: string, delta: number) => {
+    pushComposeHistory();
+    setComposeLayers((arr) => {
+      const idx = arr.findIndex((l) => l.id === id);
+      if (idx < 0) return arr;
+      const next = [...arr];
+      const target = next.splice(idx, 1)[0];
+      const ni = Math.max(0, Math.min(next.length, idx + delta));
+      next.splice(ni, 0, target);
+      return next;
+    });
+  };
+  const moveLayerToTop = (id: string) => {
+    pushComposeHistory();
+    setComposeLayers((arr) => {
+      const idx = arr.findIndex((l) => l.id === id);
+      if (idx < 0) return arr;
+      const next = [...arr];
+      const target = next.splice(idx, 1)[0];
+      next.push(target);
+      return next;
+    });
+  };
+  const moveLayerToBottom = (id: string) => {
+    pushComposeHistory();
+    setComposeLayers((arr) => {
+      const idx = arr.findIndex((l) => l.id === id);
+      if (idx < 0) return arr;
+      const next = [...arr];
+      const target = next.splice(idx, 1)[0];
+      next.unshift(target);
+      return next;
+    });
+  };
+  const removeLayerById = (id: string) => {
+    pushComposeHistory();
+    setComposeLayers((arr) => arr.filter((l) => l.id !== id));
+    setSelectedIds((s) => s.filter((x) => x !== id));
+  };
+  const duplicateLayer = (id: string) => {
+    pushComposeHistory();
+    setComposeLayers((arr) => {
+      const idx = arr.findIndex((l) => l.id === id);
+      if (idx < 0) return arr;
+      const src = arr[idx];
+      const copy: ImageLayer = {
+        ...src,
+        id: genLayerId(),
+        name: src.name + ' 副本',
+        x: src.x + 16,
+        y: src.y + 16,
+      };
+      const next = [...arr];
+      next.splice(idx + 1, 0, copy);
+      setSelectedIds([copy.id]);
+      return next;
+    });
+  };
+  const updateLayer = (id: string, patch: Partial<ImageLayer>) => {
+    setComposeLayers((arr) =>
+      arr.map((l) => (l.id === id ? ({ ...l, ...patch } as ImageLayer) : l)),
+    );
+  };
+
+  // 应用 compose: 离屏 canvas 渲染 → toDataURL → uploadDataUrl → onProduce
+  async function applyCompose() {
+    if (composeLayers.length === 0) {
+      setErrMsg('请先添加图层');
+      return;
+    }
+    setBusy(true);
+    setErrMsg(null);
+    try {
+      const cv = document.createElement('canvas');
+      cv.width = canvasW;
+      cv.height = canvasH;
+      const ctx = cv.getContext('2d');
+      if (!ctx) throw new Error('canvas 不可用');
+      // 透明底 (不填任何颜色)
+      ctx.clearRect(0, 0, canvasW, canvasH);
+      // 累加画每个可见图层
+      for (const layer of composeLayers) {
+        if (!layer.visible) continue;
+        const im = await loadImage(layer.src);
+        ctx.save();
+        ctx.globalAlpha = layer.opacity;
+        const cx = layer.x + layer.w / 2;
+        const cy = layer.y + layer.h / 2;
+        ctx.translate(cx, cy);
+        if (layer.rotation) ctx.rotate((layer.rotation * Math.PI) / 180);
+        ctx.scale(layer.flipX ? -1 : 1, layer.flipY ? -1 : 1);
+        ctx.drawImage(im, -layer.w / 2, -layer.h / 2, layer.w, layer.h);
+        ctx.restore();
+      }
+      const dataUrl = cv.toDataURL('image/png');
+      const url = await uploadDataUrl(dataUrl, 'compose');
+      onProduce([url], {
+        type: 'compose',
+        layerCount: composeLayers.length,
+        canvasW,
+        canvasH,
+      });
+      onClose();
+    } catch (e: any) {
+      setErrMsg(e?.message || '应用图层组合失败');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ---- compose 底图初始化: 双击进来的 srcUrl 作为图层 #0 (并以其原图尺寸作为画布默认) ----
+  useEffect(() => {
+    if (mode !== 'compose') return;
+    if (composeInited) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const im = await loadImage(srcUrl);
+        if (cancelled) return;
+        const W = im.naturalWidth || 1024;
+        const H = im.naturalHeight || 1024;
+        const cw = Math.max(64, Math.min(4096, W));
+        const ch = Math.max(64, Math.min(4096, H));
+        const layer: ImageLayer = {
+          id: genLayerId(),
+          kind: 'image',
+          name: '底图',
+          src: srcUrl,
+          x: 0,
+          y: 0,
+          w: cw,
+          h: ch,
+          rotation: 0,
+          flipX: false,
+          flipY: false,
+          opacity: 1,
+          visible: true,
+          locked: false,
+        };
+        setCanvasW(cw);
+        setCanvasH(ch);
+        setComposeLayers([layer]);
+        setSelectedIds([layer.id]);
+        setComposeInited(true);
+      } catch (e: any) {
+        setErrMsg(e?.message || '底图加载失败');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, srcUrl]);
+
+  // ---- compose 鼠标交互 (move / scale 4 角 / rotate 把手) ----
+  const stagePointToCanvas = (clientX: number, clientY: number): { x: number; y: number } | null => {
+    const stage = composeStageRef.current;
+    if (!stage) return null;
+    const r = stage.getBoundingClientRect();
+    const fit = composeFitRef.current;
+    const sx = clientX - r.left - fit.offsetX;
+    const sy = clientY - r.top - fit.offsetY;
+    return { x: sx / fit.scale, y: sy / fit.scale };
+  };
+
+  const onComposeLayerPointerDown = (
+    e: React.PointerEvent,
+    layerId: string,
+    op: 'move' | 'scale' | 'rotate',
+    handle?: 'tl' | 'tr' | 'bl' | 'br',
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const layer = composeLayers.find((l) => l.id === layerId) as ImageLayer | undefined;
+    if (!layer || layer.locked) return;
+    const pt = stagePointToCanvas(e.clientX, e.clientY);
+    if (!pt) return;
+    pushComposeHistory();
+    // 选中处理: shift 追加 / 全选切换; 否则单选
+    let newSelected: string[];
+    if (e.shiftKey) {
+      newSelected = selectedIds.includes(layerId)
+        ? selectedIds.filter((x) => x !== layerId)
+        : [...selectedIds, layerId];
+    } else {
+      newSelected = selectedIds.includes(layerId) && selectedIds.length > 1
+        ? selectedIds
+        : [layerId];
+    }
+    setSelectedIds(newSelected);
+    const startMap = new Map<string, ImageLayer>();
+    for (const id of newSelected) {
+      const lz = composeLayers.find((l) => l.id === id) as ImageLayer | undefined;
+      if (lz) startMap.set(id, { ...lz });
+    }
+    composeDragRef.current = {
+      pointerId: e.pointerId,
+      startCx: pt.x,
+      startCy: pt.y,
+      op,
+      handle,
+      startLayers: startMap,
+      activeId: layerId,
+      centerX: layer.x + layer.w / 2,
+      centerY: layer.y + layer.h / 2,
+      startAngle:
+        op === 'rotate'
+          ? Math.atan2(pt.y - (layer.y + layer.h / 2), pt.x - (layer.x + layer.w / 2)) *
+            (180 / Math.PI)
+          : 0,
+      shift: e.shiftKey,
+      alt: e.altKey,
+    };
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+  };
+
+  const onComposeStageMove = (e: React.PointerEvent) => {
+    const ctx = composeDragRef.current;
+    if (!ctx) return;
+    const pt = stagePointToCanvas(e.clientX, e.clientY);
+    if (!pt) return;
+    const dx = pt.x - ctx.startCx;
+    const dy = pt.y - ctx.startCy;
+    if (ctx.op === 'move') {
+      setComposeLayers((arr) =>
+        arr.map((l) => {
+          const start = ctx.startLayers.get(l.id);
+          if (!start) return l;
+          return { ...l, x: start.x + dx, y: start.y + dy };
+        }),
+      );
+    } else if (ctx.op === 'scale' && ctx.handle) {
+      const start = ctx.startLayers.get(ctx.activeId);
+      if (!start) return;
+      // 4 角缩放：默认同比 (Shift 则自由); Alt 中心缩放
+      const aspect = start.w / start.h;
+      let nx = start.x;
+      let ny = start.y;
+      let nw = start.w;
+      let nh = start.h;
+      const handle = ctx.handle;
+      const sameRatio = !e.shiftKey;
+      if (handle === 'br') {
+        nw = Math.max(8, start.w + dx);
+        nh = Math.max(8, sameRatio ? nw / aspect : start.h + dy);
+      } else if (handle === 'tr') {
+        nw = Math.max(8, start.w + dx);
+        const dh = sameRatio ? nw / aspect - start.h : -dy;
+        nh = Math.max(8, start.h + dh);
+        ny = start.y - (nh - start.h);
+      } else if (handle === 'bl') {
+        nw = Math.max(8, start.w - dx);
+        nx = start.x + (start.w - nw);
+        nh = Math.max(8, sameRatio ? nw / aspect : start.h + dy);
+      } else if (handle === 'tl') {
+        nw = Math.max(8, start.w - dx);
+        nx = start.x + (start.w - nw);
+        const dh = sameRatio ? nw / aspect - start.h : -dy;
+        nh = Math.max(8, start.h + dh);
+        ny = start.y - (nh - start.h);
+      }
+      if (e.altKey) {
+        // Alt 中心缩放
+        nx = start.x + start.w / 2 - nw / 2;
+        ny = start.y + start.h / 2 - nh / 2;
+      }
+      updateLayer(ctx.activeId, { x: nx, y: ny, w: nw, h: nh });
+    } else if (ctx.op === 'rotate') {
+      const start = ctx.startLayers.get(ctx.activeId);
+      if (!start || ctx.centerX == null || ctx.centerY == null) return;
+      const ang =
+        Math.atan2(pt.y - ctx.centerY, pt.x - ctx.centerX) * (180 / Math.PI);
+      let next = start.rotation + (ang - (ctx.startAngle || 0));
+      if (e.shiftKey) {
+        next = Math.round(next / 15) * 15; // Shift 吸附 15°
+      }
+      updateLayer(ctx.activeId, { rotation: next });
+    }
+  };
+
+  const onComposeStageUp = (e: React.PointerEvent) => {
+    if (composeDragRef.current) {
+      try {
+        (e.target as Element).releasePointerCapture?.(composeDragRef.current.pointerId);
+      } catch {}
+      composeDragRef.current = null;
+    }
+  };
+
+  // ---- compose 键盘快捷键 (Ctrl+Z/Y/A/D, Del, 方向键) ----
+  useEffect(() => {
+    if (mode !== 'compose') return;
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea') return;
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (ctrl && !e.shiftKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        composeUndo();
+      } else if (
+        (ctrl && e.shiftKey && e.key.toLowerCase() === 'z') ||
+        (ctrl && e.key.toLowerCase() === 'y')
+      ) {
+        e.preventDefault();
+        composeRedo();
+      } else if (ctrl && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        setSelectedIds(composeLayers.map((l) => l.id));
+      } else if (ctrl && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        if (selectedIds.length === 1) duplicateLayer(selectedIds[0]);
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedIds.length === 0) return;
+        e.preventDefault();
+        pushComposeHistory();
+        setComposeLayers((arr) => arr.filter((l) => !selectedIds.includes(l.id)));
+        setSelectedIds([]);
+      } else if (
+        e.key === 'ArrowLeft' ||
+        e.key === 'ArrowRight' ||
+        e.key === 'ArrowUp' ||
+        e.key === 'ArrowDown'
+      ) {
+        if (selectedIds.length === 0) return;
+        e.preventDefault();
+        const step = e.shiftKey ? 10 : 1;
+        const dx =
+          e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+        const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+        setComposeLayers((arr) =>
+          arr.map((l) =>
+            selectedIds.includes(l.id) ? { ...l, x: l.x + dx, y: l.y + dy } : l,
+          ),
+        );
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, composeLayers, selectedIds, composeUndo, composeRedo]);
+
+  // ---- compose 拖入文件 / Ctrl+V 粘贴文件 ----
+  useEffect(() => {
+    if (mode !== 'compose') return;
+    const stage = composeStageRef.current;
+    if (!stage) return;
+    const onDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    };
+    const onDrop = async (e: DragEvent) => {
+      e.preventDefault();
+      const files = e.dataTransfer?.files;
+      if (!files || files.length === 0) return;
+      for (const f of Array.from(files)) {
+        if (f.type.startsWith('image/')) {
+          await addImageLayerFromFile(f, f.name);
+        }
+      }
+    };
+    const onPaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const it of Array.from(items)) {
+        if (it.type.startsWith('image/')) {
+          const blob = it.getAsFile();
+          if (blob) await addImageLayerFromFile(blob, `paste-${Date.now()}.png`);
+        }
+      }
+    };
+    stage.addEventListener('dragover', onDragOver);
+    stage.addEventListener('drop', onDrop);
+    window.addEventListener('paste', onPaste);
+    return () => {
+      stage.removeEventListener('dragover', onDragOver);
+      stage.removeEventListener('drop', onDrop);
+      window.removeEventListener('paste', onPaste);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, addImageLayerFromFile]);
+
+  // ---- compose stage 尺寸观察 + fit 计算 ----
+  useEffect(() => {
+    if (mode !== 'compose') return;
+    const el = composeStageRef.current;
+    if (!el) return;
+    const update = () => {
+      const r = el.getBoundingClientRect();
+      setComposeStageBox({ w: r.width, h: r.height });
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [mode]);
+  const composeFit = useMemo(() => {
+    const sw = Math.max(1, composeStageBox.w);
+    const sh = Math.max(1, composeStageBox.h);
+    const scale = Math.min(sw / canvasW, sh / canvasH) * 0.92;
+    const offsetX = (sw - canvasW * scale) / 2;
+    const offsetY = (sh - canvasH * scale) / 2;
+    return { scale, offsetX, offsetY };
+  }, [composeStageBox, canvasW, canvasH]);
+  useEffect(() => {
+    composeFitRef.current = composeFit;
+  }, [composeFit]);
 
   // ---- mask / brush 画布渲染 (如不同状态中跳转, 根据矢量重画) ----
   const drawStrokeOnCtx = (
@@ -937,6 +1504,8 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
                 ? '用笔刷涂出需重绘区域，白色 = 遮罩区'
                 : mode === 'brush'
                 ? '选择工具 + 颜色，在图上记号、标注、画草图'
+                : mode === 'compose'
+                ? '拖入图片或粘贴 → 多图层组合 (拖动/4 角缩放/旋转/Shift 自由比例/Alt 中心)'
                 : gridMode === 'preset'
                 ? '调整横/纵线数量与 gap 进行等分切分'
                 : '点击画布添加切线，拖动进行调整'}
@@ -955,6 +1524,9 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
             </button>
             <button style={tabBtn(mode === 'grid')} onClick={() => setMode('grid')} title="宫格切分 (4)">
               <Grid3x3 size={14} /> 宫格切分
+            </button>
+            <button style={tabBtn(mode === 'compose')} onClick={() => setMode('compose')} title="图层组合 (5)">
+              <LayersIcon size={14} /> 组合
             </button>
           </div>
           <button style={btnBase} onClick={onClose} title="关闭 (ESC)">
@@ -1179,9 +1751,508 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
               <span style={{ color: subText }}>产物：原图 ⊕ 画板合成图</span>
             </>
           )}
+          {mode === 'compose' && (
+            <>
+              <button
+                style={btnBase}
+                onClick={() => composeFileInputRef.current?.click()}
+                title="添加图片图层"
+              >
+                <Plus size={13} /> 添加图片
+              </button>
+              <input
+                ref={composeFileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                style={{ display: 'none' }}
+                onChange={async (e) => {
+                  const files = e.target.files;
+                  if (!files) return;
+                  for (const f of Array.from(files)) {
+                    await addImageLayerFromFile(f, f.name);
+                  }
+                  e.target.value = '';
+                }}
+              />
+              <span style={{ color: subText, marginLeft: 4 }}>画布</span>
+              <input
+                type="number"
+                min={64}
+                max={4096}
+                value={canvasW}
+                onChange={(e) => {
+                  const v = Math.max(64, Math.min(4096, Number(e.target.value) || 1024));
+                  setCanvasW(v);
+                }}
+                style={{ ...inputStyle, width: 70 }}
+              />
+              <span style={{ color: subText }}>×</span>
+              <input
+                type="number"
+                min={64}
+                max={4096}
+                value={canvasH}
+                onChange={(e) => {
+                  const v = Math.max(64, Math.min(4096, Number(e.target.value) || 1024));
+                  setCanvasH(v);
+                }}
+                style={{ ...inputStyle, width: 70 }}
+              />
+              {([
+                [1024, 1024, '1:1'],
+                [768, 1024, '3:4'],
+                [1024, 768, '4:3'],
+                [1080, 1920, '9:16'],
+                [1920, 1080, '16:9'],
+              ] as Array<[number, number, string]>).map(([w, h, label]) => (
+                <button
+                  key={label}
+                  style={btnBase}
+                  onClick={() => {
+                    pushComposeHistory();
+                    setCanvasW(w);
+                    setCanvasH(h);
+                  }}
+                  title={`${w}×${h}`}
+                >
+                  {label}
+                </button>
+              ))}
+              <div
+                style={{
+                  width: 1,
+                  height: 18,
+                  background: isPixel ? '#1A1410' : 'rgba(127,127,127,.3)',
+                  margin: '0 4px',
+                }}
+              />
+              <button
+                style={btnBase}
+                onClick={composeUndo}
+                disabled={!composeHistory.length}
+                title="撤销 (Ctrl+Z)"
+              >
+                <Undo2 size={13} />
+              </button>
+              <button
+                style={btnBase}
+                onClick={composeRedo}
+                disabled={!composeFuture.length}
+                title="恢复 (Ctrl+Y)"
+              >
+                <Redo2 size={13} />
+              </button>
+              <div style={{ flex: 1 }} />
+              <span style={{ color: subText }}>
+                {composeLayers.length} 图层 · {selectedIds.length} 选中
+              </span>
+            </>
+          )}
         </div>
 
         {/* Stage */}
+        {mode === 'compose' ? (
+          <div
+            className="img-edit-stage"
+            data-mode="compose"
+            style={{
+              flex: 1,
+              display: 'flex',
+              minHeight: 420,
+              background: isPixel ? '#FFF1B8' : isDark ? '#020617' : '#f8fafc',
+            }}
+          >
+            {/* 左 sidebar 图层列表 */}
+            <div
+              style={{
+                width: 200,
+                borderRight: isPixel
+                  ? '2px solid #1A1410'
+                  : `1px solid ${isDark ? 'rgba(255,255,255,.1)' : 'rgba(0,0,0,.1)'}`,
+                padding: 8,
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+                background: isPixel ? '#FFFBF0' : isDark ? 'rgba(255,255,255,.02)' : 'rgba(0,0,0,.02)',
+              }}
+            >
+              <div style={{ fontSize: 11, color: subText, padding: '4px 6px', fontWeight: 700 }}>
+                <LayersIcon size={12} style={{ verticalAlign: -2, marginRight: 4 }} />
+                图层 (顶 → 底)
+              </div>
+              {[...composeLayers].reverse().map((layer) => {
+                const selected = selectedIds.includes(layer.id);
+                return (
+                  <div
+                    key={layer.id}
+                    onPointerDown={(e) => {
+                      if (e.shiftKey) {
+                        setSelectedIds((s) =>
+                          s.includes(layer.id) ? s.filter((x) => x !== layer.id) : [...s, layer.id],
+                        );
+                      } else {
+                        setSelectedIds([layer.id]);
+                      }
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '4px 6px',
+                      background: selected
+                        ? isPixel
+                          ? '#FFE066'
+                          : accent + '33'
+                        : 'transparent',
+                      border: isPixel ? '2px solid' : '1px solid',
+                      borderColor: selected
+                        ? isPixel
+                          ? '#1A1410'
+                          : accent
+                        : 'transparent',
+                      borderRadius: isPixel ? 0 : 6,
+                      cursor: 'pointer',
+                      fontSize: 12,
+                    }}
+                  >
+                    <button
+                      style={{ ...btnBase, padding: 2, minWidth: 'auto' }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        updateLayer(layer.id, { visible: !layer.visible });
+                      }}
+                      title={layer.visible ? '隐藏' : '显示'}
+                    >
+                      {layer.visible ? <EyeIcon size={12} /> : <EyeOffIcon size={12} />}
+                    </button>
+                    <button
+                      style={{ ...btnBase, padding: 2, minWidth: 'auto' }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        updateLayer(layer.id, { locked: !layer.locked });
+                      }}
+                      title={layer.locked ? '解锁' : '锁定'}
+                    >
+                      {layer.locked ? <LockIcon size={12} /> : <UnlockIcon size={12} />}
+                    </button>
+                    <span
+                      style={{
+                        flex: 1,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                      title={layer.name}
+                    >
+                      {layer.name}
+                    </span>
+                    <button
+                      style={{ ...btnBase, padding: 2, minWidth: 'auto' }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeLayerById(layer.id);
+                      }}
+                      title="删除"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                );
+              })}
+              {composeLayers.length === 0 && (
+                <div style={{ fontSize: 11, color: subText, padding: 8, textAlign: 'center' }}>
+                  无图层
+                </div>
+              )}
+            </div>
+            {/* 中画布 */}
+            <div
+              ref={composeStageRef}
+              style={{
+                flex: 1,
+                position: 'relative',
+                overflow: 'hidden',
+                cursor: 'default',
+              }}
+              onPointerMove={onComposeStageMove}
+              onPointerUp={onComposeStageUp}
+              onPointerDown={(e) => {
+                if (e.target === e.currentTarget) setSelectedIds([]);
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  left: composeFit.offsetX,
+                  top: composeFit.offsetY,
+                  width: canvasW * composeFit.scale,
+                  height: canvasH * composeFit.scale,
+                  background:
+                    'repeating-conic-gradient(' +
+                    (isPixel ? '#fff' : isDark ? '#1f2937' : '#fff') +
+                    ' 0% 25%, ' +
+                    (isPixel ? '#FFE066' : isDark ? '#374151' : '#e5e7eb') +
+                    ' 0% 50%) 50% / 24px 24px',
+                  border: isPixel ? '2px solid #1A1410' : `1px solid ${accent}`,
+                  boxShadow: isPixel ? '4px 4px 0 #1A1410' : `0 0 0 1px ${accent}33`,
+                }}
+                onPointerDown={(e) => {
+                  if (e.target === e.currentTarget) setSelectedIds([]);
+                }}
+              >
+                {composeLayers.map((layer) => {
+                  const selected = selectedIds.includes(layer.id);
+                  const W = layer.w * composeFit.scale;
+                  const H = layer.h * composeFit.scale;
+                  const X = layer.x * composeFit.scale;
+                  const Y = layer.y * composeFit.scale;
+                  return (
+                    <div
+                      key={layer.id}
+                      style={{
+                        position: 'absolute',
+                        left: X,
+                        top: Y,
+                        width: W,
+                        height: H,
+                        transform: `rotate(${layer.rotation}deg) scale(${layer.flipX ? -1 : 1}, ${layer.flipY ? -1 : 1})`,
+                        transformOrigin: 'center center',
+                        opacity: layer.visible ? layer.opacity : 0.2,
+                        outline: selected ? `2px solid ${accent}` : 'none',
+                        outlineOffset: 0,
+                        cursor: layer.locked ? 'not-allowed' : 'move',
+                        pointerEvents: 'auto',
+                      }}
+                      onPointerDown={(e) => onComposeLayerPointerDown(e, layer.id, 'move')}
+                    >
+                      {/* eslint-disable-next-line jsx-a11y/alt-text */}
+                      <img
+                        src={layer.src}
+                        crossOrigin="anonymous"
+                        draggable={false}
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          height: '100%',
+                          imageRendering: isPixel ? 'pixelated' : 'auto',
+                          userSelect: 'none',
+                          pointerEvents: 'none',
+                        }}
+                      />
+                      {selected && !layer.locked && (
+                        <>
+                          {(['tl', 'tr', 'bl', 'br'] as const).map((h) => {
+                            const pos: React.CSSProperties = {
+                              position: 'absolute',
+                              width: 12,
+                              height: 12,
+                              background: '#fff',
+                              border: `2px solid ${accent}`,
+                              borderRadius: handleRadius,
+                              cursor: h === 'tl' || h === 'br' ? 'nwse-resize' : 'nesw-resize',
+                            };
+                            if (h === 'tl') {
+                              pos.left = -7;
+                              pos.top = -7;
+                            } else if (h === 'tr') {
+                              pos.right = -7;
+                              pos.top = -7;
+                            } else if (h === 'bl') {
+                              pos.left = -7;
+                              pos.bottom = -7;
+                            } else {
+                              pos.right = -7;
+                              pos.bottom = -7;
+                            }
+                            return (
+                              <div
+                                key={h}
+                                style={pos}
+                                onPointerDown={(e) =>
+                                  onComposeLayerPointerDown(e, layer.id, 'scale', h)
+                                }
+                              />
+                            );
+                          })}
+                          {/* 旋转把手 */}
+                          <div
+                            onPointerDown={(e) =>
+                              onComposeLayerPointerDown(e, layer.id, 'rotate')
+                            }
+                            style={{
+                              position: 'absolute',
+                              left: '50%',
+                              top: -28,
+                              width: 14,
+                              height: 14,
+                              background: accent,
+                              border: '2px solid #fff',
+                              borderRadius: '50%',
+                              transform: 'translateX(-50%)',
+                              cursor: 'crosshair',
+                              boxShadow: '0 0 0 1px rgba(0,0,0,.4)',
+                            }}
+                          />
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            {/* 右 sidebar 选中属性 */}
+            <div
+              style={{
+                width: 220,
+                borderLeft: isPixel
+                  ? '2px solid #1A1410'
+                  : `1px solid ${isDark ? 'rgba(255,255,255,.1)' : 'rgba(0,0,0,.1)'}`,
+                padding: 12,
+                overflowY: 'auto',
+                background: isPixel ? '#FFFBF0' : isDark ? 'rgba(255,255,255,.02)' : 'rgba(0,0,0,.02)',
+                fontSize: 12,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+              }}
+            >
+              {selectedIds.length === 0 && (
+                <div style={{ color: subText, textAlign: 'center', marginTop: 12 }}>未选中图层</div>
+              )}
+              {selectedIds.length > 1 && (
+                <div style={{ color: subText, textAlign: 'center', marginTop: 12 }}>
+                  已选中 {selectedIds.length} 个图层
+                </div>
+              )}
+              {selectedIds.length === 1 &&
+                (() => {
+                  const layer = composeLayers.find((l) => l.id === selectedIds[0]);
+                  if (!layer) return null;
+                  const numField = (
+                    label: string,
+                    val: number,
+                    onChange: (v: number) => void,
+                  ) => (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ width: 28, color: subText }}>{label}</span>
+                      <input
+                        type="number"
+                        value={Math.round(val * 100) / 100}
+                        onChange={(e) => onChange(Number(e.target.value) || 0)}
+                        style={{ ...inputStyle, flex: 1, textAlign: 'left' }}
+                      />
+                    </div>
+                  );
+                  return (
+                    <>
+                      <div style={{ fontWeight: 700, color: textColor, wordBreak: 'break-all' }}>
+                        {layer.name}
+                      </div>
+                      {numField('X', layer.x, (v) => updateLayer(layer.id, { x: v }))}
+                      {numField('Y', layer.y, (v) => updateLayer(layer.id, { y: v }))}
+                      {numField('W', layer.w, (v) => updateLayer(layer.id, { w: Math.max(8, v) }))}
+                      {numField('H', layer.h, (v) => updateLayer(layer.id, { h: Math.max(8, v) }))}
+                      {numField('旋', layer.rotation, (v) => updateLayer(layer.id, { rotation: v }))}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ width: 28, color: subText }}>不透</span>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={Math.round(layer.opacity * 100)}
+                          onChange={(e) =>
+                            updateLayer(layer.id, { opacity: Number(e.target.value) / 100 })
+                          }
+                          style={{ flex: 1 }}
+                        />
+                        <span style={{ width: 28, textAlign: 'right' }}>
+                          {Math.round(layer.opacity * 100)}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        <button
+                          style={tabBtn(layer.flipX)}
+                          onClick={() => updateLayer(layer.id, { flipX: !layer.flipX })}
+                          title="水平翻转"
+                        >
+                          <FlipHorizontal2 size={13} />
+                        </button>
+                        <button
+                          style={tabBtn(layer.flipY)}
+                          onClick={() => updateLayer(layer.id, { flipY: !layer.flipY })}
+                          title="垂直翻转"
+                        >
+                          <FlipVertical2 size={13} />
+                        </button>
+                        <button
+                          style={tabBtn(layer.locked)}
+                          onClick={() => updateLayer(layer.id, { locked: !layer.locked })}
+                          title="锁定"
+                        >
+                          {layer.locked ? <LockIcon size={13} /> : <UnlockIcon size={13} />}
+                        </button>
+                        <button
+                          style={tabBtn(!layer.visible)}
+                          onClick={() => updateLayer(layer.id, { visible: !layer.visible })}
+                          title="可见性"
+                        >
+                          {layer.visible ? <EyeIcon size={13} /> : <EyeOffIcon size={13} />}
+                        </button>
+                      </div>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        <button
+                          style={btnBase}
+                          onClick={() => moveLayerToTop(layer.id)}
+                          title="置顶"
+                        >
+                          <ChevronsUp size={13} />
+                        </button>
+                        <button
+                          style={btnBase}
+                          onClick={() => moveLayer(layer.id, 1)}
+                          title="上移"
+                        >
+                          <ArrowUp size={13} />
+                        </button>
+                        <button
+                          style={btnBase}
+                          onClick={() => moveLayer(layer.id, -1)}
+                          title="下移"
+                        >
+                          <ArrowDown size={13} />
+                        </button>
+                        <button
+                          style={btnBase}
+                          onClick={() => moveLayerToBottom(layer.id)}
+                          title="置底"
+                        >
+                          <ChevronsDown size={13} />
+                        </button>
+                      </div>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        <button
+                          style={btnBase}
+                          onClick={() => duplicateLayer(layer.id)}
+                          title="复制 (Ctrl+D)"
+                        >
+                          <CopyIcon size={13} /> 复制
+                        </button>
+                        <button
+                          style={btnBase}
+                          onClick={() => removeLayerById(layer.id)}
+                          title="删除 (Del)"
+                        >
+                          <Trash2 size={13} /> 删除
+                        </button>
+                      </div>
+                    </>
+                  );
+                })()}
+            </div>
+          </div>
+        ) : (
         <div
           ref={stageRef}
           className="img-edit-stage"
@@ -1432,6 +2503,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
             )}
           </div>
         </div>
+        )}
 
         {/* Footer */}
         <div
@@ -1495,6 +2567,23 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
               ) : (
                 <>
                   <Check size={14} /> 应用画板
+                </>
+              )}
+            </button>
+          ) : mode === 'compose' ? (
+            <button
+              style={btnPrimary}
+              onClick={applyCompose}
+              disabled={busy || composeLayers.length === 0}
+              title={composeLayers.length === 0 ? '请先添加图层' : ''}
+            >
+              {busy ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" /> 处理中…
+                </>
+              ) : (
+                <>
+                  <Check size={14} /> 应用组合
                 </>
               )}
             </button>
