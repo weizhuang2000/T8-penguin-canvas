@@ -1966,6 +1966,50 @@ function CanvasInner({ onAddNodeRef }: CanvasInnerProps) {
         continue;
       }
 
+      // === v1.2.9.14: Suno (audio) 双轨专属路径 ===
+      // AudioNode (type='audio') 双输出口 audio-0 (主轨 audioUrl) + audio-1 (副轨 audioUrl_1),
+      // 与 FramePair 同模式: 按轨创建带 sourceHandle 的 OutputNode, 不走通用 pickKind/pickIndex 路径,
+      // useUpstreamMaterials / OutputNode collected 会按 handle 过滤到对应轨 (循环中各轨独立累积 N 首，不会集中到出口 1)。
+      if (t === 'audio') {
+        const a0 = typeof d.audioUrl === 'string' ? d.audioUrl : '';
+        const a1 = typeof d.audioUrl_1 === 'string' ? d.audioUrl_1 : '';
+        if (!a0 && !a1) continue;
+        const sig = `suno:${a0}|${a1}`;
+        if (autoOutputProcessedRef.current.get(n.id) === sig) continue;
+        const usedHandles = new Set<string | null>();
+        for (const e of edges) {
+          if (e.source !== n.id) continue;
+          usedHandles.add((e as any).sourceHandle ?? null);
+        }
+        const baseX = (n.position?.x ?? 0) + (((n as any).width || (n as any).measured?.width || 280)) + 80;
+        const baseY = n.position?.y ?? 0;
+        const need: Array<'audio-0' | 'audio-1'> = [];
+        // null 默认占位则 audio-0 不重复创建（老连接兼容）
+        if (a0 && !usedHandles.has('audio-0') && !usedHandles.has(null)) need.push('audio-0');
+        if (a1 && !usedHandles.has('audio-1')) need.push('audio-1');
+        if (need.length === 0) { newSigPatches.push([n.id, sig]); continue; }
+        newSigPatches.push([n.id, sig]);
+        for (let i = 0; i < need.length; i++) {
+          const h = need[i];
+          const newId = `output-auto-${n.id}-${Date.now()}-${h}-${Math.random().toString(36).slice(2, 6)}`;
+          toAddNodes.push({
+            id: newId,
+            type: 'output',
+            position: { x: baseX, y: baseY + i * 360 },
+            data: {}, // 不带 pickKind/pickIndex。由 useUpstreamMaterials/OutputNode collected 按 sourceHandle 滤
+            selected: false,
+          } as Node);
+          toAddEdges.push({
+            id: `e-auto-${newId}`,
+            source: n.id,
+            target: newId,
+            sourceHandle: h,
+            type: 'deletable',
+          } as Edge);
+        }
+        continue;
+      }
+
       // 提取输出项 (去重 + 过滤 + 同类型内序号)
       const seen = new Set<string>();
       const imgs: string[] = [];

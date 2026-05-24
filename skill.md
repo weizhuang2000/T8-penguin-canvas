@@ -5397,8 +5397,10 @@ onProduce 十三 2 张 url、顺序为 `[originUrl, maskUrl]`，meta `{ type:'ma
 | 循环器内 `extractFromNode` kind 不匹配返回 null | 用户输入图像但下游是视频节点（kind='image' 但 directs[0] 是 video）→ 读不到 `imageUrl` 返回 null | 防线 ② extractFromNode kind 兜底 |
 | 「成功 N」但 OutputNode 只显示最后一张（覆盖症状） | autoOutput 给 OutputNode 升级 `pickKind='image', pickIndex=0`，循环跑完 `__loopAccumulate` 清除后 `collected.images` 顺序变成 `[fresh_lastRound, ...direct]`，pickIndex=0 把全集砍成 1 张 | 防线 ③ hasAnyDirectAccumulated 短路 |
 | OutputNode 完全空白（循环结束后才被建） | EXEC 节点带 `__loopAccumulate`，autoOutput 跳过它，OutputNode 在循环跑完 finally 清除标记后才被 autoOutput 新建 + upgrade pickKind；此时 `directImageUrls=[]` → `hasAnyDirectAccumulated=false` → pickKind 切割 → 仅显示当前 `ud.imageUrl`（最后一张） | 防线 ④ execAccumulator + finally 兜底 |
+| **多端口节点（FramePair / Suno）循环时所有产物挤在 1 个出口，另一个出口空白** | autoOutput 创建的下游 OutputNode 边没有 `sourceHandle`，handleMap 全是 null → 所有轨道的产物聚合到同一个 OutputNode；同时 LoopNode `acc.auds[]` 把多轨混在一起 → 写回时也不分轨 | **防线 ⑤ 多端口节点 handle-aware autoOutput + accumulator 分轨（v1.2.9.14 新增）** |
 
-### 54.2 四道防线（必须全部到位）
+
+### 54.2 五道防线（必须全部到位）
 
 #### 防线 ① · EXEC 节点 startPolling 必须 Promise 化
 
@@ -5566,6 +5568,110 @@ await setTimeout(30); harvestFromExec(); writeFreshToOutputs(); await setTimeout
 }
 ```
 
+#### 防线 ⑤ · 多端口节点 handle-aware autoOutput + accumulator 分轨（v1.2.9.14 新增）
+
+**场景**：FramePair（first/last 双图端口）、Suno（audio-0/audio-1 双轨端口）等 EXEC 节点一个 `data` 上同时存两种产物，与多个 `Handle source id="xxx"` 一一映射。
+
+**根因**：
+
+1. Canvas autoOutput 走通用 `pickKind / pickIndex` 路径创建下游 OutputNode，边没有 `sourceHandle` → useUpstreamMaterials 的 handleMap 全部是 `null` → 多端口产物被全部汇聶到同一个 OutputNode。
+2. LoopNode `harvestFromExec` 把多轨产物（`audioUrl` + `audioUrl_1`）混进同一个 `acc.auds[]`；writeFreshToOutputs 也不读 edge.sourceHandle → 虚货全集写到所有 OutputNode。
+3. 用户看到：循环 2 轮 Suno 产生 4 首 → 出口 1 的 OutputNode 显示 4 首、出口 2 空白。
+
+**修复三部件（必须同时完成）**：
+
+**补丁一 · [Canvas.tsx autoOutput 为多端口节点加专属路径](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/Canvas.tsx)**
+
+```ts
+// FramePair 专属路径（v1.2.8.3）
+if (t === 'frame-pair') {
+  const need = ['first', 'last'].filter(h => !usedHandles.has(h));
+  for (const h of need) {
+    toAddNodes.push({ id, type: 'output', data: {} /* 不带 pickKind */ });
+    toAddEdges.push({ source: n.id, target: id, sourceHandle: h }); // ← 关键: 边带 sourceHandle
+  }
+  continue;
+}
+
+// Suno 专属路径（v1.2.9.14 新增）
+if (t === 'audio') {
+  const a0 = d.audioUrl || '';
+  const a1 = d.audioUrl_1 || '';
+  const need = [];
+  if (a0 && !usedHandles.has('audio-0') && !usedHandles.has(null)) need.push('audio-0');
+  if (a1 && !usedHandles.has('audio-1')) need.push('audio-1');
+  for (const h of need) {
+    toAddNodes.push({ id, type: 'output', data: {} });
+    toAddEdges.push({ source: n.id, target: id, sourceHandle: h }); // ← 关键
+  }
+  continue;
+}
+```
+
+**补丁二 · [useUpstreamMaterials.ts / OutputNode.tsx collected 按 sourceHandle 过滤](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/useUpstreamMaterials.ts)**
+
+```ts
+const handles = handleMap.get(sid) || new Set([null]);
+
+// FramePair
+if (isFramePair) {
+  const wantFirst = handles.has('first') || (handles.has(null) && !handles.has('last'));
+  const wantLast  = handles.has('last')  || (handles.has(null) && !handles.has('first'));
+  if (wantFirst) push(ud.firstFrameUrl);
+  if (wantLast)  push(ud.lastFrameUrl);
+  continue;
+}
+
+// Suno (v1.2.9.14)
+if (isSuno) {
+  const wantA0 = handles.has('audio-0') || (handles.has(null) && !handles.has('audio-1'));
+  const wantA1 = handles.has('audio-1') || (handles.has(null) && !handles.has('audio-0'));
+  if (wantA0) push(ud.audioUrl);     // 主轨
+  if (wantA1) push(ud.audioUrl_1);   // 副轨
+  continue;
+}
+```
+
+**补丁三 · [LoopNode.execAccumulator 按轨分存 + writeFreshToOutputs 按 handle 分流](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/LoopNode.tsx)**
+
+```ts
+type ExecAcc = {
+  isFP: boolean; firsts: string[]; lasts: string[];        // FramePair: first/last
+  isSuno: boolean; auds0: string[]; auds1: string[];       // Suno: audio-0/audio-1 (v1.2.9.14)
+  imgs: string[]; vids: string[]; auds: string[]; txts: string[]; // 通用
+};
+
+// harvestFromExec
+if (isFramePair(ud)) { acc.isFP = true; pushUniqArr(acc.firsts, ud.firstFrameUrl); pushUniqArr(acc.lasts, ud.lastFrameUrl); continue; }
+if (isSuno(ud))     { acc.isSuno = true; pushUniqArr(acc.auds0, ud.audioUrl); pushUniqArr(acc.auds1, ud.audioUrl_1); continue; }
+
+// writeFreshToOutputs 按 sourceHandle 分流
+for (const e of inEdges) {
+  const acc = execAccumulator.get(e.source); if (!acc) continue;
+  const h = e.sourceHandle;
+  if (acc.isFP) {
+    if (h === 'first' || h == null) acc.firsts.forEach(u => pushUniq(fImgs, ...));
+    if (h === 'last'  || h == null) acc.lasts.forEach(u => pushUniq(fImgs, ...));
+    continue;
+  }
+  if (acc.isSuno) {
+    if (h === 'audio-0' || h == null) acc.auds0.forEach(u => pushUniq(fAuds, ...));
+    if (h === 'audio-1' || h == null) acc.auds1.forEach(u => pushUniq(fAuds, ...));
+    continue;
+  }
+  // 通用路径
+  acc.imgs.forEach(...); acc.vids.forEach(...); acc.auds.forEach(...); acc.txts.forEach(...);
+}
+```
+
+**多端口节点 「三点一体」原则**（制作新多端口节点时必须全部加）：
+
+1. **autoOutput 为每个端口创建独立 OutputNode**，边上带对应 `sourceHandle`（FramePair: 'first'/'last'、Suno: 'audio-0'/'audio-1'）。不走通用 `pickKind/pickIndex` 路径。
+2. **useUpstreamMaterials / OutputNode collected 中按 handleMap 过滤**，跳过通用字段路径避免重复读取。
+3. **LoopNode execAccumulator 加 `is<Kind>` flag 与分轨数组**，`writeFreshToOutputs` 按 `edge.sourceHandle` 路由到对应轨数组。
+
+任何未来多端口节点（例如三轨输出 / 多分辨率输出）都需按同一模式实现这三个补丁，只需增加 `is<Kind>` 标志与对应 handle-id 枚举即可。
+
 ### 54.3 制作新 EXEC 节点的强制 Checklist
 
 任何新增可在循环器中执行的节点（**EXEC_TYPES** 里的成员）都必须勾选下列项目，否则在循环器中必然出现 BUG：
@@ -5577,6 +5683,10 @@ await setTimeout(30); harvestFromExec(); writeFreshToOutputs(); await setTimeout
 - [ ] 产物字段写入 `update({ imageUrl / imageUrls / urls / videoUrl / audioUrl / audioUrl_1 / outputText / reply / text })` 中至少一项；按 url 后缀（.png/.mp4/.mp3）分流到对应字段，避免视频 url 进 `imageUrl`
 - [ ] handleRun 入口加重入保护：`if (status === 'submitting' || status === 'polling') return;`
 - [ ] handleRun 开始时清空上一轮的产物字段（`urls: [], taskId: null`），防止 stale 干扰
+- [ ] **多端口节点（一个 data 上出两个产物字段 + 两个 Handle source id）额外必须：**
+  - [ ] Canvas autoOutput 加专属路径，为每个端口创建 OutputNode 且边带 `sourceHandle`
+  - [ ] useUpstreamMaterials 与 OutputNode collected 加 `is<Kind>` 分支，按 handleMap 过滤输出
+  - [ ] LoopNode `ExecAcc` 加 `is<Kind>` flag + 分轨数组；harvestFromExec 分轨累积；writeFreshToOutputs 按 `edge.sourceHandle` 路由
 - [ ] 新建一个测试画布：上游 2 个素材 → 循环器 → 新节点 → （手动 / 不连）OutputNode，跑一次串联循环，验证 OutputNode 显示完整 N 张产物（不是只显示最后一张，也不是失败）
 
 ### 54.4 全部 16 个 EXEC 节点循环器兼容性矩阵（最终态）
@@ -5596,6 +5706,7 @@ await setTimeout(30); harvestFromExec(); writeFreshToOutputs(); await setTimeout
 | `frame-extractor` | 同步 | — | ✓ |
 | `upload` | 同步本地缓存 | — | ✓ |
 | **finally 兜底（覆盖最后一张）** | LoopNode execAccumulator + finally 200ms 后 write | **v1.2.9.13** | ✓ 解决「循环结束后才创建 OutputNode 只显示最后一张」 |
+| **多端口节点（FramePair / Suno）多轨混装问题** | autoOutput handle-aware + accumulator 分轨 + collected 按 handle 过滤 | **v1.2.9.14** | ✓ 解决「Suno 循环 2 轮 → 出口 1 显示 4 首、出口 2 空白」 |
 
 ### 54.5 v1.2.9.x 版本演进表
 
@@ -5608,6 +5719,7 @@ await setTimeout(30); harvestFromExec(); writeFreshToOutputs(); await setTimeout
 | v1.2.9.11 | startPolling Promise 化 + extractFromNode kind 兜底 | AudioNode/VideoNode/SeedanceNode 失败修复 |
 | v1.2.9.12 | RunningHubNode startPolling Promise 化 | RH/RH-wallet 失败修复 |
 | **v1.2.9.13** | **execAccumulator 跨轮累积 + finally 兜底 writeback** | **RH/RH-wallet 循环结束后才建 OutputNode 覆盖修复（全部 16 节点完美兼容）** |
+| **v1.2.9.14** | **多端口节点 handle-aware autoOutput + accumulator 分轨（FramePair/Suno 三点一体）** | **Suno 双轨产物在循环中不再混装出口 1，各轨独立累积到对应 audio-0/audio-1 OutputNode** |
 
 ### 54.6 防止再回归的代码注释锚点
 
@@ -5619,6 +5731,10 @@ await setTimeout(30); harvestFromExec(); writeFreshToOutputs(); await setTimeout
 - `v1.2.9.11`：[AudioNode/VideoNode/SeedanceNode startPolling 改 Promise](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/AudioNode.tsx)
 - `v1.2.9.12`：[RunningHubNode.tsx#L389-L468 startPolling 改 Promise](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/RunningHubNode.tsx)
 - `v1.2.9.13`：[LoopNode.tsx execAccumulator + harvestFromExec + finally 200ms writeback](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/LoopNode.tsx)
+- `v1.2.9.14`：[Canvas.tsx autoOutput Suno 专属路径（audio-0 / audio-1 sourceHandle）](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/Canvas.tsx)
+- `v1.2.9.14`：[useUpstreamMaterials.ts isSuno 双轨 handle 过滤](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/useUpstreamMaterials.ts)
+- `v1.2.9.14`：[OutputNode.tsx collected isSuno 双轨 handle 过滤](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/OutputNode.tsx)
+- `v1.2.9.14`：[LoopNode.tsx ExecAcc 加 isSuno + auds0/auds1 + writeFreshToOutputs handle 分流](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/LoopNode.tsx)
 
 ### 54.7 经验教训（一句话总结）
 
@@ -5626,7 +5742,7 @@ await setTimeout(30); harvestFromExec(); writeFreshToOutputs(); await setTimeout
 2. **`__loopAccumulate` 标记会让 autoOutput 跳过节点**：意味着循环结束前 OutputNode 可能根本不存在；finally 兜底必不可少。
 3. **`hasAnyDirectAccumulated` 是覆盖症状的最后一道墙**：即使 autoOutput 给 OutputNode 升级了 pickKind，只要 directImageUrls 非空就跳过切割。
 4. **跨轮 accumulator 而非当前 ud**：跑到第 N 轮时 ud 只剩最后一轮值，靠 ud 写 OutputNode 永远只能拿到最后一张。
-5. **execAccumulator 同时支持 FramePair `isFP` 双图分流**：sourceHandle='first'/'last' 各取 firsts/lasts 数组。
+5. **execAccumulator 同时支持 FramePair `isFP` 双图分流与 Suno `isSuno` 双轨分流**：sourceHandle='first'/'last' / 'audio-0'/'audio-1' 各取对应数组；任何多端口节点需同三点一体修复（autoOutput 带 handle / collected 滤 handle / accumulator 按轨）。
 6. **finally 中 setTimeout(200) 不是黑魔法**：是给 autoOutput useEffect 一个 commit 周期把新 OutputNode 落 store。
 
 ---

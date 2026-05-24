@@ -275,11 +275,11 @@ const LoopNode = (p: NodeProps) => {
     // 修复: 跨轮 accumulate 每个 EXEC 节点的 fresh 字段, write 时基于 accumulator,
     // 即使 OutputNode 是循环结束后才建/升级, finally 兜底 write 也能拿到完整累积
     // (与 v1.2.9.10 hasAnyDirectAccumulated 跳过 pickKind 切割双保险)。
-    type ExecAcc = { isFP: boolean; firsts: string[]; lasts: string[]; imgs: string[]; vids: string[]; auds: string[]; txts: string[] };
+    type ExecAcc = { isFP: boolean; isSuno: boolean; firsts: string[]; lasts: string[]; auds0: string[]; auds1: string[]; imgs: string[]; vids: string[]; auds: string[]; txts: string[] };
     const execAccumulator = new Map<string, ExecAcc>();
     const ensureAcc = (eid: string): ExecAcc => {
       let a = execAccumulator.get(eid);
-      if (!a) { a = { isFP: false, firsts: [], lasts: [], imgs: [], vids: [], auds: [], txts: [] }; execAccumulator.set(eid, a); }
+      if (!a) { a = { isFP: false, isSuno: false, firsts: [], lasts: [], auds0: [], auds1: [], imgs: [], vids: [], auds: [], txts: [] }; execAccumulator.set(eid, a); }
       return a;
     };
     const pushUniqArr = (arr: string[], v: any) => {
@@ -303,6 +303,18 @@ const LoopNode = (p: NodeProps) => {
           acc.isFP = true;
           pushUniqArr(acc.firsts, ud.firstFrameUrl);
           pushUniqArr(acc.lasts, ud.lastFrameUrl);
+          continue;
+        }
+        // v1.2.9.14: Suno 双轨检测 (与 FramePair 同模式) —— 同时具备 audioUrl + audioUrl_1 属性
+        const isSuno = Object.prototype.hasOwnProperty.call(ud, 'audioUrl') &&
+                       Object.prototype.hasOwnProperty.call(ud, 'audioUrl_1');
+        if (isSuno) {
+          acc.isSuno = true;
+          pushUniqArr(acc.auds0, ud.audioUrl);     // 主轨 → audio-0
+          pushUniqArr(acc.auds1, ud.audioUrl_1);   // 副轨 → audio-1
+          // 另外 audioUrls 数组 (LoopNode 聚合过) 也合入主轨作为兼容
+          if (Array.isArray(ud.audioUrls)) ud.audioUrls.forEach((u: any) => pushUniqArr(acc.auds0, u));
+          // 同时走下面的 imgs/vids/txts 路径准备其他可能存在的产物 (Suno 实际不会产生, 但保证广義安全)
           continue;
         }
         pushUniqArr(acc.imgs, ud.imageUrl);
@@ -388,6 +400,12 @@ const LoopNode = (p: NodeProps) => {
             if (acc.isFP) {
               if (handle === 'first' || handle == null) acc.firsts.forEach((u) => pushUniq(fImgs, seenI, u));
               if (handle === 'last' || handle == null) acc.lasts.forEach((u) => pushUniq(fImgs, seenI, u));
+              continue;
+            }
+            // v1.2.9.14: Suno 双轨语义: 'audio-0' 主轨 / 'audio-1' 副轨 / null/默认 双取
+            if (acc.isSuno) {
+              if (handle === 'audio-0' || handle == null) acc.auds0.forEach((u) => pushUniq(fAuds, seenA, u));
+              if (handle === 'audio-1' || handle == null) acc.auds1.forEach((u) => pushUniq(fAuds, seenA, u));
               continue;
             }
             // 通用 EXEC 节点: 跨轮累积的产物全集

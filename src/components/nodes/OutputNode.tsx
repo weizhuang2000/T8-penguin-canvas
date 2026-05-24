@@ -208,6 +208,21 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
       // 视频
       pushUnique(out.videos, ud.videoUrl);
 
+      // === v1.2.9.14: Suno 双端口语义 (与 FramePair 同模式) ===
+      // AudioNode (Suno) 同时具备 audioUrl + audioUrl_1 字段时按 sourceHandle 过滤,
+      //   - 'audio-0' → 主轨、 'audio-1' → 副轨、 null/默认 → 两轨
+      // 跳过下面的通用 audioUrl/audioUrl_1 分支，避免重复加入。
+      const isSuno =
+        Object.prototype.hasOwnProperty.call(ud, 'audioUrl') &&
+        Object.prototype.hasOwnProperty.call(ud, 'audioUrl_1');
+      if (isSuno) {
+        const wantA0 = handles.has('audio-0') || (handles.has(null) && !handles.has('audio-1'));
+        const wantA1 = handles.has('audio-1') || (handles.has(null) && !handles.has('audio-0'));
+        if (wantA0) pushUnique(out.audios, ud.audioUrl);
+        if (wantA1) pushUnique(out.audios, ud.audioUrl_1);
+        continue;
+      }
+
       // 音频 (audioUrl 主轨, audioUrl_1 副轨——AudioNode/SunoNode 双输出口)
       pushUnique(out.audios, ud.audioUrl);
       pushUnique(out.audios, ud.audioUrl_1);

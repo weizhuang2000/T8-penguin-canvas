@@ -159,6 +159,25 @@ export function useUpstreamMaterials(nodeId: string): UpstreamMaterials {
         for (const u of ud.videoUrls) pushUrl(sid, 'video', u, videos);
       }
 
+      // === v1.2.9.14: Suno 双端口语义 (与 FramePair 同模式) ===
+      // AudioNode (Suno) 同时具备 audioUrl(主轨, sourceHandle='audio-0') + audioUrl_1(副轨, sourceHandle='audio-1') 字段时按 handle 过滤,
+      //   - 'audio-0' 端口 → 只输出主轨
+      //   - 'audio-1' 端口 → 只输出副轨
+      //   - null/默认  → 同时输出两轨 (autoOutput 旧版 / 手动接默认 handle 的兼容)
+      const isSuno =
+        Object.prototype.hasOwnProperty.call(ud, 'audioUrl') &&
+        Object.prototype.hasOwnProperty.call(ud, 'audioUrl_1');
+      if (isSuno) {
+        const wantA0 = handles.has('audio-0') || (handles.has(null) && !handles.has('audio-1'));
+        const wantA1 = handles.has('audio-1') || (handles.has(null) && !handles.has('audio-0'));
+        if (wantA0) pushUrl(sid, 'audio', ud.audioUrl, audios);
+        if (wantA1) pushUrl(sid, 'audio', ud.audioUrl_1, audios);
+        if (Array.isArray(ud.audioUrls)) {
+          for (const u of ud.audioUrls) pushUrl(sid, 'audio', u, audios);
+        }
+        continue;
+      }
+
       // 音频 (audioUrl 主轨, audioUrl_1 副轨——AudioNode 双输出口, audioUrls 数组 — LoopNode 聚合)
       pushUrl(sid, 'audio', ud.audioUrl, audios);
       pushUrl(sid, 'audio', ud.audioUrl_1, audios);
