@@ -920,9 +920,9 @@ SSE 按行 `split('\n')` 解析；`data: [DONE]` 立即 return；`delta.content`
 
 ---
 
-### 11.11 Midjourney 节点对齐（gpt-image-2-web `runMJ` · Comfly 渠道 · 无 FAL）
+### 11.11 Midjourney 节点对齐（gpt-image-2-web `runMJ` ·  渠道 · 无 FAL）
 
-> Midjourney 复用 ImageNode（不新增独立节点类型），与 GPT2 / Nano Banana 2 / Nano Banana Pro 三家共用 [`ImageNode.tsx`](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/ImageNode.tsx)，通过 `modelDef.paramKind === 'mj'` 切到 MJ 专用面板与 MJ 提交分支。**MJ 没有 FAL 渠道**，仅经贞贞工坊 Comfly 代理。本节是唯一权威参考，请勿自创另一套实现。
+> Midjourney 复用 ImageNode（不新增独立节点类型），与 GPT2 / Nano Banana 2 / Nano Banana Pro 三家共用 [`ImageNode.tsx`](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/ImageNode.tsx)，通过 `modelDef.paramKind === 'mj'` 切到 MJ 专用面板与 MJ 提交分支。**MJ 没有 FAL 渠道**，本节是唯一权威参考，请勿自创另一套实现。
 
 #### 11.11.1 起点函数与上游协议（主项目 `gpt-image-2-web/index.html` 行号）
 
@@ -962,7 +962,7 @@ SSE 按行 `split('\n')` 解析；`data: [DONE]` 立即 return；`delta.content`
 
 * 主参考图 / 垫图：走 `base64Array`（多张）。
 * sref / oref：**不进 base64Array**，先 `uploadMjImage()` 换 URL，再以 `--sref / --oref` 拼进 prompt 字符串。
-* 后端在 [`POST /api/proxy/mj/imagine`](file:///e:/PenguinPravite/T8-penguin-canvas/backend/src/routes/proxy.js) 中将上述字段重组上送 Comfly。
+* 后端在 [`POST /api/proxy/mj/imagine`](file:///e:/PenguinPravite/T8-penguin-canvas/backend/src/routes/proxy.js) 中将上述字段重组上送。
 
 #### 11.11.4 响应判定（轮询）
 
@@ -971,7 +971,6 @@ SSE 按行 `split('\n')` 解析；`data: [DONE]` 立即 return；`delta.content`
 * `data.status === 'SUCCESS'`：
   * 主图：`data.image_url`。
   * 4 张子图：`data.image_urls` 可能是 **JSON 字符串**，需 `JSON.parse` 解析为数组（每项形如 `{ url: '...' }` 或纯 string，参 [queryMjTask](file:///e:/PenguinPravite/T8-penguin-canvas/src/services/generation.ts) 兼容写法）。
-* URL 域名替换：上游 `ai.comfly.chat` 一次性重写为 `ai.t8star.cn`，由后端代理统一完成。
 
 #### 11.11.5 后端三条独立路由（`backend/src/routes/proxy.js`）
 
@@ -1012,7 +1011,6 @@ SSE 按行 `split('\n')` 解析；`data: [DONE]` 立即 return；`delta.content`
 | sref/oref 走错通道 | 把 sref/oref 直接进 base64Array 导致提示词无 `--sref / --oref` | 严格区分：垫图→base64Array；sref/oref→先 upload 取 URL 再拼 prompt |
 | `image_urls` 是字符串 / 对象数组 / camelCase | 误报 “MJ 任务完成但未返回图片” | `queryMjTask` 同时读 `image_urls/imageUrls`，对象元素取 `x.url \|\| x.image_url \|\| x.imageUrl \|\| x`；失败时 `ImageNode` 会 `logBus.warn` 输出 `raw` 报文便于定位 |
 | `--sv 1` 多余 | 上游不识别报错 | `sv === '0' \|\| sv === '1'` 时 **不** 输出 `--sv` |
-| URL 仍是 `ai.comfly.chat` | 浏览器图片加载失败（鉴权域不同） | 后端代理一次性 `replace('ai.comfly.chat','ai.t8star.cn')` |
 | FAL 子模型混入 | 误以为 MJ 也有 FAL | MJ **无 FAL**，模型注册表中无 `midjourney-fal` |
 | 轮询无上限 | 任务挂起永远轮 | 默认 `maxPoll=300 × 3s = 15min`；UI 可调 10~2000 / 1~30s |
 
@@ -3369,7 +3367,7 @@ const payload = { model, messages: normalizedMessages, /* ... */ };
 
 | 模型 | 轮询位置 | 参数 |
 |---|---|---|
-| Midjourney (Comfly) | [ImageNode.tsx L301-L342](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/ImageNode.tsx#L301-L342) | `maxPoll=300 × 3s` |
+| Midjourney | [ImageNode.tsx L301-L342](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/ImageNode.tsx#L301-L342) | `maxPoll=300 × 3s` |
 | GPT2-FAL / nano-banana-pro-FAL | [ImageNode.tsx L390-L429](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/ImageNode.tsx#L390-L429) | `600 × 3s` |
 | Seedance / Veo3 / Grok-FAL | SeedanceNode / VideoNode | 各自 `maxPoll/pollInt` |
 | Suno | AudioNode | `60 × 3s` |

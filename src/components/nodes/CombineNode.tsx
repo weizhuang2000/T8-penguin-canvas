@@ -4,6 +4,7 @@ import { AlertCircle, Loader2, Sparkles, Combine } from 'lucide-react';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { opCombine } from '../../services/imageOps';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
+import { useHasAutoOutput } from './useHasAutoOutput';
 
 /**
  * CombineNode - 多图拼接(横向/纵向)
@@ -14,6 +15,7 @@ const COLOR = '#fb923c';
 const CombineNode = (p: NodeProps) => {
   const update = useUpdateNodeData(p.id);
   const { getEdges, getNodes } = useReactFlow();
+  const hasAutoOutput = useHasAutoOutput(p.id);
   const [error, setError] = useState<string | null>(null);
   const d = p.data as any;
   const direction: 'horizontal' | 'vertical' = d?.direction || 'horizontal';
@@ -128,7 +130,7 @@ const CombineNode = (p: NodeProps) => {
         )}
       </div>
 
-      {outImg && (
+      {outImg && !hasAutoOutput && (
         <div className="border-t border-white/10 p-2">
           <img src={outImg} alt="结果" className="w-full rounded object-contain" />
         </div>
