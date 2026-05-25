@@ -6108,3 +6108,108 @@ const { status, urls, failReason } = await queryRh(taskId);
 3. 主项目后端基于 `JsonStorage` 工具，T8 后端用本文件内自实现 `loadJson/saveJson/genId`
 
 ---
+
+## v1.2.10.1 · RH 工具节点运行逻辑与 RunningHubNode 一比一对齐
+
+### 背景
+v1.2.10.0 初版上线后用户反馈五个问题：
+1. **实例类型不对** — RHToolsNode 未同 RunningHubNode 那样带 `instanceType` select(默认/plus)，造成 RH 在某些账号上冷启动失败
+2. **Handle 遮挡** — source/target Handle 被节点内部表单遮住，鼠标点不到
+3. **上游输入不生效** — IMAGE/VIDEO/AUDIO 字段未默认勾「从上游自动获取」，上游连上也不会同步
+4. **音频输出丢失** — portTypes outputs 只有 image/video，取不到 audio
+5. **循环器只出 1 个结果** — RHToolsNode 未加入 EXECUTABLE_NODE_TYPES，LoopNode/NodeActionBar EXEC_TYPES 未含 'rh-tools'
+
+### 修复范围
+- [src/components/nodes/RHToolsNode.tsx](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/RHToolsNode.tsx) — 完全重写运行逻辑，以 [RunningHubNode.tsx](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/RunningHubNode.tsx) 为金标准：resolveNodeInfoList 三层防御 / IMAGE预览白名单 / instanceType select / computeFreshValuesNow / useEffect 上游同步三态全部一比一移植
+- [src/config/portTypes.ts](file:///e:/PenguinPravite/T8-penguin-canvas/src/config/portTypes.ts) — `'rh-tools': { inputs:['text','image','video','audio'], outputs:['image','video','audio'] }`
+- [src/components/Canvas.tsx](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/Canvas.tsx) — `EXECUTABLE_NODE_TYPES.add('rh-tools')`
+- [src/components/nodes/LoopNode.tsx](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/LoopNode.tsx) 与 [src/components/NodeActionBar.tsx](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/NodeActionBar.tsx) EXEC_TYPES 同步加 'rh-tools'
+- 删除 `RHToolRunnerPanel.tsx`—运行面板在重写后直接嵌入 RHToolsNode 本体，不再需要独立子组件
+
+---
+
+## v1.2.10.2 · 颜色主题统一 + 文件自动保存路径全链路
+
+### v1.2.10.2.A 颜色主题统一（紫色 → cyan）
+RHToolsNode 初版使用 `violet` 紫色与 RH 分类其他节点 (RunningHub cyan-600 / cyan-400) 风格不一。修复：
+- [src/config/nodeRegistry.ts](file:///e:/PenguinPravite/T8-penguin-canvas/src/config/nodeRegistry.ts) `color: 'violet' → 'cyan'`
+- [src/components/nodes/RHToolsNode.tsx](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/RHToolsNode.tsx) accent/accentSoft/ringColor 三组主题色统一为 cyan 双亮暗分支，四处 Handle `!bg-violet-400 → !bg-cyan-400`
+- [src/components/nodes/RHToolEditorModal.tsx](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/RHToolEditorModal.tsx) accent `rgb(139,92,246) → cyan` 双主题分支
+
+### v1.2.10.2.B 文件自动保存路径（全局产物 → 本地）
+**需求**：API 设置面板新增「文件自动保存路径」输入项，初始 `D:\zhenzhen`。路径不存在时启动自动创建。所有可执行节点生成的图像/视频/音频自动复制一份到此路径。
+
+**架构**（五层贯通）：
+```
+[后端] config.js DEFAULT_LOCAL_SAVE_DIR='D:\zhenzhen'
+           settings.js DEFAULT_SETTINGS.fileSavePath + ensureFileSavePath() 启动自动 mkdir / POST 后 ensureDir
+           files.js POST /api/files/save-to-disk（三种协议：/files/output/* / /files/input/* / http(s)://*，同名跳过，自动 mkdir -p）
+[前端] types/canvas.ts ApiSettings.fileSavePath?: string
+           stores/apiKeys.ts DEFAULT.fileSavePath = 'D:\\zhenzhen'
+           services/api.ts saveAssetToDisk（静默失败）
+           ApiSettings.tsx 输入项 + handleSave 路径变动才上行
+           OutputNode.tsx useEffect 监听 collected.{images,videos,audios}，ref Set 去重触发 saveAssetToDisk
+```
+
+**为什么在 OutputNode 植入？** 画布中所有可执行节点产出后都会被 Canvas.autoOutput 自动挂上 OutputNode 展示，本节点作为「统一收口」，单点植入即可覆盖全部节点。
+
+**后端端点三分支**（[backend/src/routes/files.js](file:///e:/PenguinPravite/T8-penguin-canvas/backend/src/routes/files.js)）：
+```js
+router.post('/save-to-disk', async (req, res) => {
+  const { url, filename } = req.body;
+  // 路径获取 → ensureDir
+  if (url.startsWith('/files/output/'))   await fsp.copyFile(path.join(OUTPUT_DIR, basename), target);
+  else if (url.startsWith('/files/input/')) await fsp.copyFile(path.join(INPUT_DIR,  basename), target);
+  else if (url.startsWith('http')) {
+    const buf = Buffer.from(await (await fetch(url)).arrayBuffer());
+    fs.writeFileSync(target, buf);
+  }
+  // 同名文件跳过（exist:true）
+});
+```
+
+**双层防重复保存**：
+- 前端：OutputNode 用 `useRef<Set<string>>` 节点级去重，已保存过的 url 不重复发请求
+- 后端：同名文件检测到直接返 `{ ok:true, exist:true }`，不覆盖
+
+**静默失败设计**：`saveAssetToDisk` 不抛错，避免任何本地 IO 问题干扰到主生成链路。
+
+---
+
+## v1.2.10.3 · 像素风走 RunningHubNode 同款糖果调色板
+
+用户反馈：v1.2.10.2 修为 cyan 后科技风面板同一了，但像素风仍为浅蓝，与左侧 RunningHub 节点的「米白底 + 糖果黄 + 黑墨边」不一致。
+
+**修复**：[RHToolsNode.tsx](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/RHToolsNode.tsx) 中 9 个主题色变量全部补 isPixel 分支，走 px-* CSS 变量。
+
+| 变量 | 像素风 | 科技风 |
+|---|---|---|
+| accent | var(--px-ink) 黑墨 | cyan-600 / cyan-400 |
+| accentSoft | var(--px-yellow) 糖果黄 | cyan-soft |
+| ringColor | var(--px-ink) 黑边 | cyan-ring |
+| bg | var(--px-surface) 米白 | #fff / #1c1c1e |
+| surface | var(--px-muted) 浅米 | #f3f4f6 / #2c2c2e |
+| surfaceHover | var(--px-yellow) 黄 | #e5e7eb / #3a3a3c |
+| text | var(--px-ink) 黑 | #1c1c1e / #e5e5e7 |
+| subText | var(--px-ink-soft) 深灰 | #6b7280 / #9ca3af |
+| border | var(--px-ink) 黑边 | rgba(0,0,0,0.08) / rgba(255,255,255,0.08) |
+
+补充两处特别处理：
+- 参数表外层 background：像素风用 `var(--px-muted)` 浅米（不填纯黄让面版透出来）
+- 运行按钮 hover 三态分支：像素风用 `var(--px-yellow)`
+
+---
+
+## v1.2.10.4 · RH 工具 → RH 超市 重命名
+
+仅修改面向用户可见的三处文案：
+
+| 文件 | 改动 |
+|---|---|
+| [src/config/nodeRegistry.ts](file:///e:/PenguinPravite/T8-penguin-canvas/src/config/nodeRegistry.ts) | Sidebar 节点徽章 `label: 'RH工具' → 'RH超市'` |
+| [src/components/nodes/RHToolsNode.tsx](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/RHToolsNode.tsx) | 启动器视图头部标题 `RH 工具 → RH 超市` |
+| [src/components/nodes/RHToolEditorModal.tsx](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/RHToolEditorModal.tsx) | 编辑器弹窗头部 `RH 工具管理 → RH 超市管理` |
+
+**内部保持不变**：`type: 'rh-tools'` / `data/rh-tool-categories.json` / `data/rh-tool-apps.json` / 后端路由 `/api/settings/rh-tool-*` 均不变，以保证数据与老画布兼容。
+
+---
