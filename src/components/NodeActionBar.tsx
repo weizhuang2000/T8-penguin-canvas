@@ -23,6 +23,8 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'image', 'edit',
   'multi-angle-3d', 'panorama-720', 'penguin-portrait',
   'video', 'seedance', 'audio', 'llm', 'runninghub', 'runninghub-wallet',
+    // v1.2.10.1: RH 工具节点
+    'rh-tools',
   'resize', 'upscale', 'grid-crop', 'remove-bg', 'combine',
   'frame-extractor', 'frame-pair',
   'upload',

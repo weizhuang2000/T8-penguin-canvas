@@ -59,6 +59,10 @@ export const NODE_PORTS: Record<string, NodePorts> = {
   // RhConfigNode 阶段 B 通用化：可接受任意上游节点产出的
   // text / image / video / audio（提交时由 RunningHubNode 负责调 /upload-asset 转 fileName）
   'rh-config': { inputs: ['text', 'image', 'video', 'audio'], outputs: ['config'] },
+  // RH 工具节点 (启动器): 节点内部独立运行 RH 应用。
+  // v1.2.10.1: 与 RunningHubNode 一致，左侧可接 text/image/video/audio 上游，
+  // 右侧输出 image/video/audio（按扩展名分流到 imageUrl/videoUrl/audioUrl）。
+  'rh-tools': { inputs: ['text', 'image', 'video', 'audio'], outputs: ['image', 'video', 'audio'] },
 
   // ========== Special ==========
   'multi-angle-3d': { inputs: ['text', 'image'], outputs: ['image'] },

@@ -45,6 +45,7 @@ import SeedanceNode from './nodes/SeedanceNode';
 import AudioNode from './nodes/AudioNode';
 import RunningHubNode from './nodes/RunningHubNode';
 import RhConfigNode from './nodes/RhConfigNode';
+import RHToolsNode from './nodes/RHToolsNode';
 import ResizeNode from './nodes/ResizeNode';
 import UpscaleNode from './nodes/UpscaleNode';
 import GridCropNode from './nodes/GridCropNode';
@@ -95,6 +96,8 @@ const SPECIFIC_NODES: Record<string, any> = {
   // RH 钱包应用：复用 RunningHubNode。v1.2.9.16 起与普通 RunningHub 节点统一使用 settings.rhApiKey
   'runninghub-wallet': RunningHubNode,
   'rh-config': RhConfigNode,
+  // RH 工具节点：内置启动器 + 应用运行面板（v1.2.10+）
+  'rh-tools': RHToolsNode,
   // Special (5)
   'multi-angle-3d': PresetImageNode,
   'panorama-720': PresetImageNode,
@@ -163,6 +166,27 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     history: [],
   },
   upload: { uploadType: null },
+  // RH 工具节点（v1.2.10.1+）：启动器状态字段 + 运行状态字段（与 RunningHubNode 对齐）
+  // 启动器：rhToolsActiveCategoryId / rhToolsActiveAppId / rhToolsSearchQuery
+  // 运行态：appInfo / paramValues / instanceType / status / taskId / urls / error / rhCode / materialOrder
+  // 输出字段：imageUrl / videoUrl / audioUrl（按扩展名分流给下游 OutputNode）
+  'rh-tools': {
+    rhToolsActiveCategoryId: 'all',
+    rhToolsActiveAppId: '',
+    rhToolsSearchQuery: '',
+    appInfo: null,
+    paramValues: {},
+    materialOrder: [],
+    instanceType: '',
+    status: 'idle',
+    taskId: '',
+    urls: [],
+    error: '',
+    rhCode: 0,
+    imageUrl: '',
+    videoUrl: '',
+    audioUrl: '',
+  },
   // 循环器: 默认串联 + image kind
   loop: { mode: 'serial', kind: 'image', outputs: [], progress: { done: 0, total: 0, ok: 0, fail: 0 } },
   // 从合集获取: 默认 image + 第 1 个
@@ -175,6 +199,8 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'image', 'edit',
   'multi-angle-3d', 'panorama-720', 'penguin-portrait',
   'video', 'seedance', 'audio', 'llm', 'runninghub', 'runninghub-wallet',
+  // v1.2.10.1: rh-tools 与 RunningHub 同质，同样可被批量运行调起
+  'rh-tools',
   'resize', 'upscale', 'grid-crop', 'remove-bg', 'combine',
   'frame-extractor', 'frame-pair',
   'upload',
