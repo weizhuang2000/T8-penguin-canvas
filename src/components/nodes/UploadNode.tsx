@@ -17,6 +17,17 @@ import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useDragMaterialStore, type MaterialPayload } from '../../stores/dragMaterial';
 import ImageEditModal, { type ImageEditProduceMeta } from './ImageEditModal';
 import ResizableCorners from './ResizableCorners';
+import CollectionSplitButton from '../CollectionSplitButton';
+import {
+  createOutputDataFromItems,
+  createUploadDataFromItem,
+  createUploadDataFromItems,
+  formatMediaSize,
+  getMediaItemsFromData,
+  sameMediaUrls,
+  type MediaItem,
+  type MediaKind,
+} from '../../utils/mediaCollection';
 // v1.2.10.5: 节点落点防重叠
 import { placeSingleNode, placeBatchNodes, defaultSizeOf, type Rect as PlacementRect } from '../../utils/nodePlacement';
 
@@ -36,7 +47,7 @@ import { placeSingleNode, placeBatchNodes, defaultSizeOf, type Rect as Placement
  *   - 上游 nothing(无 target Handle)
  *   - 输出 → 通过 data.imageUrl/videoUrl/audioUrl 暴露给下游
  */
-type UploadKind = 'image' | 'video' | 'audio';
+type UploadKind = MediaKind;
 
 const KIND_META: Record<
   UploadKind,
@@ -101,10 +112,9 @@ const UploadNode = ({ id, data, selected }: NodeProps) => {
 
   const d = data as any;
   const uploadType: UploadKind | null = d?.uploadType ?? null;
-  const fileName: string = d?.fileName || '';
-  const fileSize: number = d?.fileSize || 0;
   const meta = uploadType ? KIND_META[uploadType] : null;
-  const url: string | undefined = meta ? d?.[meta.dataField] : undefined;
+  const mediaItems = uploadType ? getMediaItemsFromData(d, uploadType) : [];
+  const url: string | undefined = mediaItems[0]?.url;
 
   // 节点本地尺寸 state: 默认 (260, 高度由内容撑开 — 上传后图/视频会撑高 root)
   // 拖角后由 ResizableCorners onResize 同步具体 px (保证 measured 准确 + keepAspectRatio 生效 + handleBounds 准确)
@@ -118,7 +128,7 @@ const UploadNode = ({ id, data, selected }: NodeProps) => {
   //   3. 创建后节点 id 以 'output-auto-up-' 开头, 避开 'output-auto-' 网格重排接管
   const handleRun = async () => {
     setError(null);
-    if (!uploadType || !meta || !url) {
+    if (!uploadType || !meta || mediaItems.length === 0) {
       const msg = '请先上传素材';
       setError(msg);
       throw new Error(msg);
@@ -131,7 +141,7 @@ const UploadNode = ({ id, data, selected }: NodeProps) => {
       const t = nodes.find((n) => n.id === e.target);
       if (!t || t.type !== 'output') return false;
       const td = (t.data as any) || {};
-      return td.directImageUrl === url || td.directVideoUrl === url || td.directAudioUrl === url;
+      return sameMediaUrls(getMediaItemsFromData(td, uploadType), mediaItems);
     });
     if (dupExisted) {
       // 已有指向同一 url 的下游 OutputNode, 不重复创建
@@ -143,18 +153,8 @@ const UploadNode = ({ id, data, selected }: NodeProps) => {
     const baseY = me?.position?.y ?? 0;
     const ts = Date.now();
     const newId = `output-auto-up-${id}-${ts}-${Math.random().toString(36).slice(2, 6)}`;
-    // 按 uploadType 写入不同的 direct* 字段, 让 OutputNode 能独立展示
-    const dataPatch: Record<string, any> = {};
-    if (uploadType === 'image') {
-      dataPatch.directImageUrl = url;
-      dataPatch.imageUrl = url;
-    } else if (uploadType === 'video') {
-      dataPatch.directVideoUrl = url;
-      dataPatch.videoUrl = url;
-    } else if (uploadType === 'audio') {
-      dataPatch.directAudioUrl = url;
-      dataPatch.audioUrl = url;
-    }
+    // 按 uploadType 写入 direct* 字段；多文件上传会成为一个合集 OutputNode。
+    const dataPatch = createOutputDataFromItems(uploadType, mediaItems);
     // v1.2.10.5: 防重叠 —— 单节点螺线避让
     const _finalPos = placeSingleNode(baseX, baseY, 'output', nodes, { source: `placement:upload-auto:${id}` });
     const newNode: Node = {
@@ -192,39 +192,57 @@ const UploadNode = ({ id, data, selected }: NodeProps) => {
     update({
       uploadType: null,
       imageUrl: undefined,
+      imageUrls: undefined,
       videoUrl: undefined,
+      videoUrls: undefined,
       audioUrl: undefined,
+      audioUrls: undefined,
       fileName: '',
+      fileNames: [],
       fileSize: 0,
+      fileSizes: [],
       mime: '',
+      mimes: [],
     });
     setError(null);
   };
 
-  /** 真正执行上传(在已确定 kind 后) */
-  const uploadFile = async (file: File, kind: UploadKind) => {
+  const uploadSingleFile = async (file: File, kind: UploadKind): Promise<MediaItem> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch('/api/files/upload', { method: 'POST', body: fd });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `上传失败 HTTP ${res.status}`);
+    }
+    const json = await res.json();
+    if (!json.success || !json.data?.url) {
+      throw new Error(json.error || '上传失败:未返回 URL');
+    }
+    return {
+      kind,
+      url: json.data.url,
+      name: file.name,
+      size: file.size,
+      mime: file.type,
+    };
+  };
+
+  /** 真正执行上传(在已确定 kind 后); 同类型多文件会追加到当前合集 */
+  const uploadFiles = async (files: File[], kind: UploadKind, skipped = 0) => {
+    if (files.length === 0) return;
     setError(null);
     setUploading(true);
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await fetch('/api/files/upload', { method: 'POST', body: fd });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `上传失败 HTTP ${res.status}`);
+      const uploaded: MediaItem[] = [];
+      for (const file of files) {
+        uploaded.push(await uploadSingleFile(file, kind));
       }
-      const json = await res.json();
-      if (!json.success || !json.data?.url) {
-        throw new Error(json.error || '上传失败:未返回 URL');
+      const base = uploadType === kind ? mediaItems : [];
+      update(createUploadDataFromItems(kind, [...base, ...uploaded]));
+      if (skipped > 0) {
+        setError(`已上传 ${uploaded.length} 个${KIND_META[kind].label}，跳过 ${skipped} 个非同类型文件`);
       }
-      const km = KIND_META[kind];
-      update({
-        uploadType: kind,
-        [km.dataField]: json.data.url,
-        fileName: file.name,
-        fileSize: file.size,
-        mime: file.type,
-      });
     } catch (e: any) {
       setError(e?.message || '上传失败');
     } finally {
@@ -232,23 +250,29 @@ const UploadNode = ({ id, data, selected }: NodeProps) => {
     }
   };
 
-  /** 文件选择:自动按 MIME 推断 kind 后上传 */
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = ''; // 允许重复选同一文件
-    if (!file) return;
-    const inferred = uploadType ?? inferKindFromFile(file);
+  const prepareFiles = (rawFiles: File[]) => {
+    const files = rawFiles.filter(Boolean);
+    if (files.length === 0) return;
+    const inferred = uploadType ?? files.map(inferKindFromFile).find(Boolean) ?? null;
     if (!inferred) {
       setError('无法识别文件类型,请选择图像/视频/音频');
       return;
     }
-    // 若已选定类型且不匹配, 提示错误
-    if (uploadType && uploadType !== inferred) {
-      const km = KIND_META[uploadType];
-      setError(`文件类型不匹配:期望 ${km.label},得到 ${file.type || '未知'}`);
+    const accepted = files.filter((file) => inferKindFromFile(file) === inferred);
+    const skipped = files.length - accepted.length;
+    if (accepted.length === 0) {
+      const km = KIND_META[inferred];
+      setError(`文件类型不匹配:期望 ${km.label}`);
       return;
     }
-    void uploadFile(file, inferred);
+    void uploadFiles(accepted, inferred, skipped);
+  };
+
+  /** 文件选择:自动按 MIME 推断 kind 后上传 */
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = ''; // 允许重复选同一文件
+    prepareFiles(files);
   };
 
   /** 拖拽上传:若 kind 未选则按文件 MIME 自动推断 */
@@ -256,14 +280,7 @@ const UploadNode = ({ id, data, selected }: NodeProps) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    const file = e.dataTransfer?.files?.[0];
-    if (!file) return;
-    const inferred = uploadType ?? inferKindFromFile(file);
-    if (!inferred) {
-      setError('无法识别文件类型,请选择图像/视频/音频');
-      return;
-    }
-    void uploadFile(file, inferred);
+    prepareFiles(Array.from(e.dataTransfer?.files || []));
   };
 
   const triggerPick = () => fileInputRef.current?.click();
@@ -315,9 +332,42 @@ const UploadNode = ({ id, data, selected }: NodeProps) => {
     rf.addNodes(newNodes);
   };
 
+  const splitUploadCollection = () => {
+    if (!uploadType || mediaItems.length <= 1) return;
+    const me = rf.getNode(id);
+    const myW = (me as any)?.measured?.width || (me as any)?.width || 260;
+    const myH = (me as any)?.measured?.height || (me as any)?.height || 240;
+    const baseX = (me?.position?.x ?? 0) + myW + 80;
+    const baseY = me?.position?.y ?? 0;
+    const ts = Date.now();
+    const COLS = 3;
+    const COL_W = 300;
+    const ROW_H = Math.max(240, myH);
+    const _sz = defaultSizeOf('upload');
+    const _desired: PlacementRect[] = mediaItems.map((_, i) => ({
+      x: baseX + (i % COLS) * COL_W,
+      y: baseY + Math.floor(i / COLS) * ROW_H,
+      w: _sz.w,
+      h: _sz.h,
+    }));
+    const _off = placeBatchNodes(_desired, rf.getNodes(), { source: `placement:split-upload:${id}` });
+    const newNodes: Node[] = mediaItems.map((item, i) => ({
+      id: `upload-split-${id}-${ts}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+      type: 'upload',
+      position: {
+        x: baseX + (i % COLS) * COL_W + _off.dx,
+        y: baseY + Math.floor(i / COLS) * ROW_H + _off.dy,
+      },
+      data: createUploadDataFromItem(item),
+      selected: false,
+    } as Node));
+    rf.addNodes(newNodes);
+  };
+
   // ==================== 渲染 ====================
   const handleColor = meta?.color || PORT_COLOR.any;
   const headerLabel = meta ? `上传${meta.label}` : '上传素材';
+  const totalSize = mediaItems.reduce((sum, item) => sum + (item.size || 0), 0);
 
   return (
     <div
@@ -426,12 +476,13 @@ const UploadNode = ({ id, data, selected }: NodeProps) => {
           ref={fileInputRef}
           type="file"
           accept={meta ? meta.accept : 'image/*,video/*,audio/*'}
+          multiple
           className="hidden"
           onChange={handleFileChange}
         />
 
         {/* 未上传状态: 一个大点击/拖拽区域, 自动识别类型 */}
-        {!url && (
+        {mediaItems.length === 0 && (
           <div
             onClick={triggerPick}
             onDragOver={(e) => {
@@ -458,96 +509,137 @@ const UploadNode = ({ id, data, selected }: NodeProps) => {
                 isDark ? 'text-white/30' : 'text-zinc-400'
               }`}
             >
-              自动识别 图像 / 视频 / 音频
+              自动识别 图像 / 视频 / 音频 · 支持同类型批量
             </span>
           </div>
         )}
 
         {/* 已上传:展示预览 + 文件信息 */}
-        {url && uploadType && meta && (
-          <div className="space-y-1.5">
+        {mediaItems.length > 0 && uploadType && meta && (
+          <div className="group/upload-section space-y-1.5">
+            <div className={`flex items-center gap-1.5 text-[10px] ${isDark ? 'text-white/50' : 'text-zinc-500'}`}>
+              <meta.icon size={11} />
+              <span className="flex-1">{meta.label} ({mediaItems.length})</span>
+              <CollectionSplitButton
+                count={mediaItems.length}
+                kindLabel={meta.label}
+                onSplit={splitUploadCollection}
+                className="opacity-100 transition sm:opacity-0 sm:group-hover/upload-section:opacity-100 sm:focus-within:opacity-100"
+              />
+            </div>
+
             {uploadType === 'image' && (
-              <img
-                src={url}
-                alt={fileName}
-                className="w-full h-auto rounded block cursor-zoom-in"
-                style={{ background: '#0008', objectFit: 'contain', maxHeight: 480 }}
-                data-drag-source
-                data-drag-kind="image"
-                data-drag-url={url}
-                data-drag-preview={url}
-                data-drag-node-id={id}
-                data-resource-title={fileName}
-                onMouseDown={(e) =>
-                  beginMaterialDrag(e, { kind: 'image', url, sourceNodeId: id, previewUrl: url })
-                }
-                onDoubleClick={(e) => {
-                  e.stopPropagation();
-                  openEdit();
-                }}
-                title="双击编辑（裁剪 / 宫格切分） · Ctrl+拖拽可送到其他节点"
-              />
+              <div className={mediaItems.length >= 2 ? 'grid grid-cols-2 gap-1.5' : 'space-y-1'}>
+                {mediaItems.map((item, i) => (
+                  <div key={`${item.url}-${i}`} className="space-y-0.5">
+                    <img
+                      src={item.url}
+                      alt={item.name || `图像 ${i + 1}`}
+                      className="w-full h-auto rounded block cursor-zoom-in"
+                      style={{ background: '#0008', objectFit: 'contain', maxHeight: mediaItems.length >= 2 ? 120 : 480 }}
+                      data-drag-source
+                      data-drag-kind="image"
+                      data-drag-url={item.url}
+                      data-drag-preview={item.url}
+                      data-drag-node-id={id}
+                      data-resource-title={item.name}
+                      onMouseDown={(e) =>
+                        beginMaterialDrag(e, { kind: 'image', url: item.url, sourceNodeId: id, previewUrl: item.url })
+                      }
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        setEditingUrl(item.url);
+                      }}
+                      title="双击编辑（裁剪 / 宫格切分） · Ctrl+拖拽可送到其他节点"
+                    />
+                    <div className={`flex items-center gap-1 text-[10px] ${isDark ? 'text-white/45' : 'text-zinc-500'}`}>
+                      <span className="truncate flex-1" title={item.name}>{item.name || `图像 ${i + 1}`}</span>
+                      {item.size ? <span className="opacity-70">{formatMediaSize(item.size)}</span> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
+
             {uploadType === 'video' && (
-              <video
-                src={url}
-                controls
-                className="w-full h-auto rounded block"
-                style={{ background: '#000', objectFit: 'contain', maxHeight: 480 }}
-                data-drag-source
-                data-drag-kind="video"
-                data-drag-url={url}
-                data-drag-preview={url}
-                data-drag-node-id={id}
-                data-resource-title={fileName}
-                onMouseDown={(e) =>
-                  beginMaterialDrag(e, { kind: 'video', url, sourceNodeId: id, previewUrl: url })
-                }
-              />
+              <div className="space-y-1.5">
+                {mediaItems.map((item, i) => (
+                  <div key={`${item.url}-${i}`} className="space-y-0.5">
+                    <video
+                      src={item.url}
+                      controls
+                      className="w-full h-auto rounded block"
+                      style={{ background: '#000', objectFit: 'contain', maxHeight: mediaItems.length >= 2 ? 180 : 480 }}
+                      data-drag-source
+                      data-drag-kind="video"
+                      data-drag-url={item.url}
+                      data-drag-preview={item.url}
+                      data-drag-node-id={id}
+                      data-resource-title={item.name}
+                      onMouseDown={(e) =>
+                        beginMaterialDrag(e, { kind: 'video', url: item.url, sourceNodeId: id, previewUrl: item.url })
+                      }
+                    />
+                    <div className={`flex items-center gap-1 text-[10px] ${isDark ? 'text-white/45' : 'text-zinc-500'}`}>
+                      <span className="truncate flex-1" title={item.name}>{item.name || `视频 ${i + 1}`}</span>
+                      {item.size ? <span className="opacity-70">{formatMediaSize(item.size)}</span> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
+
             {uploadType === 'audio' && (
-              <audio
-                src={url}
-                controls
-                className="w-full"
-                data-drag-source
-                data-drag-kind="audio"
-                data-drag-url={url}
-                data-drag-node-id={id}
-                data-resource-title={fileName}
-                onMouseDown={(e) =>
-                  beginMaterialDrag(e, { kind: 'audio', url, sourceNodeId: id })
-                }
-              />
+              <div className="space-y-1.5">
+                {mediaItems.map((item, i) => (
+                  <div key={`${item.url}-${i}`} className="space-y-0.5">
+                    <audio
+                      src={item.url}
+                      controls
+                      className="w-full"
+                      data-drag-source
+                      data-drag-kind="audio"
+                      data-drag-url={item.url}
+                      data-drag-node-id={id}
+                      data-resource-title={item.name}
+                      onMouseDown={(e) =>
+                        beginMaterialDrag(e, { kind: 'audio', url: item.url, sourceNodeId: id })
+                      }
+                    />
+                    <div className={`flex items-center gap-1 text-[10px] ${isDark ? 'text-white/45' : 'text-zinc-500'}`}>
+                      <span className="truncate flex-1" title={item.name}>{item.name || `音频 ${i + 1}`}</span>
+                      {item.size ? <span className="opacity-70">{formatMediaSize(item.size)}</span> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
+
             <div
               className={`flex items-center gap-1 text-[10px] ${
                 isDark ? 'text-white/50' : 'text-zinc-500'
               }`}
             >
-              <span className="truncate flex-1" title={fileName}>
-                {fileName || '未命名'}
+              <span className="truncate flex-1">
+                {mediaItems.length} 项{totalSize > 0 ? ` · ${formatMediaSize(totalSize)}` : ''}
               </span>
-              {fileSize > 0 && (
-                <span className="opacity-70">
-                  {(fileSize / 1024).toFixed(1)} KB
-                </span>
-              )}
               <button
                 onClick={triggerPick}
-                title="替换文件"
-                className={`p-0.5 rounded ${
+                title="继续添加同类型文件"
+                className={`nodrag nopan p-0.5 rounded ${
                   isDark ? 'hover:bg-white/10' : 'hover:bg-black/10'
                 }`}
+                onMouseDown={(e) => e.stopPropagation()}
               >
                 <UploadIcon size={11} />
               </button>
               <button
                 onClick={handleReset}
                 title="清空文件"
-                className={`p-0.5 rounded ${
+                className={`nodrag nopan p-0.5 rounded ${
                   isDark ? 'hover:bg-red-500/20 text-red-400' : 'hover:bg-red-100 text-red-600'
                 }`}
+                onMouseDown={(e) => e.stopPropagation()}
               >
                 <X size={11} />
               </button>

@@ -14,10 +14,16 @@ import { useThemeStore } from '../../stores/theme';
 import { PORT_COLOR } from '../../config/portTypes';
 import ImageEditModal, { type ImageEditProduceMeta } from './ImageEditModal';
 import ImageCompareModal from '../ImageCompareModal';
+import CollectionSplitButton from '../CollectionSplitButton';
 import { useMaterialDropTarget } from '../../hooks/useMaterialDropTarget';
 import { useDragMaterialStore, type MaterialPayload } from '../../stores/dragMaterial';
 import ResizableCorners from './ResizableCorners';
 import { saveAssetToDisk } from '../../services/api';
+import {
+  createOutputDataFromItem,
+  type MediaItem,
+  type MediaKind,
+} from '../../utils/mediaCollection';
 import {
   extractImagesFromData,
   extractInputCandidatesFromData,
@@ -430,6 +436,39 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
     });
   };
 
+  const splitOutputCollection = (kind: MediaKind, urls: string[]) => {
+    if (!urls || urls.length <= 1) return;
+    const me = rf.getNode(id);
+    const myW = (me as any)?.measured?.width || (me as any)?.width || 320;
+    const myH = (me as any)?.measured?.height || (me as any)?.height || 360;
+    const baseX = (me?.position?.x ?? 0) + myW + 80;
+    const baseY = me?.position?.y ?? 0;
+    const ts = Date.now();
+    const COLS = 3;
+    const COL_W = 350;
+    const ROW_H = Math.max(300, myH);
+    const _sz = defaultSizeOf('output');
+    const items: MediaItem[] = urls.map((url) => ({ kind, url }));
+    const _desired: PlacementRect[] = items.map((_, i) => ({
+      x: baseX + (i % COLS) * COL_W,
+      y: baseY + Math.floor(i / COLS) * ROW_H,
+      w: _sz.w,
+      h: _sz.h,
+    }));
+    const _off = placeBatchNodes(_desired, rf.getNodes(), { source: `placement:split-output:${id}` });
+    const newNodes: Node[] = items.map((item, i) => ({
+      id: `output-split-${id}-${ts}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+      type: 'output',
+      position: {
+        x: baseX + (i % COLS) * COL_W + _off.dx,
+        y: baseY + Math.floor(i / COLS) * ROW_H + _off.dy,
+      },
+      data: createOutputDataFromItem(item),
+      selected: false,
+    } as Node));
+    rf.addNodes(newNodes);
+  };
+
   const handleProduce = (urls: string[], _meta: ImageEditProduceMeta) => {
     if (!urls || urls.length === 0) return;
     const me = rf.getNode(id);
@@ -817,10 +856,16 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
 
         {/* 图像区 */}
         {collected.images.length > 0 && (
-          <div className="space-y-1">
+          <div className="group/output-images space-y-1">
             <div className={`flex items-center gap-1.5 text-[10px] ${isDark ? 'text-white/50' : 'text-zinc-500'}`}>
               <ImageIcon size={11} />
-              <span>图像 ({collected.images.length})</span>
+              <span className="flex-1">图像 ({collected.images.length})</span>
+              <CollectionSplitButton
+                count={collected.images.length}
+                kindLabel="图像"
+                onSplit={() => splitOutputCollection('image', collected.images)}
+                className="opacity-100 transition sm:opacity-0 sm:group-hover/output-images:opacity-100 sm:focus-within:opacity-100"
+              />
             </div>
             {/* 单张：全宽大图预览；多张：3 列网格（一行最多 3 张，超过自动换行） */}
             <div
@@ -901,10 +946,16 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
 
         {/* 视频区 */}
         {collected.videos.length > 0 && (
-          <div className="space-y-1">
+          <div className="group/output-videos space-y-1">
             <div className={`flex items-center gap-1.5 text-[10px] ${isDark ? 'text-white/50' : 'text-zinc-500'}`}>
               <VideoIcon size={11} />
-              <span>视频 ({collected.videos.length})</span>
+              <span className="flex-1">视频 ({collected.videos.length})</span>
+              <CollectionSplitButton
+                count={collected.videos.length}
+                kindLabel="视频"
+                onSplit={() => splitOutputCollection('video', collected.videos)}
+                className="opacity-100 transition sm:opacity-0 sm:group-hover/output-videos:opacity-100 sm:focus-within:opacity-100"
+              />
             </div>
             {collected.videos.map((u, i) => (
               <div key={i} className="space-y-0.5">
@@ -944,10 +995,16 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
 
         {/* 音频区 */}
         {collected.audios.length > 0 && (
-          <div className="space-y-1">
+          <div className="group/output-audios space-y-1">
             <div className={`flex items-center gap-1.5 text-[10px] ${isDark ? 'text-white/50' : 'text-zinc-500'}`}>
               <Music size={11} />
-              <span>音频 ({collected.audios.length})</span>
+              <span className="flex-1">音频 ({collected.audios.length})</span>
+              <CollectionSplitButton
+                count={collected.audios.length}
+                kindLabel="音频"
+                onSplit={() => splitOutputCollection('audio', collected.audios)}
+                className="opacity-100 transition sm:opacity-0 sm:group-hover/output-audios:opacity-100 sm:focus-within:opacity-100"
+              />
             </div>
             {collected.audios.map((u, i) => (
               <div key={i} className="space-y-0.5">
