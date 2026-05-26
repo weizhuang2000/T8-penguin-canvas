@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, type CSSProperties } from 'react';
+import { memo, useState, type CSSProperties } from 'react';
 import { Handle, Position, useReactFlow, type Edge, type Node, type NodeProps } from '@xyflow/react';
 import {
   Aperture,
@@ -23,7 +23,7 @@ import { useUpdateNodeData } from './useUpdateNodeData';
  *
  * 通过 data.kind 区分:
  *   - 'cinematic' = 电影感组合器(风格 / 镜头 / 光影 / 调色 / 质感)
- *   - 'video-motion' = 视频运动预设(摇镜 / 推拉 / 环绕)
+ *   - 'video-motion' = 视频运镜组合器(场景 / 动作 / 路径 / 节奏 / 稳定 / 主体)
  *
  * 输出:data.prompt(下游通过 prompt 收集消费)
  */
@@ -44,12 +44,28 @@ interface CinematicGroup {
   items: Preset[];
 }
 
+interface MotionGroup {
+  id: MotionField;
+  label: string;
+  icon: React.ReactNode;
+  items: Preset[];
+  columns?: number;
+}
+
 type CinematicField =
   | 'cinematicPresetId'
   | 'cinematicShotId'
   | 'cinematicLightId'
   | 'cinematicColorId'
   | 'cinematicTextureId';
+
+type MotionField =
+  | 'motionSceneId'
+  | 'motionActionId'
+  | 'motionPathId'
+  | 'motionTempoId'
+  | 'motionStabilityId'
+  | 'motionSubjectId';
 
 const CINEMATIC_PRESETS: Preset[] = [
   { id: 'soft-light', label: '柔光', text: 'soft cinematic lighting, golden hour, gentle shadows', zhText: '柔和电影光线，黄金时刻，温柔阴影' },
@@ -166,15 +182,114 @@ const STRENGTH_PRESETS: Preset[] = [
   { id: 'strong', label: '强烈', text: 'strong cinematic stylization, bold atmosphere and dramatic visual identity', zhText: '强烈电影风格化，氛围鲜明，视觉识别度高' },
 ];
 
-const MOTION_PRESETS: Preset[] = [
-  { id: 'static', label: '静止', text: 'static shot, locked camera, no movement', zhText: '固定机位，锁定镜头，无运动' },
-  { id: 'pan-l', label: '左摇', text: 'slow pan to the left, smooth camera movement', zhText: '缓慢向左摇镜，运动平滑' },
-  { id: 'pan-r', label: '右摇', text: 'slow pan to the right, smooth camera movement', zhText: '缓慢向右摇镜，运动平滑' },
-  { id: 'zoom-in', label: '推近', text: 'slow zoom in, gradually closer to subject', zhText: '缓慢推近，逐渐靠近主体' },
-  { id: 'zoom-out', label: '拉远', text: 'slow zoom out, revealing wider scene', zhText: '缓慢拉远，逐渐展示更大场景' },
-  { id: 'orbit', label: '环绕', text: 'orbit around the subject, 360 degree shot', zhText: '围绕主体环绕，360 度镜头' },
-  { id: 'dolly', label: '推轨', text: 'dolly forward through the scene', zhText: '轨道推镜穿过场景' },
-  { id: 'aerial', label: '航拍', text: 'aerial drone shot, descending from above', zhText: '航拍镜头，从高处下降' },
+const MOTION_SCENE_PRESETS: Preset[] = [
+  { id: 'character-entry', label: '角色登场', text: 'cinematic character entrance, reveal the subject with confident movement', zhText: '角色登场镜头，用有气势的运动逐步揭示主体' },
+  { id: 'product-showcase', label: '产品展示', text: 'premium product showcase movement, clean controlled camera path', zhText: '高级产品展示运镜，路径干净可控' },
+  { id: 'emotion-push', label: '情绪推近', text: 'emotional push-in, gradually intensify the character feeling', zhText: '情绪推近，逐步强化人物情绪' },
+  { id: 'orbit-reveal', label: '环绕展示', text: 'hero orbit reveal, show the subject from a dynamic surrounding angle', zhText: '主角式环绕展示，从动态角度呈现主体' },
+  { id: 'world-reveal', label: '环境揭示', text: 'environment reveal shot, start intimate then open into the wider scene', zhText: '环境揭示镜头，从局部逐渐打开到更大场景' },
+  { id: 'impact-action', label: '战斗冲击', text: 'impactful action camera move, energetic but readable motion', zhText: '战斗冲击运镜，有能量但画面可读' },
+  { id: 'dream-drift', label: '梦幻漂移', text: 'dreamlike drifting camera, floating graceful movement', zhText: '梦幻漂移镜头，漂浮而优雅的运动' },
+  { id: 'architecture-tour', label: '建筑巡游', text: 'architectural tour movement, glide through space with clear depth', zhText: '建筑巡游运镜，平滑穿行并展示空间层次' },
+  { id: 'food-detail', label: '美食细节', text: 'food detail camera move, macro glide with appetizing focus', zhText: '美食细节运镜，微距滑动并突出诱人焦点' },
+  { id: 'travel-drone', label: '旅行航拍', text: 'travel drone reveal, cinematic aerial movement over the scene', zhText: '旅行航拍揭示镜头，从空中电影化展示场景' },
+  { id: 'dialogue-follow', label: '对话跟随', text: 'dialogue follow camera, natural human movement and stable framing', zhText: '对话跟随镜头，自然移动并保持构图稳定' },
+  { id: 'transition-whip', label: '转场甩镜', text: 'whip pan transition energy, fast directional motion for a scene change', zhText: '甩镜转场能量，用快速方向运动衔接场景' },
+];
+
+const MOTION_ACTION_PRESETS: Preset[] = [
+  { id: 'static', label: '静止', text: 'static locked-off shot, no camera movement', zhText: '固定机位，无镜头运动' },
+  { id: 'zoom-in', label: '推近', text: 'slow dolly in toward the subject', zhText: '镜头缓慢向主体推进' },
+  { id: 'zoom-out', label: '拉远', text: 'slow dolly out, revealing more of the scene', zhText: '镜头缓慢拉远，展示更多场景' },
+  { id: 'pan-l', label: '左摇', text: 'smooth pan to the left', zhText: '镜头平滑向左摇动' },
+  { id: 'pan-r', label: '右摇', text: 'smooth pan to the right', zhText: '镜头平滑向右摇动' },
+  { id: 'tilt-up', label: '上摇', text: 'smooth tilt up, revealing height and scale', zhText: '镜头平滑上摇，揭示高度和尺度' },
+  { id: 'tilt-down', label: '下摇', text: 'smooth tilt down, revealing the subject from above', zhText: '镜头平滑下摇，从上方揭示主体' },
+  { id: 'orbit', label: '环绕', text: 'orbit around the subject with a clear circular camera move', zhText: '围绕主体环绕，运动轨迹清晰' },
+  { id: 'tracking', label: '跟拍', text: 'tracking shot following the subject movement', zhText: '跟拍主体移动，保持连续跟随' },
+  { id: 'dolly', label: '滑轨', text: 'smooth dolly track through the scene', zhText: '滑轨式平滑穿过场景' },
+  { id: 'pedestal', label: '升降', text: 'vertical pedestal camera move, rising or descending smoothly', zhText: '垂直升降运镜，平滑上升或下降' },
+  { id: 'aerial', label: '航拍', text: 'aerial drone camera movement with cinematic scale', zhText: '航拍镜头，带有电影化空间尺度' },
+  { id: 'handheld', label: '手持', text: 'subtle handheld camera motion, alive but controlled', zhText: '轻微手持镜头，有生命感但可控' },
+  { id: 'whip', label: '甩镜', text: 'fast whip pan motion with directional blur', zhText: '快速甩镜，带方向性运动模糊' },
+  { id: 'crash-zoom', label: '急推', text: 'dramatic crash zoom, sudden emphasis on the subject', zhText: '戏剧化急推，突然强调主体' },
+];
+
+const MOTION_GROUPS: MotionGroup[] = [
+  {
+    id: 'motionPathId',
+    label: '路径',
+    icon: <Wand2 size={12} />,
+    columns: 3,
+    items: [
+      { id: 'forward', label: '向前推进', text: 'move forward through the space', zhText: '穿过空间向前推进' },
+      { id: 'backward', label: '向后拉开', text: 'pull backward to reveal the wider scene', zhText: '向后拉开，揭示更大场景' },
+      { id: 'left-to-right', label: '左到右', text: 'travel from left to right across the frame', zhText: '从画面左侧移动到右侧' },
+      { id: 'right-to-left', label: '右到左', text: 'travel from right to left across the frame', zhText: '从画面右侧移动到左侧' },
+      { id: 'rise', label: '低处上升', text: 'rise from a low position into a broader view', zhText: '从低处上升到更开阔视角' },
+      { id: 'descend', label: '高处下降', text: 'descend from above toward the subject', zhText: '从高处向主体下降' },
+      { id: 'clockwise', label: '顺时针', text: 'circle clockwise around the subject', zhText: '顺时针围绕主体运动' },
+      { id: 'counter-clockwise', label: '逆时针', text: 'circle counter-clockwise around the subject', zhText: '逆时针围绕主体运动' },
+      { id: 'from-cover', label: '遮挡露出', text: 'reveal the subject from behind a foreground obstruction', zhText: '从前景遮挡后露出主体' },
+      { id: 'detail-to-wide', label: '细节到全景', text: 'begin on a close detail and open into a wide view', zhText: '从近处细节打开到全景' },
+      { id: 'wide-to-detail', label: '全景到细节', text: 'begin wide and move into a specific detail', zhText: '从全景推进到具体细节' },
+      { id: 'through-space', label: '穿越空间', text: 'move through layers of the environment with depth', zhText: '穿过环境层次，表现空间深度' },
+      { id: 'parallel-follow', label: '平行跟随', text: 'move parallel with the subject at matching speed', zhText: '与主体平行移动并保持速度一致' },
+      { id: 'diagonal', label: '斜向推进', text: 'move diagonally toward the subject for dynamic depth', zhText: '斜向推进主体，增加动态纵深' },
+      { id: 'arc', label: '弧线移动', text: 'move along a gentle arc path', zhText: '沿柔和弧线路径移动' },
+    ],
+  },
+  {
+    id: 'motionTempoId',
+    label: '节奏',
+    icon: <Sparkles size={12} />,
+    columns: 3,
+    items: [
+      { id: 'very-slow', label: '极慢', text: 'very slow movement, calm and deliberate', zhText: '极慢运动，安静而克制' },
+      { id: 'slow', label: '慢速', text: 'slow cinematic movement', zhText: '慢速电影化运动' },
+      { id: 'standard', label: '标准', text: 'natural medium-speed camera movement', zhText: '自然中速运镜' },
+      { id: 'fast', label: '快速', text: 'fast energetic camera movement while keeping the subject readable', zhText: '快速有能量的运镜，同时保持主体可读' },
+      { id: 'accelerate', label: '加速', text: 'gradually accelerate the camera movement', zhText: '镜头运动逐渐加速' },
+      { id: 'decelerate', label: '减速', text: 'gradually slow down into the final frame', zhText: '逐渐减速并落到最终画面' },
+      { id: 'ease', label: '缓入缓出', text: 'smooth ease-in and ease-out motion', zhText: '平滑缓入缓出运动' },
+      { id: 'sudden-stop', label: '突然停顿', text: 'end with a controlled sudden stop for emphasis', zhText: '以可控的突然停顿强化重点' },
+      { id: 'oner', label: '一镜到底', text: 'single continuous take, no cuts', zhText: '一镜到底，不切镜头' },
+    ],
+  },
+  {
+    id: 'motionStabilityId',
+    label: '稳定',
+    icon: <Aperture size={12} />,
+    columns: 3,
+    items: [
+      { id: 'stabilizer', label: '稳定器', text: 'smooth gimbal-stabilized camera movement', zhText: '稳定器般平滑运镜' },
+      { id: 'subtle-handheld', label: '轻手持', text: 'subtle handheld motion, organic and controlled', zhText: '轻微手持感，自然且可控' },
+      { id: 'strong-handheld', label: '强手持', text: 'energetic handheld motion with intentional shake', zhText: '强手持运动，有意图的抖动感' },
+      { id: 'drone', label: '无人机', text: 'drone-like stabilized aerial motion', zhText: '无人机般稳定的空中运动' },
+      { id: 'slider', label: '滑轨', text: 'clean slider movement with precise linear motion', zhText: '干净滑轨运动，线性精准' },
+      { id: 'crane', label: '摇臂', text: 'crane-style camera move with elegant vertical sweep', zhText: '摇臂式运镜，优雅纵向扫动' },
+      { id: 'telephoto', label: '长焦压缩', text: 'telephoto compression, smooth background separation', zhText: '长焦压缩空间，背景分离平滑' },
+      { id: 'wide-angle', label: '广角空间', text: 'wide-angle spatial movement, strong depth and scale', zhText: '广角空间运镜，纵深和尺度强' },
+      { id: 'no-shake', label: '无抖动', text: 'no unwanted shake, no jitter, keep motion clean', zhText: '无多余抖动，无跳动，保持运动干净' },
+    ],
+  },
+  {
+    id: 'motionSubjectId',
+    label: '主体',
+    icon: <Camera size={12} />,
+    columns: 3,
+    items: [
+      { id: 'centered', label: '主体居中', text: 'keep the subject centered in frame', zhText: '保持主体居中' },
+      { id: 'face-clear', label: '脸部清晰', text: 'keep the face clear and readable', zhText: '保持脸部清晰可读' },
+      { id: 'follow-person', label: '跟随人物', text: 'follow the person naturally without losing framing', zhText: '自然跟随人物，不丢失构图' },
+      { id: 'surround-subject', label: '围绕主体', text: 'move around the subject while maintaining focus', zhText: '围绕主体移动并保持焦点' },
+      { id: 'reveal-background', label: '揭示背景', text: 'reveal the background while keeping the subject important', zhText: '揭示背景，同时保持主体重要性' },
+      { id: 'detail-emphasis', label: '强调细节', text: 'emphasize key details with controlled motion', zhText: '用可控运动强调关键细节' },
+      { id: 'stable-framing', label: '构图稳定', text: 'keep composition stable and balanced', zhText: '保持构图稳定平衡' },
+      { id: 'no-cuts', label: '不切镜', text: 'avoid cuts, keep one continuous camera move', zhText: '避免切镜，保持连续运镜' },
+      { id: 'no-warp', label: '不变形', text: 'avoid warping, melting, or drifting subject geometry', zhText: '避免主体变形、融化或漂移' },
+    ],
+  },
 ];
 
 function findPreset(items: Preset[], id?: string): Preset | undefined {
@@ -200,6 +315,23 @@ function buildCinematicPrompt(
     ...CINEMATIC_GROUPS.map((group) => presetText(findPreset(group.items, next[group.id]), lang)),
     presetText(findPreset(STRENGTH_PRESETS, strengthId), lang),
     typeof next.cinematicCustom === 'string' ? next.cinematicCustom.trim() : '',
+  ].filter(Boolean);
+
+  return parts.join(lang === 'zh' ? '，' : ', ');
+}
+
+function buildMotionPrompt(
+  data: any,
+  patch: Partial<Record<MotionField | 'motionCustom' | 'motionLanguage', string>> = {},
+) {
+  const next = { ...data, ...patch };
+  const lang: PromptLanguage = next.motionLanguage === 'zh' ? 'zh' : 'en';
+  const actionId = next.motionActionId || next.presetId;
+  const parts = [
+    presetText(findPreset(MOTION_SCENE_PRESETS, next.motionSceneId), lang),
+    presetText(findPreset(MOTION_ACTION_PRESETS, actionId), lang),
+    ...MOTION_GROUPS.map((group) => presetText(findPreset(group.items, next[group.id]), lang)),
+    typeof next.motionCustom === 'string' ? next.motionCustom.trim() : '',
   ].filter(Boolean);
 
   return parts.join(lang === 'zh' ? '，' : ', ');
@@ -238,6 +370,142 @@ const miniIconControlStyle: CSSProperties = {
   minWidth: 26,
 };
 
+interface MotionPreviewShape {
+  d: string;
+  dot: [number, number];
+  subject: boolean;
+}
+
+function motionPreviewShape(key?: string): MotionPreviewShape {
+  switch (key || 'forward') {
+    case 'static':
+    case 'locked-off':
+      return { d: 'M108 34 C122 34 138 34 152 34', dot: [152, 34], subject: true };
+    case 'zoom-in':
+    case 'crash-zoom':
+    case 'forward':
+    case 'wide-to-detail':
+    case 'through-space':
+      return { d: 'M82 34 C112 34 146 34 178 34', dot: [178, 34], subject: true };
+    case 'zoom-out':
+    case 'backward':
+    case 'detail-to-wide':
+      return { d: 'M178 34 C146 34 112 34 82 34', dot: [82, 34], subject: true };
+    case 'pan-l':
+    case 'right-to-left':
+      return { d: 'M190 34 C154 30 110 30 72 34', dot: [72, 34], subject: false };
+    case 'pan-r':
+    case 'left-to-right':
+      return { d: 'M72 34 C108 30 152 30 190 34', dot: [190, 34], subject: false };
+    case 'tilt-up':
+    case 'pedestal':
+    case 'rise':
+      return { d: 'M132 54 C134 42 136 28 138 14', dot: [138, 14], subject: true };
+    case 'tilt-down':
+    case 'descend':
+      return { d: 'M138 14 C136 28 134 42 132 54', dot: [132, 54], subject: true };
+    case 'orbit':
+    case 'clockwise':
+    case 'counter-clockwise':
+    case 'surround-subject':
+      return { d: 'M112 34 C126 12 174 12 188 34 C174 56 126 56 112 34', dot: [188, 34], subject: true };
+    case 'tracking':
+    case 'dolly':
+    case 'parallel-follow':
+      return { d: 'M68 40 C108 24 148 44 194 28', dot: [194, 28], subject: true };
+    case 'aerial':
+      return { d: 'M78 54 C104 22 154 18 196 16', dot: [196, 16], subject: true };
+    case 'handheld':
+    case 'strong-handheld':
+      return { d: 'M70 36 C94 20 112 50 136 30 C156 14 168 54 190 34', dot: [190, 34], subject: true };
+    case 'whip':
+    case 'transition-whip':
+      return { d: 'M58 38 C100 18 150 54 204 28', dot: [204, 28], subject: false };
+    case 'from-cover':
+      return { d: 'M72 46 C102 46 126 24 158 28 C176 30 190 34 204 34', dot: [204, 34], subject: true };
+    case 'arc':
+    case 'diagonal':
+      return { d: 'M70 52 C104 18 150 18 194 30', dot: [194, 30], subject: true };
+    default:
+      return { d: 'M74 34 C104 34 150 34 190 34', dot: [190, 34], subject: true };
+  }
+}
+
+function motionPreviewPath(actionId?: string, pathId?: string) {
+  const baseKey = actionId || pathId || 'forward';
+  const base = motionPreviewShape(baseKey);
+  const overlay = actionId && pathId && pathId !== actionId ? motionPreviewShape(pathId) : null;
+  return { ...base, overlay };
+}
+
+function motionPresetLabel(items: Preset[], id?: string) {
+  return id ? items.find((item) => item.id === id)?.label || '' : '';
+}
+
+function motionPathLabel(id?: string) {
+  return motionPresetLabel(MOTION_GROUPS.find((group) => group.id === 'motionPathId')?.items || [], id);
+}
+
+function MotionRoutePreview({ actionId, pathId }: { actionId?: string; pathId?: string }) {
+  const preview = motionPreviewPath(actionId, pathId);
+  const actionLabel = motionPresetLabel(MOTION_ACTION_PRESETS, actionId);
+  const pathLabel = motionPathLabel(pathId);
+  return (
+    <div className="t8-card px-2.5 py-2 space-y-1.5">
+      <div className="flex items-center gap-1.5 text-[11px] font-bold" style={{ color: 'var(--t8-text-muted)' }}>
+        <Camera size={12} />
+        路线预览
+        <span className="ml-auto max-w-[150px] truncate text-[10px] font-semibold" style={{ color: 'var(--t8-text-dim)' }}>
+          {[actionLabel || '默认', pathLabel].filter(Boolean).join(' + ')}
+        </span>
+      </div>
+      <svg viewBox="0 0 260 72" className="w-full h-16 block" aria-hidden="true">
+        <rect x="7" y="8" width="246" height="56" rx="18" fill="var(--t8-bg-panel-muted)" opacity="0.68" />
+        <path
+          d="M22 54 C68 14 196 14 238 54"
+          fill="none"
+          stroke="var(--t8-grid-line)"
+          strokeWidth="1"
+          strokeDasharray="5 6"
+          opacity="0.55"
+        />
+        {preview.subject && (
+          <g opacity="0.95">
+            <circle cx="132" cy="34" r="12" fill="var(--t8-bg-panel-elevated)" stroke="var(--t8-border-strong)" strokeWidth="2" />
+            <circle cx="132" cy="34" r="4" fill="var(--t8-accent)" />
+          </g>
+        )}
+        <path d={preview.d} fill="none" stroke="var(--t8-accent)" strokeWidth="5" strokeLinecap="round" opacity="0.28" />
+        <path d={preview.d} fill="none" stroke="var(--t8-accent)" strokeWidth="2.5" strokeLinecap="round" />
+        <circle cx={preview.dot[0]} cy={preview.dot[1]} r="5" fill="var(--t8-secondary)" stroke="var(--t8-bg-panel)" strokeWidth="2" />
+        {preview.overlay && (
+          <>
+            <path
+              d={preview.overlay.d}
+              fill="none"
+              stroke="var(--t8-secondary)"
+              strokeWidth="4"
+              strokeLinecap="round"
+              strokeDasharray="7 6"
+              opacity="0.22"
+            />
+            <path
+              d={preview.overlay.d}
+              fill="none"
+              stroke="var(--t8-secondary)"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeDasharray="7 6"
+              opacity="0.82"
+            />
+            <circle cx={preview.overlay.dot[0]} cy={preview.overlay.dot[1]} r="4" fill="var(--t8-secondary)" opacity="0.78" />
+          </>
+        )}
+      </svg>
+    </div>
+  );
+}
+
 const ToolboxParamNode = (p: NodeProps) => {
   const update = useUpdateNodeData(p.id);
   const rf = useReactFlow();
@@ -246,22 +514,11 @@ const ToolboxParamNode = (p: NodeProps) => {
   const prompt: string = d?.prompt || '';
   const [error, setError] = useState('');
 
-  const motionMeta = useMemo(
-    () => ({
-      title: '运动模板',
-      subtitle: '相机运动',
-      icon: <Film size={13} />,
-      presets: MOTION_PRESETS,
-      color: '#a78bfa',
-      bg: 'color-mix(in srgb, #a78bfa 18%, var(--t8-bg-panel-elevated))',
-      text: '#ddd6fe',
-      chipActive: 'border-violet-400/70 bg-violet-500/30 text-violet-50',
-    }),
-    [],
-  );
-
-  const lang: PromptLanguage = d?.cinematicLanguage === 'zh' ? 'zh' : 'en';
-  const selectedMotionId: string | undefined = d?.presetId;
+  const cinematicLang: PromptLanguage = d?.cinematicLanguage === 'zh' ? 'zh' : 'en';
+  const motionLang: PromptLanguage = d?.motionLanguage === 'zh' ? 'zh' : 'en';
+  const selectedMotionActionId: string | undefined = d?.motionActionId || d?.presetId;
+  const selectedMotionSceneId: string | undefined = d?.motionSceneId;
+  const selectedMotionPathId: string | undefined = d?.motionPathId;
   const selectedBaseId: string | undefined = d?.cinematicPresetId || d?.presetId;
   const selectedStrength = d?.cinematicStrength || 'balanced';
 
@@ -290,8 +547,29 @@ const ToolboxParamNode = (p: NodeProps) => {
     setError('');
   };
 
-  const handleMotionSelect = (preset: Preset) => {
-    update({ presetId: preset.id, prompt: preset.text });
+  const updateMotion = (patch: Partial<Record<MotionField | 'motionCustom' | 'motionLanguage', string>>) => {
+    const promptText = buildMotionPrompt(d, patch);
+    const next: Record<string, string> = { ...patch, prompt: promptText };
+    if (patch.motionActionId) next.presetId = patch.motionActionId;
+    if (patch.motionLanguage) next.motionLanguage = patch.motionLanguage;
+    update(next);
+    setError('');
+  };
+
+  const clearMotion = () => {
+    update({
+      presetId: '',
+      motionSceneId: '',
+      motionActionId: '',
+      motionPathId: '',
+      motionTempoId: '',
+      motionStabilityId: '',
+      motionSubjectId: '',
+      motionCustom: '',
+      motionLanguage: 'en',
+      prompt: '',
+    });
+    setError('');
   };
 
   const copyPrompt = () => {
@@ -302,7 +580,7 @@ const ToolboxParamNode = (p: NodeProps) => {
   const handleRun = async () => {
     const finalPrompt = String((p.data as any)?.prompt || prompt || '').trim();
     if (!finalPrompt) {
-      const msg = kind === 'cinematic' ? '请先选择电影感风格或填写自定义补充' : '请先选择运动模板';
+      const msg = kind === 'cinematic' ? '请先选择电影感风格或填写自定义补充' : '请先选择运镜动作或填写自定义补充';
       setError(msg);
       throw new Error(msg);
     }
@@ -330,7 +608,7 @@ const ToolboxParamNode = (p: NodeProps) => {
     }
 
     const me = rf.getNode(p.id);
-    const myW = (me as any)?.measured?.width || (me as any)?.width || (kind === 'cinematic' ? 620 : 260);
+    const myW = (me as any)?.measured?.width || (me as any)?.width || (kind === 'cinematic' ? 620 : 540);
     const baseX = (me?.position?.x ?? 0) + myW + 80;
     const baseY = me?.position?.y ?? 0;
     const pos = placeSingleNode(baseX, baseY, 'output', nodes, { source: `placement:toolbox-output:${p.id}` });
@@ -359,49 +637,167 @@ const ToolboxParamNode = (p: NodeProps) => {
     return (
       <div
         className={`t8-node relative transition-all ${p.selected ? 'ring-2 ring-violet-300' : ''}`}
-        style={{ width: 248 }}
+        style={{ width: 540, maxWidth: 540 }}
       >
-        <Handle type="source" position={Position.Right} style={{ background: motionMeta.color, border: 0 }} />
+        <Handle type="source" position={Position.Right} style={{ background: 'var(--t8-accent)', border: 0 }} />
 
         <div className="t8-node-header flex items-center gap-2 px-3 py-2 rounded-t-[inherit]">
           <div
-            className="w-6 h-6 rounded flex items-center justify-center"
-            style={{ background: motionMeta.bg, color: motionMeta.text, boxShadow: `inset 0 0 0 1px ${motionMeta.color}` }}
+            className="w-7 h-7 rounded-lg flex items-center justify-center"
+            style={{
+              background: 'color-mix(in srgb, var(--t8-accent) 18%, var(--t8-bg-panel-elevated))',
+              color: 'var(--t8-accent)',
+              boxShadow: 'inset 0 0 0 1px var(--t8-accent)',
+            }}
           >
-            {motionMeta.icon}
+            <Film size={15} />
           </div>
-          <div className="flex-1">
-            <div className="text-sm font-semibold">{motionMeta.title}</div>
-            <div className="text-[10px]" style={{ color: 'var(--t8-text-dim)' }}>
-              {motionMeta.subtitle}
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold">视频运镜组合器</div>
+            <div className="text-[10px] truncate" style={{ color: 'var(--t8-text-dim)' }}>
+              场景 / 动作 / 路径 / 节奏 / 稳定
             </div>
+          </div>
+          <div className="flex items-center gap-1">
+            {(['en', 'zh'] as PromptLanguage[]).map((item) => (
+              <button
+                key={item}
+                type="button"
+                style={motionLang === item ? miniControlActiveStyle : miniControlStyle}
+                title={item === 'en' ? '输出英文 prompt' : '输出中文 prompt'}
+                onClick={() => updateMotion({ motionLanguage: item })}
+              >
+                {item === 'en' ? 'EN' : '中'}
+              </button>
+            ))}
+            <button
+              type="button"
+              style={miniIconControlStyle}
+              title="清空"
+              aria-label="清空视频运镜设置"
+              onClick={clearMotion}
+            >
+              <RotateCcw size={13} />
+            </button>
           </div>
         </div>
 
-        <div className="p-2.5 space-y-2 nodrag" onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-          <div className="grid grid-cols-2 gap-1.5">
-            {motionMeta.presets.map((ps) => (
-              <button
-                key={ps.id}
-                type="button"
-                onClick={() => handleMotionSelect(ps)}
-                className={`${chipClass} ${selectedMotionId === ps.id ? motionMeta.chipActive : ''}`}
-              >
-                {ps.label}
-              </button>
-            ))}
+        <div className="p-3 space-y-3 nodrag" onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+          <section className="space-y-1.5">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold" style={{ color: 'var(--t8-text-muted)' }}>
+              <Clapperboard size={12} />
+              成片场景
+            </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {MOTION_SCENE_PRESETS.map((ps) => (
+                <button
+                  key={ps.id}
+                  type="button"
+                  onClick={() => updateMotion({ motionSceneId: selectedMotionSceneId === ps.id ? '' : ps.id })}
+                  className={`${chipClass} ${selectedMotionSceneId === ps.id ? 't8-btn-primary' : ''}`}
+                  title={ps.label}
+                >
+                  {ps.label}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <div className="grid grid-cols-[1.35fr_1fr] gap-2">
+            <section className="t8-card p-2 space-y-1.5">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold" style={{ color: 'var(--t8-text-muted)' }}>
+                <Camera size={12} />
+                运镜动作
+              </div>
+              <div className="grid grid-cols-3 gap-1">
+                {MOTION_ACTION_PRESETS.map((ps) => (
+                  <button
+                    key={ps.id}
+                    type="button"
+                    onClick={() => updateMotion({ motionActionId: selectedMotionActionId === ps.id ? '' : ps.id })}
+                    className={`${miniChipClass} ${selectedMotionActionId === ps.id ? 't8-btn-primary' : ''}`}
+                    title={ps.label}
+                  >
+                    {ps.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <MotionRoutePreview actionId={selectedMotionActionId} pathId={selectedMotionPathId} />
           </div>
 
-          {prompt && (
-            <div className="t8-card px-2 py-1.5 text-[10px] leading-relaxed">
-              <div className="flex items-center gap-1 mb-0.5" style={{ color: 'var(--t8-text-dim)' }}>
-                <Sparkles size={9} /> 输出
-              </div>
-              <span className="break-all">{prompt}</span>
+          <div className="grid grid-cols-2 gap-2">
+            {MOTION_GROUPS.map((group) => {
+              const selectedId = d?.[group.id] || '';
+              return (
+                <section key={group.id} className="t8-card p-2 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold" style={{ color: 'var(--t8-text-muted)' }}>
+                    {group.icon}
+                    {group.label}
+                  </div>
+                  <div className={`grid gap-1 ${group.columns === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                    {group.items.map((ps) => (
+                      <button
+                        key={ps.id}
+                        type="button"
+                        onClick={() => updateMotion({ [group.id]: selectedId === ps.id ? '' : ps.id })}
+                        className={`${miniChipClass} ${selectedId === ps.id ? 't8-btn-primary' : ''}`}
+                        title={ps.label}
+                      >
+                        {ps.label}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+
+          <label className="t8-card p-2 space-y-1.5 block">
+            <span className="flex items-center gap-1.5 text-[11px] font-bold" style={{ color: 'var(--t8-text-muted)' }}>
+              <Film size={12} />
+              自定义补充
+            </span>
+            <input
+              className="t8-input w-full h-8 px-2 text-[11px]"
+              value={d?.motionCustom || ''}
+              placeholder="如慢动作、镜头穿过雨幕、不要切镜..."
+              onChange={(e) => updateMotion({ motionCustom: e.target.value })}
+            />
+          </label>
+
+          <div className="t8-card px-2.5 py-2 text-[10px] leading-relaxed">
+            <div className="flex items-center gap-2 mb-1" style={{ color: 'var(--t8-text-dim)' }}>
+              <Sparkles size={10} />
+              <span className="font-bold">输出到下游 prompt</span>
+              <button
+                type="button"
+                className="ml-auto"
+                title="复制输出文本"
+                aria-label="复制输出文本"
+                onClick={copyPrompt}
+                disabled={!prompt}
+                style={{
+                  ...miniIconControlStyle,
+                  width: 24,
+                  minWidth: 24,
+                  height: 24,
+                  minHeight: 24,
+                  opacity: prompt ? 1 : 0.45,
+                  cursor: prompt ? 'pointer' : 'not-allowed',
+                }}
+              >
+                <Copy size={11} />
+              </button>
             </div>
-          )}
-          <button type="button" className="t8-btn t8-btn-primary w-full min-h-8 text-xs" onClick={handleRun}>
-            <Play size={12} fill="currentColor" />
+            <div className="min-h-[40px] max-h-24 overflow-y-auto pr-1 break-words" style={{ color: prompt ? 'var(--t8-text-main)' : 'var(--t8-text-dim)' }}>
+              {prompt || '选择成片场景，再叠加运镜动作、路径、节奏和主体约束。'}
+            </div>
+          </div>
+
+          <button type="button" className="t8-btn t8-btn-primary w-full min-h-9 text-xs" onClick={handleRun}>
+            <Play size={13} fill="currentColor" />
             运行输出文本
           </button>
           {error && <div className="text-[10px]" style={{ color: 'var(--t8-danger, #ef4444)' }}>{error}</div>}
@@ -439,7 +835,7 @@ const ToolboxParamNode = (p: NodeProps) => {
             <button
               key={item}
               type="button"
-              style={lang === item ? miniControlActiveStyle : miniControlStyle}
+              style={cinematicLang === item ? miniControlActiveStyle : miniControlStyle}
               title={item === 'en' ? '输出英文 prompt' : '输出中文 prompt'}
               onClick={() => updateCinematic({ cinematicLanguage: item })}
             >

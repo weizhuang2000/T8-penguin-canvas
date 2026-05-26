@@ -162,7 +162,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     frameMode: 'auto',
   },
   cinematic: { kind: 'cinematic', cinematicLanguage: 'en', cinematicStrength: 'balanced' },
-  'video-motion': { kind: 'video-motion' },
+  'video-motion': { kind: 'video-motion', motionLanguage: 'en' },
   'multi-angle-3d': { preset: 'multi-angle-3d' },
   'panorama-720': { preset: 'panorama-720' },
   'penguin-portrait': { preset: 'penguin-portrait' },
@@ -219,7 +219,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'upload',
   // v1.2.8 工具节点 (循环器 / 从合集获取)
   'loop', 'pick-from-set',
-  // v1.4.6: 工具箱文本节点也可点击 RUN 直接外挂 OutputNode
+  // v1.4.7: 工具箱文本节点也可点击 RUN 直接外挂 OutputNode
   'cinematic', 'video-motion',
 ]);
 

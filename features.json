@@ -1,7 +1,7 @@
 {
   "$schema": "本文件为 T8-penguin-canvas 节点清单防丢失锁,任何节点删减都需要在 roadmap.md 中说明并更新本文件。",
-  "version": "1.4.6",
-  "lastUpdated": "2026-05-27-v1.4.6-cinematic-composer-polish",
+  "version": "1.4.7",
+  "lastUpdated": "2026-05-27-v1.4.7-video-motion-composer-preview-fix",
   "packaging": {
     "description": "Electron NSIS 桌面端打包链路(v1.2.1 起标准化, 严禁未明确指令主动打包)。完整产物拓扑: app.asar(electron/{main,loader,preload}.cjs + node_modules) + app.asar.unpacked(node_modules/sharp + @img) + resources/backend-enc/*.t8c(extraResources, asar 外) + resources/frontend(extraResources, asar 外)。前端版本号由 vite define 注入 __APP_VERSION__、Sidebar 左下角自动同步。",
     "scripts": {
@@ -16,9 +16,9 @@
       "T8PC_FRONTEND_DIST": "打包模式 = path.join(process.resourcesPath, 'frontend'); 开发模式 = <project>/dist",
       "T8PC_RES": "打包模式 = process.resourcesPath; 开发模式 = <project>"
     },
-    "version": "1.4.6",
-    "semverVersion": "1.4.6",
-    "versionNote": "v1.3.0 起统一采用 semver 三段阶段号 x.y.z；阶段内 patch 从 1.4.0 → 1.4.9，下一阶段进位 1.5.0；当前 v1.4.6 将电影感节点从 6 个单选预设升级为电影感组合器，支持 15 成片风格、镜头/光影/调色/质感各 15 项、中英文 prompt、运行输出到 OutputNode，并保持手动连线读取 data.prompt 兼容；收尾修复 OP 风格迷你按钮变形，并将镜头「主观」改为「中景」。本次为 GitHub 源码推送，未打包 Electron。",
+    "version": "1.4.7",
+    "semverVersion": "1.4.7",
+    "versionNote": "v1.3.0 起统一采用 semver 三段阶段号 x.y.z；阶段内 patch 从 1.4.0 → 1.4.9，下一阶段进位 1.5.0；当前 v1.4.7 将视频运镜节点升级为组合器，支持成片场景、运镜动作、路径、节奏、稳定、主体约束、路线示意、中英文 prompt 和运行输出到 OutputNode。本次只推 GitHub 源码，未打包 Electron。",
     "installer": "未重新打包；上次用户包为 dist_electron/T8-PenguinCanvas-Setup-1.4.2.exe (NSIS, 104.58 MB)",
     "checklist": [
       "运行 npm run encrypt 前确认已 npm install bytenode 且使用 Electron 内置 Node",
@@ -187,7 +187,8 @@
     "phase57": { "label": "宫格剪裁 gap 去缝可视预览 (v1.4.3)", "status": "complete", "items": ["GridCropNode 增加 gap / 去缝间距控制，复用后端 /api/image/grid-crop 已有的 gap 裁切能力，运行时会按切线两侧裁掉缝隙区域。", "节点内新增上游图像预览：橙色实线显示宫格切线，半透明橙色带显示会被裁掉的 gap 区域，白色虚线显示 gap 两侧边界，用户调节时可即时感知效果。", "新增 2×2、3×3、2×3、1×4、4×1 常用预设，适合 MJ 四宫格、九宫格头像、横向/纵向分镜条等场景。", "ImageOpFrame 支持由子节点传入 inputImages，宫格剪裁预览和运行使用同一套上游图像来源，并兼容 imageUrl / imageUrls / urls / generatedImages。", "Canvas 新建 grid-crop 节点默认写入 rows=3、cols=3、gap=0；公开版本同步到 1.4.3，skill.md 仅本地更新，继续禁止推送 GitHub。"] },
     "phase58": { "label": "节点运行按钮首次点击兜底修复 (v1.4.4)", "status": "complete", "items": ["修复未选中节点内部按钮首次点击可能只触发 ReactFlow 节点选中/拖拽启动、没有执行按钮 click 的问题。", "Canvas 在 document 原生 capture 阶段仅拦截 .react-flow__node 或 data-node-action-bar 内 button / role=button 的左键 pointerdown 与 mousedown，不 preventDefault，不影响按钮本身 click。", "NodeActionBar 增加 data-node-action-bar 标记并补 onPointerDown stopPropagation，让悬浮 RUN / STOP / 关闭按钮同样避开 ReactFlow pointerdown capture 抢事件。", "该兜底覆盖 Image / Video / Audio / LLM / RunningHub / RH超市 / 图像工具等所有节点内按钮，保留输入框、素材 Ctrl 拖拽、右键菜单、连线和画布框选原有行为。", "公开版本同步到 1.4.4：package.json、package-lock.json、vite.config.ts/js、electron/main.cjs、backend/src/config.js APP_VERSION、features.json、README.md 全部同步；skill.md 仅本地更新，继续禁止推送 GitHub。"] },
     "phase59": { "label": "宫格剪裁指定序号与批量拆分 (v1.4.5)", "status": "complete", "items": ["GridCropNode 新增输出顺序：行优先、列优先、蛇形、反向；预览图上的编号会随顺序变化，方便用户明确第几格对应哪块画面。", "GridCropNode 新增导出序号输入，支持 1,3,5-8 等写法；填写后未选中的格子在预览中变淡，运行只输出指定格子。", "GridCropNode 新增上游合集批量拆分开关，默认仍只处理第 1 张上游图像；打开后会把上游合集中的每张图逐张宫格切分，并合并为一个输出合集。", "前端运行前按预览编号直接计算 rectsPx 传给 /api/image/grid-crop，确保旧后端或未重启后端也不会忽略输出顺序和导出序号。", "ImageOpFrame 新增 processAllInputs 批量处理能力，支持图像工具节点按需逐张处理全部上游图像并合并 urls/imageUrls 输出。", "Canvas 自动输出补过期清理：当宫格剪裁从 9 项变为 3 项时，会清理没有下游、未手动移动的过期自动 OutputNode，避免旧结果残留误导用户。", "后端 /api/image/grid-crop 同步支持 orderMode 与 exportIndexes，供新版后端直接排序与筛选；公开版本同步到 1.4.5，skill.md 仅本地更新，继续禁止推送 GitHub。"] },
-    "phase60": { "label": "电影感组合器升级 (v1.4.6)", "status": "complete", "items": ["ToolboxParamNode 的 cinematic 分支从 6 个单选按钮升级为电影感组合器，保持右侧 text 输出端口和 data.prompt 协议不变，旧画布 presetId 继续兼容。", "成片风格扩展为 15 项并固定 5 列紧凑布局，避免 OP / 像素风按钮被撑大变形。", "镜头、光影、调色、质感四组均扩展到 15 个常用电影创作选项，每组可选一项，再配合轻微 / 标准 / 强烈三档强度生成最终 prompt。", "镜头组原「主观」选项改为「中景」，英文提示词改为 medium shot, balanced subject and environment, clear narrative context；中文提示词改为中景镜头，人物与环境比例平衡，叙事空间清晰。", "新增 EN / 中语言切换，默认英文；切换语言会按当前已选项即时重建英文或中文 prompt，自定义补充按用户原文保留。", "新增节点内「运行输出文本」按钮，cinematic / video-motion 接入 useRunTrigger、Canvas 批量运行和 NodeActionBar；运行时会直接创建或更新下游 OutputNode，同时保留手动连线读取 data.prompt 的旧方式。", "新增自定义补充输入与复制输出按钮，用户可把主题关键词、场景氛围或风格偏好合并进最终 prompt。", "电影感与视频运镜节点统一改用 t8-node / t8-card / t8-btn / t8-input 主题变量样式，减少硬编码深色样式，自动适配科技风、像素糖果风和 OP 风格。", "OP 风格下 EN / 中 / 清空 / 复制等迷你控件改为电影感节点独立 mini control 样式，不再复用 .t8-btn，避免被通用海报按钮样式放大变形。", "已通过 npm run build，并用临时画布在本地页面做布局截图检查；临时画布与检查文件已清理；本次源码推送 GitHub，未重新打包 Electron。"] }
+    "phase60": { "label": "电影感组合器升级 (v1.4.6)", "status": "complete", "items": ["ToolboxParamNode 的 cinematic 分支从 6 个单选按钮升级为电影感组合器，保持右侧 text 输出端口和 data.prompt 协议不变，旧画布 presetId 继续兼容。", "成片风格扩展为 15 项并固定 5 列紧凑布局，避免 OP / 像素风按钮被撑大变形。", "镜头、光影、调色、质感四组均扩展到 15 个常用电影创作选项，每组可选一项，再配合轻微 / 标准 / 强烈三档强度生成最终 prompt。", "镜头组原「主观」选项改为「中景」，英文提示词改为 medium shot, balanced subject and environment, clear narrative context；中文提示词改为中景镜头，人物与环境比例平衡，叙事空间清晰。", "新增 EN / 中语言切换，默认英文；切换语言会按当前已选项即时重建英文或中文 prompt，自定义补充按用户原文保留。", "新增节点内「运行输出文本」按钮，cinematic / video-motion 接入 useRunTrigger、Canvas 批量运行和 NodeActionBar；运行时会直接创建或更新下游 OutputNode，同时保留手动连线读取 data.prompt 的旧方式。", "新增自定义补充输入与复制输出按钮，用户可把主题关键词、场景氛围或风格偏好合并进最终 prompt。", "电影感与视频运镜节点统一改用 t8-node / t8-card / t8-btn / t8-input 主题变量样式，减少硬编码深色样式，自动适配科技风、像素糖果风和 OP 风格。", "OP 风格下 EN / 中 / 清空 / 复制等迷你控件改为电影感节点独立 mini control 样式，不再复用 .t8-btn，避免被通用海报按钮样式放大变形。", "已通过 npm run build，并用临时画布在本地页面做布局截图检查；临时画布与检查文件已清理；本次源码推送 GitHub，未重新打包 Electron。"] },
+    "phase61": { "label": "视频运镜组合器升级 (v1.4.7)", "status": "complete", "items": ["ToolboxParamNode 的 video-motion 分支从 8 个单选运镜按钮升级为视频运镜组合器，保持右侧 text 输出端口和 data.prompt 协议不变，旧画布 presetId 继续兼容。", "新增 12 个成片场景模板：角色登场、产品展示、情绪推近、环绕展示、环境揭示、战斗冲击、梦幻漂移、建筑巡游、美食细节、旅行航拍、对话跟随、转场甩镜。", "运镜动作扩展到 15 项：静止、推近、拉远、左摇、右摇、上摇、下摇、环绕、跟拍、滑轨、升降、航拍、手持、甩镜、急推。", "新增路径 / 节奏 / 稳定 / 主体四组约束，分别覆盖 15 / 9 / 9 / 9 个常用视频创作控制项，最终组合为可直接给视频模型使用的 prompt。", "新增路线预览小面板，用 SVG 路径显示推进、拉远、平移、环绕、升降、手持、甩镜等运动方向，帮助用户感知运镜意图；预览以运镜动作为主线，路径设置以虚线辅助叠加，避免选中路径后覆盖动作预览。", "新增 EN / 中语言切换，默认英文；切换语言会按当前已选项即时重建英文或中文 prompt，自定义补充保留用户原文。", "新增自定义补充与复制输出按钮，保留「运行输出文本」创建或更新下游 OutputNode 的能力，并继续支持手动连线读取 data.prompt。", "Canvas 初始 data 写入 motionLanguage=en，nodePlacement 默认尺寸更新为 540×760，nodeRegistry / features / README / 版本文件同步到 1.4.7。"] }
   },
   "categories": {
     "input": {
@@ -265,7 +266,7 @@
       "count": 2,
       "nodes": [
         { "type": "cinematic", "label": "电影感工具箱", "description": "电影感组合器：15 成片风格 + 镜头 / 光影 / 调色 / 质感各 15 项，支持中英文 prompt 与运行输出到 OutputNode" },
-        { "type": "video-motion", "label": "视频运镜工具箱", "description": "运镜参数；支持运行输出到 OutputNode" }
+        { "type": "video-motion", "label": "视频运镜工具箱", "description": "视频运镜组合器：成片场景 + 运镜动作 + 路径 / 节奏 / 稳定 / 主体约束，支持中英文 prompt、路线预览与运行输出到 OutputNode" }
       ]
     }
   },

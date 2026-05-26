@@ -60,7 +60,7 @@ export const NODE_DEFAULT_SIZE: Record<string, { w: number; h: number }> = {
   'frame-pair': { w: 320, h: 360 },
   'grid-crop': { w: 320, h: 360 },
   cinematic: { w: 620, h: 920 },
-  'video-motion': { w: 248, h: 300 },
+  'video-motion': { w: 540, h: 760 },
   groupBox: { w: 480, h: 320 },
 };
 
