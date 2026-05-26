@@ -8,15 +8,22 @@ import {
   type NodeProps,
   type Node,
 } from '@xyflow/react';
-import { MonitorPlay, Type as TypeIcon, Image as ImageIcon, Video as VideoIcon, Music, Download, Pencil, Check, Edit3 } from 'lucide-react';
+import { MonitorPlay, Type as TypeIcon, Image as ImageIcon, Video as VideoIcon, Music, Download, Pencil, Check, Edit3, GitCompare } from 'lucide-react';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useThemeStore } from '../../stores/theme';
 import { PORT_COLOR } from '../../config/portTypes';
 import ImageEditModal, { type ImageEditProduceMeta } from './ImageEditModal';
+import ImageCompareModal from '../ImageCompareModal';
 import { useMaterialDropTarget } from '../../hooks/useMaterialDropTarget';
 import { useDragMaterialStore, type MaterialPayload } from '../../stores/dragMaterial';
 import ResizableCorners from './ResizableCorners';
 import { saveAssetToDisk } from '../../services/api';
+import {
+  extractImagesFromData,
+  extractInputCandidatesFromData,
+  isImageLikeUrl,
+  type ImageCompareCandidate,
+} from '../../utils/imageCompare';
 // v1.2.10.5: 节点落点防重叠 —— 双击编辑产出 N 节点 3 列宫格整组避让
 import { placeBatchNodes, defaultSizeOf, type Rect as PlacementRect } from '../../utils/nodePlacement';
 
@@ -46,6 +53,19 @@ import { placeBatchNodes, defaultSizeOf, type Rect as PlacementRect } from '../.
 
 const isVideoUrl = (u: string) => /\.(mp4|webm|mov|m4v|mkv)(\?|$)/i.test(u);
 const isAudioUrl = (u: string) => /\.(mp3|wav|ogg|m4a|flac)(\?|$)/i.test(u);
+
+const NODE_INPUT_LABELS: Record<string, string> = {
+  upload: '上传图',
+  output: '上游输出图',
+  image: '上游生成图',
+  'frame-pair': '抽帧图',
+  resize: '尺寸调整图',
+  combine: '合成图',
+  'grid-crop': '宫格切图',
+  'remove-bg': '抠图结果',
+  upscale: '放大结果',
+  relay: '中继图',
+};
 
 interface Collected {
   texts: string[];
@@ -352,6 +372,64 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
   // 以 directImageUrl 独立模式创建 N 个新 OutputNode (沉淀在本节点的右下区),
   // 取 id 前缀 'output-auto-edit-' 以与源 output-auto-* 区分 (不受重排接管).
   const [editingUrl, setEditingUrl] = useState<string | null>(null);
+  const [compareState, setCompareState] = useState<{
+    resultUrl: string;
+    candidates: ImageCompareCandidate[];
+  } | null>(null);
+
+  const buildCompareCandidates = (resultUrl: string): ImageCompareCandidate[] => {
+    const nodes = rf.getNodes();
+    const edges = rf.getEdges();
+    const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+    const seen = new Set<string>([resultUrl]);
+    const out: ImageCompareCandidate[] = [];
+
+    const push = (url: any, label: string, sourceNodeId?: string, sourceType?: string) => {
+      if (typeof url !== 'string') return;
+      const s = url.trim();
+      if (!s || !isImageLikeUrl(s) || seen.has(s)) return;
+      seen.add(s);
+      out.push({ url: s, label, sourceNodeId, sourceType });
+    };
+
+    const directSourceIds = Array.from(new Set(connections.map((c) => c.source)));
+    for (const sourceId of directSourceIds) {
+      const sourceNode = nodeMap.get(sourceId);
+      if (!sourceNode) continue;
+      const sourceType = String(sourceNode.type || '');
+      out.push(...extractInputCandidatesFromData(sourceNode.data, sourceId, sourceType, seen));
+
+      const incoming = edges.filter((e) => e.target === sourceId);
+      for (const edge of incoming as any[]) {
+        const inputNode = nodeMap.get(edge.source);
+        if (!inputNode) continue;
+        const inputType = String(inputNode.type || '');
+        const labelBase = NODE_INPUT_LABELS[inputType] || '上游输入图';
+        const imgs = extractImagesFromData(inputNode.data, edge.sourceHandle ?? null);
+        imgs.forEach((u, i) => {
+          const label = inputType === 'frame-pair'
+            ? (edge.sourceHandle === 'last' ? '尾帧' : edge.sourceHandle === 'first' ? '首帧' : `抽帧图 ${i + 1}`)
+            : `${labelBase} ${i + 1}`;
+          push(u, label, inputNode.id, inputType);
+        });
+        out.push(...extractInputCandidatesFromData(inputNode.data, inputNode.id, inputType, seen));
+      }
+    }
+
+    collected.images.forEach((u, i) => {
+      push(u, `当前输出 ${i + 1}`, id, 'output');
+    });
+
+    return out;
+  };
+
+  const openImageCompare = (resultUrl: string) => {
+    setCompareState({
+      resultUrl,
+      candidates: buildCompareCandidates(resultUrl),
+    });
+  };
+
   const handleProduce = (urls: string[], _meta: ImageEditProduceMeta) => {
     if (!urls || urls.length === 0) return;
     const me = rf.getNode(id);
@@ -753,31 +831,54 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
               }
             >
               {collected.images.map((u, i) => (
-                <div key={i} className="space-y-0.5">
-                  <img
-                    src={u}
-                    alt={`图像 ${i + 1}`}
-                    className="w-full h-auto rounded block cursor-zoom-in"
-                    style={{
-                      background: '#0008',
-                      objectFit: 'contain',
-                      maxHeight: collected.images.length >= 2 ? 140 : 480,
-                    }}
-                    data-drag-source
-                    data-drag-kind="image"
-                    data-drag-url={u}
-                    data-drag-preview={u}
-                    data-drag-node-id={id}
-                    data-resource-title={u.split('/').pop()}
-                    onMouseDown={(e) =>
-                      beginMaterialDrag(e, { kind: 'image', url: u, sourceNodeId: id, previewUrl: u })
-                    }
-                    onDoubleClick={(e) => {
-                      e.stopPropagation();
-                      setEditingUrl(u);
-                    }}
-                    title="双击编辑 (裁剪 / 宫格切分) · Ctrl+拖拽可送到其他节点"
-                  />
+                <div key={i} className="group space-y-0.5">
+                  <div className="relative">
+                    <img
+                      src={u}
+                      alt={`图像 ${i + 1}`}
+                      className="w-full h-auto rounded block cursor-zoom-in"
+                      style={{
+                        background: '#0008',
+                        objectFit: 'contain',
+                        maxHeight: collected.images.length >= 2 ? 140 : 480,
+                      }}
+                      data-drag-source
+                      data-drag-kind="image"
+                      data-drag-url={u}
+                      data-drag-preview={u}
+                      data-drag-node-id={id}
+                      data-resource-title={u.split('/').pop()}
+                      onMouseDown={(e) =>
+                        beginMaterialDrag(e, { kind: 'image', url: u, sourceNodeId: id, previewUrl: u })
+                      }
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        setEditingUrl(u);
+                      }}
+                      title="双击编辑 (裁剪 / 宫格切分) · Ctrl+拖拽可送到其他节点"
+                    />
+                    <button
+                      type="button"
+                      className="nodrag nopan t8-btn absolute right-1.5 top-1.5 z-10 h-7 w-7 p-0 opacity-100 shadow-md transition sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
+                      title="对比输入图与结果图"
+                      aria-label="对比输入图与结果图"
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        openImageCompare(u);
+                      }}
+                    >
+                      <GitCompare size={13} />
+                    </button>
+                  </div>
                   <div className={`flex items-center gap-1 text-[10px] ${isDark ? 'text-white/40' : 'text-zinc-400'}`}>
                     <span className="truncate flex-1" title={u}>{u.split('/').pop()}</span>
                     <a
@@ -888,6 +989,13 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
           srcUrl={editingUrl}
           onClose={() => setEditingUrl(null)}
           onProduce={handleProduce}
+        />
+      )}
+      {compareState && (
+        <ImageCompareModal
+          resultUrl={compareState.resultUrl}
+          inputCandidates={compareState.candidates}
+          onClose={() => setCompareState(null)}
         />
       )}
     </div>

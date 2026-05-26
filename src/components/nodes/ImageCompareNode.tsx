@@ -1,10 +1,21 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
 import { AlertCircle, GitCompare, Loader2, Sparkles } from 'lucide-react';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useHasAutoOutput } from './useHasAutoOutput';
 import { opCompare, uploadDataUrl } from '../../services/imageOps';
+import ImageCompareStage from '../ImageCompareStage';
+import {
+  ALIGN_OPTIONS,
+  MODE_OPTIONS,
+  extractImagesFromData,
+  getImageCompareStats,
+  renderCompareDataUrl,
+  type AlignMode,
+  type CompareMode,
+  type CompareStats,
+} from '../../utils/imageCompare';
 
 /**
  * ImageCompareNode - 图像对比
@@ -13,275 +24,6 @@ import { opCompare, uploadDataUrl } from '../../services/imageOps';
  * 写入 data.imageUrl，继续交给下游 OutputNode / 资源库 / 导出链路使用。
  */
 const COLOR = '#fb923c';
-
-type CompareMode = 'slider' | 'side-by-side' | 'overlay' | 'blink' | 'heatmap' | 'focus';
-type AlignMode = 'contain' | 'cover' | 'fill';
-
-interface CompareStats {
-  imageA: { width: number; height: number };
-  imageB: { width: number; height: number };
-  meanDiff?: number;
-  changedRatio?: number;
-  maxDiff?: number;
-}
-
-const VIDEO_RE = /\.(mp4|webm|mov|m4v|mkv)(\?|$)/i;
-const AUDIO_RE = /\.(mp3|wav|ogg|m4a|flac|aac)(\?|$)/i;
-
-const MODE_OPTIONS: Array<{ value: CompareMode; label: string; short: string }> = [
-  { value: 'slider', label: '滑杆对比', short: '滑杆' },
-  { value: 'side-by-side', label: '并排对比', short: '并排' },
-  { value: 'overlay', label: '透明叠加', short: '叠加' },
-  { value: 'blink', label: '闪烁对比', short: '闪烁' },
-  { value: 'heatmap', label: '差异热力图', short: '热力' },
-  { value: 'focus', label: '差异聚焦', short: '聚焦' },
-];
-
-const ALIGN_OPTIONS: Array<{ value: AlignMode; label: string }> = [
-  { value: 'contain', label: '完整适配' },
-  { value: 'cover', label: '裁剪铺满' },
-  { value: 'fill', label: '拉伸对齐' },
-];
-
-function isImageLikeUrl(url: string): boolean {
-  if (!url) return false;
-  if (AUDIO_RE.test(url) || VIDEO_RE.test(url)) return false;
-  return true;
-}
-
-function pushImage(out: string[], value: any) {
-  if (typeof value !== 'string') return;
-  const s = value.trim();
-  if (!s || !isImageLikeUrl(s) || out.includes(s)) return;
-  out.push(s);
-}
-
-function extractImages(data: any, sourceHandle?: string | null): string[] {
-  const out: string[] = [];
-  if (!data) return out;
-
-  const isFramePair =
-    Object.prototype.hasOwnProperty.call(data, 'firstFrameUrl') &&
-    Object.prototype.hasOwnProperty.call(data, 'lastFrameUrl');
-  if (isFramePair) {
-    if (sourceHandle === 'last') {
-      pushImage(out, data.lastFrameUrl);
-      return out;
-    }
-    if (sourceHandle === 'first') {
-      pushImage(out, data.firstFrameUrl);
-      return out;
-    }
-    pushImage(out, data.firstFrameUrl);
-    pushImage(out, data.lastFrameUrl);
-    return out;
-  }
-
-  pushImage(out, data.imageUrl);
-  for (const field of ['imageUrls', 'urls', 'generatedImages']) {
-    const v = data[field];
-    if (Array.isArray(v)) v.forEach((u) => pushImage(out, u));
-  }
-  return out;
-}
-
-function loadImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('图像读取失败'));
-    img.src = url;
-  });
-}
-
-function drawAligned(
-  ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement,
-  width: number,
-  height: number,
-  align: AlignMode,
-) {
-  if (align === 'fill') {
-    ctx.drawImage(img, 0, 0, width, height);
-    return;
-  }
-  const iw = img.naturalWidth || img.width || 1;
-  const ih = img.naturalHeight || img.height || 1;
-  const scale = align === 'cover'
-    ? Math.max(width / iw, height / ih)
-    : Math.min(width / iw, height / ih);
-  const w = iw * scale;
-  const h = ih * scale;
-  ctx.drawImage(img, (width - w) / 2, (height - h) / 2, w, h);
-}
-
-function drawDiffPixels(
-  rawA: Uint8ClampedArray,
-  rawB: Uint8ClampedArray,
-  threshold: number,
-  variant: 'heatmap' | 'focus',
-) {
-  const out = new Uint8ClampedArray(rawA.length);
-  for (let i = 0; i < rawA.length; i += 4) {
-    const diff = (
-      Math.abs(rawA[i] - rawB[i]) +
-      Math.abs(rawA[i + 1] - rawB[i + 1]) +
-      Math.abs(rawA[i + 2] - rawB[i + 2])
-    ) / 3;
-    const t = Math.max(0, Math.min(1, (diff - threshold) / Math.max(1, 255 - threshold)));
-
-    if (variant === 'focus') {
-      if (diff < threshold) {
-        const gray = rawA[i] * 0.299 + rawA[i + 1] * 0.587 + rawA[i + 2] * 0.114;
-        out[i] = gray * 0.58;
-        out[i + 1] = gray * 0.58;
-        out[i + 2] = gray * 0.58;
-      } else {
-        const mix = Math.max(0.18, t * 0.36);
-        out[i] = rawB[i] * (1 - mix) + 255 * mix;
-        out[i + 1] = rawB[i + 1] * (1 - mix) + 148 * mix;
-        out[i + 2] = rawB[i + 2] * (1 - mix) + 36 * mix;
-      }
-      out[i + 3] = 255;
-      continue;
-    }
-
-    const mix = diff < threshold ? 0 : Math.max(0.3, t * 0.82);
-    const heatR = 255;
-    const heatG = Math.round(232 * (1 - t) + 48 * t);
-    const heatB = Math.round(60 * (1 - t));
-    const base = diff < threshold ? 0.86 : 0.62;
-    out[i] = rawA[i] * base * (1 - mix) + heatR * mix;
-    out[i + 1] = rawA[i + 1] * base * (1 - mix) + heatG * mix;
-    out[i + 2] = rawA[i + 2] * base * (1 - mix) + heatB * mix;
-    out[i + 3] = 255;
-  }
-  return out;
-}
-
-function DiffCanvasPreview(props: {
-  before: string;
-  after: string;
-  align: AlignMode;
-  threshold: number;
-  variant: 'heatmap' | 'focus';
-}) {
-  const { before, after, align, threshold, variant } = props;
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([loadImage(before), loadImage(after)])
-      .then(([a, b]) => {
-        if (cancelled) return;
-        const baseW = a.naturalWidth || a.width || 1;
-        const baseH = a.naturalHeight || a.height || 1;
-        const scale = Math.min(720 / baseW, 420 / baseH, 1);
-        const w = Math.max(80, Math.round(baseW * scale));
-        const h = Math.max(80, Math.round(baseH * scale));
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        ctx.clearRect(0, 0, w, h);
-        drawAligned(ctx, a, w, h, 'fill');
-        const imgA = ctx.getImageData(0, 0, w, h);
-        ctx.clearRect(0, 0, w, h);
-        drawAligned(ctx, b, w, h, align);
-        const imgB = ctx.getImageData(0, 0, w, h);
-        const out = new ImageData(drawDiffPixels(imgA.data, imgB.data, threshold, variant), w, h);
-        ctx.putImageData(out, 0, 0);
-      })
-      .catch(() => {
-        const canvas = canvasRef.current;
-        const ctx = canvas?.getContext('2d');
-        if (canvas && ctx) {
-          canvas.width = 640;
-          canvas.height = 360;
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [align, after, before, threshold, variant]);
-
-  return <canvas ref={canvasRef} className="block h-full w-full rounded-lg object-contain" />;
-}
-
-async function drawAlignedToImageData(
-  img: HTMLImageElement,
-  width: number,
-  height: number,
-  align: AlignMode,
-) {
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('canvas 不可用');
-  ctx.clearRect(0, 0, width, height);
-  drawAligned(ctx, img, width, height, align);
-  return { canvas, ctx, imageData: ctx.getImageData(0, 0, width, height) };
-}
-
-async function renderCompareDataUrl(args: {
-  before: string;
-  after: string;
-  mode: CompareMode;
-  align: AlignMode;
-  split: number;
-  opacity: number;
-  threshold: number;
-}) {
-  const { before, after, mode, align, split, opacity, threshold } = args;
-  const [a, b] = await Promise.all([loadImage(before), loadImage(after)]);
-  const width = a.naturalWidth || a.width || 1;
-  const height = a.naturalHeight || a.height || 1;
-  const { canvas: canvasA, ctx: ctxA, imageData: dataA } = await drawAlignedToImageData(a, width, height, 'fill');
-  const { canvas: canvasB, imageData: dataB } = await drawAlignedToImageData(b, width, height, align);
-
-  if (mode === 'side-by-side' || mode === 'blink') {
-    const gap = 16;
-    const out = document.createElement('canvas');
-    out.width = width * 2 + gap;
-    out.height = height;
-    const ctx = out.getContext('2d');
-    if (!ctx) throw new Error('canvas 不可用');
-    ctx.drawImage(canvasA, 0, 0);
-    ctx.drawImage(canvasB, width + gap, 0);
-    return out.toDataURL('image/png');
-  }
-
-  if (mode === 'overlay') {
-    ctxA.save();
-    ctxA.globalAlpha = Math.max(0, Math.min(1, opacity / 100));
-    ctxA.drawImage(canvasB, 0, 0);
-    ctxA.restore();
-    return canvasA.toDataURL('image/png');
-  }
-
-  if (mode === 'heatmap' || mode === 'focus') {
-    const raw = drawDiffPixels(dataA.data, dataB.data, threshold, mode);
-    ctxA.putImageData(new ImageData(raw, width, height), 0, 0);
-    return canvasA.toDataURL('image/png');
-  }
-
-  const clipW = Math.max(1, Math.min(width, Math.round(width * split / 100)));
-  ctxA.save();
-  ctxA.beginPath();
-  ctxA.rect(0, 0, clipW, height);
-  ctxA.clip();
-  ctxA.drawImage(canvasB, 0, 0);
-  ctxA.restore();
-  ctxA.fillStyle = '#fb923c';
-  ctxA.fillRect(Math.max(0, clipW - 1), 0, 2, height);
-  return canvasA.toDataURL('image/png');
-}
 
 const ImageCompareNode = (p: NodeProps) => {
   const update = useUpdateNodeData(p.id);
@@ -301,7 +43,6 @@ const ImageCompareNode = (p: NodeProps) => {
 
   const [error, setError] = useState<string | null>(d.error || null);
   const [stats, setStats] = useState<CompareStats | null>(null);
-  const [blinkOn, setBlinkOn] = useState(false);
 
   const upstreamSig = useMemo(() => {
     const list = Array.isArray(upstreamNodes) ? upstreamNodes : [];
@@ -333,7 +74,7 @@ const ImageCompareNode = (p: NodeProps) => {
 
     for (const c of conns as any[]) {
       const n = nodeMap.get(c.source);
-      const imgs = extractImages(n?.data, c.sourceHandle ?? null);
+      const imgs = extractImagesFromData(n?.data, c.sourceHandle ?? null);
       for (const img of imgs) {
         if (!allCandidates.includes(img)) allCandidates.push(img);
         if (c.targetHandle === 'a') {
@@ -360,66 +101,14 @@ const ImageCompareNode = (p: NodeProps) => {
   const hasPair = !!before && !!after;
 
   useEffect(() => {
-    if (mode !== 'blink') {
-      setBlinkOn(false);
-      return;
-    }
-    const timer = window.setInterval(() => setBlinkOn((v) => !v), 650);
-    return () => window.clearInterval(timer);
-  }, [mode]);
-
-  useEffect(() => {
     let cancelled = false;
     if (!hasPair) {
       setStats(null);
       return;
     }
-    Promise.all([loadImage(before), loadImage(after)])
-      .then(([a, b]) => {
-        if (cancelled) return;
-        const baseW = a.naturalWidth || a.width || 1;
-        const baseH = a.naturalHeight || a.height || 1;
-        const sampleScale = Math.min(192 / baseW, 192 / baseH, 1);
-        const sampleW = Math.max(24, Math.round(baseW * sampleScale));
-        const sampleH = Math.max(24, Math.round(baseH * sampleScale));
-        const canvas = document.createElement('canvas');
-        canvas.width = sampleW;
-        canvas.height = sampleH;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          setStats({
-            imageA: { width: baseW, height: baseH },
-            imageB: { width: b.naturalWidth || b.width || 1, height: b.naturalHeight || b.height || 1 },
-          });
-          return;
-        }
-        ctx.clearRect(0, 0, sampleW, sampleH);
-        drawAligned(ctx, a, sampleW, sampleH, 'fill');
-        const dataA = ctx.getImageData(0, 0, sampleW, sampleH).data;
-        ctx.clearRect(0, 0, sampleW, sampleH);
-        drawAligned(ctx, b, sampleW, sampleH, align);
-        const dataB = ctx.getImageData(0, 0, sampleW, sampleH).data;
-        let sum = 0;
-        let max = 0;
-        let changed = 0;
-        const px = sampleW * sampleH;
-        for (let i = 0; i < dataA.length; i += 4) {
-          const diff = (
-            Math.abs(dataA[i] - dataB[i]) +
-            Math.abs(dataA[i + 1] - dataB[i + 1]) +
-            Math.abs(dataA[i + 2] - dataB[i + 2])
-          ) / 3;
-          sum += diff;
-          if (diff > max) max = diff;
-          if (diff >= threshold) changed += 1;
-        }
-        setStats({
-          imageA: { width: baseW, height: baseH },
-          imageB: { width: b.naturalWidth || b.width || 1, height: b.naturalHeight || b.height || 1 },
-          meanDiff: sum / px,
-          maxDiff: max,
-          changedRatio: changed / px,
-        });
+    getImageCompareStats(before, after, align, threshold)
+      .then((next) => {
+        if (!cancelled) setStats(next);
       })
       .catch(() => {
         if (!cancelled) setStats(null);
@@ -492,8 +181,6 @@ const ImageCompareNode = (p: NodeProps) => {
     boxShadow: p.selected ? `0 0 0 2px ${COLOR}, var(--t8-shadow-strong, 0 18px 36px rgba(0,0,0,.22))` : undefined,
   };
 
-  const imageFit = align === 'fill' ? 'fill' : align;
-
   const renderPreview = () => {
     if (!before) {
       return (
@@ -513,74 +200,18 @@ const ImageCompareNode = (p: NodeProps) => {
       );
     }
 
-    if (mode === 'side-by-side') {
-      return (
-        <div className="grid grid-cols-2 gap-2">
-          {[
-            ['原图', before],
-            ['对比图', after],
-          ].map(([label, url]) => (
-            <div key={label} className="overflow-hidden rounded-lg border border-[var(--t8-border)] bg-[var(--t8-bg-panel-muted)]">
-              <div className="px-2 py-1 text-[10px] font-bold text-[var(--t8-text-muted)] border-b border-[var(--t8-border)]">{label}</div>
-              <div className="aspect-square">
-                <img src={url} alt={label} className="w-full h-full object-contain" draggable={false} />
-              </div>
-            </div>
-          ))}
-        </div>
-      );
-    }
-
     return (
-      <div className="relative aspect-video overflow-hidden rounded-lg border border-[var(--t8-border)] bg-[var(--t8-bg-panel-muted)] select-none">
-        <img
-          src={before}
-          alt="原图 A"
-          className="absolute inset-0 w-full h-full"
-          style={{ objectFit: imageFit as any, opacity: mode === 'blink' && blinkOn ? 0 : mode === 'heatmap' ? 0.35 : 1 }}
-          draggable={false}
-        />
-        {mode === 'slider' && (
-          <>
-            <img
-              src={after}
-              alt="对比图 B"
-              className="absolute inset-0 w-full h-full"
-              style={{ objectFit: imageFit as any, clipPath: `inset(0 ${100 - split}% 0 0)` }}
-              draggable={false}
-            />
-            <div className="absolute inset-y-0 w-0.5 bg-[var(--t8-accent)] shadow" style={{ left: `calc(${split}% - 1px)` }} />
-          </>
-        )}
-        {mode === 'overlay' && (
-          <img
-            src={after}
-            alt="对比图 B"
-            className="absolute inset-0 w-full h-full"
-            style={{ objectFit: imageFit as any, opacity: opacity / 100 }}
-            draggable={false}
-          />
-        )}
-        {mode === 'blink' && (
-          <>
-            <img
-              src={after}
-              alt="对比图 B"
-              className="absolute inset-0 w-full h-full"
-              style={{ objectFit: imageFit as any, opacity: blinkOn ? 1 : 0 }}
-              draggable={false}
-            />
-            <div className="absolute bottom-2 left-2 rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-bold text-white">
-              {blinkOn ? '对比图' : '原图'}
-            </div>
-          </>
-        )}
-        {(mode === 'heatmap' || mode === 'focus') && (
-          <div className="absolute inset-0 bg-[var(--t8-bg-panel-muted)]">
-            <DiffCanvasPreview before={before} after={after} align={align} threshold={threshold} variant={mode} />
-          </div>
-        )}
-      </div>
+      <ImageCompareStage
+        before={before}
+        after={after}
+        mode={mode}
+        align={align}
+        split={split}
+        opacity={opacity}
+        threshold={threshold}
+        labels={['原图', '对比图']}
+        className="aspect-video"
+      />
     );
   };
 
