@@ -1,7 +1,7 @@
 {
   "$schema": "本文件为 T8-penguin-canvas 节点清单防丢失锁,任何节点删减都需要在 roadmap.md 中说明并更新本文件。",
-  "version": "1.4.9",
-  "lastUpdated": "2026-05-27-v1.4.9-motion-cinematic-presets",
+  "version": "1.5.2",
+  "lastUpdated": "2026-05-27-v1.5.2-text-split-polish",
   "packaging": {
     "description": "Electron NSIS 桌面端打包链路(v1.2.1 起标准化, 严禁未明确指令主动打包)。完整产物拓扑: app.asar(electron/{main,loader,preload}.cjs + node_modules) + app.asar.unpacked(node_modules/sharp + @img) + resources/backend-enc/*.t8c(extraResources, asar 外) + resources/frontend(extraResources, asar 外)。前端版本号由 vite define 注入 __APP_VERSION__、Sidebar 左下角自动同步。",
     "scripts": {
@@ -16,9 +16,9 @@
       "T8PC_FRONTEND_DIST": "打包模式 = path.join(process.resourcesPath, 'frontend'); 开发模式 = <project>/dist",
       "T8PC_RES": "打包模式 = process.resourcesPath; 开发模式 = <project>"
     },
-    "version": "1.4.9",
-    "semverVersion": "1.4.9",
-    "versionNote": "v1.3.0 起统一采用 semver 三段阶段号 x.y.z；阶段内 patch 从 1.4.0 → 1.4.9，下一阶段进位 1.5.0；当前 v1.4.9 补齐「视频运镜」与「电影感」创作预设：视频运镜的成片场景 / 运镜动作 / 路径 / 节奏 / 稳定 / 主体约束六组均为 50 项，路线预览覆盖全部动作与路径并新增符号图例；电影感成片风格 / 镜头 / 光影 / 调色 / 质感均为 50 项，继续支持收藏和 JSON 导入 / 导出复用。本次只做源码开发，未打包 Electron。",
+    "version": "1.5.2",
+    "semverVersion": "1.5.2",
+    "versionNote": "v1.3.0 起统一采用 semver 三段阶段号 x.y.z；当前 v1.5.2 为文本分割节点体验修复：默认分割方式改为按行，修复中文 IME 编辑、段落/序号/镜头/字数切块分割边界和旧 segmentsOverride 缓存问题；新增每种分割方式的使用说明，并把节点改为 760px 双列布局，右侧分段预览固定高度内部滚动、分段收藏贴底。本次只做源码开发，未打包 Electron。",
     "installer": "未重新打包；上次用户包为 dist_electron/T8-PenguinCanvas-Setup-1.4.2.exe (NSIS, 104.58 MB)",
     "checklist": [
       "运行 npm run encrypt 前确认已 npm install bytenode 且使用 Electron 内置 Node",
@@ -125,7 +125,7 @@
     "htmlAttrs": ["data-theme-style", "data-theme-mode"]
   },
   "repository": "https://github.com/T8mars/T8-penguin-canvas",
-  "totalNodes": 28,
+  "totalNodes": 38,
   "phases": {
     "phase0": { "label": "基础设施", "status": "complete", "items": ["Vite + React 19 + TS", "Tailwind", "前端 11422 / 后端 18766 代理", "Express 后端骨架"] },
     "phase1": { "label": "画布主体", "status": "complete", "items": ["xyflow 画布", "Sidebar 节点添加", "画布 CRUD", "三套 API Key 设置"] },
@@ -192,7 +192,10 @@
     "phase62": { "label": "可视化多角度工具箱节点 (v1.4.8)", "status": "complete", "items": ["工具箱分类新增「可视化多角度」节点，类型为 multi-angle-visual，保持工具箱统一的 text 输出端口，可手动连线读取 data.prompt，也可点击运行输出到下游 OutputNode。", "节点左侧可选接入 image 上游作为参考预览；未接图像时仍显示抽象主体板和 2.5D 相机示意，不依赖 Three.js，降低打包体积和运行风险。", "可视化面板支持拖动水平环、俯仰弧线和远近轨道，也可用滑杆精调 azimuth / elevation / distance；平视 0° 在弧线中心，负数向下为仰拍，正数向上为高机位 / 俯拍。", "自动映射为 Qwen Multiangle Camera 兼容的 front / quarter / side / back、low-angle / eye-level / elevated / high-angle、wide / medium / close-up prompt；远近数值越大越近，越小越远。", "内置正面、45 度、侧面、背面、俯拍、仰拍、远景、中景、特写和 6 个创作机位快捷预设，适合角色设定、产品展示、建模参考、多角度图像生成等场景。", "输出格式支持 Qwen / 通用 / 双格式三档，并新增 EN / 中语言切换，默认英文；Qwen 模式输出 <sks> 结构提示词，通用模式输出自然语言相机提示词，双格式同时给模型和人工阅读使用。", "二版新增批量角度输出：单条 / 三视图 / 四视图 / 八方位 / 自定义角度，会把多条 prompt 以编号文本写入同一个 OutputNode，保留现有 text 端口协议。", "二版新增自定义前缀 / 后缀，和自定义补充分别进入最终 prompt；Prompt 模式切换与 EN / 中切换会即时重建输出。", "二版新增镜头收藏，收藏当前方位 / 俯仰 / 远近到节点 data，随画布保存，并支持一键应用或删除。", "二版新增角度预设 JSON 导入 / 导出：导出当前机位、批量模式、内置批量组和收藏镜头；导入时恢复当前机位、Prompt 设置、前后缀和收藏镜头，前端 FileReader/Blob 完成，不依赖后端。", "三版布局优化：节点改为 760px 宽双栏紧凑布局，左侧保留可视化预览和输出 prompt，右侧把方向 / 高度 / 远近 / 快捷机位 / 批量输出 / Prompt 模式 / 语言全部改为下拉列表，收藏区限高滚动，显著降低节点高度。", "镜头收藏区细节优化：收藏列表改为单列滚动预览，阻止 wheel 事件冒泡到 ReactFlow 画布，避免滚动列表时触发画布缩放；收藏名称增加内边距、长文本省略和 tooltip，删除按钮固定右侧。", "Canvas / nodeRegistry / portTypes / nodePlacement / types / features / README / 版本文件同步到 1.4.8；skill.md 仅本地更新，继续禁止推送 GitHub。"] },
     "phase63": { "label": "视频运镜紧凑收藏优化 (v1.4.8)", "status": "complete", "items": ["ToolboxParamNode 的 video-motion 分支改为 720px 宽双栏紧凑布局，左侧保留路线预览和输出 prompt，右侧集中配置，避免原按钮墙节点过高。", "成片场景、运镜动作、运动路径、节奏速度、稳定质感、主体约束全部改为下拉列表，且六组创作预设均扩展到 50 项；语言也从顶部大按钮改为列表项，交互更直观且不挤压 OP / 像素主题。", "路线预览从十几个硬编码 ID 改为动作 / 路径分类映射，50 个运镜动作和 50 个运动路径都能触发对应 SVG 反馈；动作预览为主线，路径预览以虚线叠加。", "新增运镜收藏：收藏当前场景 / 动作 / 路径 / 节奏 / 稳定 / 主体 / 自定义补充 / 语言到节点 data，随画布保存，支持一键应用与删除。", "新增视频运镜 JSON 导入 / 导出：schema 为 t8-video-motion-presets，导出当前配置、内置目录摘要和收藏；导入使用 FileReader 在前端恢复配置与收藏，不依赖后端。", "nodePlacement 默认尺寸同步为 720×460，避免新建视频运镜节点仍按旧 540×760 的大节点避让。", "nodeRegistry 描述同步为列表式配置、收藏与 JSON 复用；skill.md 仅本地更新，继续禁止推送 GitHub。"] },
     "phase64": { "label": "电影感紧凑收藏优化 (v1.4.8)", "status": "complete", "items": ["ToolboxParamNode 的 cinematic 分支改为 720px 宽双栏紧凑布局，左侧放输出 prompt 与电影收藏，右侧集中配置，避免原按钮墙节点占据整屏。", "成片风格、镜头、光影、调色、质感、强度和语言全部改为下拉列表，保留中英文 prompt、手动连线 data.prompt 和一键运行输出到 OutputNode 的旧协议。", "成片风格、镜头、光影、调色、质感五组创作预设均扩展到 50 项；强度继续保留轻微 / 标准 / 强烈三档，作为独立控制项。", "新增电影感收藏：收藏当前风格 / 镜头 / 光影 / 调色 / 质感 / 强度 / 自定义补充 / 语言到节点 data，随画布保存，支持一键应用与删除。", "新增电影感 JSON 导入 / 导出：schema 为 t8-cinematic-presets，导出当前配置、内置目录摘要和收藏；导入使用 FileReader 在前端恢复配置与收藏，不依赖后端。", "nodePlacement 默认尺寸同步为 720×460，避免新建电影感节点仍按旧大按钮墙尺寸避让。", "nodeRegistry 与 README 描述同步为列表式配置、收藏与 JSON 复用；skill.md 仅本地更新，继续禁止推送 GitHub。"] },
-    "phase65": { "label": "视频运镜 / 电影感预设补齐 (v1.4.9)", "status": "complete", "items": ["视频运镜节点的成片场景、运镜动作、运动路径、节奏速度、稳定质感、主体约束六组全部补齐到 50 项，方便创作者用下拉列表快速组合镜头语言。", "路线预览改为 MOTION_PREVIEW_GROUPS 分类映射，50 个运镜动作和 50 个运动路径均有对应 SVG 反馈；动作主线使用实线，路径叠加使用虚线，避免新增预设看起来没有反应。", "路线预览下方新增符号图例，解释动作主线、路径叠加、参考轨道、主体焦点和运动终点，降低用户理解成本。", "电影感节点的成片风格、镜头、光影、调色、质感五组保持 50 项，并清空示例测试补充文本，避免用户打开本地画布时看到测试收藏内容。", "公开版本同步到 1.4.9：package.json、package-lock.json、vite.config.ts/js、electron/main.cjs、backend/src/config.js APP_VERSION、features.json、README.md 全部同步；skill.md 仅本地更新，继续禁止推送 GitHub。"] }
+    "phase65": { "label": "视频运镜 / 电影感预设补齐 (v1.4.9)", "status": "complete", "items": ["视频运镜节点的成片场景、运镜动作、运动路径、节奏速度、稳定质感、主体约束六组全部补齐到 50 项，方便创作者用下拉列表快速组合镜头语言。", "路线预览改为 MOTION_PREVIEW_GROUPS 分类映射，50 个运镜动作和 50 个运动路径均有对应 SVG 反馈；动作主线使用实线，路径叠加使用虚线，避免新增预设看起来没有反应。", "路线预览下方新增符号图例，解释动作主线、路径叠加、参考轨道、主体焦点和运动终点，降低用户理解成本。", "电影感节点的成片风格、镜头、光影、调色、质感五组保持 50 项，并清空示例测试补充文本，避免用户打开本地画布时看到测试收藏内容。", "公开版本同步到 1.4.9：package.json、package-lock.json、vite.config.ts/js、electron/main.cjs、backend/src/config.js APP_VERSION、features.json、README.md 全部同步；skill.md 仅本地更新，继续禁止推送 GitHub。"] },
+    "phase66": { "label": "文本分割工具节点 (v1.5.0)", "status": "complete", "items": ["工具节点分类新增「文本分割」节点，类型 text-split，支持接上游 text 或手动粘贴长提示词 / 分镜模板。", "分割方式支持按段落、按行、自定义分隔符、Markdown 标题、序号/镜头号和按字数切块；默认去空行和 trim，并提供压缩空白、去序号、每段前缀/后缀与 {{index}} / {{total}} 占位符。", "节点内提供分段预览、单段编辑、删除、上下移动、复制全部和打散为多个 TextNode；UI 使用 t8-node / t8-card / t8-btn / t8-input / t8-select，自动适配科技风、像素糖果风和 OP 风格。", "新增 src/utils/textSplit.ts 纯函数分割器，后续扩展规则只需维护该工具函数。", "TextSplitNode 会写入 textSegments / segments / prompt / text / outputText；useUpstreamMaterials 与 OutputNode 优先消费 textSegments/texts 数组，避免把 joined prompt 作为额外第 N+1 项。", "LoopNode 的 text 类型注入、聚合和下游收集同步支持 textSegments，方便文本分割后直接驱动循环批量生成。", "公开版本同步到 1.5.0：package.json、package-lock.json、vite.config.ts/js、electron/main.cjs、backend/src/config.js APP_VERSION、features.json、README.md 全部同步；skill.md 仅本地更新，继续禁止推送 GitHub。"] },
+    "phase67": { "label": "文本分割二版增强 (v1.5.1)", "status": "complete", "items": ["TextSplitNode 新增「智能分镜」模式，按 Markdown 标题、镜头/分镜/场景/Scene/Shot、中文序号、数字序号和内外景提示识别分镜标题，失败时自动回退到序号或段落分割。", "新增「正则高级」模式，支持按正则分隔或提取匹配内容，flags 会过滤为 JS RegExp 安全字符，正则错误只在节点内提示，不会中断画布。", "新增分段收藏：可保存当前分割方式、正则、自定义前后缀、上游优先设置和手动调整后的分段，收藏写入节点 data 并随画布保存。", "新增 t8-text-split-presets JSON 导入 / 导出，导出当前配置、当前分段和收藏；导入在前端用 FileReader 恢复，不依赖后端。", "新增「循环器链路」按钮，一键在文本分割节点左侧创建或校准 text 类型前置 LoopNode，并把原本直连文本分割的上游文本线迁移为“上游 -> 循环器 -> 文本分割”，避免循环器跑到文本分割后面。", "普通文本分割保持旧体验：只更新节点内预览和 textSegments，不自动创建 OutputNode；如果前面接了循环器，则仅在循环器从 running 变成 success 后自动打散当前分段为多个 TextNode。", "TextSplitNode 会自动清理上一版误创建的 output-auto-text-split 输出素材节点，避免旧画布继续残留无用输出素材。", "TextSplitNode 的迷你上移 / 下移 / 删除按钮继续使用独立固定尺寸样式，不复用 .t8-btn，避免 OP / 像素糖果风按钮被主题放大变形。", "公开版本同步到 1.5.1：package.json、package-lock.json、vite.config.ts/js、electron/main.cjs、backend/src/config.js APP_VERSION、features.json、README.md 全部同步；skill.md 仅本地更新，继续禁止推送 GitHub。"] },
+    "phase68": { "label": "文本分割体验修复与双列布局 (v1.5.2)", "status": "complete", "items": ["默认新建 TextSplitNode 的 splitMode 改为 line，适合用户最常见的一行一个提示词 / 分镜条目。", "修复分段预览 textarea 中文 IME 输入被截断：分段编辑改为稳定 key + composition 本地草稿，中文组词期间不再反复写入节点 data。", "修复按段落、按序号/镜头和按字数切块的边界：按段落可按普通换行或空行拆分；按序号/镜头只在镜头/分镜/场景/序号标题处拆，正文普通换行不拆；字数切块最小值从 80 改为 1。", "新增 MODE_HELP 分割方式说明文案，用户切换按行 / 按段落 / 自定义 / 智能分镜 / 正则 / Markdown / 序号镜头 / 字数切块时会看到简短用途说明。", "segmentsOverride 增加分割算法版本签名，源文本、配置或算法变化时自动失效旧手动覆盖，避免旧画布继续显示过期分段。", "TextSplitNode 改为 760px 双列布局：左侧配置与原始文本，右侧分段预览和收藏；右侧预览固定高度并内部滚动，收藏区贴底，避免段数多时撑高整个节点。", "nodePlacement 默认尺寸同步为 760×520，公开版本同步到 1.5.2：package.json、package-lock.json、vite.config.ts/js、electron/main.cjs、backend/src/config.js APP_VERSION、features.json、README.md 全部同步；skill.md 仅本地更新，继续禁止推送 GitHub。"] }
   },
   "categories": {
     "input": {
@@ -238,7 +241,7 @@
     },
     "utility": {
       "label": "工具节点",
-      "count": 12,
+      "count": 13,
       "nodes": [
         { "type": "drawing-board", "label": "画板", "description": "手绘 / 涂抹", "hidden": true },
         { "type": "browser", "label": "浏览器", "description": "网页内嵌", "hidden": true },
@@ -247,6 +250,7 @@
         { "type": "frame-pair", "label": "首尾帧获取", "description": "v1.2.7 新增。输入一个视频节点，运行后抽取首帧与尾帧，输出 2 个 image 素材(双 source handle id=first/last)。浏览器端 video+canvas 抽帧上传 base64，双主题 (像素风糖果色/科技风玻璃)，接入运行总线可被批量运行调起" },
         { "type": "loop", "label": "循环器", "description": "v1.2.8 新增。接多个同类型素材(text/image/video/audio)，两种模式: 串联逐个注入自身进发下游可执行子图 / 并联克隆 (N-1) 份子图并发跱发。采集输出位序位填 null，永久保留克隆节点，克隆块垂直堆叠(yOffset = i × blockH)，使用 runBus.runningIds + triggerRunMany 多节点并发触发。双主题 violet 调" },
         { "type": "pick-from-set", "label": "从合集获取", "description": "v1.2.8 新增。从上游多素材集合中按 kind + 序号取出单一素材写入自身 data，下游通过 useUpstreamMaterials 自动拾取。默认 image+第1个，kind 切换时输出 Handle 颜色随动 PORT_COLOR 变化" },
+        { "type": "text-split", "label": "文本分割", "description": "v1.5.2 增强。接上游 text 或手动粘贴长文本，默认按行，可按段落/自定义分隔符/Markdown 标题/序号镜头/智能分镜/正则高级/字数切块输出 textSegments 数组；支持模式说明、中文稳定编辑、去空行、修剪、压空白、去序号、前后缀占位符、双列分段预览编辑、复制全部、手动打散为多个 TextNode、分段收藏、JSON 导入导出，以及一键创建前置循环器链路；前置循环器执行完成后会自动打散为 TextNode" },
         { "type": "resize", "label": "尺寸调整", "description": "图像尺寸调整(v1.2.0 起默认 fit=cover 裁剪铺满,FIT_OPTIONS 4 选项带中文说明 cover/contain/inside/fill;ImageOpFrame 派生节点下游连 OutputNode 时自动隐藏内部预览避免双显)" },
         { "type": "combine", "label": "合并", "description": "图像合并" },
         { "type": "remove-bg", "label": "抠图", "description": "去除背景", "hidden": true },
@@ -256,7 +260,7 @@
     },
     "auxiliary": {
       "label": "辅助节点",
-      "count": 4,
+      "count": 5,
       "nodes": [
         { "type": "edit", "label": "编辑节点", "description": "图像编辑/局部" },
         { "type": "idea", "label": "灵感节点", "description": "灵感记录" },

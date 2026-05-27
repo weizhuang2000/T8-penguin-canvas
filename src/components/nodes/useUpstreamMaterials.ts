@@ -74,11 +74,11 @@ export function useUpstreamMaterials(nodeId: string): UpstreamMaterials {
 
     const list = Array.isArray(upstreamNodes) ? upstreamNodes : [];
 
-    const pushText = (sourceId: string, v: any) => {
+    const pushText = (sourceId: string, v: any, keyOverride?: string) => {
       if (typeof v !== 'string') return;
       const s = v.trim();
       if (!s) return;
-      const dedupeKey = `text:${s}`;
+      const dedupeKey = keyOverride || `text:${s}`;
       if (seen.has(dedupeKey)) return;
       seen.add(dedupeKey);
       texts.push({
@@ -119,11 +119,20 @@ export function useUpstreamMaterials(nodeId: string): UpstreamMaterials {
       const ud: any = n.data || {};
       const handles = handleMap.get(sid) || new Set<string | null>([null]);
 
-      // 文本: outputText (用户编辑覆盖) > reply > prompt > text
-      pushText(sid, ud.outputText);
-      pushText(sid, ud.reply);
-      pushText(sid, ud.prompt);
-      pushText(sid, ud.text);
+      // 文本: textSegments/texts 数组优先, 避免文本分割节点再把 joined prompt 当成第 N+1 项
+      const textArrayFields = ['textSegments', 'segments', 'texts'];
+      const textArrayField = textArrayFields.find((f) => Array.isArray(ud[f]) && ud[f].length > 0);
+      if (textArrayField) {
+        ud[textArrayField].forEach((item: any, index: number) => {
+          pushText(sid, item, `text-array:${sid}:${textArrayField}:${index}`);
+        });
+      } else {
+        // 文本: outputText (用户编辑覆盖) > reply > prompt > text
+        pushText(sid, ud.outputText);
+        pushText(sid, ud.reply);
+        pushText(sid, ud.prompt);
+        pushText(sid, ud.text);
+      }
 
       // === v1.2.8.3: FramePair 双端口语义 ===
       // 节点同时具备 firstFrameUrl + lastFrameUrl 字段时按 sourceHandle 过滤,

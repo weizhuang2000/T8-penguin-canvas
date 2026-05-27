@@ -41,6 +41,10 @@ const EXEC_TYPES = new Set<string>([
   'upload',
 ]);
 
+// 自动计算型下游节点：没有 useRunTrigger，不应放入 EXEC_TYPES 等待 runBus，
+// 但循环器每轮注入素材后，这些节点会通过 useUpstreamMaterials/useEffect 自行刷新 data。
+const PASSIVE_LOOP_TYPES = new Set<string>(['text-split']);
+
 const COLOR = '#a78bfa'; // violet-400
 
 type LoopMode = 'serial' | 'parallel';
@@ -53,14 +57,14 @@ function buildItemPatch(kind: MaterialKind, item: string) {
   if (kind === 'video') return { videoUrl: item };
   if (kind === 'audio') return { audioUrl: item };
   // text
-  return { text: item, prompt: item, outputText: item };
+  return { text: item, prompt: item, outputText: item, textSegments: [item], segments: [item], texts: [item] };
 }
 // 重置 patch（开始新轮次前清空可能的旧数据）
 function buildResetPatch(kind: MaterialKind) {
   if (kind === 'image') return { imageUrl: '', imageUrls: [] };
   if (kind === 'video') return { videoUrl: '' };
   if (kind === 'audio') return { audioUrl: '' };
-  return { text: '', prompt: '', outputText: '' };
+  return { text: '', prompt: '', outputText: '', textSegments: [], segments: [], texts: [] };
 }
 
 // ===== helper: 从某个节点 data 提取对应 kind 的产物 url/text =====
@@ -117,6 +121,10 @@ function bfsForward(allEdges: Edge[], starts: string[]): Set<string> {
     }
   }
   return visited;
+}
+
+function hasPassiveLoopNode(nodes: Node[]): boolean {
+  return nodes.some((node) => node.type && PASSIVE_LOOP_TYPES.has(node.type));
 }
 
 // ===== helper: 等待某节点 lastDone =====
@@ -233,7 +241,8 @@ const LoopNode = (p: NodeProps) => {
     const subNodes = allNodes.filter((n) => reachable.has(n.id));
     const subEdges = allEdges.filter((e) => reachable.has(e.source) && reachable.has(e.target));
     const order = topologicalSort(subNodes, subEdges, EXEC_TYPES);
-    if (order.length === 0) { setError('下游链路上没有可执行节点'); update({ status: 'error', error: '无可执行节点' }); return; }
+    const passiveOnly = order.length === 0 && hasPassiveLoopNode(subNodes);
+    if (order.length === 0 && !passiveOnly) { setError('下游链路上没有可执行节点'); update({ status: 'error', error: '无可执行节点' }); return; }
 
     // === v1.2.9.0: 全新累积参数机制 ===
     // 思路: 不再克隆 OutputNode 节点。改为给所有下游 EXEC + OUTPUT 节点注入 __loopAccumulate 标记,
@@ -330,9 +339,14 @@ const LoopNode = (p: NodeProps) => {
         pushUniqArr(acc.auds, ud.audioUrl);
         pushUniqArr(acc.auds, ud.audioUrl_1);
         if (Array.isArray(ud.audioUrls)) ud.audioUrls.forEach((u: any) => pushUniqArr(acc.auds, u));
-        if (typeof ud.outputText === 'string' && ud.outputText) pushUniqArr(acc.txts, ud.outputText);
-        if (typeof ud.reply === 'string' && ud.reply) pushUniqArr(acc.txts, ud.reply);
-        if (typeof ud.text === 'string' && ud.text) pushUniqArr(acc.txts, ud.text);
+        const textArrays = [ud.textSegments, ud.segments, ud.texts].filter(Array.isArray);
+        if (textArrays.length > 0) {
+          textArrays.forEach((arr: any) => arr.forEach((t: any) => pushUniqArr(acc.txts, t)));
+        } else {
+          if (typeof ud.outputText === 'string' && ud.outputText) pushUniqArr(acc.txts, ud.outputText);
+          if (typeof ud.reply === 'string' && ud.reply) pushUniqArr(acc.txts, ud.reply);
+          if (typeof ud.text === 'string' && ud.text) pushUniqArr(acc.txts, ud.text);
+        }
       }
     };
     // 进入循环前: 仅标记下游 EXEC 节点 (让 OutputNode 跳过 fresh) + 清空已知 OutputNode 的累积字段。
@@ -460,6 +474,9 @@ const LoopNode = (p: NodeProps) => {
         const ok = await awaitNode(nid, cancelRef);
         if (!ok) { chainOk = false; break; }
       }
+      if (chainOk && passiveOnly) {
+        await new Promise<void>((r) => setTimeout(() => r(), 80));
+      }
 
       // 3. 收集本轮终点产物 (取直接下游第一个的当前 data)
       let result: string | null = null;
@@ -521,12 +538,12 @@ const LoopNode = (p: NodeProps) => {
       if (kind === 'image') { aggPatch.imageUrl = ''; aggPatch.imageUrls = []; aggPatch.urls = []; }
       else if (kind === 'video') { aggPatch.videoUrl = ''; aggPatch.videoUrls = []; }
       else if (kind === 'audio') { aggPatch.audioUrl = ''; aggPatch.audioUrls = []; }
-      else { aggPatch.text = ''; aggPatch.prompt = ''; aggPatch.outputText = ''; aggPatch.texts = []; }
+      else { aggPatch.text = ''; aggPatch.prompt = ''; aggPatch.outputText = ''; aggPatch.texts = []; aggPatch.textSegments = []; aggPatch.segments = []; }
     } else {
       if (kind === 'image') { aggPatch.imageUrls = successOnly; aggPatch.urls = successOnly; aggPatch.imageUrl = successOnly[0] || ''; }
       else if (kind === 'video') { aggPatch.videoUrl = successOnly[0] || ''; aggPatch.videoUrls = successOnly; }
       else if (kind === 'audio') { aggPatch.audioUrl = successOnly[0] || ''; aggPatch.audioUrls = successOnly; }
-      else { aggPatch.text = successOnly.join('\n\n'); aggPatch.prompt = successOnly.join('\n\n'); aggPatch.outputText = successOnly.join('\n\n'); aggPatch.texts = successOnly; }
+      else { aggPatch.text = successOnly.join('\n\n'); aggPatch.prompt = successOnly.join('\n\n'); aggPatch.outputText = successOnly.join('\n\n'); aggPatch.texts = successOnly; aggPatch.textSegments = successOnly; aggPatch.segments = successOnly; }
     }
     update({ status: cancelRef.current ? 'idle' : (failCount === items.length ? 'error' : 'success'), error: null, ...aggPatch });
   }, [id, items, kind, rf, update]);
@@ -568,7 +585,8 @@ const LoopNode = (p: NodeProps) => {
     const subNodes = allNodes.filter((n) => reachable.has(n.id));
     const subEdges = allEdges.filter((e) => reachable.has(e.source) && reachable.has(e.target));
     const originalOrder = topologicalSort(subNodes, subEdges, EXEC_TYPES);
-    if (originalOrder.length === 0) { setError('下游链路上没有可执行节点'); update({ status: 'error', error: '无可执行节点' }); return; }
+    const passiveOnly = originalOrder.length === 0 && hasPassiveLoopNode(subNodes);
+    if (originalOrder.length === 0 && !passiveOnly) { setError('下游链路上没有可执行节点'); update({ status: 'error', error: '无可执行节点' }); return; }
 
     // 子图边界 (用于克隆排版)
     const minY = Math.min(...subNodes.map((n) => n.position.y));
@@ -660,6 +678,9 @@ const LoopNode = (p: NodeProps) => {
         const ok = await awaitOnly(nid, cancelRef);
         if (!ok) { chainOk = false; break; }
       }
+      if (chainOk && passiveOnly) {
+        await new Promise<void>((r) => setTimeout(() => r(), 80));
+      }
       // 收集
       let result: string | null = null;
       if (chainOk) {
@@ -682,12 +703,12 @@ const LoopNode = (p: NodeProps) => {
       if (kind === 'image') { aggPatch.imageUrl = ''; aggPatch.imageUrls = []; aggPatch.urls = []; }
       else if (kind === 'video') { aggPatch.videoUrl = ''; aggPatch.videoUrls = []; }
       else if (kind === 'audio') { aggPatch.audioUrl = ''; aggPatch.audioUrls = []; }
-      else { aggPatch.text = ''; aggPatch.prompt = ''; aggPatch.outputText = ''; aggPatch.texts = []; }
+      else { aggPatch.text = ''; aggPatch.prompt = ''; aggPatch.outputText = ''; aggPatch.texts = []; aggPatch.textSegments = []; aggPatch.segments = []; }
     } else {
       if (kind === 'image') { aggPatch.imageUrls = successOnly; aggPatch.urls = successOnly; aggPatch.imageUrl = successOnly[0] || ''; }
       else if (kind === 'video') { aggPatch.videoUrl = successOnly[0] || ''; aggPatch.videoUrls = successOnly; }
       else if (kind === 'audio') { aggPatch.audioUrl = successOnly[0] || ''; aggPatch.audioUrls = successOnly; }
-      else { aggPatch.text = successOnly.join('\n\n'); aggPatch.prompt = successOnly.join('\n\n'); aggPatch.outputText = successOnly.join('\n\n'); aggPatch.texts = successOnly; }
+      else { aggPatch.text = successOnly.join('\n\n'); aggPatch.prompt = successOnly.join('\n\n'); aggPatch.outputText = successOnly.join('\n\n'); aggPatch.texts = successOnly; aggPatch.textSegments = successOnly; aggPatch.segments = successOnly; }
     }
     update({ status: cancelRef.current ? 'idle' : (failCount === items.length ? 'error' : 'success'), error: null, ...aggPatch });
   }, [id, items, kind, rf, update]);

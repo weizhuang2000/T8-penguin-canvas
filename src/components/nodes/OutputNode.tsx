@@ -131,6 +131,9 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
         const arr2 = Array.isArray(ud.urls) ? ud.urls.join(',') : '';
         const arr3 = Array.isArray(ud.generatedImages) ? ud.generatedImages.join(',') : '';
         const arr4 = Array.isArray(ud.consumedTexts) ? ud.consumedTexts.join('\u241F') : '';
+        const arr5 = Array.isArray(ud.textSegments) ? ud.textSegments.join('\u241F') : '';
+        const arr6 = Array.isArray(ud.segments) ? ud.segments.join('\u241F') : '';
+        const arr7 = Array.isArray(ud.texts) ? ud.texts.join('\u241F') : '';
         return [
           n?.id || '',
           ud.outputText || '',
@@ -148,6 +151,9 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
           arr2,
           arr3,
           arr4,
+          arr5,
+          arr6,
+          arr7,
         ].join('§');
       })
       .join('|');
@@ -189,6 +195,13 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
       if (skipTextSet.has(s)) return; // 已被 LLM 消化
       if (arr.indexOf(s) === -1) arr.push(s);
     };
+    const pushTextSegment = (arr: string[], v: any) => {
+      if (typeof v !== 'string') return;
+      const s = v.trim();
+      if (!s) return;
+      if (skipTextSet.has(s)) return;
+      arr.push(s);
+    };
 
     const list = Array.isArray(upstreamNodes) ? upstreamNodes : [];
     for (const n of list) {
@@ -201,11 +214,17 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
       //             这样跨轮产物不会被生成节点「本轮覆盖」的 fresh 担换, 循环结束后标记被 LoopNode 清除, 恢复正常透传。
       if (ud.__loopAccumulate) continue;
 
-      // 文本
-      pushUniqueText(out.texts, ud.outputText);
-      pushUniqueText(out.texts, ud.reply);
-      pushUniqueText(out.texts, ud.prompt);
-      pushUniqueText(out.texts, ud.text);
+      // 文本: textSegments/texts 数组优先, 避免文本分割节点再把 joined prompt 当成第 N+1 项
+      const textArrayFields = ['textSegments', 'segments', 'texts'];
+      const textArrayField = textArrayFields.find((f) => Array.isArray(ud[f]) && ud[f].length > 0);
+      if (textArrayField) {
+        ud[textArrayField].forEach((item: any) => pushTextSegment(out.texts, item));
+      } else {
+        pushUniqueText(out.texts, ud.outputText);
+        pushUniqueText(out.texts, ud.reply);
+        pushUniqueText(out.texts, ud.prompt);
+        pushUniqueText(out.texts, ud.text);
+      }
 
       // === v1.2.8.4: FramePair 双端口语义 ===
       // 节点同时具备 firstFrameUrl + lastFrameUrl 字段时按 sourceHandle 过滤,
@@ -284,6 +303,9 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
     if (typeof d.directOutputText === 'string' && d.directOutputText) {
       pushUniqueText(out.texts, d.directOutputText);
     }
+    if (Array.isArray(d.directTextSegments)) {
+      d.directTextSegments.forEach((t: any) => pushUniqueText(out.texts, t));
+    }
 
     // 兜底: 一些节点把视频/音频塞在 imageUrl, 通过扩展名识别再纠正
     out.images = out.images.filter((u) => {
@@ -339,7 +361,7 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
     }
 
     return out;
-  }, [upstreamNodes, upstreamSig, handleMap, d.pickKind, d.pickIndex, d.directImageUrl, d.directImageUrls, d.directVideoUrl, d.directVideoUrls, d.directAudioUrl, d.directAudioUrls, d.directOutputText]);
+  }, [upstreamNodes, upstreamSig, handleMap, d.pickKind, d.pickIndex, d.directImageUrl, d.directImageUrls, d.directVideoUrl, d.directVideoUrls, d.directAudioUrl, d.directAudioUrls, d.directOutputText, d.directTextSegments]);
 
   // 文本编辑
   const overrideText: string = typeof d.outputText === 'string' ? d.outputText : '';
@@ -573,6 +595,8 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
       videoUrl: collected.videos[0] || '',
       audioUrl: collected.audios[0] || '',
       audioUrl_1: collected.audios[1] || '', // 透传 Suno 双轨副轨避免串联丢失
+      textSegments: hasNonText ? [] : collected.texts.slice(),
+      segments: hasNonText ? [] : collected.texts.slice(),
     };
     const cur: any = {
       prompt: d.prompt || '',
@@ -584,6 +608,8 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
       videoUrl: d.videoUrl || '',
       audioUrl: d.audioUrl || '',
       audioUrl_1: d.audioUrl_1 || '',
+      textSegments: Array.isArray(d.textSegments) ? d.textSegments : [],
+      segments: Array.isArray(d.segments) ? d.segments : [],
     };
     const changed =
       cur.prompt !== next.prompt ||
@@ -594,7 +620,9 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
       cur.audioUrl !== next.audioUrl ||
       cur.audioUrl_1 !== next.audioUrl_1 ||
       JSON.stringify(cur.imageUrls) !== JSON.stringify(next.imageUrls) ||
-      JSON.stringify(cur.urls) !== JSON.stringify(next.urls);
+      JSON.stringify(cur.urls) !== JSON.stringify(next.urls) ||
+      JSON.stringify(cur.textSegments) !== JSON.stringify(next.textSegments) ||
+      JSON.stringify(cur.segments) !== JSON.stringify(next.segments);
     if (changed) update(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayText, collected]);

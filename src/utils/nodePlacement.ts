@@ -52,6 +52,7 @@ export const NODE_DEFAULT_SIZE: Record<string, { w: number; h: number }> = {
   'penguin-portrait': { w: 320, h: 380 },
   loop: { w: 320, h: 240 },
   'pick-from-set': { w: 280, h: 200 },
+  'text-split': { w: 760, h: 520 },
   resize: { w: 280, h: 220 },
   combine: { w: 280, h: 220 },
   'remove-bg': { w: 280, h: 220 },

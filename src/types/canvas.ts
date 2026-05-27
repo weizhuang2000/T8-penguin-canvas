@@ -30,6 +30,7 @@ export type NodeType =
   | 'frame-pair'
   | 'loop'
   | 'pick-from-set'
+  | 'text-split'
   | 'resize'
   | 'combine'
   | 'remove-bg'

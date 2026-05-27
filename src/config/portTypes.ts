@@ -83,6 +83,8 @@ export const NODE_PORTS: Record<string, NodePorts> = {
   loop: { inputs: ['text', 'image', 'video', 'audio'], outputs: ['text', 'image', 'video', 'audio'] },
   // 从合集获取 (v1.2.8): 从上游集合中选中单一素材 → 输出按 kind 变化
   'pick-from-set': { inputs: ['text', 'image', 'video', 'audio'], outputs: ['text', 'image', 'video', 'audio'] },
+  // 文本分割: 长文本/上游文本 → 多段 textSegments, 下游按多文本集合消费
+  'text-split': { inputs: ['text'], outputs: ['text'] },
   resize: { inputs: ['image'], outputs: ['image'] },
   combine: { inputs: ['image'], outputs: ['image'] },
   'remove-bg': { inputs: ['image'], outputs: ['image'] },

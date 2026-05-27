@@ -77,6 +77,7 @@ import FrameExtractorNode from './nodes/FrameExtractorNode';
 import FramePairNode from './nodes/FramePairNode';
 import LoopNode from './nodes/LoopNode';
 import PickFromSetNode from './nodes/PickFromSetNode';
+import TextSplitNode from './nodes/TextSplitNode';
 import UploadNode from './nodes/UploadNode';
 import OutputNode from './nodes/OutputNode';
 import GroupBoxNode from './nodes/GroupBoxNode';
@@ -123,6 +124,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'frame-pair': FramePairNode,
   loop: LoopNode,
   'pick-from-set': PickFromSetNode,
+  'text-split': TextSplitNode,
   resize: ResizeNode,
   combine: CombineNode,
   'remove-bg': RemoveBgNode,
@@ -164,6 +166,23 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
   },
   cinematic: { kind: 'cinematic', cinematicLanguage: 'en', cinematicStrength: 'balanced' },
   'video-motion': { kind: 'video-motion', motionLanguage: 'en' },
+  'text-split': {
+    sourceText: '',
+    splitMode: 'line',
+    delimiter: '---',
+    chunkSize: 600,
+    regexPattern: '',
+    regexFlags: 'gm',
+    regexStrategy: 'split',
+    removeEmpty: true,
+    trim: true,
+    normalizeSpaces: false,
+    stripNumbering: false,
+    preferUpstream: true,
+    textSplitFavorites: [],
+    textSegments: [],
+    segments: [],
+  },
   'multi-angle-visual': {
     kind: 'multi-angle-visual',
     multiAngleAzimuth: 0,
