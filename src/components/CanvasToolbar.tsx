@@ -13,10 +13,13 @@ import {
   Play,
   Square,
   Magnet,
+  Bell,
+  BellOff,
   Terminal as TerminalIcon,
 } from 'lucide-react';
 import { useThemeStore } from '../stores/theme';
 import { useLogStore } from '../stores/logs';
+import { useTaskCompletionSoundStore } from '../stores/taskCompletionSound';
 import { CANVAS_TEMPLATES, type CanvasTemplate } from '../config/canvasTemplates';
 
 interface CanvasToolbarProps {
@@ -70,6 +73,8 @@ export default function CanvasToolbar({
   const termOpen = useLogStore((s) => s.open);
   const termUnread = useLogStore((s) => s.unread);
   const toggleTerm = useLogStore((s) => s.toggleOpen);
+  const completionSoundEnabled = useTaskCompletionSoundStore((s) => s.enabled);
+  const toggleCompletionSound = useTaskCompletionSoundStore((s) => s.toggleEnabled);
   const [tplOpen, setTplOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const tplRef = useRef<HTMLDivElement>(null);
@@ -160,6 +165,23 @@ export default function CanvasToolbar({
           title={snapEnabled ? '关闭网格吸附 + 对齐辅助线' : '开启网格吸附 + 对齐辅助线'}
         >
           <Magnet size={15} />
+        </button>
+        <button
+          className={`${baseBtn} ${
+            completionSoundEnabled
+              ? isPixel
+                ? 'bg-[var(--px-mint)] text-[var(--px-ink)]'
+                : isDark
+                  ? 'text-sky-300 bg-sky-500/15'
+                  : 'text-sky-600 bg-sky-500/10'
+              : ''
+          }`}
+          onClick={toggleCompletionSound}
+          title={completionSoundEnabled ? '关闭任务完成提示音' : '开启任务完成提示音'}
+          aria-label={completionSoundEnabled ? '关闭任务完成提示音' : '开启任务完成提示音'}
+          aria-pressed={completionSoundEnabled}
+        >
+          {completionSoundEnabled ? <Bell size={15} /> : <BellOff size={15} />}
         </button>
 
         <div className={sep} />

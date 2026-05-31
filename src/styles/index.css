@@ -261,6 +261,116 @@ html[data-theme-visual] .t8-canvas-shell .t8-control-rail .react-flow__controls,
   opacity: 0.5 !important;
 }
 
+.t8-control-rail-help {
+  box-sizing: border-box;
+  width: var(--t8-theme-music-size, 32px);
+  height: var(--t8-theme-music-size, 32px);
+  min-width: var(--t8-theme-music-size, 32px);
+  min-height: var(--t8-theme-music-size, 32px);
+  padding: 0;
+  border: 1px solid var(--t8-flow-controls-border);
+  border-radius: 999px;
+  background: var(--t8-flow-controls-bg);
+  color: var(--t8-flow-controls-fg);
+  box-shadow: var(--t8-shadow-button, 0 8px 22px rgba(0, 0, 0, 0.24));
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.t8-control-rail-help:hover,
+.t8-control-rail-help.is-active {
+  background: var(--t8-flow-controls-button-hover-bg);
+  border-color: var(--t8-flow-controls-accent);
+  color: var(--t8-flow-controls-accent);
+  box-shadow:
+    var(--t8-shadow-button, 0 8px 22px rgba(0, 0, 0, 0.24)),
+    0 0 0 3px color-mix(in srgb, var(--t8-flow-controls-accent) 18%, transparent);
+}
+
+.t8-control-rail-help:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+.t8-model-help-panel {
+  position: absolute;
+  left: calc(var(--t8-floating-control-left, 14px) + var(--t8-theme-music-size, 32px) + 14px);
+  bottom: var(--t8-floating-control-bottom, 12px);
+  z-index: 70;
+  width: min(760px, calc(100vw - var(--t8-floating-control-left, 14px) - 84px));
+  max-height: min(74vh, 680px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--t8-text-main, #f4f4f5);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--t8-bg-panel, #141416) 96%, var(--t8-accent, #38bdf8) 4%), var(--t8-bg-panel, #141416));
+  border: 1px solid color-mix(in srgb, var(--t8-border-strong, var(--t8-border, rgba(255, 255, 255, 0.2))) 78%, var(--t8-accent, #38bdf8) 22%);
+  border-radius: var(--t8-radius-lg, 16px);
+  box-shadow: var(--t8-shadow-node, 0 22px 60px rgba(0, 0, 0, 0.42));
+}
+
+.t8-model-help-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px 14px;
+  border-bottom: 1px solid var(--t8-border, rgba(255, 255, 255, 0.14));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--t8-accent, #38bdf8) 18%, transparent), transparent);
+}
+
+.t8-model-help-panel__eyebrow {
+  margin-bottom: 4px;
+  color: var(--t8-accent, #38bdf8);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.t8-model-help-panel__header h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 800;
+}
+
+.t8-model-help-panel__close {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  border: 1px solid var(--t8-border-strong, var(--t8-border, rgba(255, 255, 255, 0.2)));
+  border-radius: 999px;
+  color: var(--t8-text-main, #f4f4f5);
+  background: color-mix(in srgb, var(--t8-bg-panel, #141416) 88%, transparent);
+  cursor: pointer;
+}
+
+.t8-model-help-panel__close:hover {
+  color: var(--t8-accent, #38bdf8);
+  border-color: var(--t8-accent, #38bdf8);
+  background: var(--t8-flow-controls-button-hover-bg);
+}
+
+.t8-model-help-panel__body {
+  overflow: auto;
+  padding: 16px 18px 18px;
+}
+
+.t8-model-help-panel__text {
+  white-space: pre-wrap;
+  color: var(--t8-text-main, #f4f4f5);
+  font-size: 14px;
+  line-height: 1.78;
+}
+
 /* === xyflow 内置保留 type 名防御 ===
    xyflow 在 style.css 中会对 .react-flow__node-input / -output / -default / -group
    这几个“内置节点类型”自动套上默认样式:

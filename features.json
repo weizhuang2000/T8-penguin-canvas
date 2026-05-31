@@ -1,7 +1,7 @@
 {
   "$schema": "本文件为 T8-penguin-canvas 节点清单防丢失锁,任何节点删减都需要在 roadmap.md 中说明并更新本文件。",
-  "version": "1.7.3",
-  "lastUpdated": "2026-05-31-v1.7.3-sora2-fal-model-hotfix",
+  "version": "1.7.4",
+  "lastUpdated": "2026-05-31-v1.7.4-node-fragment-completion-sound",
   "packaging": {
     "description": "Electron NSIS 桌面端打包链路(v1.2.1 起标准化, 严禁未明确指令主动打包)。完整产物拓扑: app.asar(electron/{main,loader,preload}.cjs + node_modules) + app.asar.unpacked(node_modules/sharp + @img) + resources/backend-enc/*.t8c(extraResources, asar 外) + resources/frontend(extraResources, asar 外)。前端版本号由 vite define 注入 __APP_VERSION__、Sidebar 左下角自动同步。",
     "scripts": {
@@ -16,9 +16,9 @@
       "T8PC_FRONTEND_DIST": "打包模式 = path.join(process.resourcesPath, 'frontend'); 开发模式 = <project>/dist",
       "T8PC_RES": "打包模式 = process.resourcesPath; 开发模式 = <project>"
     },
-    "version": "1.7.3",
-    "semverVersion": "1.7.3",
-    "versionNote": "v1.3.0 起统一采用 semver 三段阶段号 x.y.z；当前源码为 v1.7.3：Sora2 视频节点只保留稳定 sora-2 (FAL) 模型入口，移除日期版模型下拉；历史画布若保存过 sora-2-2025-* 会在前后端自动归一到 sora-2 后提交，避免 FAL 任务失败或 UI 显示 3 个模型。本次未重新打包 Electron。",
+    "version": "1.7.4",
+    "semverVersion": "1.7.4",
+    "versionNote": "v1.3.0 起统一采用 semver 三段阶段号 x.y.z；当前源码为 v1.7.4：跨画布发送支持节点片段并保留选中节点内部连线；新增独立任务完成提示音，默认开启，图像 / 视频 / SD2.0 / 音频 / LLM 成功完成后 5 秒内最多提示一次；同步收口主题 select/帮助面板样式。本次未重新打包 Electron。",
     "installer": "本次未打包 Electron；最近一次安装包为 dist_electron/T8-PenguinCanvas-Setup-1.5.5.exe (NSIS, 108.96 MB)",
     "checklist": [
       "运行 npm run encrypt 前确认已 npm install bytenode 且使用 Electron 内置 Node",
@@ -1276,12 +1276,14 @@
       ]
     },
     "phase81": {
-      "label": "跨画布素材发送与 Eagle 入库 (v1.6.2)",
+      "label": "跨画布素材 / 节点发送与 Eagle 入库 (v1.6.2+)",
       "status": "complete",
       "items": [
         "新增 SendMaterialsModal 发送素材弹窗，框选上传素材、输出素材、素材集或从资源库卡片触发时，会汇总图像 / 视频 / 音频 / 文本并显示素材概览。",
+        "选中多个节点发送到其他画布时，新增“节点片段”模式：复制选中节点本体并保留选中节点之间的内部连线，目标画布仍保持原工作流关系；资源库和 Eagle 入口继续只处理图像 / 视频 / 音频 / 文本素材。",
         "发送方式支持智能保持、合并素材集、上传素材、拆成多个上传、输出素材；目标画布支持搜索与明确选中态，底部展示当前选择，发送 / 保存 / Eagle 操作都有忙碌反馈。",
         "Canvas 跨画布写入目标画布 JSON 后刷新画布列表；勾选发送后切换时，会在目标画布加载完成后自动定位到新建素材节点中心，当前画布发送也会聚焦新节点。",
+        "顶部工具条新增任务完成提示音开关，默认开启；仅图像 / 视频 / SD2.0(seedance) / 音频 / LLM 节点成功完成时播放独立轻提示音，和 ThemeMusicToggle 主题音乐通道分开，主题音乐静音不影响提示音，并通过全局 5 秒节流避免批量运行频繁响铃。",
         "同批素材发送写入 sendBridgeSignature / sendBridgeMode / sendBridgeSourceCanvasId；重复向同一画布发送相同素材时会先替换旧批次，旧版无签名但由发送功能创建的同素材节点也会被清理，避免 2 个素材多次累计成 8 个节点。",
         "新增后端 /api/eagle/status 与 /api/eagle/import，本地 Eagle API 只允许 localhost / 127.0.0.1 / ::1，支持本地 input/output 文件、资源库文件、资源库素材集文件与文本临时 txt 入库。",
         "设置页新增 Eagle 本地接口地址，默认 http://127.0.0.1:41595；_post_build.cjs 增加 routes/eagle.t8c 检查，确保 Electron 打包不会漏掉 Eagle 路由。",
@@ -1490,6 +1492,17 @@
         "前端 VideoNode 会把历史画布里保存的 sora-2-2025-* 自动识别为 Sora2 主模型，避免旧节点因为模型选项被移除而回退到其他视频模型。",
         "后端 /api/proxy/video/fal/submit 会在校验、选路和 payload 组装前把日期版 Sora2 模型名归一为 sora-2；实际仍走 fal-ai/sora-2/text-to-video 或 fal-ai/sora-2/image-to-video，参考图默认 base64。",
         "README、features.json 与版本文件同步到 v1.7.3；skill.md 仅本地记录，不参与 GitHub 推送。"
+      ]
+    },
+    "phase101": {
+      "label": "节点片段发送与任务完成提示音 (v1.7.4)",
+      "status": "complete",
+      "items": [
+        "跨画布发送弹窗新增「节点片段」模式，框选多个节点发送到其他画布时会复制选中节点自身数据，并保留选中节点之间的内部连线关系；素材 / 资源库 / Eagle 发送仍保持原有素材模式。",
+        "节点片段落到目标画布时会重新映射节点和连线 id，保持相对布局并避开目标画布已有节点；发送后切换目标画布和定位新内容继续可用。",
+        "顶部工具栏新增任务完成提示音开关，默认开启并持久化，提示音与主题音乐分离，主题音乐静音时仍可播放。",
+        "提示音只覆盖图像、视频、SD2.0、音频和 LLM 五类核心生成节点，手动点击节点生成和顶部 RUN / 批量运行都在真实成功完成后触发；5 秒内最多响一次，避免连续任务造成干扰。",
+        "主题 CSS 补充 select / option 兜底、幽游白书 select 样式和模型帮助面板样式，保持多主题下表单与帮助浮层可读。"
       ]
     }
   },
