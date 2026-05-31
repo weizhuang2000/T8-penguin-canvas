@@ -1,7 +1,7 @@
 {
   "$schema": "本文件为 T8-penguin-canvas 节点清单防丢失锁,任何节点删减都需要在 roadmap.md 中说明并更新本文件。",
-  "version": "1.8.2",
-  "lastUpdated": "2026-06-01-v1.8.2-advanced-provider-settings-ui-electron",
+  "version": "1.8.3",
+  "lastUpdated": "2026-06-01-v1.8.3-release-refresh-electron",
   "packaging": {
     "description": "Electron NSIS 桌面端打包链路(v1.2.1 起标准化, 严禁未明确指令主动打包)。完整产物拓扑: app.asar(electron/{main,loader,preload}.cjs + node_modules) + app.asar.unpacked(node_modules/sharp + @img) + resources/backend-enc/*.t8c(extraResources, asar 外) + resources/frontend(extraResources, asar 外)。前端版本号由 vite define 注入 __APP_VERSION__、Sidebar 左下角自动同步。",
     "scripts": {
@@ -16,10 +16,10 @@
       "T8PC_FRONTEND_DIST": "打包模式 = path.join(process.resourcesPath, 'frontend'); 开发模式 = <project>/dist",
       "T8PC_RES": "打包模式 = process.resourcesPath; 开发模式 = <project>"
     },
-    "version": "1.8.2",
-    "semverVersion": "1.8.2",
-    "versionNote": "v1.3.0 起统一采用 semver 三段阶段号 x.y.z；当前源码为 v1.8.2：扩展 API 平台 Phase A/B 继续推进，API 设置页已出现默认折叠的「扩展 API 平台【高级/可选】」入口，前端类型/store/设置备份支持 advancedProviders，后端新增 provider adapter 骨架与 /api/proxy/external/test-provider 测试端点。默认主流程仍保持贞贞工坊 / RunningHub / LLM 独立 Key 不变，真实图像/视频/LLM 平台生成调用继续按 roadmap Phase C-F 推进。",
-    "installer": "已按 npm run dist 打包 Electron；最终安装包为 dist_electron/T8-PenguinCanvas-Setup-1.8.2.exe (NSIS, 129.25 MB)，并通过 win-unpacked 10 秒启动冒烟。",
+    "version": "1.8.3",
+    "semverVersion": "1.8.3",
+    "versionNote": "v1.3.0 起统一采用 semver 三段阶段号 x.y.z；当前源码为 v1.8.3：发布元数据与 Electron 安装包刷新，继续保留 v1.8.2 扩展 API 平台设置页与测试端点能力。默认主流程仍保持贞贞工坊 / RunningHub / LLM 独立 Key 不变，真实图像/视频/LLM 平台生成调用继续按 roadmap Phase C-F 推进，不能提前宣称扩展平台真实生成已可用。",
+    "installer": "已按 npm run dist 重新打包 Electron；最终安装包为 dist_electron/T8-PenguinCanvas-Setup-1.8.3.exe（NSIS，129.25 MB），并通过 win-unpacked 10 秒启动冒烟。",
     "checklist": [
       "运行 npm run encrypt 前确认已 npm install bytenode 且使用 Electron 内置 Node",
       "backend/src/ 任何文件修改后必须重新 npm run encrypt 再打包",
@@ -1675,6 +1675,16 @@
         "electron/_post_build.cjs 同步校验 routes/externalProviders.t8c 与所有 provider adapter .t8c，防止新增后端文件未加密进入打包产物。",
         "公开版本同步到 1.8.2：package.json、package-lock.json、vite.config.ts/js、electron/main.cjs、backend/src/config.js APP_VERSION、features.json、README.md 同步；skill.md 仅本地更新，继续禁止推送 GitHub；本次按规范打包 Electron。",
         "验证：node --test tests/*.test.ts 通过 41/41；node --check 覆盖新增 provider adapter、externalProviders 路由、server/settings；npm run build 与 npm run dist 通过；浏览器冒烟确认设置页可见并展开扩展平台区且 console error 为空；win-unpacked 10 秒启动冒烟通过。"
+      ]
+    },
+    "phase115": {
+      "label": "版本元数据与 Electron 重新打包 (v1.8.3)",
+      "status": "complete",
+      "items": [
+        "公开版本同步到 1.8.3：package.json、package-lock.json、vite.config.ts/js、electron/main.cjs、backend/src/config.js APP_VERSION、features.json、README.md 同步；skill.md 仅本地更新，继续禁止推送 GitHub。",
+        "本次为发布刷新版本，不新增扩展平台真实生成路径；扩展 API 平台仍停留在设置页、脱敏保存、provider 测试端点与 adapter 骨架阶段，Phase C-F 继续按 roadmap 开发。",
+        "继续按 Electron 打包 SOP 执行 npm run dist、_post_build.cjs 加密产物校验和 win-unpacked 启动冒烟；dist_electron/build 产物不进入 Git。",
+        "未跟踪的本地预览 SVG 不属于本次发布范围，保持不提交。"
       ]
     }
   },
