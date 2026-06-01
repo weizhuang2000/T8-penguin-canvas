@@ -10,13 +10,13 @@ https://www.runninghub.cn/?inviteCode=rh-v1121
 My favorite girl Go YounJung
 # 🐧 贞贞的无限画布（企鹅共创版） · T8-penguin-canvas
 
-> AI 节点画布工作流工具 · Web + Electron 桌面端｜v1.8.9
+> AI 节点画布工作流工具 · Web + Electron 桌面端｜v1.9.0
 >
 > GitHub：<https://github.com/T8mars/T8-penguin-canvas>
 
 一个面向 AI 创作的 **节点式画布**：拖拽节点、连线编排、生成图像 / 视频 / 音频、调用 LLM、串接 RunningHub 工作流，叠加批量执行、智能对齐、打组、主题模板与终端日志。Web 浏览器即可使用，亦可一键打包为 Windows 桌面端（NSIS 安装包）。
 
-![status](https://img.shields.io/badge/version-v1.8.9-brightgreen) ![node](https://img.shields.io/badge/node-%E2%89%A518-blue) ![react](https://img.shields.io/badge/react-19-61dafb) ![electron](https://img.shields.io/badge/electron-33-47848f) ![license](https://img.shields.io/badge/license-MIT-yellow)
+![status](https://img.shields.io/badge/version-v1.9.0-brightgreen) ![node](https://img.shields.io/badge/node-%E2%89%A518-blue) ![react](https://img.shields.io/badge/react-19-61dafb) ![electron](https://img.shields.io/badge/electron-33-47848f) ![license](https://img.shields.io/badge/license-MIT-yellow)
 
 ---
 
@@ -46,6 +46,7 @@ My favorite girl Go YounJung
 - 📁 **跨平台本地路径默认值**：Windows 继续默认 `D:\zhenzhen`，macOS / Linux 默认 `~/zhenzhen`；旧版非 Windows 配置若仍是硬编码默认值会自动迁移，自定义路径不会被覆盖
 - 🏷️ **生成提示词 @ 素材提及**：图像 / 视频 / SD2.0 / 音频 / LLM / RunningHub / RH 钱包应用 / RH 超市文本参数可输入 `@` 选择当前上游素材，输入框内显示小预览图，提交时稳定解析为 `@image1` / `@video1` / `@audio1`
 - 📝 **文本节点自由缩放**：文本节点四角拖拽可独立调整宽高，输出端口固定贴合右侧中点，并在尺寸变化后刷新 ReactFlow internals，避免连线和端口脱离
+- 🔗 **RH 文本 NodeID 绑定**（v1.9.0）：文本节点可填写 RH 节点序号，RunningHub / RH 钱包应用 / RH 超市会按应用参数里的 RH nodeId 自动匹配上游文本；节点内也能手动选择绑定文本，冲突和错误序号会保留清晰状态提示
 - 🧩 **xyflow 12** 画布引擎：缩放、平移、连线、迷你地图、控制条、SPA 兜底
 - 🔑 **四套独立 API Key 隔离**：贞贞工坊 / RunningHub / RH 钱包应用 / LLM —— 全部经后端代理脱敏，前端永远拿不到明文
 - 📈 **一键批量运行**：Kahn 拓扑排序串行触发可执行节点，进度可视化，支持中断
@@ -57,7 +58,7 @@ My favorite girl Go YounJung
 - 🧍‍♂️ **姿势大师**：支持 100 种常用姿势、多人骨架、MediaPipe 识别、手部控制、A/B 关键帧、姿势库、批量分镜，并可在节点内切换线稿 / OpenPose / COCO 预览与运行输出；OpenPose/COCO keypoints JSON 可单独导出给 ComfyUI / ControlNet 复用
 - 🧪 **Grok Image / Sora2 FAL / Grok Video FAL**：图像节点新增 Grok Image TAB；视频节点模型类型默认 `Grok Video → Veo 3.1 → Sora2`，Grok Video TAB 默认 `Grok Video 1.5 (FAL)`，图像传入默认 base64，最多 1 张参考图且不发送比例参数；旧版 Grok FAL / Sora2 FAL 仍保留兼容入口
 - 🧾 **文本分割二版**：文本分割节点支持段落 / 行 / 自定义分隔 / Markdown / 序号 / 智能分镜 / 正则高级 / 字数切块；按段落严格以至少一个空行切段，按行才逐行切分，内置模式说明、中文输入稳定编辑、双列预览布局、分段收藏、JSON 导入导出，并一键创建前置文本循环器链路；循环器执行完成后可自动打散为多个文本节点
-- 🖌️ **图层画板节点**：工具分类开放画板节点，支持 16:9 / 9:16 等画布比例、空白图层、图层组折叠、可见 / 锁定状态、载入上游或本地图片、手绘 / 文字 / 图形 / 箭头、缩放旋转、导入导出画板 JSON 与运行输出 PNG
+- 🖌️ **图层画板节点**（v1.9.0 增强）：工具分类开放画板节点，支持 16:9 / 9:16 等画布比例、空白图层、图层组折叠、可见 / 锁定状态、载入上游或本地图片、手绘 / 文字 / 图形 / 箭头、缩放旋转、套索 / 钢笔非破坏式抠图、放大编辑窗口、导入导出画板 JSON 与运行输出 PNG；放大窗口复用完整图层面板并按设备像素比重绘，避免图片被低清预览二次放大
 - 🔑 **分类独立 API Key 可选 · 默认折叠**（v1.2.6）：gpt-image / nano-banana / mj / veo / grok / seedance / suno 七个分类 Key 未填自动 fallback 贞贞通用 Key，新手默认折叠不被干扰
 - 🧭 **扩展 API 平台高级入口**（v1.8.5）：API 设置页默认折叠的「扩展 API 平台【高级/可选】」可配置 OpenAI 兼容、ModelScope、火山引擎、本地 ComfyUI、即梦 CLI；面板已按平台用途、适用节点、连接配置、模型列表和高级项分区说明，启用后图像 / 视频 / SD2.0 / LLM 节点可选择高级来源，默认不改变主流程
 - 🧽 **去AI水印辅助节点**（v1.8.6）：桥接 `wiltodelta/remove-ai-watermarks`，支持可见水印识别去除、框选擦除（cv2 / LaMA）、隐形水印、AI 元数据检查 / 清理和来源鉴别；开发环境可使用本地 Python 包，用户 Electron 完整包可通过 `tools/remove-ai-watermarks-runtime` sidecar runtime 随包分发

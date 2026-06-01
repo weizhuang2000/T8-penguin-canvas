@@ -84,6 +84,9 @@ const MaterialThumbnail = ({
     WebkitUserSelect: 'none',
     WebkitUserDrag: 'none',
   } as unknown as React.CSSProperties;
+  const title = material.rhNodeId
+    ? `${material.label || material.url}\nRH#${material.rhNodeId}`
+    : (material.label || material.url);
 
   const wrapStyle: React.CSSProperties = {
     opacity: isSorting ? 0.58 : 1,
@@ -125,7 +128,7 @@ const MaterialThumbnail = ({
       onPointerDownCapture={stopFlowPointer}
       onMouseDown={stopFlowMouse}
       onDragStart={preventNativeImageDrag}
-      title={material.label || material.url}
+      title={title}
     >
       {/* 内容主体 */}
       {material.kind === 'image' ? (
@@ -208,6 +211,25 @@ const MaterialThumbnail = ({
       >
         {material.origin === 'local' ? <Pin size={8} /> : <Link2 size={8} />}
       </div>
+
+      {material.kind === 'text' && material.rhNodeId && (
+        <div
+          style={{
+            ...cornerCommon,
+            bottom: 0,
+            left: 0,
+            height: 13,
+            padding: '0 3px',
+            minWidth: 26,
+            fontSize: 8,
+            background: isPixel ? 'var(--px-yellow, #fde047)' : 'rgba(14,165,233,.88)',
+            color: isPixel ? '#1a1a1a' : '#fff',
+            ...(isPixel ? { borderRight: '1.5px solid #1a1a1a', borderTop: '1.5px solid #1a1a1a' } : {}),
+          }}
+        >
+          RH#{material.rhNodeId}
+        </div>
+      )}
 
       {/* 删除 / 排除按钮 - 右下 */}
       {((removable && onRemove) || (excludeable && onExclude)) && (

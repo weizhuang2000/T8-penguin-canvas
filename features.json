@@ -1,7 +1,7 @@
 {
   "$schema": "本文件为 T8-penguin-canvas 节点清单防丢失锁,任何节点删减都需要在 roadmap.md 中说明并更新本文件。",
-  "version": "1.8.9",
-  "lastUpdated": "2026-06-01-nodeid-badge-anchor",
+  "version": "1.9.0",
+  "lastUpdated": "2026-06-01-drawing-board-focus-editor",
   "packaging": {
     "description": "Electron NSIS 桌面端打包链路(v1.2.1 起标准化, 严禁未明确指令主动打包)。完整产物拓扑: app.asar(electron/{main,loader,preload}.cjs + node_modules) + app.asar.unpacked(node_modules/sharp + @img) + resources/backend-enc/*.t8c(extraResources, asar 外) + resources/frontend(extraResources, asar 外)。前端版本号由 vite define 注入 __APP_VERSION__、Sidebar 左下角自动同步。",
     "scripts": {
@@ -16,9 +16,9 @@
       "T8PC_FRONTEND_DIST": "打包模式 = path.join(process.resourcesPath, 'frontend'); 开发模式 = <project>/dist",
       "T8PC_RES": "打包模式 = process.resourcesPath; 开发模式 = <project>"
     },
-    "version": "1.8.9",
-    "semverVersion": "1.8.9",
-    "versionNote": "v1.3.0 起统一采用 semver 三段阶段号 x.y.z；当前源码为 v1.8.9：NodeID 徽标改为测量真实可见节点卡片右上角锚定，避免 ReactFlow 外层测量框与节点卡片宽度不一致时角标漂离节点。默认主流程仍保持贞贞工坊 / RunningHub / LLM 独立 Key 不变。",
+    "version": "1.9.0",
+    "semverVersion": "1.9.0",
+    "versionNote": "v1.3.0 起统一采用 semver 三段阶段号 x.y.z；当前源码为 v1.9.0：画板节点放大编辑窗口复用完整图层面板并用设备像素比重绘，套索/钢笔抠图完成后回到选择工具；视频预览统一循环播放；文本节点可绑定 RH NodeID 并自动填入 RunningHub/RH 钱包/RH 超市文本参数。默认主流程仍保持贞贞工坊 / RunningHub / LLM 独立 Key 不变。",
     "installer": "本次为源码发布，未重新打包 Electron；上一安装包仍为 dist_electron/T8-PenguinCanvas-Setup-1.8.6.exe（NSIS，129.40 MB）。如需离线用户包，仍需按打包清单准备 remove-ai-watermarks sidecar runtime 并执行 npm run dist。",
     "checklist": [
       "运行 npm run encrypt 前确认已 npm install bytenode 且使用 Electron 内置 Node",
@@ -1800,6 +1800,19 @@
         "公开版本同步到 1.8.9：package.json、package-lock.json、vite.config.ts/js、electron/main.cjs、backend/src/config.js APP_VERSION、features.json、README.md 同步；skill.md 仅本地更新，继续禁止推送 GitHub；本次只推源码，不打包 Electron。",
         "验证：node --test tests/*.test.ts 通过 74/74；npm run build 通过（仅保留既有 chunk size 与 react-vendor 空 chunk 警告）；浏览器刷新后检查当前灌篮主题 17 个 NodeID 均写入锚点变量且 console error/warn 为空。"
       ]
+    },
+    "phase122": {
+      "label": "画板放大编辑与 RH 文本绑定收口 (v1.9.0)",
+      "status": "complete",
+      "items": [
+        "画板节点套索/钢笔抠图走非破坏式新图层输出；抠图成功后自动切回选择工具并清掉加载提示，避免用户继续停在抠图状态误操作。",
+        "画板节点新增放大编辑窗口，主窗口和放大窗口共用完整 layer panel：新建图层、新建组、组折叠、显示/隐藏、锁定/解锁、拖拽排序、移动到组、删除、导出与当前图层编辑能力一致。",
+        "放大编辑窗口的 canvas 使用 displaySize + devicePixelRatio 作为真实 backing store，并启用 high quality image smoothing；放大后直接重绘图层内容，避免把节点内缩略预览二次放大造成模糊。",
+        "视频素材预览统一使用 LoopingVideo 与 src/utils/videoPlayback.ts，上传素材、输出素材、资源库、视频/SD2.0/RH/循环器/素材选择等节点的视频播放器默认 loop、playsInline、preload=metadata。",
+        "文本节点新增 RH 节点序号字段；RunningHub、RH 钱包应用与 RH 超市会把上游文本按 RH nodeId 自动绑定到 TEXT/STRING 参数，也允许在参数区手动选择上游文本，冲突和非文本字段会保留清晰状态。",
+        "公开版本同步到 1.9.0：package.json、package-lock.json、vite.config.ts/js、electron/main.cjs、backend/src/config.js APP_VERSION、features.json、README.md 同步；skill.md 仅本地更新，继续禁止推送 GitHub；本次只推源码，不打包 Electron。",
+        "验证：node --test tests/*.test.ts 通过 93/93；npm run build 通过（仅保留既有 chunk size 与 react-vendor 空 chunk 警告）；浏览器冒烟检查画板放大窗口有完整图层控制、canvas 按实际尺寸重绘且 console error 为空。"
+      ]
     }
   },
   "categories": {
@@ -1831,7 +1844,7 @@
         {
           "type": "text",
           "label": "文本节点",
-          "description": "提示词文本；四角拖拽可自由调整宽高，输出口保持贴合右侧中点"
+          "description": "提示词文本；四角拖拽可自由调整宽高，输出口保持贴合右侧中点；可填写 RH 节点序号，供 RunningHub/RH 钱包/RH 超市按应用 nodeId 自动绑定文本参数"
         },
         {
           "type": "image",
@@ -1925,7 +1938,7 @@
         {
           "type": "drawing-board",
           "label": "画板",
-          "description": "v1.6.1 开放。图层画板：支持 16:9 / 9:16 等比例、空白图层、图层组折叠、可见/锁定、载入上游或本地图片、手绘/文字/矩形/圆形/箭头、缩放旋转、导入导出画板 JSON，并可运行输出 PNG 图像"
+          "description": "v1.6.1 开放，v1.9.0 增强。图层画板：支持 16:9 / 9:16 等比例、空白图层、图层组折叠、可见/锁定、载入上游或本地图片、手绘/文字/矩形/圆形/箭头、缩放旋转、套索/钢笔非破坏式抠图、放大编辑窗口、导入导出画板 JSON，并可运行输出 PNG 图像"
         },
         {
           "type": "browser",

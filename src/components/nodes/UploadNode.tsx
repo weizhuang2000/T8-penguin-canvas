@@ -20,6 +20,7 @@ import ImageEditModal, { type ImageEditProduceMeta } from './ImageEditModal';
 import ResizableCorners from './ResizableCorners';
 import CollectionSplitButton from '../CollectionSplitButton';
 import ImageHoverPreview from '../ImageHoverPreview';
+import LoopingVideo from '../LoopingVideo';
 import { decodeDuckFiles, type DuckDecodeFileItem } from '../../services/api';
 import { resolveThemeTemplate } from '../../theme/defaultTemplates';
 import {
@@ -660,7 +661,7 @@ const UploadNode = ({ id, data, selected }: NodeProps) => {
               <div className="space-y-1.5">
                 {mediaItems.map((item, i) => (
                   <div key={`${item.url}-${i}`} className="space-y-0.5">
-                    <video
+                    <LoopingVideo
                       src={item.url}
                       controls
                       className="w-full h-auto rounded block"

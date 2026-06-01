@@ -16,6 +16,7 @@ import { useUpstreamMaterials, type Material } from './useUpstreamMaterials';
 import { useOrderedMaterials } from './useOrderedMaterials';
 import MaterialPreviewSection from './MaterialPreviewSection';
 import MentionPromptInput from './MentionPromptInput';
+import LoopingVideo from '../LoopingVideo';
 import { resolveMediaMentions, type MediaMention } from './mediaMentions';
 import { useDragMaterialStore, type MaterialPayload } from '../../stores/dragMaterial';
 import { useMaterialDropTarget } from '../../hooks/useMaterialDropTarget';
@@ -745,7 +746,7 @@ const SeedanceNode = ({ id, data, selected }: NodeProps) => {
               <div className="space-y-1">
                 {localRefVideos.map((u, i) => (
                   <div key={`v${i}`} className="flex items-center gap-1">
-                    <video
+                    <LoopingVideo
                       src={u}
                       data-drag-source
                       data-drag-kind="video"
@@ -842,7 +843,7 @@ const SeedanceNode = ({ id, data, selected }: NodeProps) => {
 
       {videoUrl && !hasAutoOutput && (
         <div className="border-t border-white/10 p-2">
-          <video
+          <LoopingVideo
             src={videoUrl}
             controls
             className="w-full rounded"

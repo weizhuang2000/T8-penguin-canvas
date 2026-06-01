@@ -35,6 +35,7 @@ import { useUpstreamMaterials, type Material } from './useUpstreamMaterials';
 import { useOrderedMaterials } from './useOrderedMaterials';
 import MaterialPreviewSection from './MaterialPreviewSection';
 import MentionPromptInput from './MentionPromptInput';
+import LoopingVideo from '../LoopingVideo';
 import { resolveMediaMentions, type MediaMention } from './mediaMentions';
 import { useRHToolsSafe } from '../../providers/RHToolsProvider';
 import { useThemeStore } from '../../stores/theme';
@@ -46,6 +47,15 @@ import {
   filterExcludedMaterials,
   normalizeExcludedMaterialIds,
 } from '../../utils/materialExclusion';
+import {
+  areRhParamValuesEqual,
+  applyRhTextBindings,
+  findMaterialById,
+  findRhTextMaterialForField,
+  normalizeRhNodeId,
+  rhParamKey,
+  type RhParamValue,
+} from '../../utils/rhTextBinding';
 import ResizableCorners from './ResizableCorners';
 import RHToolEditorModal from './RHToolEditorModal';
 import type { RHTool, RHToolsBackup } from '../../services/api';
@@ -113,7 +123,7 @@ function extractDefaultValue(it: any): string {
   return typeof v === 'object' ? '' : String(v);
 }
 
-const paramKey = (nodeId: any, fieldName: any) => `${nodeId}::${fieldName}`;
+const paramKey = rhParamKey;
 
 type RHToolsPollEntry = {
   timer: number;
@@ -149,7 +159,7 @@ const RHToolsNode = ({ id, data, selected }: NodeProps) => {
   const taskId: string | undefined = d?.taskId;
   const urls: string[] = d?.urls || [];
   const appInfo: any = d?.appInfo;
-  const paramValues: Record<string, { value: string; sourceFromUpstream?: boolean }> = d?.paramValues || {};
+  const paramValues: Record<string, RhParamValue> = d?.paramValues || {};
   const paramMentions: Record<string, MediaMention[]> =
     d?.paramMentions && typeof d.paramMentions === 'object' ? d.paramMentions : {};
 
@@ -243,17 +253,22 @@ const RHToolsNode = ({ id, data, selected }: NodeProps) => {
     () => filterExcludedMaterials(upstream.audios, excludedMaterialIds),
     [upstream.audios, excludedMaterialIds],
   );
+  const visibleUpstreamTexts = useMemo(
+    () => filterExcludedMaterials(upstream.texts, excludedMaterialIds),
+    [upstream.texts, excludedMaterialIds],
+  );
   const excludedUpstreamCount = useMemo(
-    () => countExcludedMaterials(excludedMaterialIds, [...upstream.images, ...upstream.videos, ...upstream.audios]),
-    [excludedMaterialIds, upstream.images, upstream.videos, upstream.audios],
+    () => countExcludedMaterials(excludedMaterialIds, [...upstream.texts, ...upstream.images, ...upstream.videos, ...upstream.audios]),
+    [excludedMaterialIds, upstream.texts, upstream.images, upstream.videos, upstream.audios],
   );
   const materialOrder: string[] = Array.isArray(d?.materialOrder) ? d.materialOrder : [];
+  const orderedTexts = useOrderedMaterials(visibleUpstreamTexts, materialOrder);
   const orderedImages = useOrderedMaterials(visibleUpstreamImages, materialOrder);
   const orderedVideos = useOrderedMaterials(visibleUpstreamVideos, materialOrder);
   const orderedAudios = useOrderedMaterials(visibleUpstreamAudios, materialOrder);
   const mentionMaterials = useMemo<Material[]>(
-    () => [...orderedImages, ...orderedVideos, ...orderedAudios],
-    [orderedImages, orderedVideos, orderedAudios],
+    () => [...orderedTexts, ...orderedImages, ...orderedVideos, ...orderedAudios],
+    [orderedTexts, orderedImages, orderedVideos, orderedAudios],
   );
   const setMaterialOrder = (newOrder: string[]) => update({ materialOrder: newOrder });
   const handleExcludeUpstreamMaterial = (m: Material) => {
@@ -285,7 +300,7 @@ const RHToolsNode = ({ id, data, selected }: NodeProps) => {
     return m;
   }, [appInfo]);
 
-  const setParam = (k: string, patch: Partial<{ value: string; sourceFromUpstream: boolean }>) => {
+  const setParam = (k: string, patch: Partial<RhParamValue>) => {
     const cur = paramValues[k] || { value: '' };
     const next = { ...paramValues, [k]: { ...cur, ...patch } };
     update({ paramValues: next });
@@ -297,7 +312,7 @@ const RHToolsNode = ({ id, data, selected }: NodeProps) => {
   const setTextParam = (k: string, value: string, mentions: MediaMention[]) => {
     const cur = paramValues[k] || { value: '' };
     update({
-      paramValues: { ...paramValues, [k]: { ...cur, value } },
+      paramValues: { ...paramValues, [k]: { ...cur, value, sourceFromUpstream: false, sourceMaterialId: '', sourceRhNodeId: '' } },
       paramMentions: { ...paramMentions, [k]: mentions },
     });
   };
@@ -328,15 +343,18 @@ const RHToolsNode = ({ id, data, selected }: NodeProps) => {
         changed = true;
       }
     }
-    if (changed) update({ paramValues: next });
+    const withTextBindings = applyRhTextBindings(list, orderedTexts, next);
+    if (changed || !areRhParamValuesEqual(paramValues, withTextBindings)) {
+      update({ paramValues: withTextBindings });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderedImages, orderedVideos, orderedAudios, appInfo]);
+  }, [orderedTexts, orderedImages, orderedVideos, orderedAudios, appInfo]);
 
   // 同步重算最新 paramValues（避免 React state 异步陷阱）
   const computeFreshValuesNow = (
     list: any[] | undefined,
-  ): Record<string, { value: string; sourceFromUpstream?: boolean }> => {
-    const next: Record<string, { value: string; sourceFromUpstream?: boolean }> = { ...paramValues };
+  ): Record<string, RhParamValue> => {
+    const next: Record<string, RhParamValue> = { ...paramValues };
     if (!Array.isArray(list)) return next;
     const counters: Record<string, number> = { image: 0, video: 0, audio: 0 };
     for (const it of list) {
@@ -350,7 +368,7 @@ const RHToolsNode = ({ id, data, selected }: NodeProps) => {
       if (!upUrl) continue;
       next[k] = { value: upUrl, sourceFromUpstream: true };
     }
-    return next;
+    return applyRhTextBindings(list, orderedTexts, next);
   };
 
   // 收集上游 RhConfig nodeInfoList（保留兼容）
@@ -365,7 +383,7 @@ const RHToolsNode = ({ id, data, selected }: NodeProps) => {
 
   const buildRawNodeInfoList = (
     overrideList?: any[],
-    overrideValues?: Record<string, { value: string; sourceFromUpstream?: boolean }>,
+    overrideValues?: Record<string, RhParamValue>,
   ): any[] => {
     const seen = new Set<string>();
     const out: any[] = [];
@@ -590,7 +608,7 @@ const RHToolsNode = ({ id, data, selected }: NodeProps) => {
 
   const handleFetchInfo = async (): Promise<{
     list: any[];
-    paramValues: Record<string, { value: string; sourceFromUpstream?: boolean }>;
+    paramValues: Record<string, RhParamValue>;
   } | null> => {
     setVisibleError(null);
     if (!webappId) {
@@ -602,7 +620,7 @@ const RHToolsNode = ({ id, data, selected }: NodeProps) => {
       const info = await fetchRhAppInfo(webappId);
       const list: any[] = info?.nodeInfoList || [];
       logBus.info(`拉取应用信息 · webappId=${webappId} · ${list.length} 个字段`, src);
-      const next: Record<string, { value: string; sourceFromUpstream?: boolean }> = { ...paramValues };
+      const next: Record<string, RhParamValue> = { ...paramValues };
       for (const it of list) {
         const k = paramKey(it.nodeId, it.fieldName);
         const vt = inferValueType(it?.fieldType);
@@ -614,8 +632,9 @@ const RHToolsNode = ({ id, data, selected }: NodeProps) => {
         }
         next[k] = { value: extractDefaultValue(it) };
       }
-      update({ appInfo: info, paramValues: next });
-      return { list, paramValues: next };
+      const withTextBindings = applyRhTextBindings(list, orderedTexts, next);
+      update({ appInfo: info, paramValues: withTextBindings });
+      return { list, paramValues: withTextBindings };
     } catch (e: any) {
       setVisibleError(e?.message || '查询失败');
       logBus.error(`拉取应用信息失败: ${e?.message || e}`, src);
@@ -657,7 +676,7 @@ const RHToolsNode = ({ id, data, selected }: NodeProps) => {
       return;
     }
     let freshList: any[] | null = null;
-    let freshValues: Record<string, { value: string; sourceFromUpstream?: boolean }> | null = null;
+    let freshValues: Record<string, RhParamValue> | null = null;
     if (!appInfo?.nodeInfoList?.length) {
       const r = await handleFetchInfo();
       if (r) {
@@ -826,8 +845,9 @@ const RHToolsNode = ({ id, data, selected }: NodeProps) => {
           onWheelCapture={(e) => e.stopPropagation()}
         >
           {/* 上游素材聚合预览 */}
-          {(orderedImages.length + orderedVideos.length + orderedAudios.length + excludedUpstreamCount) > 0 && (
+          {(orderedTexts.length + orderedImages.length + orderedVideos.length + orderedAudios.length + excludedUpstreamCount) > 0 && (
             <MaterialPreviewSection
+              texts={orderedTexts}
               images={orderedImages}
               videos={orderedVideos}
               audios={orderedAudios}
@@ -838,7 +858,7 @@ const RHToolsNode = ({ id, data, selected }: NodeProps) => {
               onRestoreExcluded={handleRestoreExcludedMaterials}
               isDark={isDark}
               isPixel={isPixel}
-              groups={['image', 'video', 'audio']}
+              groups={['text', 'image', 'video', 'audio']}
               title="上游素材 · 拖拽可调整顺序"
             />
           )}
@@ -967,17 +987,117 @@ const RHToolsNode = ({ id, data, selected }: NodeProps) => {
                         style={{ background: surface, color: text, border: `1px solid ${border}` }}
                       />
                     ) : (
-                      <MentionPromptInput
-                        value={cur.value}
-                        mentions={getParamMentions(k)}
-                        materials={mentionMaterials}
-                        onChange={(value, mentions) => setTextParam(k, value, mentions)}
-                        placeholder={extractDefaultValue(it)}
-                        isDark={isDark}
-                        isPixel={isPixel}
-                        className="w-full min-h-14 resize-none rounded px-2 py-1 text-[11px] outline-none"
-                        style={{ background: surface, color: text, border: `1px solid ${border}` }}
-                      />
+                      (() => {
+                        const selectedTextMaterial = findMaterialById(orderedTexts, cur.sourceMaterialId);
+                        const autoTextMatch = findRhTextMaterialForField(it, orderedTexts);
+                        const linkedTextMaterial = selectedTextMaterial || (autoTextMatch.status === 'matched' ? autoTextMatch.material || null : null);
+                        const isLinked = !!cur.sourceFromUpstream && !!linkedTextMaterial;
+                        const bindHint =
+                          autoTextMatch.status === 'conflict'
+                            ? `多个上游文本都填写了 RH#${normalizeRhNodeId(it.nodeId)}，请改成唯一 RH# 或手动选择。`
+                            : autoTextMatch.status === 'no-match'
+                              ? `给文本节点填写 RH#${normalizeRhNodeId(it.nodeId)} 后可自动绑定。`
+                              : isLinked
+                                ? `已绑定 ${linkedTextMaterial?.rhNodeId ? `RH#${linkedTextMaterial.rhNodeId}` : '手动选择的文本'}`
+                                : '可按文本节点 RH# 自动绑定，也可手动选择上游文本。';
+                        return (
+                          <>
+                            {orderedTexts.length > 0 && (
+                              <div className="rounded px-2 py-1.5 space-y-1" style={{ background: surface, border: `1px solid ${border}` }}>
+                                <div className="flex items-center justify-between gap-2 text-[10px]">
+                                  <label className="flex items-center gap-1 cursor-pointer" style={{ color: accent }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={!!cur.sourceFromUpstream}
+                                      onChange={(e) => {
+                                        if (!e.target.checked) {
+                                          setParam(k, { sourceFromUpstream: false, sourceMaterialId: '', sourceRhNodeId: '' });
+                                          return;
+                                        }
+                                        const fallback = linkedTextMaterial || (orderedTexts.length === 1 ? orderedTexts[0] : null);
+                                        if (fallback) {
+                                          setParam(k, {
+                                            value: fallback.url,
+                                            sourceFromUpstream: true,
+                                            sourceMaterialId: fallback.id,
+                                            sourceRhNodeId: normalizeRhNodeId(fallback.rhNodeId),
+                                          });
+                                        } else {
+                                          setParam(k, { sourceFromUpstream: true });
+                                        }
+                                      }}
+                                      style={{ accentColor: accent }}
+                                    />
+                                    从上游文本获取
+                                  </label>
+                                  {linkedTextMaterial && (
+                                    <button
+                                      onClick={() => setParam(k, {
+                                        value: linkedTextMaterial.url,
+                                        sourceFromUpstream: true,
+                                        sourceMaterialId: linkedTextMaterial.id,
+                                        sourceRhNodeId: normalizeRhNodeId(linkedTextMaterial.rhNodeId),
+                                      })}
+                                      className="flex items-center gap-1"
+                                      style={{ color: accent }}
+                                      title="重新同步上游文本"
+                                    >
+                                      <RefreshCw size={9} /> 同步
+                                    </button>
+                                  )}
+                                </div>
+                                <select
+                                  value={cur.sourceMaterialId || ''}
+                                  onChange={(e) => {
+                                    const material = findMaterialById(orderedTexts, e.target.value);
+                                    if (!material) {
+                                      setParam(k, { sourceMaterialId: '', sourceRhNodeId: '', sourceFromUpstream: true });
+                                      return;
+                                    }
+                                    setParam(k, {
+                                      value: material.url,
+                                      sourceFromUpstream: true,
+                                      sourceMaterialId: material.id,
+                                      sourceRhNodeId: normalizeRhNodeId(material.rhNodeId),
+                                    });
+                                  }}
+                                  className="w-full rounded px-2 py-1 text-[10px] outline-none"
+                                  style={{ background: bg, color: text, border: `1px solid ${border}` }}
+                                >
+                                  <option value="">按 RH# 自动匹配</option>
+                                  {orderedTexts.map((material) => (
+                                    <option key={material.id} value={material.id}>
+                                      {material.rhNodeId ? `RH#${material.rhNodeId}` : '未填 RH#'} · {material.label || material.url.slice(0, 24)}
+                                    </option>
+                                  ))}
+                                </select>
+                                <div className="text-[9px] leading-tight" style={{ color: subText }}>{bindHint}</div>
+                              </div>
+                            )}
+                            {isLinked ? (
+                              <textarea
+                                value={cur.value}
+                                readOnly
+                                className="w-full min-h-14 resize-none rounded px-2 py-1 text-[11px] outline-none"
+                                style={{ background: accentSoft, color: text, border: `1px solid ${ringColor}`, cursor: 'not-allowed' }}
+                                title="已从上游文本同步；取消勾选后可手动编辑"
+                              />
+                            ) : (
+                              <MentionPromptInput
+                                value={cur.value}
+                                mentions={getParamMentions(k)}
+                                materials={mentionMaterials}
+                                onChange={(value, mentions) => setTextParam(k, value, mentions)}
+                                placeholder={extractDefaultValue(it)}
+                                isDark={isDark}
+                                isPixel={isPixel}
+                                className="w-full min-h-14 resize-none rounded px-2 py-1 text-[11px] outline-none"
+                                style={{ background: surface, color: text, border: `1px solid ${border}` }}
+                              />
+                            )}
+                          </>
+                        );
+                      })()
                     )}
                   </div>
                 );
@@ -1042,7 +1162,7 @@ const RHToolsNode = ({ id, data, selected }: NodeProps) => {
             <div className="space-y-1 pt-1" style={{ borderTop: `1px solid ${border}` }}>
               {urls.map((u, i) => {
                 if (/\.(mp4|webm|mov|m4v|mkv)$/i.test(u)) {
-                  return <video key={i} src={u} controls className="w-full rounded" />;
+                  return <LoopingVideo key={i} src={u} controls className="w-full rounded" />;
                 }
                 if (/\.(mp3|wav|ogg|m4a|flac|aac)$/i.test(u)) {
                   return <audio key={i} src={u} controls className="w-full h-8" />;

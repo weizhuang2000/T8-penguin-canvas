@@ -17,6 +17,7 @@ import ImageEditModal, { type ImageEditProduceMeta } from './ImageEditModal';
 import ImageCompareModal from '../ImageCompareModal';
 import CollectionSplitButton from '../CollectionSplitButton';
 import ImageHoverPreview from '../ImageHoverPreview';
+import LoopingVideo from '../LoopingVideo';
 import { useMaterialDropTarget } from '../../hooks/useMaterialDropTarget';
 import { useDragMaterialStore, type MaterialPayload } from '../../stores/dragMaterial';
 import ResizableCorners from './ResizableCorners';
@@ -1032,7 +1033,7 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
             </div>
             {collected.videos.map((u, i) => (
               <div key={i} className="space-y-0.5">
-                <video
+                <LoopingVideo
                   src={u}
                   controls
                   className="w-full h-auto rounded block"
