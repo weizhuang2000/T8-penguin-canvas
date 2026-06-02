@@ -1,5 +1,66 @@
 # T8-penguin-canvas Roadmap
 
+## RH 工具箱路线（开发中）
+
+> 目标：新增只读精选节点「RH工具箱」。它和「RH超市」共享 RunningHub 提交能力，但职责不同：RH超市让用户自己维护应用；RH工具箱只展示维护者预置的工具，并通过统一调用协议给画布其他功能复用，例如图像抠图/编辑/放大、视频编辑/放大、文本扩写、音频克隆等。
+
+### 1. 产品定位
+
+- RH工具箱放在 RH 分类，作为维护者精选工具入口；用户可以使用、搜索、按分类运行，但不能在客户端新增、编辑、导入或导出工具。
+- 制作方式面向维护者：用 manifest / maker 生成工具定义，打包 Electron 时只带清洗后的运行 manifest，不把制作界面、草稿、调试数据或私有说明打进用户包。
+- RH工具箱不是新的一套业务 API，而是 RunningHub WebApp 的能力包装层：底层继续走统一 `rhApiKey`、`submitRh`、`queryRh`、`fetchRhAppInfo`、`uploadRhAsset`。
+- 所有输出必须归一化为现有画布协议：`imageUrl/imageUrls`、`videoUrl/videoUrls`、`audioUrl/audioUrls`、`outputText/texts`、`urls`、`taskId/raw`，继续兼容输出素材、资源库、自动保存、节点发送和循环器。
+
+### 2. Manifest 与可扩展协议
+
+- 运行 manifest 是唯一权威来源，建议文件为 `src/data/rhToolboxManifest.ts`；每个工具必须有稳定 `id`，后续重命名只改 `title`，不能改 `id`。
+- 分类结构包含 `category.id/name/description/order/icon`，工具结构包含 `id/title/description/categoryId/webappId/enabled/order/capabilities/inputSchema/outputSchema/fixedParams/userParams/runtime/ui/version`。
+- `inputSchema` 负责把 T8 输入映射到 RH nodeInfoList 字段：`key/kind/rhNodeId/fieldName/required/multiple/maxItems/defaultValue/uploadAsset/order`。
+- `fixedParams` 用于维护者固定 RH 参数，例如模型、模式、质量、尺寸；`userParams` 用于暴露给用户的少量安全参数，例如强度、倍率、语言、风格。
+- `outputSchema` 描述工具输出语义，例如 `image.transparent`、`video.upscaled`、`text.expanded`、`audio.cloned`，并声明默认处理策略 `append-output / replace-source / text-only / multi-output`。
+- 所有工具都必须通过同一个 runner 构建 `nodeInfoList`，禁止为每个应用写一个专属 React 分支；新增应用应尽量只新增 manifest。
+
+### 3. 能力标签
+
+- 图像能力：`image.cutout`、`image.edit`、`image.upscale`、`image.expand`、`image.restore`、`image.background`、`image.color`。
+- 视频能力：`video.edit`、`video.upscale`、`video.frame-interpolate`、`video.remove-bg`、`video.retime`、`video.to-image`。
+- 文本能力：`text.expand`、`text.rewrite`、`text.translate`、`text.prompt-enhance`、`text.summarize`、`text.classify`。
+- 音频能力：`audio.clone`、`audio.tts`、`audio.separate`、`audio.enhance`、`audio.denoise`、`audio.music`。
+- 其他节点调用 RH工具箱时只按能力标签筛选工具，不依赖具体 WebApp 名称；例如图像编辑节点可以请求 `image.cutout`，视频节点可以请求 `video.upscale`，文本节点可以请求 `text.expand`。
+
+### 4. 第一阶段：节点与通用调用内核
+
+- 新增 `rh-toolbox` 节点，左侧接 `text/image/video/audio`，右侧输出 `text/image/video/audio`。
+- 节点初始为工具列表：分类、搜索、能力标签、工具说明、空状态提示；只显示 `enabled !== false` 的工具。
+- 点击工具后进入运行视图：展示上游素材、可排序/排除、少量用户参数、实例类型、运行按钮、任务状态和输出预览。
+- 新增纯工具函数负责 manifest 归一、能力筛选、输入挑选、RH nodeInfoList 构建、输出类型分流，保证其他节点未来也能直接复用。
+- 新增前端 service `runRhToolboxTool()`：自动拉取 RH appInfo、上传媒体素材、提交任务、轮询结果、归一化输出。
+- 第一版无需把快捷调用按钮嵌入其他节点，但服务接口必须为后续“在图像编辑里一键抠图并替换原图”等场景预留 `caller/sourceMaterialId/outputRole` 字段。
+
+### 4.1 维护者制作器节点（开发态）
+
+- 新增开发态节点 `rh-toolbox-maker` / 「RH工具箱制作器」：只在 `import.meta.env.DEV` 下注册到侧栏和 `nodeTypes`，生产包不展示、不加载制作器组件。
+- 制作器在画布中填写工具标题、稳定 ID、分类、WebApp ID、能力标签、输入映射、用户参数、固定参数、输出声明、运行参数和快捷入口开关。
+- 制作器可按 WebApp ID 调用 `fetchRhAppInfo()` 拉取 RH `nodeInfoList`，维护者可一键把字段加入上游输入、用户参数或固定参数，减少手工编辑 manifest 的往返。
+- 制作器输出规范化后的单工具 manifest JSON，可复制、下载，也可保存到浏览器开发草稿；开发态 `RH工具箱` 节点会合并这些草稿用于试跑。
+- 开发草稿只用于本机维护验证，不是用户功能；正式发布仍应把确认后的工具写入运行 manifest，并保持用户端只读。
+- `electron/_post_build.cjs` 必须检查用户包中没有 `RHToolboxMakerNode` / 「RH工具箱制作器」等制作器前端代码或 `rh-toolbox-maker` 私有目录。
+
+### 5. 后续阶段
+
+- 第二阶段：在图像预览 / 图像编辑 / 输出素材里增加能力快捷入口，例如「抠图」「放大」「扩图」，运行后可选择替换原图、追加为新图或生成新输出节点。
+- 第三阶段：视频节点增加视频工具快捷入口，例如视频放大、插帧、改节奏、背景移除，支持把结果回写到当前节点参考素材或输出素材。
+- 第四阶段：文本节点与 LLM 节点支持 `text.expand/rewrite/prompt-enhance` 快捷调用，保留原文本并可一键替换或追加版本。
+- 第五阶段：音频节点支持 `audio.clone/tts/separate/enhance`，输出按音频多轨协议回收，避免覆盖用户已有素材。
+- 第六阶段：制作工具成熟后增加 manifest 校验、预览、导入 RH appInfo 自动生成字段映射、版本差异检测和打包前校验；用户包仍只带运行 manifest。
+
+### 6. 打包与维护规范
+
+- Electron 用户包不得包含 RH工具箱 maker 源码、草稿 JSON、测试 WebApp 私密说明或调试日志；只允许包含前端运行 manifest 和加密后端。
+- 若后续新增私有 maker 目录，`electron/_post_build.cjs` 必须加入禁止混入检查，例如 `resources/tools/rh-toolbox-maker`、`resources/rh-toolbox-maker`、`resources/app/rh-toolbox-maker`。
+- 每次新增工具必须至少检查：manifest id 不重复、分类存在、webappId 非空、inputSchema 映射合法、能力标签可被其他节点识别、空输入有友好错误。
+- 新增能力标签或输出角色时同步更新 `roadmap.md`、`features.json`、测试和后续 `skill.md` 规范。
+
 ## 宫格编辑节点路线（开发中）
 
 > 目标：新增独立「宫格编辑」节点，用于多图分镜拼版。它和现有「宫格剪裁」职责相反：宫格剪裁是一张图拆成多图，宫格编辑是多张图按格子排序后生成一张拼接图。

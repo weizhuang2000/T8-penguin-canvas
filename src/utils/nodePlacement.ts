@@ -49,6 +49,8 @@ export const NODE_DEFAULT_SIZE: Record<string, { w: number; h: number }> = {
   runninghub: { w: 360, h: 460 },
   'runninghub-wallet': { w: 360, h: 460 },
   'rh-tools': { w: 360, h: 460 },
+  'rh-toolbox': { w: 360, h: 460 },
+  ...(import.meta.env?.DEV ? { 'rh-toolbox-maker': { w: 760, h: 620 } } : {}),
   'multi-angle-3d': { w: 320, h: 380 },
   'panorama-720': { w: 320, h: 380 },
   'penguin-portrait': { w: 320, h: 380 },

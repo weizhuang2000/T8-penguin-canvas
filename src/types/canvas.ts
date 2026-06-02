@@ -16,6 +16,8 @@ export type NodeType =
   | 'runninghub-wallet'
   | 'rh-config'
   | 'rh-tools'
+  | 'rh-toolbox'
+  | 'rh-toolbox-maker'
   // Special (5)
   | 'multi-angle-3d'
   | 'panorama-720'
