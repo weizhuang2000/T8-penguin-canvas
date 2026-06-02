@@ -45,6 +45,9 @@ test('ApiSettings advanced provider fields stay mounted while typing and ModelSc
   assert.match(apiSettingsSource, /https:\/\/www\.modelscope\.ai\/my\/access\/token/);
   assert.match(apiSettingsSource, /获取 Token · 国内/);
   assert.match(apiSettingsSource, /获取 Token · 国外/);
+  assert.match(apiSettingsSource, /ModelScope LoRA/);
+  assert.match(apiSettingsSource, /中文模型库/);
+  assert.match(apiSettingsSource, /https:\/\/www\.modelscope\.cn\/aigc\/models/);
 });
 
 test('ApiSettings Jimeng CLI panel explains install, login, and executable path', () => {

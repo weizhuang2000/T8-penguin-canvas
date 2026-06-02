@@ -8,6 +8,35 @@ const DEFAULT_MODELSCOPE_IMAGE_MODELS = [
   'black-forest-labs/FLUX.2-klein-9B',
 ];
 
+const DEFAULT_MODELSCOPE_LORAS_VERSION = 1;
+
+const DEFAULT_MODELSCOPE_LORAS = [
+  {
+    id: 'Daniel8152/film',
+    name: 'Z-Image Film',
+    targetModel: 'Tongyi-MAI/Z-Image-Turbo',
+    strength: 0.8,
+    enabled: true,
+    note: '',
+  },
+  {
+    id: 'Daniel8152/Qwen-Image-2512-Film',
+    name: 'Qwen Image 2512 Film',
+    targetModel: 'Qwen/Qwen-Image-2512',
+    strength: 0.8,
+    enabled: true,
+    note: '',
+  },
+  {
+    id: 'Daniel8152/Klein-enhance',
+    name: 'Klein enhance',
+    targetModel: 'black-forest-labs/FLUX.2-klein-9B',
+    strength: 0.8,
+    enabled: true,
+    note: '',
+  },
+];
+
 const DEFAULT_MODELSCOPE_CHAT_MODELS = [
   'Qwen/Qwen3-235B-A22B',
   'Qwen/Qwen3-VL-235B-A22B-Instruct',
@@ -66,6 +95,10 @@ const DEFAULT_ADVANCED_PROVIDERS = [
     defaults: {
       imageModel: DEFAULT_MODELSCOPE_IMAGE_MODELS[0],
       chatModel: DEFAULT_MODELSCOPE_CHAT_MODELS[0],
+    },
+    modelscopeConfig: {
+      defaultsVersion: DEFAULT_MODELSCOPE_LORAS_VERSION,
+      loras: DEFAULT_MODELSCOPE_LORAS,
     },
   },
   {
@@ -170,6 +203,48 @@ function normalizeModelList(values) {
     if (!out.includes(item)) out.push(item);
   }
   return out;
+}
+
+function normalizeModelscopeLoraStrength(value, fallback = 0.8) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.min(2, n));
+}
+
+function normalizeModelscopeLoras(values) {
+  const out = [];
+  const seen = new Set();
+  for (const raw of Array.isArray(values) ? values : []) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const id = cleanText(raw.id || raw.loraId || '', 180);
+    const targetModel = cleanText(raw.targetModel || raw.target_model || raw.model || '', 180);
+    if (!id || !targetModel) continue;
+    const key = `${targetModel}\n${id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      id,
+      name: cleanText(raw.name || id, 80) || id,
+      targetModel,
+      strength: normalizeModelscopeLoraStrength(raw.strength ?? raw.default_strength ?? raw.defaultStrength, 0.8),
+      enabled: normalizeBoolean(raw.enabled, true),
+      note: cleanText(raw.note || '', 300),
+    });
+  }
+  return out.slice(0, 120);
+}
+
+function normalizeModelscopeConfig(value, raw = {}) {
+  const config = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return {
+    defaultsVersion: DEFAULT_MODELSCOPE_LORAS_VERSION,
+    loras: normalizeModelscopeLoras([
+      ...DEFAULT_MODELSCOPE_LORAS,
+      ...(Array.isArray(config.loras) ? config.loras : []),
+      ...(Array.isArray(raw.ms_loras) ? raw.ms_loras : []),
+      ...(Array.isArray(raw.msLoras) ? raw.msLoras : []),
+    ]),
+  };
 }
 
 function mergeModelLists(defaults, values) {
@@ -343,6 +418,7 @@ function normalizeProvider(raw, previous = null) {
       chatModel: DEFAULT_MODELSCOPE_CHAT_MODELS[0],
       ...provider.defaults,
     };
+    provider.modelscopeConfig = normalizeModelscopeConfig(raw.modelscopeConfig || raw.modelscope_config, raw);
   }
 
   if (id === 'volcengine' && protocol === 'volcengine') {
@@ -446,6 +522,7 @@ module.exports = {
   DEFAULT_ADVANCED_PROVIDER_IDS,
   DEFAULT_MODELSCOPE_CHAT_MODELS,
   DEFAULT_MODELSCOPE_IMAGE_MODELS,
+  DEFAULT_MODELSCOPE_LORAS,
   DEFAULT_MODELSCOPE_BASE_URL,
   DEFAULT_VOLCENGINE_CHAT_MODELS,
   DEFAULT_VOLCENGINE_IMAGE_MODELS,
@@ -455,5 +532,6 @@ module.exports = {
   getEnabledAdvancedProviders,
   maskAdvancedProviders,
   normalizeAdvancedProviders,
+  normalizeModelscopeLoras,
   summarizeAdvancedProviders,
 };

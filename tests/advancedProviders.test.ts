@@ -6,8 +6,10 @@ const require = createRequire(import.meta.url);
 
 const {
   DEFAULT_ADVANCED_PROVIDER_IDS,
+  DEFAULT_MODELSCOPE_LORAS,
   maskAdvancedProviders,
   normalizeAdvancedProviders,
+  normalizeModelscopeLoras,
   summarizeAdvancedProviders,
 } = require('../backend/src/providers/registry.js');
 
@@ -26,6 +28,10 @@ test('normalizeAdvancedProviders migrates missing settings to disabled default p
     'Qwen/Qwen3-VL-235B-A22B-Instruct',
     'MiniMax/MiniMax-M2.7:MiniMax',
   ]);
+  assert.deepEqual(
+    providers.find((provider: any) => provider.id === 'modelscope')?.modelscopeConfig?.loras?.map((lora: any) => lora.id),
+    DEFAULT_MODELSCOPE_LORAS.map((lora: any) => lora.id),
+  );
   assert.deepEqual(providers.find((provider: any) => provider.id === 'volcengine')?.videoModels, [
     'doubao-seedance-2-0-260128',
     'doubao-seedance-2-0-fast-260128',
@@ -33,6 +39,49 @@ test('normalizeAdvancedProviders migrates missing settings to disabled default p
     'doubao-seedance-1-0-pro-250528',
     'doubao-seedance-1-0-lite-t2v-250428',
     'doubao-seedance-1-0-lite-i2v-250428',
+  ]);
+});
+
+test('normalizeAdvancedProviders migrates ModelScope LoRA defaults and legacy ms_loras', () => {
+  const providers = normalizeAdvancedProviders([
+    {
+      id: 'modelscope',
+      protocol: 'modelscope',
+      enabled: true,
+      ms_loras: [
+        {
+          id: 'custom/lora',
+          name: 'Custom Lora',
+          target_model: 'Tongyi-MAI/Z-Image-Turbo',
+          strength: 9,
+          enabled: true,
+          note: 'demo',
+        },
+        { id: '', target_model: 'bad' },
+      ],
+    },
+  ]);
+
+  const loras = providers.find((provider: any) => provider.id === 'modelscope')?.modelscopeConfig?.loras || [];
+  const custom = loras.find((lora: any) => lora.id === 'custom/lora');
+
+  assert.ok(loras.find((lora: any) => lora.id === 'Daniel8152/film'));
+  assert.equal(custom?.targetModel, 'Tongyi-MAI/Z-Image-Turbo');
+  assert.equal(custom?.strength, 2);
+  assert.equal(custom?.enabled, true);
+  assert.equal(loras.some((lora: any) => !lora.id), false);
+});
+
+test('normalizeModelscopeLoras dedupes by target model and clamps strength', () => {
+  const loras = normalizeModelscopeLoras([
+    { id: 'a/lora', target_model: 'model-a', strength: -1 },
+    { id: 'a/lora', targetModel: 'model-a', strength: 1 },
+    { id: 'a/lora', targetModel: 'model-b', strength: 3 },
+  ]);
+
+  assert.deepEqual(loras.map((lora: any) => `${lora.targetModel}:${lora.id}:${lora.strength}`), [
+    'model-a:a/lora:0',
+    'model-b:a/lora:2',
   ]);
 });
 

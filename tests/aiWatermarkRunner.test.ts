@@ -11,6 +11,7 @@ const {
   assertModeSupportsKind,
   buildAiWatermarkPlan,
   commandCandidates,
+  invisibleArgs,
   normalizeMode,
   normalizeRegions,
   redactCommandArgs,
@@ -107,6 +108,21 @@ test('invisible keeps enough steps and strength for at least one diffusion times
   const strengthIndex = args.indexOf('--strength');
   assert.equal(args[stepsIndex + 1], 4);
   assert.equal(args[strengthIndex + 1], 0.25);
+});
+
+test('invisible protection flags use 0.8.7 opt-in CLI arguments', () => {
+  const defaultArgs = invisibleArgs('source.png', 'final.png', {});
+  assert.equal(defaultArgs.includes('--no-protect-text'), false);
+  assert.equal(defaultArgs.includes('--no-protect-faces'), false);
+  assert.equal(defaultArgs.includes('--protect-text'), false);
+  assert.equal(defaultArgs.includes('--protect-faces'), false);
+
+  const protectedArgs = invisibleArgs('source.png', 'final.png', {
+    protectText: true,
+    protectFaces: true,
+  });
+  assert.ok(protectedArgs.includes('--protect-text'));
+  assert.ok(protectedArgs.includes('--protect-faces'));
 });
 
 test('non-image media is limited to metadata operations', () => {

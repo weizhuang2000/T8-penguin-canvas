@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, FileUp, Info, KeyRound, Loader2, Lock, Save, Settings2, TestTube2, X, FolderOpen, ServerCog } from 'lucide-react';
+import { ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, FileUp, Info, KeyRound, Loader2, Lock, Plus, Save, Settings2, TestTube2, Trash2, X, FolderOpen, ServerCog } from 'lucide-react';
 import { useApiKeysStore, FIXED_ZHENZHEN_BASE, RH_BASE } from '../stores/apiKeys';
 import { useThemeStore } from '../stores/theme';
 import type { AdvancedProviderConfig, AdvancedProviderProtocol, ApiSettings } from '../types/canvas';
 import { getRawSettings, testAdvancedProvider } from '../services/api';
 import {
   advancedProviderSummary as summarizeAdvancedProviderForm,
+  normalizeModelscopeLoraStrength,
+  normalizeModelscopeLoras,
   parseAdvancedProviderModelText,
   stringifyAdvancedProviderModels,
 } from '../utils/advancedProviders';
@@ -548,7 +550,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
 
   const updateAdvancedProviderNested = (
     id: string,
-    key: 'volcengineConfig' | 'comfyuiConfig' | 'jimengConfig',
+    key: 'modelscopeConfig' | 'volcengineConfig' | 'comfyuiConfig' | 'jimengConfig',
     patch: Record<string, any>,
   ) => {
     setAdvancedProvidersInput((prev) => prev.map((provider) => (
@@ -584,6 +586,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     const isComfy = provider.protocol === 'comfyui';
     const isJimeng = provider.protocol === 'jimeng-cli';
     const isVolc = provider.protocol === 'volcengine';
+    const isModelScope = provider.protocol === 'modelscope';
     const sectionCls = isPixel
       ? 't8-api-settings-provider-panel border p-3 space-y-4 min-w-0'
       : 't8-api-settings-provider-panel border rounded-xl p-3 sm:p-4 space-y-4 min-w-0';
@@ -628,6 +631,58 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
         setAdvancedTestStatus((prev) => ({ ...prev, [provider.id]: { ok: false, message: '参数映射 JSON 需要是数组' } }));
       }
     };
+    const modelscopeLoras = Array.isArray(provider.modelscopeConfig?.loras) ? provider.modelscopeConfig.loras : [];
+    const setModelscopeLoras = (loras: any[]) => {
+      updateAdvancedProviderNested(provider.id, 'modelscopeConfig', {
+        defaultsVersion: provider.modelscopeConfig?.defaultsVersion,
+        loras,
+      });
+    };
+    const modelscopeTargetOptions = (selected?: string) => {
+      const out: string[] = [];
+      for (const value of [
+        selected,
+        ...(Array.isArray(provider.imageModels) ? provider.imageModels : []),
+        'Tongyi-MAI/Z-Image-Turbo',
+        'Qwen/Qwen-Image-2512',
+        'Qwen/Qwen-Image-Edit-2511',
+        'black-forest-labs/FLUX.2-klein-9B',
+      ]) {
+        const item = String(value || '').trim();
+        if (item && !out.includes(item)) out.push(item);
+      }
+      return out;
+    };
+    const addModelscopeLora = () => {
+      setModelscopeLoras([
+        ...modelscopeLoras,
+        {
+          id: '',
+          name: '',
+          targetModel: modelscopeTargetOptions()[0] || 'Tongyi-MAI/Z-Image-Turbo',
+          strength: 0.8,
+          enabled: true,
+          note: '',
+        },
+      ]);
+    };
+    const updateModelscopeLora = (index: number, patch: Record<string, any>) => {
+      setModelscopeLoras(modelscopeLoras.map((lora, i) => (
+        i === index
+          ? {
+            ...lora,
+            ...patch,
+            ...(Object.prototype.hasOwnProperty.call(patch, 'strength')
+              ? { strength: normalizeModelscopeLoraStrength(patch.strength, 0.8) }
+              : {}),
+          }
+          : lora
+      )));
+    };
+    const removeModelscopeLora = (index: number) => {
+      setModelscopeLoras(modelscopeLoras.filter((_, i) => i !== index));
+    };
+    const enabledModelscopeLoraCount = normalizeModelscopeLoras(modelscopeLoras).filter((lora) => lora.enabled !== false).length;
     return (
       <div className={sectionCls}>
         <div className="flex items-start gap-3 flex-wrap">
@@ -969,6 +1024,141 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                 />
               </label>
             </div>
+          </AdvancedProviderFormBlock>
+        )}
+
+        {isModelScope && (
+          <AdvancedProviderFormBlock
+            className={formBlockCls}
+            labelClassName={labelCls}
+            hintClassName={hintCls}
+            title="4. ModelScope LoRA（可选）"
+            note={`为 ModelScope 图像模型绑定 LoRA。图像节点会按当前外部模型自动筛选；当前启用 ${enabledModelscopeLoraCount}/${modelscopeLoras.length}。`}
+          >
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => openExternal('https://www.modelscope.cn/aigc/models')}
+                className={linkBtnCls}
+                title="打开 ModelScope 国内模型库"
+              >
+                <ExternalLink size={11} /> 中文模型库
+              </button>
+              <button
+                type="button"
+                onClick={() => openExternal('https://www.modelscope.ai/civision/models')}
+                className={linkBtnAltCls}
+                title="打开 ModelScope 国际模型库"
+              >
+                <ExternalLink size={11} /> 英文模型库
+              </button>
+              <button
+                type="button"
+                onClick={addModelscopeLora}
+                className={
+                  isPixel
+                    ? 't8-api-settings-secondary-btn px-btn text-[11px] px-2 py-1 inline-flex items-center gap-1'
+                    : 't8-api-settings-secondary-btn rounded border px-2 py-1 text-[11px] inline-flex items-center gap-1'
+                }
+              >
+                <Plus size={12} /> 添加 LoRA
+              </button>
+            </div>
+
+            {!modelscopeLoras.length ? (
+              <div className={`border border-dashed p-3 text-center text-[11px] ${hintCls} ${isPixel ? '' : 'rounded-lg'}`}>
+                暂无 LoRA。点击“添加 LoRA”后填写 LoRA 模型 ID，并绑定到一个 ModelScope 图像模型。
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {modelscopeLoras.map((lora, index) => {
+                  const target = String((lora as any).targetModel || (lora as any).target_model || (lora as any).model || '').trim();
+                  const strength = normalizeModelscopeLoraStrength((lora as any).strength ?? (lora as any).default_strength, 0.8);
+                  return (
+                    <div
+                      key={index}
+                      className={isPixel ? 't8-api-settings-section border p-2 space-y-2' : 't8-api-settings-section rounded-lg border p-2 space-y-2'}
+                    >
+                      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_92px_36px] gap-2 items-end">
+                        <label className="space-y-1 min-w-0">
+                          <span className={`text-[11px] ${labelCls}`}>LoRA ID</span>
+                          <input
+                            value={(lora as any).id || ''}
+                            onChange={(e) => updateModelscopeLora(index, { id: e.target.value })}
+                            className={fieldInputCls}
+                            placeholder="例如 Daniel8152/film"
+                          />
+                        </label>
+                        <label className="space-y-1 min-w-0">
+                          <span className={`text-[11px] ${labelCls}`}>绑定图像模型</span>
+                          <select
+                            value={target || modelscopeTargetOptions()[0] || ''}
+                            onChange={(e) => updateModelscopeLora(index, { targetModel: e.target.value })}
+                            className={fieldInputCls}
+                          >
+                            {modelscopeTargetOptions(target).map((modelName) => (
+                              <option key={modelName} value={modelName}>{modelName}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="space-y-1 min-w-0">
+                          <span className={`text-[11px] ${labelCls}`}>强度</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={2}
+                            step={0.05}
+                            value={strength}
+                            onChange={(e) => updateModelscopeLora(index, { strength: e.target.value })}
+                            className={fieldInputCls}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => removeModelscopeLora(index)}
+                          className={
+                            isPixel
+                              ? 't8-mini-icon-button h-9 w-9 inline-flex items-center justify-center'
+                              : 't8-mini-icon-button h-9 w-9 rounded border inline-flex items-center justify-center'
+                          }
+                          title="删除 LoRA"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-2">
+                        <label className="space-y-1 min-w-0">
+                          <span className={`text-[11px] ${labelCls}`}>显示名</span>
+                          <input
+                            value={(lora as any).name || ''}
+                            onChange={(e) => updateModelscopeLora(index, { name: e.target.value })}
+                            className={fieldInputCls}
+                            placeholder="可选，用于节点下拉显示"
+                          />
+                        </label>
+                        <label className="space-y-1 min-w-0">
+                          <span className={`text-[11px] ${labelCls}`}>备注</span>
+                          <input
+                            value={(lora as any).note || ''}
+                            onChange={(e) => updateModelscopeLora(index, { note: e.target.value })}
+                            className={fieldInputCls}
+                            placeholder="可选，例如触发词或用途"
+                          />
+                        </label>
+                      </div>
+                      <label className={`inline-flex items-center gap-2 text-[11px] font-bold ${labelCls}`}>
+                        <input
+                          type="checkbox"
+                          checked={(lora as any).enabled !== false}
+                          onChange={(e) => updateModelscopeLora(index, { enabled: e.target.checked })}
+                        />
+                        在图像节点中可用
+                      </label>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </AdvancedProviderFormBlock>
         )}
       </div>

@@ -101,6 +101,17 @@ export interface AdvancedProviderConfig {
   videoModels?: string[];
   chatModels?: string[];
   defaults?: Record<string, any>;
+  modelscopeConfig?: {
+    defaultsVersion?: number;
+    loras?: Array<{
+      id: string;
+      name?: string;
+      targetModel: string;
+      strength?: number;
+      enabled?: boolean;
+      note?: string;
+    }>;
+  };
   volcengineConfig?: {
     project?: string;
     region?: string;

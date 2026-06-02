@@ -473,11 +473,11 @@ try:
         sys.exit(3)
     data["ok"] = True
     try:
-        data["version"] = importlib.metadata.version("remove-ai-watermarks")
+        import remove_ai_watermarks
+        data["version"] = getattr(remove_ai_watermarks, "__version__", "")
     except Exception:
         try:
-            import remove_ai_watermarks
-            data["version"] = getattr(remove_ai_watermarks, "__version__", "")
+            data["version"] = importlib.metadata.version("remove-ai-watermarks")
         except Exception:
             data["version"] = ""
     print(json.dumps(data, ensure_ascii=False))
@@ -747,8 +747,8 @@ function invisibleArgs(sourcePath, outputPath, options = {}) {
     args.push('--seed', integer(options.seed, 0, -2147483648, 2147483647));
   }
   if (options.hfToken) args.push('--hf-token', String(options.hfToken));
-  if (options.protectText === false) args.push('--no-protect-text');
-  if (options.protectFaces === false) args.push('--no-protect-faces');
+  if (options.protectText === true) args.push('--protect-text');
+  if (options.protectFaces === true) args.push('--protect-faces');
   return args;
 }
 
@@ -948,5 +948,6 @@ module.exports = {
   resolveAiWatermarkCommand,
   runAiWatermarkProcess,
   setupHints,
+  invisibleArgs,
   visibleArgs,
 };

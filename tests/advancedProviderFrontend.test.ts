@@ -7,6 +7,8 @@ import {
   advancedProviderModelOptions,
   resolveAdvancedProviderSelection,
   externalImageSizeFor,
+  modelscopeLorasForModel,
+  normalizeModelscopeLoraStrength,
   parseAdvancedProviderModelText,
   stringifyAdvancedProviderModels,
 } from '../src/utils/advancedProviders.ts';
@@ -122,4 +124,25 @@ test('externalImageSizeFor maps T8 ratio and size labels to stable WxH values', 
   assert.equal(externalImageSizeFor('16:9', '1K'), '1344x768');
   assert.equal(externalImageSizeFor('9:16', '2K'), '1536x2688');
   assert.equal(externalImageSizeFor('bad', 'unknown'), '1024x1024');
+});
+
+test('modelscopeLorasForModel filters enabled LoRA entries for selected image model', () => {
+  const provider = {
+    id: 'modelscope',
+    protocol: 'modelscope',
+    modelscopeConfig: {
+      loras: [
+        { id: 'a/lora', name: 'A', targetModel: 'model-a', strength: 0.75, enabled: true },
+        { id: 'b/lora', name: 'B', targetModel: 'model-b', strength: 0.8, enabled: true },
+        { id: 'off/lora', name: 'Off', targetModel: 'model-a', strength: 0.8, enabled: false },
+      ],
+    },
+  } as any;
+
+  const loras = modelscopeLorasForModel(provider, 'model-a');
+
+  assert.deepEqual(loras.map((lora) => lora.id), ['a/lora']);
+  assert.equal(loras[0].strength, 0.75);
+  assert.equal(normalizeModelscopeLoraStrength(8), 2);
+  assert.equal(normalizeModelscopeLoraStrength(-1), 0);
 });

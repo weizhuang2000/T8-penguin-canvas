@@ -56,6 +56,50 @@ function taskFailureDetail(raw) {
   return raw?.error_info || raw?.error || raw?.message || raw?.detail || raw?.data?.error_info || raw?.data?.message || JSON.stringify(raw);
 }
 
+function cleanLoraId(value) {
+  const text = String(value || '').trim();
+  if (!text || text.length > 180 || /[\x00-\x1f\x7f]/.test(text)) return '';
+  return text;
+}
+
+function normalizeLoraStrength(value, fallback = 0.8) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.min(2, n));
+}
+
+function normalizeLorasPayload(value) {
+  const out = {};
+  if (!value) return out;
+  if (Array.isArray(value)) {
+    for (const raw of value) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+      const id = cleanLoraId(raw.id || raw.loraId);
+      if (!id) continue;
+      out[id] = normalizeLoraStrength(raw.strength ?? raw.default_strength ?? raw.defaultStrength, 0.8);
+    }
+    return out;
+  }
+  if (typeof value !== 'object') return out;
+  for (const [rawId, rawStrength] of Object.entries(value).slice(0, 8)) {
+    const id = cleanLoraId(rawId);
+    if (!id) continue;
+    out[id] = normalizeLoraStrength(rawStrength, 0.8);
+  }
+  return out;
+}
+
+function normalizeInputLoras(input = {}) {
+  const params = input.providerParams && typeof input.providerParams === 'object' ? input.providerParams : {};
+  const direct = normalizeLorasPayload(input.loras || params.loras || params.modelscopeLoras);
+  if (Object.keys(direct).length) return direct;
+  if (params.modelscopeLoraEnabled === true) {
+    const id = cleanLoraId(params.modelscopeLoraId);
+    if (id) return { [id]: normalizeLoraStrength(params.modelscopeLoraStrength, 0.8) };
+  }
+  return {};
+}
+
 async function responseJson(res) {
   const text = await res.text();
   if (!text) return {};
@@ -136,6 +180,9 @@ async function generateImage(provider, input = {}, options = {}) {
   } catch (e) {
     return { ok: false, code: 'invalid_reference', providerId: provider.id, protocol: 'modelscope', error: e?.message || '参考图解析失败。' };
   }
+
+  const loras = normalizeInputLoras(input);
+  if (Object.keys(loras).length) payload.loras = loras;
 
   const headers = {
     Authorization: `Bearer ${cleanProvider.apiKey}`,
