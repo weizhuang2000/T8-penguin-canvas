@@ -16,8 +16,9 @@ const USER_DATA = process.env.T8PC_USER_DATA && process.env.T8PC_USER_DATA.trim(
 const DATA_ROOT = IS_PACKAGED ? USER_DATA : PROJECT_DIR;
 const USER_HOME_DIR = os.homedir() || process.env.USERPROFILE || process.env.HOME || PROJECT_DIR;
 const LEGACY_WINDOWS_DEFAULT_ROOT = 'D:\\zhenzhen';
+const WINDOWS_DEFAULT_ROOT = 'C:\\zhenzhen';
 const DEFAULT_ZHENZHEN_ROOT = process.platform === 'win32'
-  ? LEGACY_WINDOWS_DEFAULT_ROOT
+  ? WINDOWS_DEFAULT_ROOT
   : path.join(USER_HOME_DIR, 'zhenzhen');
 const DEFAULT_RESOURCE_LIBRARY_DIR = path.join(DEFAULT_ZHENZHEN_ROOT, 'resources');
 const DEFAULT_THEME_TEMPLATE_DIR = path.join(DEFAULT_ZHENZHEN_ROOT, 'theme-templates');
@@ -81,6 +82,7 @@ const config = {
   DEFAULT_EAGLE_API_BASE: 'http://127.0.0.1:41595',
   // 用于旧版本配置迁移：Windows 继续沿用 D:\zhenzhen，非 Windows 遇到旧硬编码默认值时迁移到用户目录。
   LEGACY_WINDOWS_DEFAULT_ROOT,
+  WINDOWS_DEFAULT_ROOT,
 };
 
 // 提前创建打包后的数据目录(避免首次启动报错)

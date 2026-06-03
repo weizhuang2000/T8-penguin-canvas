@@ -78,9 +78,6 @@ function normalizePathForCompare(value) {
 }
 
 function migrateLegacyDefaultPaths(settings) {
-  if (process.platform === 'win32') {
-    return { settings, changed: false };
-  }
   let changed = false;
   const next = { ...settings };
   for (const field of Object.keys(CURRENT_DEFAULT_PATHS)) {

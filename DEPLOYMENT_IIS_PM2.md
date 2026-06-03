@@ -4,7 +4,7 @@
 
 - App directory: `C:\wwwroot\expo-AI-CanvasPro`
 - IIS reverse proxy directory: `C:\wwwroot\expo-AI-CanvasPro-proxy`
-- Runtime data directory: `C:\wwwroot\expo-AI-CanvasPro-data`
+- Runtime data directory: `C:\zhenzhen`
 - Public domain: `canvas.chinaemuseum.com`
 - Node service: `http://127.0.0.1:18766`
 
@@ -15,7 +15,7 @@ cd C:\wwwroot\expo-AI-CanvasPro
 npm install
 npm run build
 
-New-Item -ItemType Directory -Force C:\wwwroot\expo-AI-CanvasPro-data\logs
+New-Item -ItemType Directory -Force C:\zhenzhen\logs
 pm2 start ecosystem.config.cjs
 pm2 save
 ```

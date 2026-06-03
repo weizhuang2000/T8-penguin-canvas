@@ -31,7 +31,7 @@ module.exports = {
         // Enable Express to serve the built Vite frontend from dist/.
         T8PC_PACKAGED: '1',
         T8PC_FRONTEND_DIST: 'C:\\wwwroot\\expo-AI-CanvasPro\\dist',
-        T8PC_USER_DATA: 'C:\\wwwroot\\expo-AI-CanvasPro-data',
+        T8PC_USER_DATA: 'C:\\zhenzhen',
 
         // Design management system MySQL.
         MYSQL_HOST: '127.0.0.1',
@@ -43,9 +43,9 @@ module.exports = {
         // Must match the design management system JWT_SECRET.
         JWT_SECRET: 'design_team_jwt_secret_key_2024_very_secure',
       },
-      error_file: 'C:\\wwwroot\\expo-AI-CanvasPro-data\\logs\\err.log',
-      out_file: 'C:\\wwwroot\\expo-AI-CanvasPro-data\\logs\\out.log',
-      log_file: 'C:\\wwwroot\\expo-AI-CanvasPro-data\\logs\\combined.log',
+      error_file: 'C:\\zhenzhen\\logs\\err.log',
+      out_file: 'C:\\zhenzhen\\logs\\out.log',
+      log_file: 'C:\\zhenzhen\\logs\\combined.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       merge_logs: true,
       time: true,
