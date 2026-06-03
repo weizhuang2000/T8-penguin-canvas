@@ -1,4 +1,4 @@
-import { memo, type DragEvent, type MouseEvent, type PointerEvent } from 'react';
+import { memo, useEffect, useState, type DragEvent, type MouseEvent, type PointerEvent } from 'react';
 import {
   Video as VideoIcon,
   Music,
@@ -6,6 +6,7 @@ import {
   Link2,
   Pin,
   FileText,
+  Image as ImageIcon,
 } from 'lucide-react';
 import type { Material } from './useUpstreamMaterials';
 
@@ -66,6 +67,11 @@ const MaterialThumbnail = ({
   isSortOver = false,
   onSortPointerDown,
 }: Props) => {
+  const [imageLoadFailed, setImageLoadFailed] = useState(false);
+  useEffect(() => {
+    setImageLoadFailed(false);
+  }, [material.url]);
+
   const stopFlowPointer = (event: PointerEvent<HTMLDivElement>) => {
     if (onSortPointerDown) {
       onSortPointerDown(event);
@@ -131,11 +137,12 @@ const MaterialThumbnail = ({
       title={title}
     >
       {/* 内容主体 */}
-      {material.kind === 'image' ? (
+      {material.kind === 'image' && !imageLoadFailed ? (
         <img
           src={material.url}
           alt={material.label || ''}
           draggable={false}
+          onError={() => setImageLoadFailed(true)}
           style={{
             width: '100%',
             height: '100%',
@@ -145,6 +152,26 @@ const MaterialThumbnail = ({
             ...noNativeDragStyle,
           }}
         />
+      ) : material.kind === 'image' ? (
+        <div style={{
+          width: '100%',
+          height: '100%',
+          padding: '5px',
+          fontSize: 9,
+          lineHeight: 1.25,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 3,
+          textAlign: 'center',
+          background: isPixel ? 'var(--px-card, #fefce8)' : isDark ? 'rgba(239,68,68,.14)' : 'rgba(239,68,68,.10)',
+          color: isPixel ? '#1a1a1a' : isDark ? '#fca5a5' : '#b91c1c',
+          overflow: 'hidden',
+        }}>
+          <ImageIcon size={15} />
+          <span style={{ wordBreak: 'keep-all' }}>图片缺失</span>
+        </div>
       ) : material.kind === 'video' ? (
         <div style={{ width: '100%', height: '100%', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <VideoIcon size={20} color="#cbd5e1" />

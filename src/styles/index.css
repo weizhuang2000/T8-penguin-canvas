@@ -1,5 +1,4 @@
 /* 像素风主题(可切换) - @import 必须置顶 */
-@import url('https://fonts.googleapis.com/css2?family=DotGothic16&family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap');
 @import './theme-pixel.css';
 @import './theme-core.css';
 @import './theme-op.css';
