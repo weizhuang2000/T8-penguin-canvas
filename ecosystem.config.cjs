@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 't8-penguin-canvas',
-      script: './backend/src/server.js',  
+      script: './src/server.js',  
       interpreter: 'node',
       cwd: 'C:\\wwwroot\\expo-AI-CanvasPro',
       instances: 1,
