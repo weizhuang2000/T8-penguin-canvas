@@ -14,6 +14,7 @@ import { useThemeStore } from '../../stores/theme';
 import { PORT_COLOR } from '../../config/portTypes';
 import { resolveThemeTemplate } from '../../theme/defaultTemplates';
 import ImageEditModal, { type ImageEditProduceMeta } from './ImageEditModal';
+import ImageLoadFallback from './ImageLoadFallback';
 import ImageCompareModal from '../ImageCompareModal';
 import CollectionSplitButton from '../CollectionSplitButton';
 import ImageHoverPreview from '../ImageHoverPreview';
@@ -947,30 +948,40 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
               {collected.images.map((u, i) => (
                 <div key={i} className="group group/output-image-card space-y-0.5">
                   <div className="relative">
-                    <img
+                    <ImageLoadFallback
                       src={u}
-                      alt={`图像 ${i + 1}`}
-                      className="w-full h-auto rounded block cursor-zoom-in"
-                      style={{
-                        background: '#0008',
-                        objectFit: 'contain',
-                        maxHeight: collected.images.length >= 2 ? 140 : 480,
-                      }}
-                      data-drag-source
-                      data-drag-kind="image"
-                      data-drag-url={u}
-                      data-drag-preview={u}
-                      data-drag-node-id={id}
-                      data-resource-title={u.split('/').pop()}
-                      onMouseDown={(e) =>
-                        beginMaterialDrag(e, { kind: 'image', url: u, sourceNodeId: id, previewUrl: u })
-                      }
-                      onDoubleClick={(e) => {
-                        e.stopPropagation();
-                        setEditingUrl(u);
-                      }}
-                      title="双击编辑 (裁剪 / 宫格切分) · Ctrl+拖拽可送到其他节点"
-                    />
+                      isDark={isDark}
+                      className="w-full rounded"
+                      style={{ maxHeight: collected.images.length >= 2 ? 140 : 480 }}
+                    >
+                      {(onError) => (
+                        <img
+                          src={u}
+                          alt={`图像 ${i + 1}`}
+                          className="w-full h-auto rounded block cursor-zoom-in"
+                          style={{
+                            background: '#0008',
+                            objectFit: 'contain',
+                            maxHeight: collected.images.length >= 2 ? 140 : 480,
+                          }}
+                          data-drag-source
+                          data-drag-kind="image"
+                          data-drag-url={u}
+                          data-drag-preview={u}
+                          data-drag-node-id={id}
+                          data-resource-title={u.split('/').pop()}
+                          onError={onError}
+                          onMouseDown={(e) =>
+                            beginMaterialDrag(e, { kind: 'image', url: u, sourceNodeId: id, previewUrl: u })
+                          }
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            setEditingUrl(u);
+                          }}
+                          title="双击编辑 (裁剪 / 宫格切分) · Ctrl+拖拽可送到其他节点"
+                        />
+                      )}
+                    </ImageLoadFallback>
                     <button
                       type="button"
                       className="nodrag nopan t8-btn t8-mini-icon-button t8-image-compare-button absolute right-1.5 top-1.5 z-10 h-7 w-7 p-0 opacity-100 shadow-md transition sm:opacity-0 sm:group-hover/output-image-card:opacity-100 sm:focus:opacity-100"
