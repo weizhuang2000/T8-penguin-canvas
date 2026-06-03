@@ -4,7 +4,7 @@ module.exports = {
       name: 't8-penguin-canvas',
       script: './src/server.js',
       interpreter: 'node',
-      cwd: 'C:\\wwwroot\\expo-AI-CanvasPro\\backend',
+      cwd: 'C:\\wwwroot\\expo-AI-CanvasPro',
       instances: 1,
       exec_mode: 'fork',
       max_memory_restart: '1024M',
