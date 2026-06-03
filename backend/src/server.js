@@ -3,6 +3,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const config = require('./config');
+const { requireAuth } = require('./auth/middleware');
 
 const app = express();
 
@@ -34,11 +35,11 @@ app.use((req, _res, next) => {
 });
 
 // ========== 静态资源托管 ==========
-app.use('/files/output', express.static(config.OUTPUT_DIR));
-app.use('/files/input', express.static(config.INPUT_DIR));
-app.use('/files/thumbnails', express.static(config.THUMBNAILS_DIR));
-app.use('/output', express.static(config.OUTPUT_DIR));
-app.use('/input', express.static(config.INPUT_DIR));
+app.use('/files/output', requireAuth, express.static(config.OUTPUT_DIR));
+app.use('/files/input', requireAuth, express.static(config.INPUT_DIR));
+app.use('/files/thumbnails', requireAuth, express.static(config.THUMBNAILS_DIR));
+app.use('/output', requireAuth, express.static(config.OUTPUT_DIR));
+app.use('/input', requireAuth, express.static(config.INPUT_DIR));
 
 // ========== 健康检查 ==========
 app.get('/api/status', (_req, res) => {
@@ -52,6 +53,7 @@ app.get('/api/status', (_req, res) => {
 });
 
 // ========== 业务路由 ==========
+const authRouter = require('./routes/auth');
 const canvasRouter = require('./routes/canvas');
 const settingsRouter = require('./routes/settings');
 const proxyRouter = require('./routes/proxy');
@@ -63,6 +65,12 @@ const themesRouter = require('./routes/themes');
 const eagleRouter = require('./routes/eagle');
 const externalProvidersRouter = require('./routes/externalProviders');
 const aiWatermarkRouter = require('./routes/aiWatermark');
+
+app.use('/api/auth', authRouter);
+app.use('/api', (req, res, next) => {
+  if (req.path === '/status' || req.path.startsWith('/auth/')) return next();
+  return requireAuth(req, res, next);
+});
 
 app.use('/api/canvas', canvasRouter);
 app.use('/api/settings', settingsRouter);

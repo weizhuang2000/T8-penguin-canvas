@@ -3,6 +3,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const config = require('../config');
+const { requireAdmin } = require('../auth/middleware');
 const {
   maskAdvancedProviders,
   normalizeAdvancedProviders,
@@ -165,12 +166,12 @@ router.get('/', (_req, res) => {
 });
 
 // GET /api/settings/raw — 内部接口,获取明文(供 Phase 4 代理调用使用)
-router.get('/raw', (_req, res) => {
+router.get('/raw', requireAdmin, (_req, res) => {
   res.json({ success: true, data: loadSettings() });
 });
 
 // POST /api/settings — 更新设置
-router.post('/', (req, res) => {
+router.post('/', requireAdmin, (req, res) => {
   const current = loadSettings();
   const incoming = req.body || {};
   const hasAdvancedProviders = Object.prototype.hasOwnProperty.call(incoming, 'advancedProviders');

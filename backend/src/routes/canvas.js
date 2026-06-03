@@ -1,12 +1,11 @@
-// 画布数据 CRUD 路由(Phase 0 占位,Phase 1 完整实现)
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const config = require('../config');
+const { deriveNextNodeSerialId, userCanAccessCanvas } = require('../auth/canvasAccess');
 
 const router = express.Router();
 
-// 工具函数
 function loadCanvasList() {
   if (!fs.existsSync(config.CANVAS_FILE)) return [];
   try {
@@ -56,71 +55,91 @@ function atomicWriteJson(file, data) {
   fs.renameSync(tmp, file);
 }
 
-function parseNodeSerialId(value) {
-  const raw = String(value ?? '').trim().replace(/^#/, '').trim();
-  if (!/^\d+$/.test(raw)) return 0;
-  const parsed = Number(raw);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 0;
-}
-
-function deriveNextNodeSerialId(nodes, incomingNext) {
-  const requested = parseNodeSerialId(incomingNext);
-  let maxSerial = 0;
-  for (const node of Array.isArray(nodes) ? nodes : []) {
-    maxSerial = Math.max(maxSerial, parseNodeSerialId(node?.data?.nodeSerialId));
-  }
-  return Math.max(1, requested || 1, maxSerial + 1);
-}
-
-// GET /api/canvas — 获取画布列表
-router.get('/', (_req, res) => {
+function findCanvasForRequest(req, res) {
   const list = loadCanvasList();
+  const item = list.find((x) => x.id === req.params.id);
+  if (!item) {
+    res.status(404).json({ success: false, error: '画布不存在' });
+    return null;
+  }
+  if (!userCanAccessCanvas(req.user, item)) {
+    res.status(403).json({ success: false, error: '无权访问该画布' });
+    return null;
+  }
+  return { list, item };
+}
+
+function ownerFieldsFromUser(user) {
+  return {
+    ownerUserId: String(user.id),
+    ownerName: user.name || user.username || '',
+    ownerRole: user.role || '',
+  };
+}
+
+router.get('/', (req, res) => {
+  const list = loadCanvasList().filter((item) => userCanAccessCanvas(req.user, item));
   res.json({ success: true, data: list });
 });
 
-// POST /api/canvas — 创建画布
 router.post('/', (req, res) => {
   const list = loadCanvasList();
   const id = `canvas-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const now = Date.now();
+  const owner = ownerFieldsFromUser(req.user);
   const canvas = {
     id,
     name: req.body?.name || '未命名画布',
+    ...owner,
     nodeCount: 0,
     createdAt: now,
     updatedAt: now,
   };
   list.push(canvas);
   saveCanvasList(list);
-  // 初始化空画布数据
   fs.writeFileSync(
     getCanvasFile(id),
-    JSON.stringify({ nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, nextNodeSerialId: 1 }, null, 2),
+    JSON.stringify({
+      ...owner,
+      nodes: [],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 },
+      nextNodeSerialId: 1,
+    }, null, 2),
     'utf-8'
   );
   res.json({ success: true, data: canvas });
 });
 
-// GET /api/canvas/:id — 获取单个画布数据
 router.get('/:id', (req, res) => {
+  const found = findCanvasForRequest(req, res);
+  if (!found) return;
   const file = getCanvasFile(req.params.id);
   if (!fs.existsSync(file)) {
     return res.status(404).json({ success: false, error: '画布不存在' });
   }
   try {
     const data = JSON.parse(fs.readFileSync(file, 'utf-8'));
-    res.json({ success: true, data });
+    res.json({
+      success: true,
+      data: {
+        ...data,
+        ownerUserId: data.ownerUserId || found.item.ownerUserId || null,
+        ownerName: data.ownerName || found.item.ownerName || '',
+        ownerRole: data.ownerRole || found.item.ownerRole || '',
+      },
+    });
   } catch (e) {
-    res.status(500).json({ success: false, error: '读取失败: ' + e.message });
+    res.status(500).json({ success: false, error: `读取失败: ${e.message}` });
   }
 });
 
-// PUT /api/canvas/:id — 更新画布数据(防空数据覆盖)
 router.put('/:id', (req, res) => {
+  const found = findCanvasForRequest(req, res);
+  if (!found) return;
   const file = getCanvasFile(req.params.id);
   const incoming = req.body;
   const allowEmptyOverwrite = req.query?.allowEmpty === '1' || incoming?.allowEmpty === true;
-  // 防空数据覆盖保护
   if (
     !incoming ||
     !Array.isArray(incoming.nodes) ||
@@ -128,33 +147,33 @@ router.put('/:id', (req, res) => {
   ) {
     const existing = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf-8')) : null;
     if (existing && Array.isArray(existing.nodes) && existing.nodes.length > 0) {
-      console.warn(`⚠ 拒绝空数据覆盖画布 ${req.params.id}(原 ${existing.nodes.length} 节点)`);
       return res.status(400).json({ success: false, error: '拒绝空数据覆盖' });
     }
   }
+
   const persisted = {
+    ownerUserId: found.item.ownerUserId || null,
+    ownerName: found.item.ownerName || '',
+    ownerRole: found.item.ownerRole || '',
     nodes: Array.isArray(incoming?.nodes) ? incoming.nodes : [],
     edges: Array.isArray(incoming?.edges) ? incoming.edges : [],
     viewport: incoming?.viewport || { x: 0, y: 0, zoom: 1 },
     nextNodeSerialId: deriveNextNodeSerialId(incoming?.nodes, incoming?.nextNodeSerialId),
   };
   fs.writeFileSync(file, JSON.stringify(persisted, null, 2), 'utf-8');
-  // 更新列表元数据
-  const list = loadCanvasList();
-  const item = list.find((x) => x.id === req.params.id);
-  if (item) {
-    item.nodeCount = persisted.nodes.length;
-    item.updatedAt = Date.now();
-    saveCanvasList(list);
-  }
+  found.item.nodeCount = persisted.nodes.length;
+  found.item.ownerUserId = found.item.ownerUserId || persisted.ownerUserId;
+  found.item.ownerName = found.item.ownerName || persisted.ownerName;
+  found.item.ownerRole = found.item.ownerRole || persisted.ownerRole;
+  found.item.updatedAt = Date.now();
+  saveCanvasList(found.list);
   res.json({ success: true });
 });
 
-// POST /api/canvas/:id/auto-save — 将当前画布镜像保存到用户配置的本地目录
-// 用于跨版本迁移: 用户可在「API 设置 → 画布自动保存路径」配置基础路径。
-// 实际保存位置: <path>/T8-penguin-canvas/canvases/<画布名>-<id>.json
 router.post('/:id/auto-save', (req, res) => {
   try {
+    const found = findCanvasForRequest(req, res);
+    if (!found) return;
     const incoming = req.body;
     if (!incoming || !Array.isArray(incoming.nodes) || !Array.isArray(incoming.edges)) {
       return res.status(400).json({ success: false, error: '画布数据格式错误' });
@@ -164,9 +183,7 @@ router.post('/:id/auto-save', (req, res) => {
       return res.status(400).json({ success: false, error: '未配置 canvasAutoSavePath' });
     }
 
-    const list = loadCanvasList();
-    const item = list.find((x) => x.id === req.params.id);
-    const name = item?.name || req.params.id;
+    const name = found.item?.name || req.params.id;
     const shortId = String(req.params.id).replace(/^canvas-/, '').slice(0, 24);
     const filename = `${safeFilename(name)}-${safeFilename(shortId)}.json`;
     const target = path.join(saveDir, filename);
@@ -178,10 +195,13 @@ router.post('/:id/auto-save', (req, res) => {
       canvas: {
         id: req.params.id,
         name,
+        ownerUserId: found.item.ownerUserId || null,
+        ownerName: found.item.ownerName || '',
+        ownerRole: found.item.ownerRole || '',
         nodeCount: incoming.nodes.length,
         edgeCount: incoming.edges.length,
-        createdAt: item?.createdAt || null,
-        updatedAt: item?.updatedAt || now,
+        createdAt: found.item?.createdAt || null,
+        updatedAt: found.item?.updatedAt || now,
       },
       nodes: incoming.nodes,
       edges: incoming.edges,
@@ -196,25 +216,22 @@ router.post('/:id/auto-save', (req, res) => {
   }
 });
 
-// DELETE /api/canvas/:id
 router.delete('/:id', (req, res) => {
-  const list = loadCanvasList();
-  const filtered = list.filter((x) => x.id !== req.params.id);
-  saveCanvasList(filtered);
+  const found = findCanvasForRequest(req, res);
+  if (!found) return;
+  saveCanvasList(found.list.filter((x) => x.id !== req.params.id));
   const file = getCanvasFile(req.params.id);
   if (fs.existsSync(file)) fs.unlinkSync(file);
   res.json({ success: true });
 });
 
-// PATCH /api/canvas/:id/name — 重命名
 router.patch('/:id/name', (req, res) => {
-  const list = loadCanvasList();
-  const item = list.find((x) => x.id === req.params.id);
-  if (!item) return res.status(404).json({ success: false, error: '画布不存在' });
-  item.name = req.body?.name || item.name;
-  item.updatedAt = Date.now();
-  saveCanvasList(list);
-  res.json({ success: true, data: item });
+  const found = findCanvasForRequest(req, res);
+  if (!found) return;
+  found.item.name = req.body?.name || found.item.name;
+  found.item.updatedAt = Date.now();
+  saveCanvasList(found.list);
+  res.json({ success: true, data: found.item });
 });
 
 module.exports = router;

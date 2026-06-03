@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Moon, Settings, Sun, Wifi, WifiOff, Sparkles, Cloud, ExternalLink, Copy, Check, Gift, Heart, Youtube, PlayCircle, Bell, Wand2, Globe, MessageCircle, CalendarDays, Rocket, Key, Gem, Library, Palette, Skull, Sailboat } from 'lucide-react';
+import { LogOut, Moon, Settings, Sun, Wifi, WifiOff, Sparkles, Cloud, ExternalLink, Copy, Check, Gift, Heart, Youtube, PlayCircle, Bell, Wand2, Globe, MessageCircle, CalendarDays, Rocket, Key, Gem, Library, Palette, Skull, Sailboat } from 'lucide-react';
 import { useThemeStore } from './stores/theme';
 import { useApiKeysStore } from './stores/apiKeys';
 import { useShortcutStore } from './stores/shortcuts';
@@ -11,8 +11,10 @@ import ResourceLibraryDrawer from './components/ResourceLibraryDrawer';
 import MaterialContextMenu from './components/MaterialContextMenu';
 import ThemeTemplateManager from './components/ThemeTemplateManager';
 import ErrorBoundary from './components/ErrorBoundary';
+import LoginScreen from './components/LoginScreen';
 import { RHToolsProvider } from './providers/RHToolsProvider';
 import * as api from './services/api';
+import type { AuthUser } from './services/api';
 import type { NodeType } from './types/canvas';
 import type { ResourceItem } from './services/api';
 import { applyThemeTemplate } from './theme/applyTheme';
@@ -163,6 +165,8 @@ function App() {
     [templateId, customTemplates],
   );
   const [backendStatus, setBackendStatus] = useState<'checking' | 'ok' | 'error'>('checking');
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [rechargeOpen, setRechargeOpen] = useState(false);
   const [resourceOpen, setResourceOpen] = useState(false);
@@ -381,14 +385,27 @@ function App() {
     return () => window.clearInterval(t);
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('sso_token')) {
+      setAuthLoading(false);
+      return;
+    }
+    api.getCurrentUser()
+      .then((user) => setAuthUser(user))
+      .finally(() => setAuthLoading(false));
+  }, []);
+
   // 预加载 settings
   useEffect(() => {
+    if (!authUser) return;
     loadSettings();
     loadCustomTemplates();
-  }, [loadSettings, loadCustomTemplates]);
+  }, [authUser, loadSettings, loadCustomTemplates]);
 
   // 资源库快捷键：未选中任何节点时打开 / 关闭资源库。输入框内不拦截，避免打断提示词编辑。
   useEffect(() => {
+    if (!authUser) return;
     const onKey = (e: KeyboardEvent) => {
       if (!matchesAnyShortcut(shortcuts['global.resource-library'], e)) return;
       if (e.repeat) return;
@@ -399,7 +416,7 @@ function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [shortcuts]);
+  }, [authUser, shortcuts]);
 
   const isDark = theme === 'dark';
   const isPixel = style === 'pixel';
@@ -409,6 +426,12 @@ function App() {
   const isEva = currentTemplate.visuals?.style === 'eva';
   const isYyh = currentTemplate.visuals?.style === 'yyh';
   const isSlamdunk = currentTemplate.visuals?.style === 'slamdunk';
+  const canManageSettings = authUser?.role === 'admin' || authUser?.role === 'manager';
+
+  const handleLogout = async () => {
+    await api.logout().catch(() => {});
+    setAuthUser(null);
+  };
 
   const handleAddNode = (type: NodeType) => {
     addNodeRef.current?.(type);
@@ -459,6 +482,18 @@ function App() {
     }
     addNodeRef.current?.('upload', { data });
   };
+
+  if (authLoading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-[#0b1120] text-white text-sm">
+        正在检查登录状态...
+      </div>
+    );
+  }
+
+  if (!authUser) {
+    return <LoginScreen onAuthenticated={setAuthUser} />;
+  }
 
   return (
     <RHToolsProvider>
@@ -1288,6 +1323,7 @@ function App() {
             <Library size={14} />
             <span className="text-[11px]">资源库</span>
           </button>
+          {canManageSettings && (
           <button
             onClick={() => setSettingsOpen(true)}
             className={
@@ -1299,6 +1335,7 @@ function App() {
           >
             <Settings size={isPixel ? 14 : 16} />
           </button>
+          )}
           <button
             onClick={toggleTheme}
             className={
@@ -1309,6 +1346,30 @@ function App() {
             title={`切换到${isDark ? '浅色' : '深色'}主题`}
           >
             {isDark ? <Sun size={isPixel ? 14 : 16} /> : <Moon size={isPixel ? 14 : 16} />}
+          </button>
+          <div
+            className={
+              isPixel
+                ? 'px-chip'
+                : `hidden sm:flex flex-col leading-none px-2 py-1 rounded-md border ${
+                    isDark ? 'border-white/10 bg-white/5' : 'border-black/10 bg-black/[0.03]'
+                  }`
+            }
+            title={`${authUser.name || authUser.username} · ${authUser.role}`}
+          >
+            <span className="text-[11px] font-semibold max-w-[120px] truncate">{authUser.name || authUser.username}</span>
+            <span className="text-[9px] opacity-60">{authUser.role}</span>
+          </div>
+          <button
+            onClick={handleLogout}
+            className={
+              isPixel
+                ? 'px-btn px-btn--icon px-btn--ghost'
+                : `p-2 rounded-md ${isDark ? 'hover:bg-white/10 text-white/75' : 'hover:bg-black/5 text-zinc-600'}`
+            }
+            title="退出登录"
+          >
+            <LogOut size={isPixel ? 14 : 16} />
           </button>
         </div>
       </header>
@@ -1322,7 +1383,7 @@ function App() {
       </div>
 
       {/* API 设置弹窗 */}
-      <ApiSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      {canManageSettings && <ApiSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />}
       <RechargeModal open={rechargeOpen} onClose={() => setRechargeOpen(false)} />
       <ThemeTemplateManager open={themeManagerOpen} onClose={() => setThemeManagerOpen(false)} />
       <ResourceLibraryDrawer

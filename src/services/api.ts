@@ -8,6 +8,18 @@ import type { MediaKind } from '../utils/mediaCollection';
 
 const BASE = '/api';
 
+export interface AuthUser {
+  id: string;
+  username: string;
+  email: string;
+  phone: string | null;
+  name: string;
+  avatarUrl: string | null;
+  role: string;
+  status: string;
+  position: string;
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
@@ -24,6 +36,35 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     throw new Error(errMsg);
   }
   return res.json();
+}
+
+export async function login(payload: { username: string; password: string }): Promise<{ user: AuthUser; token: string }> {
+  const res = await request<{ success: boolean; data: { user: AuthUser; token: string } }>(`${BASE}/auth/login`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return res.data;
+}
+
+export async function ssoLogin(token: string): Promise<{ user: AuthUser; token: string }> {
+  const res = await request<{ success: boolean; data: { user: AuthUser; token: string } }>(`${BASE}/auth/sso`, {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+  return res.data;
+}
+
+export async function getCurrentUser(): Promise<AuthUser | null> {
+  try {
+    const res = await request<{ success: boolean; data: AuthUser }>(`${BASE}/auth/me`);
+    return res.data;
+  } catch {
+    return null;
+  }
+}
+
+export async function logout(): Promise<void> {
+  await request(`${BASE}/auth/logout`, { method: 'POST' });
 }
 
 // ========== 状态 ==========
