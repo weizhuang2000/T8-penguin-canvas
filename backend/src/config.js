@@ -62,7 +62,7 @@ const config = {
   MAX_FILE_SIZE: 10 * 1024 * 1024,
 
   // 三套 API Key 默认值(均可在 settings 中覆盖)
-  // 贞贞工坊 / LLM 独立 Key 强制走 https://ai.t8star.org
+  // 百达工坊 / LLM 独立 Key 强制走 https://ai.t8star.org
   ZHENZHEN_BASE_URL: 'https://ai.t8star.org',
   RH_BASE_URL: 'https://www.runninghub.cn',
 

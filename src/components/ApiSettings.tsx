@@ -36,7 +36,7 @@ interface KeySpec {
 }
 
 const COMMON_KEYS: KeySpec[] = [
-  { field: 'zhenzhenApiKey', label: '贞贞工坊 API Key', desc: '· 通用后备 · 用于图像/视频/音频生成', bullet: 'bg-amber-400' },
+  { field: 'zhenzhenApiKey', label: '百达工坊 API Key', desc: '· 通用后备 · 用于图像/视频/音频生成', bullet: 'bg-amber-400' },
   { field: 'rhApiKey', label: 'RunningHub API Key', desc: '· RunningHub 节点与 RH 钱包应用节点共用', bullet: 'bg-cyan-400' },
   { field: 'llmApiKey', label: 'LLM 独立 API Key', desc: '· 额度隔离 · 用于 LLM/Vision', bullet: 'bg-emerald-400' },
 ];
@@ -480,7 +480,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
           type="button"
           onClick={() => openExternal('https://ai.t8star.org/register?aff=dP7j')}
           className={linkBtnCls}
-          title="前往贞贞工坊注册获取 APIKEY"
+          title="前往百达工坊注册获取 APIKEY"
         >
           <ExternalLink size={11} /> 获取 APIKey
         </button>
@@ -1015,7 +1015,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
           {/* 三套通用 Key */}
           {renderKey(COMMON_KEYS[0], { baseUrlNote: `Base URL 锁定: ${FIXED_ZHENZHEN_BASE}` })}
           {renderKey(COMMON_KEYS[1], { baseUrlNote: `Base URL: ${RH_BASE}` })}
-          {renderKey(COMMON_KEYS[2], { baseUrlNote: `Base URL 锁定: ${FIXED_ZHENZHEN_BASE} (与贞贞同地址, Key 独立)` })}
+          {renderKey(COMMON_KEYS[2], { baseUrlNote: `Base URL 锁定: ${FIXED_ZHENZHEN_BASE} (与百达同地址, Key 独立)` })}
 
           {/* 分类独立 Key（默认折叠，点击展开 —— 新手友好） */}
           <div className={`pt-3 border-t ${isPixel ? 'border-[var(--px-ink)]/30' : isDark ? 'border-white/10' : 'border-black/10'}`}>
@@ -1068,13 +1068,13 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
             })()}
             {!classifiedOpen && (
               <div className={`text-[11px] mt-2 ${hintCls}`}>
-                不必担心：<b>未填项会自动 fallback 到贞贞工坊通用 Key</b>，新手可直接保存忽略此区块。
+                不必担心：<b>未填项会自动 fallback 到百达工坊通用 Key</b>，新手可直接保存忽略此区块。
               </div>
             )}
             {classifiedOpen && (
               <div className="mt-3">
                 <div className={`text-[11px] ${hintCls} mb-3`}>
-                  为不同模型系列单独配置 Key；<b>未填则自动 fallback 到贞贞工坊通用 Key</b>。后端会根据调用的模型名/路由自动选择。
+                  为不同模型系列单独配置 Key；<b>未填则自动 fallback 到百达工坊通用 Key</b>。后端会根据调用的模型名/路由自动选择。
                 </div>
                 <div className="space-y-4">
                   {CLASSIFIED_KEYS.map((spec) => renderKey(spec, { fallbackHint: true }))}
@@ -1129,7 +1129,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
             </button>
             {!advancedOpen && (
               <div className={`text-[11px] mt-2 ${hintCls}`}>
-                未配置或未启用时不会影响贞贞工坊、RunningHub、LLM 独立 Key 等主流程。
+                未配置或未启用时不会影响百达工坊、RunningHub、LLM 独立 Key 等主流程。
               </div>
             )}
             {advancedOpen && (

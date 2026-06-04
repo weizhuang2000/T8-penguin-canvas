@@ -453,7 +453,7 @@ function App() {
               </span>
               <div className="min-w-0">
                 <h1 className="t8-op-brand__title text-[14px] font-black leading-none">
-                  ONE PIECE · 贞贞的无限画布
+                  ONE PIECE · 百达的无限画布
                 </h1>
                 <div className="t8-op-brand__sub text-[9px] font-bold tracking-wide leading-none mt-0.5">
                   GRAND LINE CANVAS
@@ -468,7 +468,7 @@ function App() {
               </span>
               <div className="min-w-0">
                 <h1 className="t8-rh-brand__title text-[14px] font-black leading-none">
-                  RH · 贞贞的无限画布
+                  RH · 百达的无限画布
                 </h1>
                 <div className="t8-rh-brand__sub text-[9px] font-bold tracking-wide leading-none mt-0.5">
                   RUNNINGHUB WORKSPACE
@@ -482,7 +482,7 @@ function App() {
               </span>
               <div className="min-w-0">
                 <h1 className="t8-naruto-brand__title text-[14px] font-black leading-none">
-                  火影 · 贞贞的无限画布
+                  火影 · 百达的无限画布
                 </h1>
                 <div className="t8-naruto-brand__sub text-[9px] font-bold tracking-wide leading-none mt-0.5">
                   SHINOBI CHAKRA CANVAS
@@ -496,7 +496,7 @@ function App() {
               </span>
               <div className="min-w-0">
                 <h1 className="t8-eva-brand__title text-[14px] font-black leading-none">
-                  EVA · 贞贞的无限画布
+                  EVA · 百达的无限画布
                 </h1>
                 <div className="t8-eva-brand__sub text-[9px] font-bold tracking-wide leading-none mt-0.5">
                   NERV HQ - TOKYO-3 / MAGI SYSTEM ONLINE
@@ -511,7 +511,7 @@ function App() {
               </span>
               <div className="min-w-0">
                 <h1 className="t8-yyh-brand__title text-[14px] font-black leading-none">
-                  幽游白书 · 贞贞的无限画布
+                  幽游白书 · 百达的无限画布
                 </h1>
                 <div className="t8-yyh-brand__sub text-[9px] font-bold tracking-wide leading-none mt-0.5">
                   SPIRIT DETECTIVE CANVAS / REI MAP ONLINE
@@ -526,7 +526,7 @@ function App() {
               </span>
               <div className="min-w-0">
                 <h1 className="t8-slamdunk-brand__title text-[14px] font-black leading-none">
-                  灌篮高手 · 贞贞的无限画布
+                  灌篮高手 · 百达的无限画布
                 </h1>
                 <div className="t8-slamdunk-brand__sub text-[9px] font-bold tracking-wide leading-none mt-0.5">
                   FULL COURT CANVAS / BUZZER BEATER READY
@@ -537,12 +537,12 @@ function App() {
           ) : isPixel ? (
             <>
               <h1 className="px-title text-[14px] font-bold tracking-wide leading-none">
-                贞贞的无限画布
+                百达的无限画布
               </h1>
               <span className="px-chip px-chip--pink text-[10px]">企鹅共创版</span>
             </>
           ) : (
-            <h1 className="text-sm font-semibold">贞贞的无限画布（企鹅共创版）</h1>
+            <h1 className="text-sm font-semibold">百达的无限画布（企鹅共创版）</h1>
           )}
           <span
             className={

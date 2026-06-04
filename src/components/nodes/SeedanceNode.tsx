@@ -511,7 +511,7 @@ const SeedanceNode = ({ id, data, selected }: NodeProps) => {
                     style={{ background: '#18181b', color: '#ffffff' }}
                     className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
                   >
-                    <option value="zhenzhen" style={{ background: '#18181b', color: '#ffffff' }}>贞贞工坊 SD2.0（默认）</option>
+                    <option value="zhenzhen" style={{ background: '#18181b', color: '#ffffff' }}>百达工坊 SD2.0（默认）</option>
                     {videoAdvancedProviders.map((provider) => (
                       <option key={provider.id} value={provider.id} style={{ background: '#18181b', color: '#ffffff' }}>
                         {provider.label || provider.id}

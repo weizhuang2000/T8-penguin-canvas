@@ -8,7 +8,7 @@ https://www.runninghub.cn/?inviteCode=rh-v1121
 
 <img src="https://github.com/T8mars/Comfyui-zhenzhen/blob/main/pic/1.png" width="30%" alt="My favorite girl">
 My favorite girl Go YounJung
-# 🐧 贞贞的无限画布（企鹅共创版） · T8-penguin-canvas
+# 🐧 百达的无限画布（企鹅共创版） · T8-penguin-canvas
 
 > AI 节点画布工作流工具 · Web + Electron 桌面端｜v1.9.1
 >
@@ -49,7 +49,7 @@ My favorite girl Go YounJung
 - 📝 **文本节点自由缩放**：文本节点四角拖拽可独立调整宽高，输出端口固定贴合右侧中点，并在尺寸变化后刷新 ReactFlow internals，避免连线和端口脱离
 - 🔗 **RH 文本 NodeID 绑定**（v1.9.0）：文本节点可填写 RH 节点序号，RunningHub / RH 钱包应用 / RH 超市会按应用参数里的 RH nodeId 自动匹配上游文本；节点内也能手动选择绑定文本，冲突和错误序号会保留清晰状态提示
 - 🧩 **xyflow 12** 画布引擎：缩放、平移、连线、迷你地图、控制条、SPA 兜底
-- 🔑 **四套独立 API Key 隔离**：贞贞工坊 / RunningHub / RH 钱包应用 / LLM —— 全部经后端代理脱敏，前端永远拿不到明文
+- 🔑 **四套独立 API Key 隔离**：百达工坊 / RunningHub / RH 钱包应用 / LLM —— 全部经后端代理脱敏，前端永远拿不到明文
 - 📈 **一键批量运行**：Kahn 拓扑排序串行触发可执行节点，进度可视化，支持中断
 - 🖼️ **图像编辑模态·五模式**：裁剪 / 蒙版 / 笔刷 / 网格 / 组合；非组合模式会按弹窗舞台真实可视尺寸完整显示原图，避免双击上传 / 输出素材编辑时上下被工具栏遮住；组合模式支持多图层拖拽 / 4 角同比缩放 + Shift 自由比例 + Alt 中心缩放 + 旋转 15° 吸附 + 50 深独立撤销栈
 - ✂️ **宫格剪裁去缝预览**：独立宫格剪裁节点支持 gap 去缝、常用宫格预设、指定序号导出、输出顺序和上游合集批量拆分；批量拆分兼容上传多图与资源库素材集，并在节点内直接预览切线与被裁掉的缝隙区域
@@ -60,7 +60,7 @@ My favorite girl Go YounJung
 - 🧪 **Grok Image / Sora2 FAL / Grok Video FAL**：图像节点新增 Grok Image TAB；视频节点模型类型默认 `Grok Video → Veo 3.1 → Sora2`，Grok Video TAB 默认 `Grok Video 1.5 (FAL)`，图像传入默认 base64，最多 1 张参考图且不发送比例参数；旧版 Grok FAL / Sora2 FAL 仍保留兼容入口
 - 🧾 **文本分割二版**：文本分割节点支持段落 / 行 / 自定义分隔 / Markdown / 序号 / 智能分镜 / 正则高级 / 字数切块；按段落严格以至少一个空行切段，按行才逐行切分，内置模式说明、中文输入稳定编辑、双列预览布局、分段收藏、JSON 导入导出，并一键创建前置文本循环器链路；循环器执行完成后可自动打散为多个文本节点
 - 🖌️ **图层画板节点**（v1.9.0 增强）：工具分类开放画板节点，支持 16:9 / 9:16 等画布比例、空白图层、图层组折叠、可见 / 锁定状态、载入上游或本地图片、手绘 / 文字 / 图形 / 箭头、缩放旋转、套索 / 钢笔非破坏式抠图、放大编辑窗口、导入导出画板 JSON 与运行输出 PNG；放大窗口复用完整图层面板并按设备像素比重绘，避免图片被低清预览二次放大
-- 🔑 **分类独立 API Key 可选 · 默认折叠**（v1.2.6）：gpt-image / nano-banana / mj / veo / grok / seedance / suno 七个分类 Key 未填自动 fallback 贞贞通用 Key，新手默认折叠不被干扰
+- 🔑 **分类独立 API Key 可选 · 默认折叠**（v1.2.6）：gpt-image / nano-banana / mj / veo / grok / seedance / suno 七个分类 Key 未填自动 fallback 百达通用 Key，新手默认折叠不被干扰
 - 🧭 **扩展 API 平台高级入口**（v1.8.5）：API 设置页默认折叠的「扩展 API 平台【高级/可选】」可配置 OpenAI 兼容、ModelScope、火山引擎、本地 ComfyUI、即梦 CLI；面板已按平台用途、适用节点、连接配置、模型列表和高级项分区说明，启用后图像 / 视频 / SD2.0 / LLM 节点可选择高级来源，默认不改变主流程
 - 🧽 **去AI水印辅助节点**（v1.8.6）：桥接 `wiltodelta/remove-ai-watermarks`，支持可见水印识别去除、框选擦除（cv2 / LaMA）、隐形水印、AI 元数据检查 / 清理和来源鉴别；开发环境可使用本地 Python 包，用户 Electron 完整包可通过 `tools/remove-ai-watermarks-runtime` sidecar runtime 随包分发
 - 🧲 **智能对齐辅助线 + snap-to-grid**：拖动时检测同列 / 同行 / 居中对齐并弱吸附
@@ -113,7 +113,7 @@ npm run dev
 
 | Key | 用途 | 默认 BaseUrl |
 |---|---|---|
-| 贞贞工坊 API Key | image / video / audio | `https://ai.t8star.org` |
+| 百达工坊 API Key | image / video / audio | `https://ai.t8star.org` |
 | LLM 独立 API Key | llm / vision（额度隔离） | OpenAI 兼容协议任意上游 |
 | RunningHub API Key | RunningHub 个人工作流 | `https://www.runninghub.cn` |
 | RH 钱包应用 APIKEY | RH 企业级共享 APIKEY（钱包应用专用） | `https://www.runninghub.cn` |
@@ -150,7 +150,7 @@ npm run dist
 | 画布引擎 | @xyflow/react 12 · zustand 5 · lucide-react |
 | 后端 | Node.js · Express · sharp（图像处理） · multer（上传） |
 | 桌面端 | Electron 33 · electron-builder 25 · bytenode 1.5 · T8ENC1（自研 AES-256-CBC 二次加密） |
-| AI 上游 | 贞贞工坊（图像/视频/Suno）· RunningHub · 任意 OpenAI 兼容 LLM |
+| AI 上游 | 百达工坊（图像/视频/Suno）· RunningHub · 任意 OpenAI 兼容 LLM |
 
 ---
 
@@ -314,7 +314,7 @@ MIT License © T8mars
 
 - 主作者：[T8mars](https://github.com/T8mars)
 - 灵感来源：PenguinPravite · Infinite Canvas · zhenzhen-web
-- 致谢上游服务：贞贞工坊（T8star）· RunningHub · OpenAI 兼容生态
+- 致谢上游服务：百达工坊（T8star）· RunningHub · OpenAI 兼容生态
 - 去AI水印辅助节点桥接 [wiltodelta/remove-ai-watermarks](https://github.com/wiltodelta/remove-ai-watermarks)（MIT License），算法能力由上游 Python 包 / CLI 提供；完整 Electron 用户包可随 `resources/tools/remove-ai-watermarks` sidecar runtime 分发
 - 桌面端打包方案：bytenode + electron-builder + NSIS
 

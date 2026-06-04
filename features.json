@@ -18,7 +18,7 @@
     },
     "version": "1.9.1",
     "semverVersion": "1.9.1",
-    "versionNote": "v1.3.0 起统一采用 semver 三段阶段号 x.y.z；当前源码为 v1.9.1：顶部工具栏快捷键面板升级为可自定义设置，支持录制组合键、清空单项、单项/全部恢复默认、冲突提示和浏览器保留键拦截；撤销/重做/复制粘贴/打组/画布定位/资源库/连线导航等动作统一走快捷键 store 并本地持久化。默认主流程仍保持贞贞工坊 / RunningHub / LLM 独立 Key 不变。",
+    "versionNote": "v1.3.0 起统一采用 semver 三段阶段号 x.y.z；当前源码为 v1.9.1：顶部工具栏快捷键面板升级为可自定义设置，支持录制组合键、清空单项、单项/全部恢复默认、冲突提示和浏览器保留键拦截；撤销/重做/复制粘贴/打组/画布定位/资源库/连线导航等动作统一走快捷键 store 并本地持久化。默认主流程仍保持百达工坊 / RunningHub / LLM 独立 Key 不变。",
     "installer": "本次为源码发布，未重新打包 Electron；上一安装包仍为 dist_electron/T8-PenguinCanvas-Setup-1.8.6.exe（NSIS，129.40 MB）。如需离线用户包，仍需按打包清单准备 remove-ai-watermarks sidecar runtime 并执行 npm run dist。",
     "checklist": [
       "运行 npm run encrypt 前确认已 npm install bytenode 且使用 Electron 内置 Node",
@@ -302,7 +302,7 @@
       "label": "核心生成节点",
       "status": "complete",
       "items": [
-        "贞贞工坊 / LLM 代理",
+        "百达工坊 / LLM 代理",
         "图像/视频/音频/LLM 节点"
       ]
     },
@@ -505,7 +505,7 @@
       "status": "complete",
       "items": [
         "问题症状: LLMNode 上游连接上传素材节点后发送报 'get file data from base64:/files/input/up_xxx.png failed: failed to decode base64 data'(convert_request_failed)",
-        "根因: UploadNode 写入的 imageUrl 是本地后端相对路径 /files/input/up_xxx.png,LLMNode 直接放进 image_url.url 透传给上游贞贞工坊 /v1/chat/completions,但上游服务器无法访问本项目本地静态,拿到路径后错误地试图当 base64 解码导致崩溃",
+        "根因: UploadNode 写入的 imageUrl 是本地后端相对路径 /files/input/up_xxx.png,LLMNode 直接放进 image_url.url 透传给上游百达工坊 /v1/chat/completions,但上游服务器无法访问本项目本地静态,拿到路径后错误地试图当 base64 解码导致崩溃",
         "修复: 后端 proxy.js 新增 normalizeLlmMessageImages(messages),在 /llm 路由进入上游前扫描 messages中所有 content 数组里的 image_url.url, /files/* 统一转成 data:image/xxx;base64,xxx dataURL inline; data:/http(s):// 保留原值",
         "对齐: 严格复用已有的 refToBananaImage helper(line 140-155),思路与 gpt-image-2-web chat 多模态参考图预处理一致",
         "失败处理: 本地拉 buffer 失败时报 400 '本地图片读取失败: 路径' 明确错误,避免上游误导报错",
@@ -555,12 +555,12 @@
         "问题症状 1: 打开 API Key 设置弹窗点眼睛无论如何都看不到已存 Key 明文——原 input 受控于用户输入为空且后端只返回脱敏字段时永远呢呢看不到",
         "修复 1: 新增 GET /api/settings/raw 前端调用 (services/api.ts getRawSettings)，点眼睛 且 input 为空 且 已存 同时成立时 拉一次明文填回 input;同时 useRef 缓存避免重复请求;眼睛拉出明文后不修改则不重复提交(revealed===input 跳过)",
         "修复 2: ApiSettings 重构 —— 用 inputs/shows Record 统一 10 个 Key 状态;增加弹窗 max-h-[90vh] + overflow-y-auto 防防陈类列表爆高",
-        "需求 2: 新增 7 类分类独立 Key,独立于贞贞工坊通用 Key (gpt-image 系列 / nano-banana 系列 / mj 系列 / veo 系列 / grok 系列 / seedance 系列 / suno 系列)",
+        "需求 2: 新增 7 类分类独立 Key,独立于百达工坊通用 Key (gpt-image 系列 / nano-banana 系列 / mj 系列 / veo 系列 / grok 系列 / seedance 系列 / suno 系列)",
         "后端 settings.js: DEFAULT_SETTINGS 增加 7 个字段 (gptImageApiKey/nanoBananaApiKey/mjApiKey/veoApiKey/grokApiKey/seedanceApiKey/sunoApiKey),GET /api/settings 同步脱敏返回",
-        "后端 proxy.js: 新增 pickApiKey(settings, hint) 按模型名/endpoint/路由名选择分类 key,未填时 fallback 到贞贞通用 Key;新增 applyClassifiedKey(settings, hint) 临时覆盖 settings.zhenzhenApiKey,后续原逻辑零侵入",
+        "后端 proxy.js: 新增 pickApiKey(settings, hint) 按模型名/endpoint/路由名选择分类 key,未填时 fallback 到百达通用 Key;新增 applyClassifiedKey(settings, hint) 临时覆盖 settings.zhenzhenApiKey,后续原逻辑零侵入",
         "后端 router 注入点: /image · /image/submit · /image/status (可传 ?model=) · /image/fal/submit · /image/fal/query · /mj/* (三条,hint='mj') · /video/submit · /video/query · /video/fal/submit · /video/fal/query · /seedance/* (hint='seedance') · /audio/submit · /audio/query (hint='suno')",
-        "前端 ApiSettings 分区展示: 上半区 三套通用 Key (贞贞/RH/LLM);下半区 分类独立 API Key (可选) · 未填时 fallback 提示“未设置 · 使用通用 Key”",
-        "零破坏: 未增加分类 key 的用户 一切如旧;已增加的用户对应模型会优先走分类 key,贞贞通用 Key 仍充当后备"
+        "前端 ApiSettings 分区展示: 上半区 三套通用 Key (百达/RH/LLM);下半区 分类独立 API Key (可选) · 未填时 fallback 提示“未设置 · 使用通用 Key”",
+        "零破坏: 未增加分类 key 的用户 一切如旧;已增加的用户对应模型会优先走分类 key,百达通用 Key 仍充当后备"
       ]
     },
     "phase24": {
@@ -618,7 +618,7 @@
         "修复 4 (backend/src/server.js): 在 app.use('/api/image', imageOpsRouter) 之后 / 启动 listen 之前插入 if (config.IS_PACKAGED && config.FRONTEND_DIST && fs.existsSync(config.FRONTEND_DIST)) { app.use(express.static(config.FRONTEND_DIST)); app.get(/^\\/(?!api\\/|files\\/|input\\/|output\\/).*/, ...sendFile index.html) } — express.static 优先于 SPA 兑底, 兑底排除 api/files/input/output 4 个前缀避免吞掉接口",
         "修复 5 (electron/main.cjs): 把窗口标题 + log 窗口 + IPC info 三处版本号 v1.1.0 → v1.2.0 同步 package.json (后续永久规则: package.json bump 后必须同步检查 main.cjs)",
         "修复 6 (electron/_post_build.cjs): 已确认存在, 验证 7 个 .t8c 必存 + frontend/{index.html,assets} 必存 + 强制清除意外混入的 resources/{app,backend}/src 明文目录",
-        "实测验证日志 (启动 dist_electron/win-unpacked/T8-PenguinCanvas.exe 完整成功证据): [backend] started in-process on http://127.0.0.1:18766 → 环境: production → 数据目录: C:\\Users\\Administrator\\AppData\\Roaming\\t8-penguin-canvas\\data → GET / 200 → GET /assets/index-*.js → GET /api/canvas → GET /api/settings → 窗口标题: 贞贞的无限画布（企鹅共创版）",
+        "实测验证日志 (启动 dist_electron/win-unpacked/T8-PenguinCanvas.exe 完整成功证据): [backend] started in-process on http://127.0.0.1:18766 → 环境: production → 数据目录: C:\\Users\\Administrator\\AppData\\Roaming\\t8-penguin-canvas\\data → GET / 200 → GET /assets/index-*.js → GET /api/canvas → GET /api/settings → 窗口标题: 百达的无限画布（企鹅共创版）",
         "最终产物: dist_electron/T8-PenguinCanvas-Setup-1.2.0.exe (NSIS, 87.18 MB)",
         "沉淀: skill.md §47 完整记录 3 处根因 + 4 步修复 + 标准化打包 SOP + 6 项打包前必检 checklist + 调试技巧表, 作为下次打包唯一参考依据"
       ]
@@ -767,14 +767,14 @@
       "status": "complete",
       "items": [
         "需求 1: 取消 RH 钱包应用 APIKEY 独立字段 —— 后端 DEFAULT_SETTINGS / GET 脱敏 / 前端 ApiSettings UI / ApiKeys store / canvas.ts 类型 / generation.ts 服务函数全链路移除 rhWalletApiKey 字段; 普通 RunningHub 节点与 RH 钱包应用节点统一读 settings.rhApiKey",
-        "需求 2: 设置面板「贞贞工坊 APIKEY」下 baseUrl 右侧加 1 个「获取 APIKey」按钮 → 新窗口打开 https://ai.t8star.org/register?aff=dP7j",
+        "需求 2: 设置面板「百达工坊 APIKEY」下 baseUrl 右侧加 1 个「获取 APIKey」按钮 → 新窗口打开 https://ai.t8star.org/register?aff=dP7j",
         "需求 3: 设置面板「RunningHub APIKEY」下 baseUrl 右侧加 2 个按钮(国内 emerald 主调 + 国外 cyan 次调) → 新窗口打开对应 runninghub.cn / runninghub.ai 郀邀链接(inviteCode=rh-v1121)",
         "需求 4: 按钮 UI 双主题适配 —— 默认 emerald/cyan 色调 + 像素风 px-btn px-btn--mint / px-btn 两套外观; window.open(url, '_blank', 'noopener,noreferrer') 安全打开",
         "后端 proxy.js: pickRhApiKey(settings) 简化为单参 → settings.rhApiKey || settings.runninghubApiKey || ''; missingRhKeyError() 错误文案统一为「未配置 RunningHub API Key」; 4 条 RH 路由(submit/query/upload-asset/app-info) 不再读 body.useWallet 与 query.wallet=1",
         "后端 settings.js: DEFAULT_SETTINGS 移除 rhWalletApiKey 字段; GET /api/settings 脱敏返回不再含 rhWalletApiKey 项",
         "前端 services/generation.ts: RhSubmitRequest 接口去掉 useWallet 字段; queryRh / fetchRhAppInfo / uploadRhAsset 3 个函数去掉 useWallet 形参 + URL 不再拼接 &wallet=1",
         "前端 RunningHubNode.tsx: useWallet 变量仅保留 UI 区分(标题/图标/配色), 4 个 RH 调用(submitRh/queryRh/fetchRhAppInfo/uploadRhAsset)全部不再透传 useWallet",
-        "前端 ApiSettings.tsx 核心改造: KeyField 联合移除 'rhWalletApiKey'; emptyMap/emptyShow 同步移除; COMMON_KEYS 由 4 项缩减为 3 项(贞贞/RH/LLM); 新增 linkBtnCls / linkBtnAltCls 双主题样式 + openExternal helper + renderGetKeyButtons(field) 函数; baseUrlNote 容器升级为 flex-wrap, 同时容纳 Lock 备注 与 获取 APIKey 按钮",
+        "前端 ApiSettings.tsx 核心改造: KeyField 联合移除 'rhWalletApiKey'; emptyMap/emptyShow 同步移除; COMMON_KEYS 由 4 项缩减为 3 项(百达/RH/LLM); 新增 linkBtnCls / linkBtnAltCls 双主题样式 + openExternal helper + renderGetKeyButtons(field) 函数; baseUrlNote 容器升级为 flex-wrap, 同时容纳 Lock 备注 与 获取 APIKey 按钮",
         "向后兼容: 老 settings.json 中残留的 rhWalletApiKey 字段仅被 loadSettings 允许但不再被任何路由消费, 老用户无需迁移",
         "零破坏: rh-config 节点仍 hidden:true 保留后門 / RH 钱包应用节点与普通 RH 节点 violet/cyan 颜色区分仍在 / 4 套主题(科技×像素×深色×浅色) 按钮样式均适配",
         "提交链: 9c9875d (11 文件 +112/-66 推送 origin/main; 后续静态打包 NSIS 安装包 + skill.md 第 56 章沉淀)"
@@ -1501,7 +1501,7 @@
       "status": "complete",
       "items": [
         "API Key 设置弹窗底部在「取消」左侧新增「导入设置」和「导出设置」按钮，作为更换版本时的一键配置备份入口。",
-        "导出设置会读取 /api/settings/raw 明文配置，并生成 t8-penguin-canvas-settings JSON，覆盖贞贞工坊 / RunningHub / LLM 通用 Key、7 类分类独立 Key、文件自动保存路径、画布自动保存路径、资源库路径、主题模板路径和 Eagle 本地接口。",
+        "导出设置会读取 /api/settings/raw 明文配置，并生成 t8-penguin-canvas-settings JSON，覆盖百达工坊 / RunningHub / LLM 通用 Key、7 类分类独立 Key、文件自动保存路径、画布自动保存路径、资源库路径、主题模板路径和 Eagle 本地接口。",
         "导入设置只接受白名单字段，自动跳过空值、未知字段和 ****1234 这类脱敏 Key；导入后先回填表单，用户确认后点击「保存」才写入后端，避免误选文件直接覆盖本地设置。",
         "导出的 JSON 标记 containsSecrets=true 并提示包含明文 API Key，属于私密备份，不能上传 GitHub 或公开分享。"
       ]
@@ -1618,7 +1618,7 @@
       "status": "complete",
       "items": [
         "修复 SD2.0 节点连接上传音频或视频后提交失败的问题：后端不再把 /files/input、/files/output 或资源库本地 URL 直接作为 reference_audio / reference_video 发送给 Seedance。",
-        "backend/src/routes/proxy.js 的 uploadRefToZhenzhen 升级为图片 / 视频 / 音频统一素材上传入口：本地 URL、资源库 URL、远端 URL 与 dataURL 都会先上传到贞贞 /v1/files，再把返回 URL 写入 Seedance content[]。",
+        "backend/src/routes/proxy.js 的 uploadRefToZhenzhen 升级为图片 / 视频 / 音频统一素材上传入口：本地 URL、资源库 URL、远端 URL 与 dataURL 都会先上传到百达 /v1/files，再把返回 URL 写入 Seedance content[]。",
         "参考 gpt-image-2-web 的 runSeedance 实现补齐 reference_video / reference_audio 上传链路，避免上游返回 Invalid audio/video format；asset-xxx 保持直接透传兼容。",
         "纯图片生成路径保持原行为，仍复用同一上传函数换取 image_url；新增 mock 路由验证确保最终 Seedance payload 不再包含本地 /files/input/ URL。",
         "验证：node --check backend/src/routes/proxy.js、npm run build 通过；开发后端已重启到新逻辑。"
@@ -1732,7 +1732,7 @@
         "OpenAI 兼容适配器支持 /chat/completions、/images/generations 与 /videos/generations，结果归一为 text/imageUrls/videoUrls/taskId/raw。",
         "ModelScope 支持异步图像任务提交与 /tasks/{task_id} 轮询；火山引擎支持 Seedream 图像与 Seedance 视频；即梦 CLI 支持 text2image/image2image/text2video/单图 multimodal2video/多图 multiframe2video。",
         "ComfyUI 设置页保留工作流 JSON 与参数映射 JSON，后端支持 /prompt 提交、/history 轮询与 image/video/audio/text 输出归一化；图像节点可选择已保存 ComfyUI 工作流。",
-        "图像、视频、SD2.0、LLM 节点在启用扩展平台后显示高级来源折叠区；旧画布和默认路径继续走贞贞工坊 / LLM 独立 Key，不受扩展平台影响。",
+        "图像、视频、SD2.0、LLM 节点在启用扩展平台后显示高级来源折叠区；旧画布和默认路径继续走百达工坊 / LLM 独立 Key，不受扩展平台影响。",
         "新增 /api/proxy/external/image、/api/proxy/external/video、/api/proxy/external/llm，输出统一转存到 /files/output/*，继续兼容 OutputNode、资源库、节点发送、Loop 与自动保存。",
         "验证：node --test tests/*.test.ts 通过 59/59；npm run build 通过（仅保留既有 chunk size 与 react-vendor 空 chunk 警告）；浏览器插件因当前本地 URL 安全策略阻止未做交互冒烟。"
       ]
@@ -2367,7 +2367,7 @@
   },
   "apiKeys": {
     "zhenzhen": {
-      "label": "贞贞工坊 API Key",
+      "label": "百达工坊 API Key",
       "baseUrl": "https://ai.t8star.org",
       "fixed": true,
       "scope": [
@@ -2409,7 +2409,7 @@
         "llm",
         "vision"
       ],
-      "note": "额度隔离,base URL 与贞贞工坊一致但 Key 独立"
+      "note": "额度隔离,base URL 与百达工坊一致但 Key 独立"
     },
     "classified": {
       "description": "分类独立 Key (phase23): 后端 pickApiKey 按模型名/endpoint/路由名路由;未填时自动 fallback 到 zhenzhenApiKey",
@@ -2471,7 +2471,7 @@
       "since": "v1.8.0-roadmap / v1.8.1-backend-foundation / v1.8.2-settings-ui / v1.8.4-generation / v1.8.5-guided-settings",
       "placement": "API 设置页中位于「分类独立 API Key【可选】」之后、文件自动保存路径之前，默认折叠；未配置时不影响主流程。展开后左侧是平台卡片，右侧按说明、基础信息、连接配置、模型列表和高级项分区。",
       "principles": [
-        "默认不改变贞贞工坊 / RunningHub / LLM 独立 Key 与分类 Key fallback 链路。",
+        "默认不改变百达工坊 / RunningHub / LLM 独立 Key 与分类 Key fallback 链路。",
         "只有用户主动展开、配置并在节点里选择扩展平台时才启用。",
         "设置页必须解释每个平台的用途、适用节点和填写方式，避免把 Base URL、Token、模型列表、AK/SK、ComfyUI JSON 等内部字段直接平铺给用户。",
         "设置保存和节点调用解耦，节点仅保存 providerSource/providerId/providerModel/providerParams。",
@@ -2589,7 +2589,7 @@
         "POST /api/ai-watermark/process — 去AI水印辅助节点处理入口，支持 smart/visible/erase(cv2/LaMA)/invisible/metadata-check/metadata-remove/identify，输出统一转存 /files/output 或返回文本报告"
       ],
       "proxy": [
-        "POST /api/proxy/image — 图像生成(贞贞工坊,自动转存)",
+        "POST /api/proxy/image — 图像生成(百达工坊,自动转存)",
         "POST /api/proxy/image/fal/submit — FAL Queue 提交(gpt-image-2-fal / nano-banana-pro-fal,同步返 images[] 或异步返 requestId+responseUrl)",
         "GET /api/proxy/image/fal/query?requestId&endpoint&responseUrl — FAL 任务轮询(HTTP 非200 时 IN_QUEUE/IN_PROGRESS 视为 pending,完成 images[] 转存)",
         "POST /api/proxy/llm — LLM Chat(独立 Key, 支持 stream:true SSE 透传, content 支持多模态 text+image_url 数组, temperature 0~2, max_tokens 100~128000)",

@@ -1975,7 +1975,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
         text: item.text,
         name: item.name,
       })),
-      tags: ['T8', '贞贞画布'],
+      tags: ['T8', '百达画布'],
     });
     if (!result.success) {
       logBus.warn(result.error || '发送到 Eagle 失败，请确认 Eagle 已启动并开启本地 API', 'Eagle');
@@ -4408,7 +4408,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
         style={{ background: bgColor, color: themeTokens.textMuted }}
       >
         <div className="text-center">
-          <div className="text-2xl mb-2 font-bold tracking-wide">🐧 贞贞的无限画布（企鹅共创版）</div>
+          <div className="text-2xl mb-2 font-bold tracking-wide">🐧 百达的无限画布（企鹅共创版）</div>
           <p>请先在左侧创建或选择一个画布</p>
         </div>
       </div>

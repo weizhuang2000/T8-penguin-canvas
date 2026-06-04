@@ -182,7 +182,7 @@ export interface FalSubmitRequest {
   n?: number;
   /** 输出格式 png / jpeg / webp */
   format?: 'png' | 'jpeg' | 'webp';
-  /** 同步模式(true 会在提交请求中附加 sync_mode:true,贞贞上游如果接受会同步返 images) */
+  /** 同步模式(true 会在提交请求中附加 sync_mode:true,百达上游如果接受会同步返 images) */
   sync?: boolean;
 
   // === gpt-fal 专属 ===
@@ -207,7 +207,7 @@ export interface FalSubmitRequest {
   seed?: number;
   system_prompt?: string;
   enable_web_search?: boolean;
-  /** 'image_url'(上传贞贞取 URL) | 'base64' 默认 'image_url' */
+  /** 'image_url'(上传百达取 URL) | 'base64' 默认 'image_url' */
   image_mode?: 'image_url' | 'base64';
 }
 

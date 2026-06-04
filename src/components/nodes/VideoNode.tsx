@@ -497,7 +497,7 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
         return;
       }
 
-      // === 原有贞贞工坊分支 ===
+      // === 原有百达工坊分支 ===
       // 参考图预处理:
       //   - Grok: 直接传 URL (本地 /files/* 也可,后端会转上游 URL)
       //   - Veo / Seedance: 转 base64
@@ -661,7 +661,7 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
                     style={{ background: '#18181b', color: '#ffffff' }}
                     className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
                   >
-                    <option value="zhenzhen" style={{ background: '#18181b', color: '#ffffff' }}>贞贞工坊（默认）</option>
+                    <option value="zhenzhen" style={{ background: '#18181b', color: '#ffffff' }}>百达工坊（默认）</option>
                     {videoAdvancedProviders.map((provider) => (
                       <option key={provider.id} value={provider.id} style={{ background: '#18181b', color: '#ffffff' }}>
                         {provider.label || provider.id}

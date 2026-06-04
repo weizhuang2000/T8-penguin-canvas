@@ -1,7 +1,7 @@
 /**
  * 上游 API 代理路由
  * 1. 隐藏 API Key,前端只通过 /api/proxy/* 调用
- * 2. 自动注入对应的 Key(贞贞工坊 / LLM 独立)
+ * 2. 自动注入对应的 Key(百达工坊 / LLM 独立)
  * 3. 图像生成结果自动转存到 /output 并返回本地 URL
  */
 const express = require('express');
@@ -96,7 +96,7 @@ function applyClassifiedKey(settings, hint) {
 // 修复 v1.2.9.14 之前的两类 bug：
 //   ① 旧路由先校验 settings.zhenzhenApiKey 非空 → 再 applyClassifiedKey；
 //      若用户「只配置了分类专属 key 而通用 key 留空」，会被第一道检查误拦，
-//      报「未配置贞贞工坊 API Key」，但其实专属 key 已存在；
+//      报「未配置百达工坊 API Key」，但其实专属 key 已存在；
 //   ② 即使 zhenzhenApiKey 是错误值（如 '123'），按旧顺序通过校验后 applyClassifiedKey
 //      仍能用 sunoApiKey 覆盖，但用户错配了 audio/upload 这类「完全没调 applyClassifiedKey」
 //      的子路由 → Suno 上传步骤直接用 zhenzhenApiKey='123' 上传 → 上游返回令牌错误。
@@ -122,8 +122,8 @@ function ensureKey(settings, res, hint, label) {
   applyClassifiedKey(settings, hint || '');
   if (!settings.zhenzhenApiKey) {
     const tip = label
-      ? `未配置 ${label} 专属 API Key，且贞贞工坊通用 API Key 也为空（请在【设置】中至少填写其中一个）`
-      : '未配置贞贞工坊 API Key（请在【设置】中填写）';
+      ? `未配置 ${label} 专属 API Key，且百达工坊通用 API Key 也为空（请在【设置】中至少填写其中一个）`
+      : '未配置百达工坊 API Key（请在【设置】中填写）';
     res.status(400).json({ success: false, error: tip });
     return false;
   }
@@ -412,7 +412,7 @@ async function saveImageItemsFromResult(result) {
 }
 
 // LLM 多模态 image_url 预处理:
-//   上游 LLM 服务(贞贞工坊)无法访问本地 /files/* 路径,需提前转成 base64 dataURL inline。
+//   上游 LLM 服务(百达工坊)无法访问本地 /files/* 路径,需提前转成 base64 dataURL inline。
 //   - data: 保留
 //   - http(s):// 保留(上游可访问)
 //   - /files/* → 本地拉 buffer 转 base64 dataURL
@@ -1009,7 +1009,7 @@ router.post('/image/fal/query', async (req, res) => {
 //   上游：{ZHENZHEN_BASE_URL}/{mj-turbo|mj-fast|mj-relax}/mj/submit/imagine
 //          {ZHENZHEN_BASE_URL}/{...}/mj/task/{id}/fetch
 //          {ZHENZHEN_BASE_URL}/{...}/mj/submit/upload-discord-images
-//   服从贞贞工坊集中 Key（同上其他 zhenzhen 路由）。
+//   服从百达工坊集中 Key（同上其他 zhenzhen 路由）。
 // ============================================================================
 const MJ_SPEED_MAP = { turbo: 'mj-turbo', fast: 'mj-fast', relax: 'mj-relax' };
 function mjSpeedSeg(speed) {
@@ -1255,7 +1255,7 @@ router.post('/llm', async (req, res) => {
 
 // ========================================================================
 // 视频生成(异步) — 完全对齐 gpt-image-2-web
-// 协议(贞贞工坊): POST /v2/videos/generations + GET /v2/videos/generations/:tid
+// 协议(百达工坊): POST /v2/videos/generations + GET /v2/videos/generations/:tid
 //
 // 通过 model 字段自动选择上游 payload 协议:
 //   - 含 'veo'      → Veo3.1 协议:  { prompt, model, enhance_prompt, aspect_ratio, seed?, enable_upsample?, images?(base64,最多3) }
@@ -1990,7 +1990,7 @@ router.get('/seedance/query', async (req, res) => {
 
 // ========================================================================
 // 音频生成(Suno - 异步)
-// 协议(贞贞工坊):POST /suno/generate + GET /suno/feed/:clipIds + POST /suno/submit/music
+// 协议(百达工坊):POST /suno/generate + GET /suno/feed/:clipIds + POST /suno/submit/music
 // 模式:generate / cover / extend
 // 严格对齐主项目 gpt-image-2-web 的 SUNO_MV_MAP (7 个版本)
 // ========================================================================

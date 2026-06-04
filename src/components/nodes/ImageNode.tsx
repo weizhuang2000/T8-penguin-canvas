@@ -686,7 +686,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
               className="w-full flex items-center justify-between text-[10px] font-semibold text-white/70 hover:text-white"
             >
               <span>高级来源</span>
-              <span>{isExternalSelected && providerSelection.provider ? providerSelection.provider.label : '默认贞贞工坊'}</span>
+              <span>{isExternalSelected && providerSelection.provider ? providerSelection.provider.label : '默认百达工坊'}</span>
             </button>
             {d?.advancedProviderOpen && (
               <div className="space-y-2">
@@ -712,7 +712,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
                     style={{ background: '#18181b', color: '#ffffff' }}
                     className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
                   >
-                    <option value="zhenzhen" style={{ background: '#18181b', color: '#ffffff' }}>贞贞工坊（默认）</option>
+                    <option value="zhenzhen" style={{ background: '#18181b', color: '#ffffff' }}>百达工坊（默认）</option>
                     {imageAdvancedProviders.map((provider) => (
                       <option key={provider.id} value={provider.id} style={{ background: '#18181b', color: '#ffffff' }}>
                         {provider.label || provider.id}

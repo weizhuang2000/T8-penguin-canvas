@@ -132,7 +132,7 @@
 
 ## 扩展 API 平台融合路线（参考 Infinite-Canvas）
 
-> 目标：把 Infinite-Canvas 中 ModelScope、火山引擎、本地 ComfyUI、即梦 Seedance 2.0 CLI、OpenAI 兼容图像/视频接口的调用方式，移植成 T8-penguin-canvas 的“高级可选扩展平台”。这些平台不是主功能入口，默认不影响贞贞工坊 / RunningHub / LLM 独立 Key 的现有体验；只有用户主动展开、配置、并在节点里选择扩展平台时才启用。
+> 目标：把 Infinite-Canvas 中 ModelScope、火山引擎、本地 ComfyUI、即梦 Seedance 2.0 CLI、OpenAI 兼容图像/视频接口的调用方式，移植成 T8-penguin-canvas 的“高级可选扩展平台”。这些平台不是主功能入口，默认不影响百达工坊 / RunningHub / LLM 独立 Key 的现有体验；只有用户主动展开、配置、并在节点里选择扩展平台时才启用。
 
 ### 1. 融合原则
 
@@ -161,8 +161,8 @@
 - 第一阶段不新增主侧栏节点，优先在现有图像、视频、SD2.0、LLM 节点里增加“更多平台/高级来源”小折叠区。
 - 未配置扩展平台时，节点 UI 不显示扩展选择，保持现有简洁度。
 - 用户配置并启用扩展平台后：
-  - 图像节点可选择 `贞贞工坊 / OpenAI兼容 / ModelScope / 火山引擎 / 即梦CLI / ComfyUI工作流`。
-  - 视频节点可选择 `贞贞工坊 / OpenAI兼容 / 火山引擎 / 即梦CLI`，Seedance 2.0 CLI 作为高级来源，不替代当前 SD2.0 主节点。
+  - 图像节点可选择 `百达工坊 / OpenAI兼容 / ModelScope / 火山引擎 / 即梦CLI / ComfyUI工作流`。
+  - 视频节点可选择 `百达工坊 / OpenAI兼容 / 火山引擎 / 即梦CLI`，Seedance 2.0 CLI 作为高级来源，不替代当前 SD2.0 主节点。
   - LLM 节点可选择 `LLM独立Key / OpenAI兼容 / ModelScope / 火山方舟聊天接入点`。
   - ComfyUI 若需要复杂工作流，可在后续阶段新增可选「本地 ComfyUI」节点；但只有用户保存至少一个工作流后才在添加菜单里显示。
 - 节点运行按钮、进度、错误展示、自动输出、完成提示音、Loop 等等待机制都复用现有状态字段，不为扩展平台另建一套交互。
@@ -231,7 +231,7 @@
 - 状态：已在 v1.8.4 落地。
 - 火山已接入 Seedream 图像与 Seedance 视频，支持 dataURL / 本地 T8 素材解析、提交任务、轮询和视频转存。
 - 即梦 CLI 已支持状态检测、text2image、image2image、text2video、单图 multimodal2video、多图 multiframe2video、poll 与输出转存。
-- 视频节点 / SD2.0 节点已提供高级来源选择，但默认仍走当前贞贞工坊路径。
+- 视频节点 / SD2.0 节点已提供高级来源选择，但默认仍走当前百达工坊路径。
 
 #### Phase E：本地 ComfyUI 工作流
 
