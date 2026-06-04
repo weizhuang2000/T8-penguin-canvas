@@ -147,6 +147,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
 
   const [inputs, setInputs] = useState<Record<KeyField, string>>(emptyMap());
   const [shows, setShows] = useState<Record<KeyField, boolean>>(emptyShow());
+  const [enableZhenzhenFallback, setEnableZhenzhenFallback] = useState(true);
   const [saved, setSaved] = useState(false);
   // v1.2.10.2: 文件自动保存路径输入
   const [fileSavePathInput, setFileSavePathInput] = useState<string>('');
@@ -180,6 +181,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     if (open) {
       setInputs(emptyMap());
       setShows(emptyShow());
+      setEnableZhenzhenFallback((settings as any)?.enableZhenzhenFallback !== false);
       revealedRef.current = {};
       setSaved(false);
       setBackupMessage('');
@@ -210,6 +212,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
 
   const getCurrentEditableSettings = (): Partial<ApiSettings> => ({
     zhenzhenApiKey: inputs.zhenzhenApiKey.trim(),
+    enableZhenzhenFallback,
     rhApiKey: inputs.rhApiKey.trim(),
     llmApiKey: inputs.llmApiKey.trim(),
     gptImageApiKey: inputs.gptImageApiKey.trim(),
@@ -257,6 +260,9 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     if ((source as any).preferences && typeof (source as any).preferences === 'object') {
       next.preferences = { ...(source as any).preferences };
     }
+    if (typeof (source as any).enableZhenzhenFallback === 'boolean') {
+      next.enableZhenzhenFallback = (source as any).enableZhenzhenFallback;
+    }
     if (Array.isArray((source as any).advancedProviders)) {
       next.advancedProviders = (source as any).advancedProviders;
     }
@@ -287,7 +293,9 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       const exportSettings = {
         ...(raw || {}),
         ...Object.fromEntries(
-          Object.entries(editable).filter(([, value]) => typeof value === 'string' && value.trim())
+          Object.entries(editable).filter(([, value]) => (
+            (typeof value === 'string' && value.trim()) || typeof value === 'boolean'
+          ))
         ),
         zhenzhenBaseUrl: FIXED_ZHENZHEN_BASE,
         llmBaseUrl: FIXED_ZHENZHEN_BASE,
@@ -325,6 +333,9 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     if (typeof patch.resourceLibraryPath === 'string') setResourceLibraryPathInput(patch.resourceLibraryPath);
     if (typeof patch.themeTemplatePath === 'string') setThemeTemplatePathInput(patch.themeTemplatePath);
     if (typeof patch.eagleApiBase === 'string') setEagleApiBaseInput(patch.eagleApiBase);
+    if (typeof patch.enableZhenzhenFallback === 'boolean') {
+      setEnableZhenzhenFallback(patch.enableZhenzhenFallback);
+    }
     if (Array.isArray(patch.advancedProviders)) {
       setAdvancedProvidersInput(patch.advancedProviders);
       setActiveAdvancedProviderId(patch.advancedProviders[0]?.id || '');
@@ -411,6 +422,10 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     if (advancedDirty) {
       (patch as any).advancedProviders = advancedProvidersInput;
     }
+    const oldFallback = (settings as any)?.enableZhenzhenFallback !== false;
+    if (enableZhenzhenFallback !== oldFallback) {
+      (patch as any).enableZhenzhenFallback = enableZhenzhenFallback;
+    }
     if (Object.keys(patch).length === 0) {
       onClose();
       return;
@@ -436,6 +451,11 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   const eyeBtnCls = isPixel
     ? 'px-btn px-btn--icon px-btn--ghost'
     : `p-2 rounded-md ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`;
+  const toggleBoxCls = isPixel
+    ? 'border border-[var(--px-ink)] bg-[var(--px-paper)] px-3 py-2'
+    : `rounded-lg border px-3 py-2 ${
+        isDark ? 'border-white/10 bg-white/[0.03]' : 'border-black/10 bg-black/[0.02]'
+      }`;
 
   // 防御性脱敏：始终只显示尾4位（与之前 `****9zVR` 一致），
   // 即使后端意外返回明文也不会暴露完整 Key
@@ -922,7 +942,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
           )}
           {opts.fallbackHint && !hasSaved && (
             <span className="text-[10px] font-normal px-1.5 py-0.5 rounded bg-white/5 text-white/40 border border-white/10">
-              未设置 · 使用通用 Key
+              {enableZhenzhenFallback ? '未设置 · 使用通用 Key' : '未设置 · 不使用通用 Key'}
             </span>
           )}
         </label>
@@ -931,7 +951,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
             type={shows[f] ? 'text' : 'password'}
             value={inputs[f]}
             onChange={(e) => setInputAt(f, e.target.value)}
-            placeholder={hasSaved ? '留空保持不变 / 输入新值覆盖' : (opts.fallbackHint ? '留空则使用通用 Key / 输入独立 Key' : '请输入 sk-...')}
+            placeholder={hasSaved ? '留空保持不变 / 输入新值覆盖' : (opts.fallbackHint ? (enableZhenzhenFallback ? '留空则使用通用 Key / 输入独立 Key' : '留空则不可用 / 输入独立 Key') : '请输入 sk-...')}
             className={inputCls}
             autoComplete="off"
           />
@@ -1014,6 +1034,20 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
         <div className="p-5 space-y-5 overflow-y-auto">
           {/* 三套通用 Key */}
           {renderKey(COMMON_KEYS[0], { baseUrlNote: `Base URL 锁定: ${FIXED_ZHENZHEN_BASE}` })}
+          <label className={`flex items-start gap-3 cursor-pointer ${toggleBoxCls}`}>
+            <input
+              type="checkbox"
+              checked={enableZhenzhenFallback}
+              onChange={(e) => setEnableZhenzhenFallback(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span className="min-w-0">
+              <span className={`block text-xs font-bold ${labelCls}`}>启用贞贞工坊 API Key 通用 fallback</span>
+              <span className={`block text-[11px] leading-relaxed ${hintCls}`}>
+                关闭后，GPT Image、nano-banana、MJ、Veo、Grok、Seedance、Suno 等分类 Key 留空时，不再使用贞贞工坊 API Key。
+              </span>
+            </span>
+          </label>
           {renderKey(COMMON_KEYS[1], { baseUrlNote: `Base URL: ${RH_BASE}` })}
           {renderKey(COMMON_KEYS[2], { baseUrlNote: `Base URL 锁定: ${FIXED_ZHENZHEN_BASE} (与百达同地址, Key 独立)` })}
 
@@ -1068,13 +1102,21 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
             })()}
             {!classifiedOpen && (
               <div className={`text-[11px] mt-2 ${hintCls}`}>
-                不必担心：<b>未填项会自动 fallback 到百达工坊通用 Key</b>，新手可直接保存忽略此区块。
+                {enableZhenzhenFallback ? (
+                  <>不必担心：<b>未填项会自动 fallback 到百达工坊通用 Key</b>，新手可直接保存忽略此区块。</>
+                ) : (
+                  <>已关闭通用 fallback，未填写的分类 Key 不会再使用贞贞工坊 API Key。</>
+                )}
               </div>
             )}
             {classifiedOpen && (
               <div className="mt-3">
                 <div className={`text-[11px] ${hintCls} mb-3`}>
-                  为不同模型系列单独配置 Key；<b>未填则自动 fallback 到百达工坊通用 Key</b>。后端会根据调用的模型名/路由自动选择。
+                  {enableZhenzhenFallback ? (
+                    <>为不同模型系列单独配置 Key；<b>未填则自动 fallback 到百达工坊通用 Key</b>。后端会根据调用的模型名/路由自动选择。</>
+                  ) : (
+                    <>为不同模型系列单独配置 Key。当前已关闭 fallback，未填写的分类不会使用贞贞工坊 API Key。</>
+                  )}
                 </div>
                 <div className="space-y-4">
                   {CLASSIFIED_KEYS.map((spec) => renderKey(spec, { fallbackHint: true }))}

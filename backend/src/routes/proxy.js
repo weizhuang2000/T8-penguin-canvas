@@ -70,7 +70,7 @@ function loadRawSettings() {
 //          / 'grok-video-fal' / 'seedance-v3' / 'suno-v5.5' / 'fal-ai/nano-banana/edit'
 function pickApiKey(settings, hint = '') {
   if (!settings) return '';
-  const fb = settings.zhenzhenApiKey || '';
+  const fb = settings.enableZhenzhenFallback === false ? '' : (settings.zhenzhenApiKey || '');
   const m = String(hint || '').toLowerCase();
   if (!m) return fb;
   if (m.includes('gpt-image') || m.includes('gpt2') || m.includes('gpt_image') || m.includes('gptimage')) return settings.gptImageApiKey || fb;
@@ -89,7 +89,7 @@ function pickApiKey(settings, hint = '') {
 function applyClassifiedKey(settings, hint) {
   if (!settings) return;
   const picked = pickApiKey(settings, hint);
-  if (picked) settings.zhenzhenApiKey = picked;
+  settings.zhenzhenApiKey = picked;
 }
 
 // ========== v1.2.9.15 新增：「专属优先 fallback 通用」一体化 API Key 校验 ==========
@@ -121,9 +121,17 @@ function ensureKey(settings, res, hint, label) {
   }
   applyClassifiedKey(settings, hint || '');
   if (!settings.zhenzhenApiKey) {
+    const fallbackDisabled = settings.enableZhenzhenFallback === false;
     const tip = label
       ? `未配置 ${label} 专属 API Key，且百达工坊通用 API Key 也为空（请在【设置】中至少填写其中一个）`
       : '未配置百达工坊 API Key（请在【设置】中填写）';
+    if (fallbackDisabled && label) {
+      res.status(400).json({
+        success: false,
+        error: `未配置 ${label} 专属 API Key，且已关闭贞贞工坊 API Key 通用 fallback（请在设置中填写对应分类 Key，或重新开启 fallback）。`,
+      });
+      return false;
+    }
     res.status(400).json({ success: false, error: tip });
     return false;
   }

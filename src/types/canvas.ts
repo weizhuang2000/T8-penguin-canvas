@@ -172,6 +172,7 @@ export interface CanvasData {
 export interface ApiSettings {
   // 三套通用 Key
   zhenzhenApiKey: string;
+  enableZhenzhenFallback?: boolean;
   zhenzhenBaseUrl: string; // 锁定 https://ai.t8star.org
   rhApiKey: string;
   rhBaseUrl: string; // https://www.runninghub.cn

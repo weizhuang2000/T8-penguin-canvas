@@ -46,6 +46,7 @@ test('settings route persists advancedProviders with masking and secret preserva
 
   const initial = await fetch(base).then((res) => res.json());
   assert.equal(initial.success, true);
+  assert.equal(initial.data.enableZhenzhenFallback, true);
   assert.ok(Array.isArray(initial.data.advancedProviders));
   assert.equal(initial.data.advancedProviderSummary.enabledCount, 0);
   assert.equal(initial.data.advancedProviders.find((p: any) => p.id === 'modelscope')?.apiKey, '');
@@ -73,7 +74,15 @@ test('settings route persists advancedProviders with masking and secret preserva
   }).then((res) => res.json());
   assert.equal(save.success, true);
 
+  const disableFallback = await fetch(base, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enableZhenzhenFallback: false }),
+  }).then((res) => res.json());
+  assert.equal(disableFallback.success, true);
+
   const masked = await fetch(base).then((res) => res.json());
+  assert.equal(masked.data.enableZhenzhenFallback, false);
   const modelscope = masked.data.advancedProviders.find((p: any) => p.id === 'modelscope');
   assert.equal(modelscope.apiKey, '****3456');
   assert.equal(modelscope.hasApiKey, true);
@@ -83,6 +92,7 @@ test('settings route persists advancedProviders with masking and secret preserva
   assert.equal(JSON.stringify(masked.data).includes('ms-secret-123456'), false);
 
   const raw = await fetch(`${base}/raw`).then((res) => res.json());
+  assert.equal(raw.data.enableZhenzhenFallback, false);
   assert.equal(raw.data.advancedProviders.find((p: any) => p.id === 'modelscope').apiKey, 'ms-secret-123456');
 
   const preserve = await fetch(base, {

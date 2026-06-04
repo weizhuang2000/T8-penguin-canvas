@@ -16,6 +16,7 @@ const router = express.Router();
 const DEFAULT_SETTINGS = {
   // 三套通用 Key
   zhenzhenApiKey: '',
+  enableZhenzhenFallback: true,
   zhenzhenBaseUrl: config.ZHENZHEN_BASE_URL, // 固定 https://ai.t8star.org
   rhApiKey: '',
   rhBaseUrl: config.RH_BASE_URL,

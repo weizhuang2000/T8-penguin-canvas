@@ -18,6 +18,7 @@ interface ApiKeysState {
 
 const DEFAULT: ApiSettings = {
   zhenzhenApiKey: '',
+  enableZhenzhenFallback: true,
   zhenzhenBaseUrl: FIXED_ZHENZHEN_BASE,
   rhApiKey: '',
   rhBaseUrl: RH_BASE,
