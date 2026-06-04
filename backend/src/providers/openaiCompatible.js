@@ -1,6 +1,7 @@
 const { resolveMediaRef } = require('./mediaResolver');
 
 const DEFAULT_TIMEOUT_MS = 8000;
+const DEFAULT_IMAGE_TIMEOUT_MS = 10 * 60 * 1000;
 
 function cleanBaseUrl(value) {
   return String(value || '').trim().replace(/\/+$/, '');
@@ -300,7 +301,7 @@ async function generateImage(provider, input = {}, options = {}) {
       method: 'POST',
       headers: bearerHeaders(provider),
       body: JSON.stringify(body),
-      timeoutMs: options.timeoutMs,
+      timeoutMs: options.timeoutMs || DEFAULT_IMAGE_TIMEOUT_MS,
       fetchImpl: options.fetchImpl,
     });
     const raw = await responseJson(res);

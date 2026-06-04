@@ -92,6 +92,36 @@ test('OpenAI compatible image generation normalizes url and b64_json results', a
   assert.equal(calls[0].body.n, 2);
 });
 
+test('OpenAI compatible image generation uses a long default timeout', async () => {
+  const provider = {
+    id: 'custom-openai',
+    protocol: 'openai-compatible',
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'sk-secret',
+    imageModels: ['gpt-image-1'],
+  };
+
+  const result = await openaiCompatible.generateImage(provider, {
+    prompt: 'a patient render',
+  }, {
+    fetchImpl: async (_url: string, init: any) => {
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, 8500);
+        init.signal?.addEventListener('abort', () => {
+          clearTimeout(timer);
+          const err: any = new Error('aborted');
+          err.name = 'AbortError';
+          reject(err);
+        });
+      });
+      return jsonResponse({ data: [{ url: 'https://cdn.example.com/out.png' }] });
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.imageUrls, ['https://cdn.example.com/out.png']);
+});
+
 test('OpenAI compatible video generation posts to video endpoint and normalizes returned media urls', async () => {
   const calls: any[] = [];
   const provider = {
