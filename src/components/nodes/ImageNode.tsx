@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react';
 import { AlertCircle, Image as ImageIcon, Loader2, Plus, Sparkles, X } from 'lucide-react';
 import { useUpstreamMaterials, type Material } from './useUpstreamMaterials';
@@ -80,6 +80,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
   const model = d?.model || IMAGE_MODELS[0].id;
   const modelDef = useMemo(() => IMAGE_MODELS.find((m) => m.id === model) || IMAGE_MODELS[0], [model]);
   const advancedProviders = useApiKeysStore((s) => s.settings.advancedProviders);
+  const allowZhenzhenFallback = useApiKeysStore((s) => s.settings.enableZhenzhenFallback !== false);
   const imageAdvancedProviders = useMemo(
     () => advancedProvidersForNode(advancedProviders, 'image'),
     [advancedProviders],
@@ -98,6 +99,20 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
     ? advancedProviderModelOptions(providerSelection.provider, 'image')
     : [];
   const externalProviderModel = providerSelection.providerModel || externalModelOptions[0] || '';
+  const firstImageAdvancedProvider = imageAdvancedProviders[0] || null;
+  const providerSelectValue = isExternalSelected
+    ? providerSelection.providerId
+    : (allowZhenzhenFallback ? 'zhenzhen' : (firstImageAdvancedProvider?.id || ''));
+
+  useEffect(() => {
+    if (allowZhenzhenFallback || isExternalSelected || !firstImageAdvancedProvider) return;
+    const nextModels = advancedProviderModelOptions(firstImageAdvancedProvider, 'image');
+    update({
+      providerSource: firstImageAdvancedProvider.protocol,
+      providerId: firstImageAdvancedProvider.id,
+      providerModel: nextModels[0] || '',
+    });
+  }, [allowZhenzhenFallback, firstImageAdvancedProvider, isExternalSelected, update]);
 
   const aspectRatio = d?.aspectRatio || modelDef.defaultAspectRatio;
   const sizeLevel = d?.sizeLevel || modelDef.defaultSize;
@@ -686,14 +701,14 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
               className="w-full flex items-center justify-between text-[10px] font-semibold text-white/70 hover:text-white"
             >
               <span>高级来源</span>
-              <span>{isExternalSelected && providerSelection.provider ? providerSelection.provider.label : '默认百达工坊'}</span>
+              <span>{isExternalSelected && providerSelection.provider ? providerSelection.provider.label : (allowZhenzhenFallback ? '默认百达工坊' : '请选择扩展平台')}</span>
             </button>
             {d?.advancedProviderOpen && (
               <div className="space-y-2">
                 <div>
                   <label className="text-[10px] text-white/50 block mb-1">平台</label>
                   <select
-                    value={isExternalSelected ? providerSelection.providerId : 'zhenzhen'}
+                    value={providerSelectValue}
                     onChange={(e) => {
                       const nextId = e.target.value;
                       if (nextId === 'zhenzhen') {
@@ -712,7 +727,9 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
                     style={{ background: '#18181b', color: '#ffffff' }}
                     className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
                   >
-                    <option value="zhenzhen" style={{ background: '#18181b', color: '#ffffff' }}>百达工坊（默认）</option>
+                    {allowZhenzhenFallback && (
+                      <option value="zhenzhen" style={{ background: '#18181b', color: '#ffffff' }}>百达工坊（默认）</option>
+                    )}
                     {imageAdvancedProviders.map((provider) => (
                       <option key={provider.id} value={provider.id} style={{ background: '#18181b', color: '#ffffff' }}>
                         {provider.label || provider.id}
