@@ -109,6 +109,33 @@ function resolveLocalFileUrl(url) {
   return resolved;
 }
 
+function isSameOrInside(child, parent) {
+  const resolvedChild = normalizePathForCompare(child);
+  const resolvedParent = normalizePathForCompare(parent);
+  return resolvedChild === resolvedParent || resolvedChild.startsWith(resolvedParent + path.sep);
+}
+
+function isSamePath(left, right) {
+  return normalizePathForCompare(left) === normalizePathForCompare(right);
+}
+
+function normalizePathForCompare(value) {
+  const resolved = path.resolve(value);
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+function shouldSkipDuplicateLocalSave(srcAbs, savePath) {
+  const source = path.resolve(srcAbs);
+  const targetDir = path.resolve(savePath);
+  const outputDir = path.resolve(config.OUTPUT_DIR);
+  if (!isSameOrInside(source, outputDir)) return false;
+  return (
+    isSamePath(targetDir, outputDir) ||
+    isSamePath(targetDir, path.dirname(outputDir)) ||
+    isSameOrInside(targetDir, outputDir)
+  );
+}
+
 function safeDuckExt(ext) {
   const clean = String(ext || 'bin')
     .trim()
@@ -239,6 +266,9 @@ router.post('/save-to-disk', express.json({ limit: '2mb' }), async (req, res) =>
     const localCopy = (srcAbs) => {
       if (!fs.existsSync(srcAbs)) {
         return res.status(404).json({ success: false, error: `源文件不存在: ${srcAbs}` });
+      }
+      if (shouldSkipDuplicateLocalSave(srcAbs, savePath)) {
+        return res.json({ success: true, data: { path: srcAbs, exist: true, skipped: true, source: 'already-local' } });
       }
       fs.copyFileSync(srcAbs, target);
       return res.json({ success: true, data: { path: target, exist: false, source: 'copy' } });

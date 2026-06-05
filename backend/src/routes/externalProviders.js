@@ -4,6 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const config = require('../config');
 const settingsRouter = require('./settings');
+const { normalizeImageOutputFormat, writeImageOutput } = require('../utils/imageOutput');
 const { maskAdvancedProviders, normalizeAdvancedProviders } = require('../providers/registry');
 const {
   generateChatWithProvider,
@@ -75,6 +76,11 @@ function writeOutputBuffer(buffer, ext) {
   return `/files/output/${filename}`;
 }
 
+async function writeImageOutputBuffer(buffer, format = 'jpg') {
+  const result = await writeImageOutput(config.OUTPUT_DIR, 'external', buffer, format);
+  return result.url;
+}
+
 function defaultExtForKind(kind) {
   if (kind === 'video') return '.mp4';
   if (kind === 'audio') return '.mp3';
@@ -82,10 +88,14 @@ function defaultExtForKind(kind) {
 }
 
 async function saveOneMediaOutput(url, kind = 'image', options = {}) {
+  const imageOutputFormat = normalizeImageOutputFormat(options.outputFormat);
   const text = String(url || '').trim();
   if (!text) return '';
   const dataMatch = text.match(/^data:([^;,]+);base64,(.+)$/i);
   if (dataMatch) {
+    if (kind === 'image') {
+      return writeImageOutputBuffer(Buffer.from(dataMatch[2], 'base64'), imageOutputFormat);
+    }
     const ext = outputExtFromMime(dataMatch[1], defaultExtForKind(kind));
     return writeOutputBuffer(Buffer.from(dataMatch[2], 'base64'), ext);
   }
@@ -96,6 +106,9 @@ async function saveOneMediaOutput(url, kind = 'image', options = {}) {
     const mime = typeof res.headers?.get === 'function' ? res.headers.get('content-type') : '';
     const ext = outputExtFromMime(mime, outputExtFromUrl(text, defaultExtForKind(kind)));
     const buf = Buffer.from(await res.arrayBuffer());
+    if (kind === 'image') {
+      return writeImageOutputBuffer(buf, imageOutputFormat);
+    }
     return writeOutputBuffer(buf, ext);
   }
   if (text.startsWith('/files/output/')) return text;
@@ -212,10 +225,13 @@ router.post('/image', async (req, res) => {
     const result = await generateImageWithProvider(resolved.provider, req.body || {}, {
       timeoutMs: Number(req.body?.timeoutMs) || undefined,
       baseUrl: `http://127.0.0.1:${config.PORT}`,
+      outputFormat: req.body?.outputFormat,
     });
     if (!result.ok) return resultResponse(res, result, resolved.provider);
     const remoteImageUrls = Array.isArray(result.imageUrls) ? result.imageUrls : [];
-    const imageUrls = await saveImageOutputs(remoteImageUrls);
+    const imageUrls = await saveImageOutputs(remoteImageUrls, {
+      outputFormat: req.body?.outputFormat,
+    });
     return resultResponse(res, result, resolved.provider, {
       remoteImageUrls,
       imageUrls,

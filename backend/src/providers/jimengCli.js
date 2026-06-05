@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
 const config = require('../config');
 const { resolveMediaRef, mimeFromPath } = require('./mediaResolver');
+const { writeImageOutput } = require('../utils/imageOutput');
 
 function cleanExecutablePath(provider) {
   return String(provider?.jimengConfig?.executablePath || '').trim();
@@ -237,6 +238,10 @@ async function defaultStoreOutput(value, kind, options = {}) {
     buf = fs.readFileSync(localPath);
   } else {
     return text;
+  }
+  if (kind !== 'video') {
+    const out = await writeImageOutput(config.OUTPUT_DIR, prefix, buf, options.outputFormat);
+    return out.url;
   }
   const filename = `${prefix}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}${ext}`;
   fs.writeFileSync(path.join(config.OUTPUT_DIR, filename), buf);

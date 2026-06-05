@@ -11,6 +11,7 @@ const multer = require('multer');
 const config = require('../config');
 const { getWhitePng } = require('../utils/whitePng');
 const { tryDecodeDuckPayload } = require('../utils/duckPayload');
+const { normalizeImageOutputFormat, writeImageOutput } = require('../utils/imageOutput');
 
 const router = express.Router();
 
@@ -52,6 +53,19 @@ function inferRemoteOutputExt(url, contentType) {
   const tail = String(url || '').split(/[?#]/)[0];
   const m = tail.match(/\.([a-z0-9]{2,8})$/i);
   return safeOutputExt(m ? m[1] : extFromContentType(contentType), 'png');
+}
+
+function isImageOutputExt(ext) {
+  return ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif'].includes(String(ext || '').toLowerCase());
+}
+
+function remoteOutputLooksLikeImage(url, contentType, ext) {
+  const ct = String(contentType || '').toLowerCase().split(';')[0].trim();
+  if (ct.startsWith('image/')) return true;
+  if (ct.startsWith('video/') || ct.startsWith('audio/')) return false;
+  const tail = String(url || '').split(/[?#]/)[0];
+  const m = tail.match(/\.([a-z0-9]{2,8})$/i);
+  return !!m && isImageOutputExt(m[1] || ext);
 }
 
 // ========== 工具:加载 Settings 明文 ==========
@@ -144,6 +158,7 @@ function ensureKey(settings, res, hint, label) {
 // 防止前端未透传 model 时轮询错误 fallback 到通用 key 导致“令牌不合法”。
 // 30 分钟过期自清。
 const taskKeyMap = new Map();
+const taskImageFormatMap = new Map();
 function rememberTaskKey(taskId, apiKey) {
   if (!taskId || !apiKey) return;
   taskKeyMap.set(String(taskId), apiKey);
@@ -152,18 +167,23 @@ function rememberTaskKey(taskId, apiKey) {
 function recallTaskKey(taskId) {
   return taskId ? taskKeyMap.get(String(taskId)) : null;
 }
+function rememberTaskImageFormat(taskId, format) {
+  if (!taskId) return;
+  taskImageFormatMap.set(String(taskId), normalizeImageOutputFormat(format));
+  setTimeout(() => taskImageFormatMap.delete(String(taskId)), 30 * 60 * 1000);
+}
+function recallTaskImageFormat(taskId) {
+  return normalizeImageOutputFormat(taskId ? taskImageFormatMap.get(String(taskId)) : undefined);
+}
 
 // ========== 工具:保存上游返回的图像到本地 ==========
-async function saveRemoteImage(url) {
+async function saveRemoteImage(url, format = 'jpg') {
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`下载失败: ${res.status}`);
     const buf = Buffer.from(await res.arrayBuffer());
-    const ext = (url.match(/\.(png|jpe?g|webp|gif)/i)?.[1] || 'png').toLowerCase();
-    const filename = `img_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
-    const filePath = path.join(config.OUTPUT_DIR, filename);
-    fs.writeFileSync(filePath, buf);
-    return `/files/output/${filename}`;
+    const out = await writeImageOutput(config.OUTPUT_DIR, 'img', buf, format);
+    return out.url;
   } catch (e) {
     console.error('⚠ 转存图像失败:', e.message);
     return url; // 退化:返回原 URL
@@ -188,15 +208,13 @@ async function saveRemoteAudio(url) {
 }
 
 // 处理 b64_json 格式
-function saveBase64Image(b64) {
+async function saveBase64Image(b64, format = 'jpg') {
   try {
     const raw = String(b64 || '');
     const clean = raw.includes(',') ? raw.split(',').pop() : raw;
     const buf = Buffer.from(clean || '', 'base64');
-    const filename = `img_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.png`;
-    const filePath = path.join(config.OUTPUT_DIR, filename);
-    fs.writeFileSync(filePath, buf);
-    return `/files/output/${filename}`;
+    const out = await writeImageOutput(config.OUTPUT_DIR, 'img', buf, format);
+    return out.url;
   } catch (e) {
     console.error('⚠ 解析 b64 失败:', e.message);
     return null;
@@ -405,14 +423,14 @@ function normalizeImageItems(result) {
   }).filter(Boolean);
 }
 
-async function saveImageItemsFromResult(result) {
+async function saveImageItemsFromResult(result, format = 'jpg') {
   const urls = [];
   for (const it of normalizeImageItems(result)) {
     if (it?.b64_json) {
-      const u = saveBase64Image(it.b64_json);
+      const u = await saveBase64Image(it.b64_json, format);
       if (u) urls.push(u);
     } else if (it?.url) {
-      const u = await saveRemoteImage(it.url);
+      const u = await saveRemoteImage(it.url, format);
       urls.push(u);
     }
   }
@@ -552,11 +570,11 @@ async function callImageUpstreamAsync({ apiKey, finalApiModel, paramKind, prompt
 }
 
 // 将上游响应 normalize 为 { kind: 'sync'|'async', urls?, taskId? }
-async function normalizeImageResponse(data) {
+async function normalizeImageResponse(data, outputFormat = 'jpg') {
   if (imageApiFailed(data)) {
     return { kind: 'failed', error: imageError(data) || '上游图像 API 返回失败' };
   }
-  const urls = await saveImageItemsFromResult(data);
+  const urls = await saveImageItemsFromResult(data, outputFormat);
   if (urls.length) return { kind: 'sync', urls };
   // 异步任务 task_id
   const taskId = imageTaskId(data);
@@ -570,8 +588,9 @@ router.post('/image', async (req, res) => {
     model, apiModel, paramKind: paramKindIn,
     prompt, n,
     aspect_ratio, image_size,
-    images, image, size, quality,
+    images, image, size, quality, outputFormat,
   } = req.body || {};
+  const imageOutputFormat = normalizeImageOutputFormat(outputFormat);
   // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
   if (!ensureKey(settings, res, apiModel || model || '', '图像')) return;
   if (!prompt) return res.status(400).json({ success: false, error: 'prompt 必填' });
@@ -598,7 +617,7 @@ router.post('/image', async (req, res) => {
         error: data?.error?.message || data?.message || `上游 HTTP ${r.status}`,
       });
     }
-    const norm = await normalizeImageResponse(data);
+    const norm = await normalizeImageResponse(data, imageOutputFormat);
     if (norm.kind === 'failed') {
       return res.status(500).json({ success: false, error: norm.error || '上游图像任务失败', raw: data });
     }
@@ -607,7 +626,7 @@ router.post('/image', async (req, res) => {
     }
     if (norm.kind === 'async') {
       // 同步接口需要同步返回结果 → 内部轮询
-      const url = await pollImageTask(norm.taskId, settings.zhenzhenApiKey);
+      const url = await pollImageTask(norm.taskId, settings.zhenzhenApiKey, imageOutputFormat);
       if (!url) return res.status(500).json({ success: false, error: '异步任务轮询超时/失败', taskId: norm.taskId });
       return res.json({ success: true, data: { urls: [url], raw: data, taskId: norm.taskId, model: finalApiModel, prompt } });
     }
@@ -627,7 +646,8 @@ router.post('/image/submit', async (req, res) => {
   const settings = loadRawSettings();
   try {
     const { model, apiModel, paramKind: paramKindIn, prompt, n,
-            aspect_ratio, image_size, images, image, size, quality } = req.body || {};
+            aspect_ratio, image_size, images, image, size, quality, outputFormat } = req.body || {};
+    const imageOutputFormat = normalizeImageOutputFormat(outputFormat);
     // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
     if (!ensureKey(settings, res, apiModel || model || '', '图像')) return;
     if (!prompt) return res.status(400).json({ success: false, error: 'prompt 不得为空' });
@@ -650,7 +670,7 @@ router.post('/image/submit', async (req, res) => {
       return res.status(r.status).json({ success: false, error: data?.error?.message || data?.message || `上游 HTTP ${r.status}`, raw: data });
     }
 
-    const norm = await normalizeImageResponse(data);
+    const norm = await normalizeImageResponse(data, imageOutputFormat);
     if (norm.kind === 'failed') {
       return res.status(500).json({ success: false, error: norm.error || '上游图像任务失败', raw: data });
     }
@@ -659,6 +679,7 @@ router.post('/image/submit', async (req, res) => {
     }
     if (norm.kind === 'async') {
       rememberTaskKey(norm.taskId, settings.zhenzhenApiKey);
+      rememberTaskImageFormat(norm.taskId, imageOutputFormat);
       return res.json({ success: true, data: { sync: false, taskId: norm.taskId, status: 'pending', progress: '0%', raw: data } });
     }
     return res.status(500).json({ success: false, error: '未获取到 task_id 且无同步结果: ' + JSON.stringify(data).slice(0, 300) });
@@ -681,6 +702,7 @@ router.get('/image/status/:tid', async (req, res) => {
     if (!ensureKey(settings, res, String(req.query.model || ''), '图像')) return;
   }
   const tid = req.params.tid;
+  const imageOutputFormat = normalizeImageOutputFormat(req.query.outputFormat || recallTaskImageFormat(tid));
   try {
     const url = `${config.ZHENZHEN_BASE_URL}/v1/images/tasks/${encodeURIComponent(tid)}`;
     const r = await fetch(url, { headers: { Authorization: `Bearer ${settings.zhenzhenApiKey}` } });
@@ -698,7 +720,7 @@ router.get('/image/status/:tid', async (req, res) => {
     const progress = inner.progress || data?.progress || '0%';
     const SUCCESS = ['success', 'completed', 'complete', 'done', 'finished'];
     const FAILURE = ['failure', 'failed', 'error', 'cancelled', 'canceled'];
-    const urls = await saveImageItemsFromResult(data);
+    const urls = await saveImageItemsFromResult(data, imageOutputFormat);
     if (SUCCESS.includes(status) || urls.length) {
       return res.json({ success: true, data: { status: 'completed', progress: '100%', urls, raw: data } });
     }
@@ -715,7 +737,7 @@ router.get('/image/status/:tid', async (req, res) => {
 // ========== 图像异步任务轮询(同步代理内部使用,路径对齐主项目 /v1/images/tasks/) ==========
 // 轮询上限:1800 × 2s = 3600s = 60 分钟,与前端 ImageNode 标准路径保持一致,
 // 避免 GPT2 复杂 prompt / 多参考图任务被 120s 提前中断。
-async function pollImageTask(taskId, apiKey, maxRetries = 1800, interval = 2000) {
+async function pollImageTask(taskId, apiKey, outputFormat = 'jpg', maxRetries = 1800, interval = 2000) {
   const url = `${config.ZHENZHEN_BASE_URL}/v1/images/tasks/${encodeURIComponent(taskId)}`;
   for (let i = 0; i < maxRetries; i++) {
     await new Promise(r => setTimeout(r, interval));
@@ -725,7 +747,7 @@ async function pollImageTask(taskId, apiKey, maxRetries = 1800, interval = 2000)
       let data; try { data = JSON.parse(text); } catch { continue; }
       if (!r.ok) continue;
       const st = String(imageStatus(data) || '').toLowerCase();
-      const urls = await saveImageItemsFromResult(data);
+      const urls = await saveImageItemsFromResult(data, outputFormat);
       if (['success', 'completed', 'complete', 'done', 'finished'].includes(st) || urls.length) {
         return urls[0] || null;
       }
@@ -816,7 +838,9 @@ router.post('/image/fal/submit', async (req, res) => {
     // nbpro-fal
     aspect_ratio, resolution, safety_tolerance, seed,
     system_prompt, enable_web_search, image_mode,
+    outputFormat,
   } = req.body || {};
+  const imageOutputFormat = normalizeImageOutputFormat(outputFormat);
   // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
   if (!ensureKey(settings, res, apiModel || '', '图像 FAL')) return;
   const apiKey = settings.zhenzhenApiKey;
@@ -831,7 +855,7 @@ router.post('/image/fal/submit', async (req, res) => {
   const refs = Array.isArray(images) ? images.filter(Boolean) : [];
   const trimmedRefs = refs.slice(0, reg.maxRefs);
   const numImages = Math.max(1, Math.min(4, parseInt(n ?? 1, 10) || 1));
-  const outputFormat = String(format || 'png').toLowerCase();
+  const falOutputFormat = String(format || 'png').toLowerCase();
 
   // ========== 根据 paramKind 组装 payload ==========
   let payload;
@@ -853,7 +877,7 @@ router.post('/image/fal/submit', async (req, res) => {
         prompt,
         quality: String(quality || 'medium'),
         num_images: numImages,
-        output_format: outputFormat,
+        output_format: falOutputFormat,
       };
       if (imageSize) payload.image_size = imageSize;
       // image_urls 仅在 edit 下添加
@@ -875,7 +899,7 @@ router.post('/image/fal/submit', async (req, res) => {
         num_images: numImages,
         aspect_ratio: String(aspect_ratio || 'auto'),
         resolution: String(resolution || '2K'),
-        output_format: outputFormat,
+        output_format: falOutputFormat,
         safety_tolerance: String(safety_tolerance || '4'),
       };
       if (seed && Number(seed) > 0) payload.seed = Number(seed);
@@ -931,7 +955,7 @@ router.post('/image/fal/submit', async (req, res) => {
       const urls = [];
       for (const it of data.images) {
         if (it?.url) {
-          const local = await saveRemoteImage(it.url);
+          const local = await saveRemoteImage(it.url, imageOutputFormat);
           urls.push(local);
         }
       }
@@ -945,6 +969,7 @@ router.post('/image/fal/submit', async (req, res) => {
       return res.status(500).json({ success: false, error: '未获取到 request_id: ' + JSON.stringify(data).slice(0, 300) });
     }
     responseUrl = fixFalResponseUrl(responseUrl, baseUrl, endpoint, requestId);
+    rememberTaskImageFormat(requestId, imageOutputFormat);
     return res.json({
       success: true,
       data: { sync: false, requestId, responseUrl, endpoint, raw: data },
@@ -960,7 +985,8 @@ router.post('/image/fal/submit', async (req, res) => {
 //   返回: { status: 'pending'|'completed'|'failed', urls?, error? }
 router.post('/image/fal/query', async (req, res) => {
   const settings = loadRawSettings();
-  const { responseUrl: rawUrl, endpoint, requestId } = req.body || {};
+  const { responseUrl: rawUrl, endpoint, requestId, outputFormat } = req.body || {};
+  const imageOutputFormat = normalizeImageOutputFormat(outputFormat || recallTaskImageFormat(requestId));
   // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
   if (!ensureKey(settings, res, endpoint || rawUrl || '', '图像 FAL')) return;
   const apiKey = settings.zhenzhenApiKey;
@@ -991,7 +1017,7 @@ router.post('/image/fal/query', async (req, res) => {
       const urls = [];
       for (const it of data.images) {
         if (it?.url) {
-          const local = await saveRemoteImage(it.url);
+          const local = await saveRemoteImage(it.url, imageOutputFormat);
           urls.push(local);
         }
       }
@@ -2303,12 +2329,16 @@ router.get('/runninghub/query', async (req, res) => {
         try {
           const fr = await fetch(remote);
           if (fr.ok) {
+            const contentType = fr.headers.get('content-type');
             let buf = Buffer.from(await fr.arrayBuffer());
-            let ext = inferRemoteOutputExt(remote, fr.headers.get('content-type'));
+            let ext = inferRemoteOutputExt(remote, contentType);
+            let isImageOutput = remoteOutputLooksLikeImage(remote, contentType, ext);
+            let keepOriginalImage = false;
             const duck = await tryDecodeDuckPayload(buf);
             if (duck?.decoded && duck.buffer) {
               buf = duck.buffer;
               ext = safeOutputExt(duck.ext, ext);
+              isImageOutput = isImageOutputExt(ext);
               console.log(
                 '[RH/query][duck] decoded',
                 `bits=${duck.lsbBits}`,
@@ -2317,11 +2347,17 @@ router.get('/runninghub/query', async (req, res) => {
                 `bytes=${buf.length}`,
               );
             } else if (duck?.passwordProtected) {
+              keepOriginalImage = true;
               console.log('[RH/query][duck] password protected payload detected, keep original duck image');
             }
-            const filename = `rh_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
-            fs.writeFileSync(path.join(config.OUTPUT_DIR, filename), buf);
-            urls.push(`/files/output/${filename}`);
+            if (isImageOutput && !keepOriginalImage) {
+              const out = await writeImageOutput(config.OUTPUT_DIR, 'rh', buf, 'jpg');
+              urls.push(out.url);
+            } else {
+              const filename = `rh_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
+              fs.writeFileSync(path.join(config.OUTPUT_DIR, filename), buf);
+              urls.push(`/files/output/${filename}`);
+            }
           } else {
             urls.push(remote);
           }

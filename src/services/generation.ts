@@ -18,6 +18,7 @@ export interface GenerateImageRequest {
   // 兼容旧参数:若传了 size(像素串)则优先用、image 单张也会并入 images
   size?: string;
   image?: string;
+  outputFormat?: 'jpg' | 'png';
 }
 
 export interface GenerateImageResult {
@@ -48,6 +49,7 @@ export interface GenerateExternalImageRequest {
   height?: number;
   n?: number;
   images?: string[];
+  outputFormat?: 'jpg' | 'png';
   providerParams?: Record<string, any>;
 }
 
@@ -158,9 +160,12 @@ export interface ImageQueryResult {
 
 // apiModel 透传给后端，让轮询阶段复用与 submit 一致的分类 API Key
 // (否则 hint 为空时会 fallback 到通用 zhenzhenApiKey，分类 key 失效)
-export async function queryImageStatus(taskId: string, apiModel?: string): Promise<ImageQueryResult> {
-  const qs = apiModel ? `?model=${encodeURIComponent(apiModel)}` : '';
-  const r = await fetch(`/api/proxy/image/status/${encodeURIComponent(taskId)}${qs}`);
+export async function queryImageStatus(taskId: string, apiModel?: string, outputFormat?: 'jpg' | 'png'): Promise<ImageQueryResult> {
+  const qs = new URLSearchParams();
+  if (apiModel) qs.set('model', apiModel);
+  if (outputFormat) qs.set('outputFormat', outputFormat);
+  const query = qs.toString() ? `?${qs.toString()}` : '';
+  const r = await fetch(`/api/proxy/image/status/${encodeURIComponent(taskId)}${query}`);
   const data = await r.json();
   if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
   // 失败状态下 success=false 但返回 body 中仍包含 status:'failed'
@@ -209,6 +214,7 @@ export interface FalSubmitRequest {
   enable_web_search?: boolean;
   /** 'image_url'(上传百达取 URL) | 'base64' 默认 'image_url' */
   image_mode?: 'image_url' | 'base64';
+  outputFormat?: 'jpg' | 'png';
 }
 
 export interface FalSubmitResult {
@@ -237,7 +243,7 @@ export interface FalQueryResult {
   falStatus?: string;
 }
 
-export async function queryImageFal(params: { responseUrl?: string; endpoint?: string; requestId?: string }): Promise<FalQueryResult> {
+export async function queryImageFal(params: { responseUrl?: string; endpoint?: string; requestId?: string; outputFormat?: 'jpg' | 'png' }): Promise<FalQueryResult> {
   const r = await fetch('/api/proxy/image/fal/query', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -878,4 +884,3 @@ export async function uploadRhAsset(url: string): Promise<{ fileName: string; fi
 // ============================================================================
 // (原崩溃前遗留的 MJ 代码块已移除; MJ 实现参见上方 buildMjPrompt / submitMjImagine / queryMjTask / uploadMjImage 及 fileToDataUrl)
 // ============================================================================
-

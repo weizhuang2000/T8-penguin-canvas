@@ -166,6 +166,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
   const status: 'idle' | 'generating' | 'success' | 'error' = d?.status || 'idle';
   const imageUrl = d?.imageUrl as string | undefined;
   const localPrompt = d?.prompt || '';
+  const outputFormat: 'jpg' | 'png' = d?.outputFormat === 'png' ? 'png' : 'jpg';
   const promptMentions: MediaMention[] = Array.isArray(d?.promptMentions) ? d.promptMentions : [];
   // 节点内本地上传的参考图(除了上游接入的,这里是手动上传)
   const refImages: string[] = Array.isArray(d?.referenceImages) ? d.referenceImages : [];
@@ -344,6 +345,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           prompt: finalPrompt,
           size,
           images: allRefs,
+          outputFormat,
           n: Math.max(1, Math.min(4, Number(d?.providerParams?.n || 1))),
           providerParams: d?.providerParams || {},
         });
@@ -491,6 +493,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           system_prompt: falKind === 'nbpro-fal' ? nbSysPrompt : undefined,
           enable_web_search: falKind === 'nbpro-fal' ? nbWebSearch : undefined,
           image_mode: falKind === 'nbpro-fal' ? nbImgMode : undefined,
+          outputFormat,
         });
 
         // 同步完成
@@ -521,7 +524,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         const interval = 3000;
         for (let i = 0; i < maxPoll; i++) {
           await new Promise((r) => setTimeout(r, interval));
-          const q = await queryImageFal({ responseUrl, endpoint, requestId });
+          const q = await queryImageFal({ responseUrl, endpoint, requestId, outputFormat });
           const st = String(q.status || '').toLowerCase();
           if (st === 'completed') {
             const url = q.urls?.[0];
@@ -564,6 +567,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         image_size: sizeLevel,
         images: allRefs,
         n: 1,
+        outputFormat,
       });
 
       // 分支一:同步完成
@@ -593,7 +597,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
       let lastProg = '5%';
       for (let i = 0; i < maxPoll; i++) {
         await new Promise((r) => setTimeout(r, interval));
-        const q = await queryImageStatus(taskId, apiModel);
+        const q = await queryImageStatus(taskId, apiModel, outputFormat);
         if (q.progress && q.progress !== lastProg) {
           lastProg = q.progress;
           update({ progress: q.progress });
@@ -844,6 +848,36 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         )}
 
         {/* ========== FAL 专属参数面板(完全对齐 gpt-image-2-web gf_panel / nano_fal_panel) ========== */}
+        <div>
+          <label className="text-[10px] text-white/50 block mb-1">输出格式</label>
+          <div
+            className={`grid grid-cols-2 gap-0.5 p-0.5 rounded ${isPixel ? '' : 'bg-white/5'}`}
+            style={isPixel ? { background: 'var(--px-muted)', border: '1.5px solid var(--px-ink)' } : undefined}
+          >
+            {(['jpg', 'png'] as const).map((fmt) => {
+              const active = outputFormat === fmt;
+              return (
+                <button
+                  key={fmt}
+                  type="button"
+                  onClick={() => update({ outputFormat: fmt })}
+                  title={fmt === 'png' ? '保留透明区域，文件更大' : '高质量 JPG，文件更小'}
+                  className={`py-1 text-[10px] font-semibold rounded transition-all ${
+                    active ? 'bg-amber-500/30 text-amber-200' : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                  style={
+                    isPixel && active
+                      ? { background: 'var(--px-yellow)', color: 'var(--px-ink)', border: '1.5px solid var(--px-ink)', boxShadow: '1px 1px 0 var(--px-ink)' }
+                      : isPixel ? { color: 'var(--px-ink-soft)' } : undefined
+                  }
+                >
+                  {fmt.toUpperCase()}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {!isExternalSelected && isFal && falKind === 'gpt-fal' && (
           <div className="space-y-2 rounded border border-blue-400/30 bg-blue-500/5 p-2">
             <div className="text-[10px] text-blue-300 font-semibold tracking-wide">
