@@ -21,6 +21,11 @@ function safeText(value, fallback = '') {
   return String(value ?? fallback).trim().slice(0, 500);
 }
 
+function normalizeSeed(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
 function genId() {
   return `hist_${now()}_${crypto.randomBytes(4).toString('hex')}`;
 }
@@ -96,6 +101,7 @@ function normalizeItem(raw) {
     provider: safeText(raw.provider),
     model: safeText(raw.model),
     taskId: safeText(raw.taskId),
+    seed: normalizeSeed(raw.seed),
     createdAt,
     hidden: !!raw.hidden,
     favorite: !!raw.favorite,
@@ -228,10 +234,11 @@ function addHistoryItems(items, context = {}, user = null) {
       provider: safeText(raw?.provider || context.provider),
       model: safeText(raw?.model || context.model),
       taskId: safeText(raw?.taskId || context.taskId),
+      seed: normalizeSeed(raw?.seed ?? context.seed),
       createdByUserId: user?.id != null ? String(user.id) : '',
     };
     if (existing) {
-      Object.assign(existing, Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== '')));
+      Object.assign(existing, Object.fromEntries(Object.entries(patch).filter(([key, value]) => value !== '' && (key !== 'seed' || value > 0))));
       existing.hidden = false;
       out.push(existing);
     } else {
@@ -312,7 +319,7 @@ function listVisibleItems(user, params = {}) {
       if (canvasId && item.canvasId !== canvasId) return false;
       if (!canViewProject(user, item.canvasId, canvases)) return false;
       if (q) {
-        const haystack = `${item.title} ${item.fileName} ${item.prompt} ${item.provider} ${item.model} ${item.tags.join(' ')}`.toLowerCase();
+        const haystack = `${item.title} ${item.fileName} ${item.prompt} ${item.provider} ${item.model} ${item.seed || ''} ${item.tags.join(' ')}`.toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       return true;

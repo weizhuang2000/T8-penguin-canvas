@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { LogOut, Moon, Settings, Sun, Wifi, WifiOff, Sparkles, Cloud, ExternalLink, Copy, Check, Gift, Heart, Youtube, PlayCircle, Bell, Globe, Library, Palette, Skull, Sailboat, Clock3 } from 'lucide-react';
+import { LogOut, Moon, Settings, Sun, Wifi, WifiOff, Sparkles, Cloud, ExternalLink, Youtube, PlayCircle, Bell, Globe, Library, Palette, Skull, Sailboat, Clock3 } from 'lucide-react';
 import { useThemeStore } from './stores/theme';
 import { useApiKeysStore } from './stores/apiKeys';
 import { useShortcutStore } from './stores/shortcuts';
@@ -171,34 +171,12 @@ function App() {
   const [resourceOpen, setResourceOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [themeManagerOpen, setThemeManagerOpen] = useState(false);
-  // 「在线画布」推广浮层开关 + 容器 ref(用于点击外部关闭)
-  const [cloudOpen, setCloudOpen] = useState(false);
-  const [wxCopied, setWxCopied] = useState(false);
-  const cloudWrapRef = useRef<HTMLDivElement>(null);
   // 「视频教程」推广浮层开关
   const [videoOpen, setVideoOpen] = useState(false);
   const videoWrapRef = useRef<HTMLDivElement>(null);
   // 画布接收节点添加的 ref(从 Sidebar -> Canvas)
   const addNodeRef = useRef<AddNodeFn | null>(null);
   const insertWorkflowRef = useRef<InsertWorkflowFn | null>(null);
-
-  // 「在线画布」浮层: 点击容器外部 / 按 ESC 自动关闭
-  useEffect(() => {
-    if (!cloudOpen) return;
-    const onDocDown = (e: MouseEvent) => {
-      if (!cloudWrapRef.current) return;
-      if (!cloudWrapRef.current.contains(e.target as Node)) setCloudOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setCloudOpen(false);
-    };
-    document.addEventListener('mousedown', onDocDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDocDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [cloudOpen]);
 
   // 「视频教程」浮层: 点击容器外部 / 按 ESC 自动关闭
   useEffect(() => {
@@ -219,7 +197,7 @@ function App() {
   }, [videoOpen]);
 
   useEffect(() => {
-    const hasOpenTopSurface = cloudOpen || videoOpen || resourceOpen || historyOpen;
+    const hasOpenTopSurface = videoOpen || resourceOpen || historyOpen;
     if (!hasOpenTopSurface) return;
 
     const onDocPointerDown = (e: PointerEvent) => {
@@ -239,7 +217,6 @@ function App() {
         return;
       }
 
-      setCloudOpen(false);
       setVideoOpen(false);
       setResourceOpen(false);
       setHistoryOpen(false);
@@ -249,18 +226,7 @@ function App() {
     return () => {
       document.removeEventListener('pointerdown', onDocPointerDown, true);
     };
-  }, [cloudOpen, videoOpen, resourceOpen, historyOpen]);
-
-  const handleCopyWx = async () => {
-    try {
-      await navigator.clipboard.writeText('Lovexy_0222');
-      setWxCopied(true);
-      window.setTimeout(() => setWxCopied(false), 1600);
-    } catch {
-      // 兼容: 不支持 clipboard API 时降级 prompt 让用户手动复制
-      window.prompt('复制企鹅微信号:', 'Lovexy_0222');
-    }
-  };
+  }, [videoOpen, resourceOpen, historyOpen]);
 
   // 将主题状态注入 <html> 供 CSS 选择器使用
   useEffect(() => {
@@ -593,7 +559,7 @@ function App() {
           )}
         </div>
         <div className="flex items-center gap-1">
-          {/* 「视频教程」推广按钮: 与右侧【在线画布/主题/风格】同款胶囊, 主调 红色(B 站 / Youtube 调性) */}
+          {/* 「视频教程」推广按钮: 与右侧主题按钮同款胶囊, 主调 红色(B 站 / Youtube 调性) */}
           <div ref={videoWrapRef} className="relative">
             <button
               onClick={() => setVideoOpen((v) => !v)}
@@ -713,158 +679,6 @@ function App() {
                     记得关注 <span className={isPixel ? 'font-bold' : `font-semibold ${isDark ? 'text-rose-300' : 'text-rose-700'}`}>T8</span>，随时获取
                     <span className={isPixel ? 'font-bold' : `font-semibold ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}> 免费版本更新 </span>
                     及最新 AI 教程。
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* 「在线画布」推广按钮: 与右侧主题/风格按钮同款外观, 点击展开浮层 */}
-          <div ref={cloudWrapRef} className="relative">
-            <button
-              onClick={() => setCloudOpen((v) => !v)}
-              className={
-                isPixel
-                  ? `px-btn px-btn--sm ${cloudOpen ? 'px-btn--mint' : 'px-btn--yellow'}`
-                  : `flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all border ${
-                      isDark
-                        ? cloudOpen
-                          ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-200 shadow-[0_0_12px_rgba(16,185,129,0.35)]'
-                          : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'
-                        : cloudOpen
-                          ? 'bg-emerald-100 border-emerald-400 text-emerald-800'
-                          : 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
-                    }`
-              }
-              title="云端创作 · 企鹅画布(还送 10 鹅卵石)"
-            >
-              <Cloud size={14} />
-              <span className="text-[11px]">在线画布</span>
-            </button>
-
-            {/* 推广浮层 */}
-            {cloudOpen && (
-              <div
-                className={
-                  isPixel
-                    ? 'absolute right-0 top-full mt-2 z-[60] w-[320px] px-panel rounded-2xl p-3 animate-[fadeIn_.18s_ease-out]'
-                    : `absolute right-0 top-full mt-2 z-[60] w-[320px] rounded-xl p-3 border shadow-2xl backdrop-blur-md animate-[fadeIn_.18s_ease-out] ${
-                        isDark
-                          ? 'bg-zinc-900/95 border-emerald-400/20 shadow-emerald-500/10'
-                          : 'bg-white/95 border-emerald-200 shadow-emerald-500/10'
-                      }`
-                }
-                style={{ zoom: 1.5 }}
-                onMouseDown={(e) => e.stopPropagation()}
-              >
-                {/* 标题 */}
-                <div className={`flex items-center gap-2 ${isPixel ? '' : isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
-                  <Cloud size={16} className={isPixel ? '' : 'shrink-0'} />
-                  <span className={`text-sm font-bold ${isPixel ? 'px-title' : ''}`}>云端创作 · 企鹅画布</span>
-                </div>
-
-                {/* 副标 + 鹅卵石提示 */}
-                <div
-                  className={`mt-2 text-[12px] leading-relaxed ${
-                    isPixel ? '' : isDark ? 'text-white/80' : 'text-zinc-700'
-                  }`}
-                >
-                  云端也能爽用<span className={isPixel ? 'font-bold' : `font-semibold ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>企鹅画布</span>～
-                  <span
-                    className={
-                      isPixel
-                        ? 'inline-flex items-center gap-1 ml-1 px-chip px-chip--yellow'
-                        : `inline-flex items-center gap-1 ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                            isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'
-                          }`
-                    }
-                  >
-                    <Gift size={10} /> 还送 10 鹅卵石
-                  </span>
-                </div>
-
-                {/* 主行动 CTA: 跳转链接(新窗口) */}
-                <a
-                  href="https://cloud.pebbling.cn/user/?invite=T8STAR"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => setCloudOpen(false)}
-                  className={
-                    isPixel
-                      ? 'mt-3 px-btn px-btn--mint w-full justify-center'
-                      : `mt-3 flex items-center justify-center gap-1.5 w-full py-2 rounded-lg text-xs font-semibold transition-all border ${
-                          isDark
-                            ? 'bg-gradient-to-r from-emerald-500/20 to-sky-500/20 border-emerald-400/40 text-emerald-200 hover:from-emerald-500/30 hover:to-sky-500/30 hover:border-emerald-400/60 hover:shadow-[0_0_16px_rgba(16,185,129,0.35)]'
-                            : 'bg-gradient-to-r from-emerald-500 to-sky-500 border-emerald-600 text-white hover:from-emerald-600 hover:to-sky-600 hover:shadow-lg'
-                        }`
-                  }
-                >
-                  <ExternalLink size={13} />
-                  <span>立即开通（新窗口打开）</span>
-                </a>
-
-                {/* 微信号 + 一键复制 */}
-                <div
-                  className={`mt-3 rounded-lg p-2 ${
-                    isPixel
-                      ? 'border-2 border-black bg-[#FFFBF0]'
-                      : isDark
-                        ? 'bg-white/5 border border-white/10'
-                        : 'bg-zinc-50 border border-zinc-200'
-                  }`}
-                >
-                  <div className={`text-[10px] mb-1 ${isPixel ? '' : isDark ? 'text-white/50' : 'text-zinc-500'}`}>
-                    加群 · 加企鹅微信
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <code
-                      className={`flex-1 text-xs font-mono px-2 py-1 rounded ${
-                        isPixel
-                          ? 'bg-white border border-black'
-                          : isDark
-                            ? 'bg-zinc-800 text-emerald-300'
-                            : 'bg-white text-emerald-700 border border-zinc-200'
-                      }`}
-                    >
-                      Lovexy_0222
-                    </code>
-                    <button
-                      onClick={handleCopyWx}
-                      className={
-                        isPixel
-                          ? `px-btn px-btn--sm ${wxCopied ? 'px-btn--mint' : 'px-btn--ghost'}`
-                          : `flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors border ${
-                              wxCopied
-                                ? isDark
-                                  ? 'bg-emerald-500/20 border-emerald-400/40 text-emerald-300'
-                                  : 'bg-emerald-100 border-emerald-300 text-emerald-700'
-                                : isDark
-                                  ? 'bg-white/5 border-white/15 text-white/70 hover:bg-white/10'
-                                  : 'bg-white border-zinc-300 text-zinc-600 hover:bg-zinc-50'
-                            }`
-                      }
-                      title={wxCopied ? '已复制' : '一键复制微信号'}
-                    >
-                      {wxCopied ? <Check size={11} /> : <Copy size={11} />}
-                      <span>{wxCopied ? '已复制' : '复制'}</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* 致谢 */}
-                <div
-                  className={`mt-3 flex items-start gap-1.5 text-[11px] leading-relaxed ${
-                    isPixel ? '' : isDark ? 'text-white/60' : 'text-zinc-500'
-                  }`}
-                >
-                  <Heart
-                    size={11}
-                    className={`mt-0.5 shrink-0 ${
-                      isPixel ? '' : isDark ? 'text-pink-400' : 'text-pink-500'
-                    }`}
-                  />
-                  <span>
-                    感谢企鹅在我制作本画布时候的帮助，大家多多支持！<span className="text-base">🐧</span>
                   </span>
                 </div>
               </div>

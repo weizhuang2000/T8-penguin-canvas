@@ -2870,6 +2870,44 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
   }, [onAddNodeRef, addNode]);
 
   useEffect(() => {
+    const onReuseSeed = (event: Event) => {
+      if (!canEditActiveCanvas) return;
+      const detail = (event as CustomEvent<any>).detail || {};
+      const seed = Math.max(0, Math.floor(Number(detail.seed) || 0));
+      if (!seed) return;
+      const prompt = typeof detail.prompt === 'string' ? detail.prompt : '';
+      const modelText = typeof detail.model === 'string' ? detail.model : '';
+      const selectedImage = nodesRef.current.find((node) => node.selected && (node.type === 'image' || node.type === 'edit'));
+      const selectedData = selectedImage?.data as Record<string, any> | undefined;
+      const targetModelText = selectedImage
+        ? `${selectedData?.model || ''} ${selectedData?.apiModel || ''}`
+        : modelText;
+      const patch: Record<string, any> = {
+        seed,
+        lastSeed: seed,
+      };
+      if (prompt.trim()) patch.prompt = prompt;
+      if (/mj|midjourney/i.test(targetModelText)) patch.mjSeed = seed;
+      if (/nano-banana-(?:pro|2)-fal|banana.*fal|nbpro/i.test(targetModelText)) patch.nbSeed = seed;
+      if (selectedImage) {
+        setNodes((prev) =>
+          prev.map((node) =>
+            node.id === selectedImage.id
+              ? { ...node, data: { ...(node.data as any), ...patch } }
+              : node
+          )
+        );
+        logBus.success(`已写入 Seed ${seed}`, '历史生成');
+        return;
+      }
+      addNode('image', { data: { ...patch } });
+      logBus.success(`已新建生图节点并写入 Seed ${seed}`, '历史生成');
+    };
+    window.addEventListener('penguin:reuse-generation-seed', onReuseSeed);
+    return () => window.removeEventListener('penguin:reuse-generation-seed', onReuseSeed);
+  }, [addNode, canEditActiveCanvas]);
+
+  useEffect(() => {
     if (onInsertWorkflowRef) {
       onInsertWorkflowRef.current = insertWorkflowFragment;
     }

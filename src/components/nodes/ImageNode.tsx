@@ -118,6 +118,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
 
   const aspectRatio = d?.aspectRatio || modelDef.defaultAspectRatio;
   const sizeLevel = d?.sizeLevel || modelDef.defaultSize;
+  const seed: number = Math.max(0, Math.floor(Number(d?.seed) || 0));
   // 子模型变体(对齐 gpt-image-2-web 的 g_model/n_model)
   const apiModel = d?.apiModel || modelDef.apiModel;
 
@@ -157,6 +158,10 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
   const mjSv: string = d?.mjSv || '1';
   const mjNo: string = d?.mjNo || '';
   const mjSeed: number = d?.mjSeed ?? 0;
+  const effectiveSeed = isMj
+    ? (mjSeed > 0 ? mjSeed : seed)
+    : (falKind === 'nbpro-fal' ? (nbSeed > 0 ? nbSeed : seed) : seed);
+  const historySeed = effectiveSeed > 0 ? effectiveSeed : undefined;
   const mjMaxPoll: number = d?.mjMaxPoll ?? 300;
   const mjPollInt: number = d?.mjPollInt ?? 3;
   const mjSrefImages: string[] = Array.isArray(d?.mjSrefImages) ? d.mjSrefImages : [];
@@ -167,6 +172,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
   const maxRefs = isExternalSelected ? Math.max(8, modelDef.maxReferenceImages || 0) : (falDef?.maxRefs ?? modelDef.maxReferenceImages);
   const status: 'idle' | 'generating' | 'success' | 'error' = d?.status || 'idle';
   const imageUrl = d?.imageUrl as string | undefined;
+  const lastSeed: number = Math.max(0, Math.floor(Number(d?.lastSeed) || 0));
   const localPrompt = d?.prompt || '';
   const outputFormat: 'jpg' | 'png' = d?.outputFormat === 'png' ? 'png' : 'jpg';
   const promptMentions: MediaMention[] = Array.isArray(d?.promptMentions) ? d.promptMentions : [];
@@ -324,6 +330,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
       canvasId: activeCanvasId,
       sourceNodeId: id,
       sourceNodeType: 'image',
+      seed: historySeed,
       nodeTitle: '图像',
     };
     if (!finalPrompt) {
@@ -354,6 +361,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           size,
           images: allRefs,
           outputFormat,
+          seed: historySeed,
           n: Math.max(1, Math.min(4, Number(d?.providerParams?.n || 1))),
           providerParams: d?.providerParams || {},
           historyContext,
@@ -367,6 +375,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           imageUrls: urls,
           remoteImageUrls: res.remoteImageUrls,
           lastPrompt: finalPrompt,
+          lastSeed: historySeed,
           usedI2I: allRefs.length > 0,
           taskId: res.taskId || d?.taskId,
         });
@@ -421,7 +430,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           sw: mjSw || undefined,
           sv: mjSv || undefined,
           no: mjNo || undefined,
-          seed: mjSeed || undefined,
+          seed: historySeed,
           speed: mjSpeed,
           base64Array,
           remix: true,
@@ -463,6 +472,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
               imageUrl: final,
               imageUrls: all,
               lastPrompt: finalPrompt,
+              lastSeed: historySeed,
               usedI2I: allRefs.length > 0 || mjSrefImages.length > 0 || mjOrefImages.length > 0,
             });
             taskCompletionSound.notifyComplete(id, 'image');
@@ -498,7 +508,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           aspect_ratio: falKind === 'nbpro-fal' ? nbAspect : undefined,
           resolution: falKind === 'nbpro-fal' ? nbResolution : undefined,
           safety_tolerance: falKind === 'nbpro-fal' ? nbSafety : undefined,
-          seed: falKind === 'nbpro-fal' && nbSeed > 0 ? nbSeed : undefined,
+          seed: falKind === 'nbpro-fal' ? historySeed : undefined,
           system_prompt: falKind === 'nbpro-fal' ? nbSysPrompt : undefined,
           enable_web_search: falKind === 'nbpro-fal' ? nbWebSearch : undefined,
           image_mode: falKind === 'nbpro-fal' ? nbImgMode : undefined,
@@ -514,6 +524,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
             progress: '100%',
             imageUrl: submit.urls[0],
             lastPrompt: finalPrompt,
+            lastSeed: historySeed,
             usedI2I: allRefs.length > 0,
           });
           taskCompletionSound.notifyComplete(id, 'image');
@@ -545,6 +556,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
               progress: '100%',
               imageUrl: url,
               lastPrompt: finalPrompt,
+              lastSeed: historySeed,
               usedI2I: allRefs.length > 0,
             });
             taskCompletionSound.notifyComplete(id, 'image');
@@ -578,6 +590,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         images: allRefs,
         n: 1,
         outputFormat,
+        seed: historySeed,
         historyContext,
       });
 
@@ -590,6 +603,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           imageUrl: submit.urls[0],
           imageUrls: submit.urls,
           lastPrompt: finalPrompt,
+          lastSeed: historySeed,
           usedI2I: allRefs.length > 0,
         });
         taskCompletionSound.notifyComplete(id, 'image');
@@ -625,6 +639,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
             imageUrl: url,
             imageUrls: q.urls,
             lastPrompt: finalPrompt,
+            lastSeed: historySeed,
             usedI2I: allRefs.length > 0,
           });
           taskCompletionSound.notifyComplete(id, 'image');
@@ -887,6 +902,24 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
               );
             })}
           </div>
+        </div>
+
+        <div>
+          <label className="text-[10px] text-white/50 block mb-1" title="0 = random / do not send">Seed (0=random)</label>
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={seed}
+            onChange={(e) => update({ seed: Math.max(0, Math.floor(Number(e.target.value) || 0)) })}
+            style={{ background: '#18181b', color: '#ffffff' }}
+            className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
+          />
+          {(isMj || falKind === 'nbpro-fal') && seed > 0 && effectiveSeed !== seed && (
+            <div className="mt-1 text-[10px] text-amber-200/80">
+              当前模型优先使用专属 seed: {effectiveSeed}
+            </div>
+          )}
         </div>
 
         {!isExternalSelected && isFal && falKind === 'gpt-fal' && (
@@ -1408,6 +1441,19 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
       {/* 结果展示：仅在未外挂 OutputNode 时在节点内预览，避免与下游 OutputNode 重复 */}
       {imageUrl && !hasAutoOutput && (
         <div className="border-t border-white/10 p-2">
+          {lastSeed > 0 && (
+            <div className="mb-1.5 flex items-center justify-between gap-2 rounded border border-amber-400/20 bg-amber-400/10 px-2 py-1 text-[10px] text-amber-200">
+              <span className="truncate">Seed: {lastSeed}</span>
+              <button
+                type="button"
+                className="shrink-0 rounded border border-amber-300/25 px-1.5 py-0.5 hover:bg-amber-300/15"
+                onClick={() => navigator.clipboard?.writeText(String(lastSeed)).catch(() => undefined)}
+                title="复制 seed"
+              >
+                复制
+              </button>
+            </div>
+          )}
           <img
             src={imageUrl}
             alt="生成结果"

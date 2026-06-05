@@ -639,6 +639,7 @@ export interface GenerationHistoryItem {
   provider?: string;
   model?: string;
   taskId?: string;
+  seed?: number;
   createdAt: number;
   hidden: boolean;
   favorite: boolean;

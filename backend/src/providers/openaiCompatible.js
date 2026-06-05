@@ -347,6 +347,7 @@ async function generateImage(provider, input = {}, options = {}) {
   if (input.n != null) body.n = Number(input.n);
   if (input.quality) body.quality = String(input.quality);
   if (input.response_format) body.response_format = String(input.response_format);
+  if (input.seed != null && Number(input.seed) > 0) body.seed = Math.floor(Number(input.seed));
 
   try {
     const refs = await resolveReferenceImages(input.images || input.referenceImages || input.reference_images, {
@@ -373,6 +374,7 @@ async function generateImage(provider, input = {}, options = {}) {
         if (input.n != null) form.append('n', String(Number(input.n)));
         if (input.quality) form.append('quality', String(input.quality));
         if (input.response_format) form.append('response_format', String(input.response_format));
+        if (input.seed != null && Number(input.seed) > 0) form.append('seed', String(Math.floor(Number(input.seed))));
         refs.forEach((ref, index) => {
           form.append('image', new Blob([ref.buffer], { type: ref.mime }), `image_${index}.${ref.ext}`);
         });

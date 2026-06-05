@@ -39,6 +39,11 @@ function resultData<T>(r: api.Result<T> | any): T | null {
   return r?.success ? (r.data as T) : null;
 }
 
+function validSeed(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
 export default function GenerationHistoryDrawer({ open, onClose, userRole }: GenerationHistoryDrawerProps) {
   const { theme, style } = useThemeStore();
   const isDark = theme === 'dark';
@@ -155,6 +160,22 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
     }));
   };
 
+  const reuseSeed = (item: GenerationHistoryItem) => {
+    const seed = validSeed(item.seed);
+    if (!seed) return;
+    window.dispatchEvent(new CustomEvent('penguin:reuse-generation-seed', {
+      detail: {
+        seed,
+        prompt: item.prompt || '',
+        model: item.model || '',
+        provider: item.provider || '',
+        imageUrl: item.url,
+        title: item.title,
+      },
+    }));
+    setMsg(`已发送 seed: ${seed}`);
+  };
+
   if (!open) return null;
 
   const panelCls = isPixel
@@ -236,6 +257,7 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
           <div className="grid grid-cols-2 gap-2">
             {items.map((item) => {
               const Icon = KIND_META[item.kind].icon;
+              const seed = validSeed(item.seed);
               return (
                 <article key={item.id} className={`overflow-hidden ${isPixel ? 'border-2 border-[var(--px-ink)] bg-[var(--px-surface)] shadow-[3px_3px_0_var(--px-ink)]' : isDark ? 'rounded-lg border border-white/10 bg-white/[0.04]' : 'rounded-lg border border-black/10 bg-black/[0.03]'}`}>
                   <div className="relative h-32 overflow-hidden bg-black/80">
@@ -243,6 +265,7 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
                     {item.kind === 'video' && <LoopingVideo src={item.url} muted className="h-full w-full object-cover" />}
                     {item.kind === 'audio' && <div className="h-full w-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#312e81,#7c3aed,#db2777)' }}><Music size={34} className="text-white" /></div>}
                     {item.hidden && <span className="absolute left-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">已隐藏</span>}
+                    {seed > 0 && <span className="absolute left-1.5 bottom-1.5 rounded bg-amber-400/90 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-950">Seed: {seed}</span>}
                     <button onClick={() => updateItem(item, { favorite: !item.favorite })} className="absolute right-1.5 top-1.5 h-7 w-7 rounded-full bg-black/55 text-amber-300 flex items-center justify-center" title="收藏">
                       <Star size={13} fill={item.favorite ? 'currentColor' : 'none'} />
                     </button>
@@ -253,10 +276,12 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
                       <span className="truncate" title={item.title}>{item.title}</span>
                     </div>
                     <div className={`text-[10px] truncate ${subtle}`}>{item.provider || item.model || item.fileName}</div>
+                    {seed > 0 && <div className={`text-[10px] truncate ${subtle}`}>Seed: {seed}</div>}
                     <div className={`text-[10px] truncate ${subtle}`}>{formatTime(item.createdAt)}</div>
                     {item.kind === 'audio' && <audio src={item.url} controls className="w-full h-8" />}
                     <div className="flex items-center justify-center gap-1.5 pt-0.5">
                       <button onClick={() => setPreview(item)} className="h-7 w-7 rounded-full border flex items-center justify-center" title="预览"><Eye size={13} /></button>
+                      {seed > 0 && item.kind === 'image' && <button onClick={() => reuseSeed(item)} className="h-7 w-7 rounded-full border flex items-center justify-center text-amber-300" title="使用 seed">#</button>}
                       <button onClick={() => sendItem(item)} className="h-7 w-7 rounded-full border flex items-center justify-center" title="发送到画布"><Send size={13} /></button>
                       <button onClick={() => addToResources(item)} className="h-7 w-7 rounded-full border flex items-center justify-center" title="加入资源库"><Star size={13} /></button>
                       {item.access?.canManage && <button onClick={() => renameItem(item)} className="h-7 w-7 rounded-full border flex items-center justify-center" title="重命名"><Pencil size={13} /></button>}
@@ -281,6 +306,7 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
             {preview.kind === 'image' && <img src={preview.url} alt={preview.title} className="max-h-[72vh] max-w-[80vw] object-contain" />}
             {preview.kind === 'video' && <video src={preview.url} controls className="max-h-[72vh] max-w-[80vw]" />}
             {preview.kind === 'audio' && <audio src={preview.url} controls className="w-[420px] max-w-[80vw]" />}
+            {validSeed(preview.seed) > 0 && <div className={`mt-2 text-xs ${subtle}`}>Seed: {validSeed(preview.seed)}</div>}
             {preview.prompt && <div className={`mt-2 max-w-[720px] whitespace-pre-wrap text-xs ${subtle}`}>{preview.prompt}</div>}
           </div>
         </div>

@@ -15,6 +15,7 @@ export interface GenerateImageRequest {
   // 多张参考图(base64 dataURL 或 http(s):// URL)
   images?: string[];
   quality?: string;
+  seed?: number;
   // 兼容旧参数:若传了 size(像素串)则优先用、image 单张也会并入 images
   size?: string;
   image?: string;
@@ -27,6 +28,7 @@ export interface GenerationHistoryContext {
   sourceNodeId?: string;
   sourceNodeType?: string;
   nodeTitle?: string;
+  seed?: number;
 }
 
 export interface GenerateImageResult {
@@ -58,6 +60,7 @@ export interface GenerateExternalImageRequest {
   n?: number;
   images?: string[];
   outputFormat?: 'jpg' | 'png';
+  seed?: number;
   providerParams?: Record<string, any>;
   historyContext?: GenerationHistoryContext;
 }

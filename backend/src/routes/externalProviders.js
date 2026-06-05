@@ -161,6 +161,7 @@ function rememberExternalOutputs(req, urls, provider, extra = {}) {
       provider: provider?.label || provider?.id || ctx.provider,
       model: req.body?.providerModel || req.body?.model || ctx.model,
       taskId: extra.taskId || ctx.taskId,
+      seed: extra.seed ?? req.body?.seed ?? ctx.seed,
     }, req.user);
   } catch (e) {
     console.warn('[generation-history] record external output failed:', e?.message || e);

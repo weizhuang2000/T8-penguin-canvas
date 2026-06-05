@@ -263,6 +263,7 @@ function historyContextFromBody(body, extra = {}) {
     provider: extra.provider ?? ctx.provider,
     model: extra.model ?? body?.apiModel ?? body?.model ?? ctx.model,
     taskId: extra.taskId ?? body?.taskId ?? ctx.taskId,
+    seed: extra.seed ?? body?.seed ?? ctx.seed,
   };
 }
 
@@ -587,7 +588,7 @@ async function normalizeLlmMessageImages(messages) {
 //   - nano-banana 图生图: multipart /edits?async=true 添加 image 多个
 //   - Grok Image: JSON /generations?async=true { model, prompt, aspect_ratio, image:[base64...]? }
 // ========================================================================
-async function callImageUpstreamAsync({ apiKey, finalApiModel, paramKind, prompt, n, aspect_ratio, image_size, refs, size, quality }) {
+async function callImageUpstreamAsync({ apiKey, finalApiModel, paramKind, prompt, n, aspect_ratio, image_size, refs, size, quality, seed }) {
   const upstreamBase = `${config.ZHENZHEN_BASE_URL}/v1/images`;
   const auth = `Bearer ${apiKey}`;
   const ar = String(aspect_ratio || '').trim();
@@ -606,6 +607,7 @@ async function callImageUpstreamAsync({ apiKey, finalApiModel, paramKind, prompt
       }
     }
     const body = { model: finalApiModel, prompt, aspect_ratio: isAuto ? '1:1' : ar };
+    if (seed && Number(seed) > 0) body.seed = Number(seed);
     if (grokRefs.length) body.image = grokRefs;
     const url = `${upstreamBase}/generations?async=true`;
     console.log('[upstream] Grok Image JSON → /generations?async=true model:', finalApiModel, 'aspect_ratio:', body.aspect_ratio, 'refs:', grokRefs.length);
@@ -626,6 +628,7 @@ async function callImageUpstreamAsync({ apiKey, finalApiModel, paramKind, prompt
     form.append('quality', quality || 'auto');
     form.append('moderation', 'auto');
     form.append('size', px);
+    if (seed && Number(seed) > 0) form.append('seed', String(Math.floor(Number(seed))));
     form.append('aspectRatio', isAuto ? '' : ar); // 主项目用 camelCase
     form.append('resolution', lvlLower);          // 主项目用小写 1k/2k/4k
 
@@ -656,6 +659,7 @@ async function callImageUpstreamAsync({ apiKey, finalApiModel, paramKind, prompt
     form.append('model', finalApiModel);
     form.append('aspect_ratio', isAuto ? '1:1' : ar);
     if (String(finalApiModel).includes('nano-banana')) form.append('image_size', lvlUpper);
+    if (seed && Number(seed) > 0) form.append('seed', String(Math.floor(Number(seed))));
     for (let i = 0; i < refs.length; i++) {
       const conv = await refToBuffer(refs[i]);
       if (!conv) continue;
@@ -669,6 +673,7 @@ async function callImageUpstreamAsync({ apiKey, finalApiModel, paramKind, prompt
   // 文生图 → JSON /generations?async=true
   const body = { prompt, model: finalApiModel, aspect_ratio: isAuto ? '1:1' : ar };
   if (String(finalApiModel).includes('nano-banana')) body.image_size = lvlUpper;
+  if (seed && Number(seed) > 0) body.seed = Number(seed);
   const url = `${upstreamBase}/generations?async=true`;
   console.log('[upstream] nano-banana JSON → /generations?async=true model:', finalApiModel, 'aspect_ratio:', body.aspect_ratio, 'image_size:', body.image_size);
   return await fetch(url, {
@@ -696,7 +701,7 @@ router.post('/image', async (req, res) => {
     model, apiModel, paramKind: paramKindIn,
     prompt, n,
     aspect_ratio, image_size,
-    images, image, size, quality, outputFormat,
+    images, image, size, quality, outputFormat, seed,
   } = req.body || {};
   const imageOutputFormat = normalizeImageOutputFormat(outputFormat);
   // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
@@ -713,7 +718,7 @@ router.post('/image', async (req, res) => {
   try {
     const r = await callImageUpstreamAsync({
       apiKey: settings.zhenzhenApiKey, finalApiModel, paramKind,
-      prompt, n, aspect_ratio, image_size, refs, size, quality,
+      prompt, n, aspect_ratio, image_size, refs, size, quality, seed,
     });
     const text = await r.text();
     let data; try { data = JSON.parse(text); } catch {
@@ -756,7 +761,7 @@ router.post('/image/submit', async (req, res) => {
   const settings = loadRawSettings();
   try {
     const { model, apiModel, paramKind: paramKindIn, prompt, n,
-            aspect_ratio, image_size, images, image, size, quality, outputFormat } = req.body || {};
+            aspect_ratio, image_size, images, image, size, quality, outputFormat, seed } = req.body || {};
     const imageOutputFormat = normalizeImageOutputFormat(outputFormat);
     // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
     if (!ensureKey(settings, res, apiModel || model || '', '图像')) return;
@@ -772,7 +777,7 @@ router.post('/image/submit', async (req, res) => {
     // 完全对齐主项目 gpt-image-2-web:走 ?async=true,GPT2 强制 multipart edits + 白图占位
     const r = await callImageUpstreamAsync({
       apiKey: settings.zhenzhenApiKey, finalApiModel, paramKind,
-      prompt, n, aspect_ratio, image_size, refs, size, quality,
+      prompt, n, aspect_ratio, image_size, refs, size, quality, seed,
     });
     const text = await r.text();
     let data; try { data = JSON.parse(text); } catch { data = { _raw: text }; }

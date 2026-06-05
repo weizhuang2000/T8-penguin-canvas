@@ -56,6 +56,23 @@ test('addHistoryItems deduplicates by url and updates context', () => withTempDa
   assert.equal(items[0].prompt, 'new');
 }));
 
+test('history items persist, update, and search image seed', () => withTempData(() => {
+  writeCanvases([{ id: 'c1', ownerUserId: 'u1' }]);
+  history.addHistoryItems([{ url: '/files/output/a.png', kind: 'image', title: 'A' }], { canvasId: 'c1', seed: 12345 }, { id: 'u1', role: 'designer' });
+  let items = history.listVisibleItems({ id: 'u1', role: 'designer' });
+  assert.equal(items.length, 1);
+  assert.equal(items[0].seed, 12345);
+
+  history.addHistoryItems([{ url: '/files/output/a.png', kind: 'image', title: 'B', seed: 67890 }], { canvasId: 'c1' }, { id: 'u1', role: 'designer' });
+  items = history.listVisibleItems({ id: 'u1', role: 'designer' });
+  assert.equal(items.length, 1);
+  assert.equal(items[0].seed, 67890);
+
+  const searched = history.listVisibleItems({ id: 'u1', role: 'designer' }, { q: '67890' });
+  assert.equal(searched.length, 1);
+  assert.equal(searched[0].url, '/files/output/a.png');
+}));
+
 test('owner can hide without deleting output file', () => withTempData(() => {
   writeCanvases([{ id: 'c1', ownerUserId: 'u1' }]);
   const file = path.join(config.OUTPUT_DIR, 'a.png');
