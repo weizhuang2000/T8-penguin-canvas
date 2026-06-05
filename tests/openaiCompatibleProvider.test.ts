@@ -92,6 +92,42 @@ test('OpenAI compatible image generation normalizes url and b64_json results', a
   assert.equal(calls[0].body.n, 2);
 });
 
+test('OpenAI compatible image generation posts reference images to edits as multipart', async () => {
+  const calls: any[] = [];
+  const provider = {
+    id: 'custom-openai',
+    protocol: 'openai-compatible',
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'sk-secret',
+    imageModels: ['gpt-image-1'],
+  };
+
+  const result = await openaiCompatible.generateImage(provider, {
+    prompt: 'follow the reference structure',
+    size: '1024x1024',
+    images: ['data:image/png;base64,QUJD'],
+  }, {
+    fetchImpl: async (url: string, init: any) => {
+      calls.push({ url, init });
+      return jsonResponse({
+        data: [
+          { url: 'https://cdn.example.com/edited.png' },
+        ],
+      });
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.imageUrls, ['https://cdn.example.com/edited.png']);
+  assert.equal(calls[0].url, 'https://api.example.com/v1/images/edits');
+  assert.equal(calls[0].init.headers.Authorization, 'Bearer sk-secret');
+  assert.equal(calls[0].init.headers['Content-Type'], undefined);
+  assert.equal(calls[0].init.body.get('model'), 'gpt-image-1');
+  assert.equal(calls[0].init.body.get('prompt'), 'follow the reference structure');
+  assert.equal(calls[0].init.body.get('size'), '1024x1024');
+  assert.equal(calls[0].init.body.getAll('image').length, 1);
+});
+
 test('OpenAI compatible image generation uses a long default timeout', async () => {
   const provider = {
     id: 'custom-openai',

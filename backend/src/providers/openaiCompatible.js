@@ -54,12 +54,13 @@ function selectedModel(requested, providerModels, fallback) {
   return model;
 }
 
-function bearerHeaders(provider) {
-  return {
+function bearerHeaders(provider, options = {}) {
+  const headers = {
     Accept: 'application/json',
     Authorization: `Bearer ${provider.apiKey}`,
-    'Content-Type': 'application/json',
   };
+  if (options.json !== false) headers['Content-Type'] = 'application/json';
+  return headers;
 }
 
 function trimBodyForError(text) {
@@ -197,6 +198,68 @@ async function resolveReferenceImages(refs, options = {}) {
   return out;
 }
 
+function parseDataUrlImage(value) {
+  const match = String(value || '').trim().match(/^data:([^;,]+);base64,(.+)$/i);
+  if (!match) return null;
+  const mime = match[1] || 'image/png';
+  const ext = (mime.split('/')[1] || 'png').replace('jpeg', 'jpg');
+  return {
+    buffer: Buffer.from(match[2] || '', 'base64'),
+    mime,
+    ext,
+  };
+}
+
+async function resolveReferenceImageFiles(refs, options = {}) {
+  const out = [];
+  for (const ref of Array.isArray(refs) ? refs : []) {
+    const value = typeof ref === 'string' ? ref : ref?.url || ref?.imageUrl || ref?.value;
+    if (!value) continue;
+
+    const dataImage = parseDataUrlImage(value);
+    if (dataImage) {
+      out.push(dataImage);
+      continue;
+    }
+
+    const local = await resolveMediaRef(value, {
+      target: 'local-path',
+      baseUrl: options.baseUrl,
+    }).catch(() => null);
+    if (local?.path) {
+      const fs = require('fs');
+      const path = require('path');
+      const mime = local.mime || 'image/png';
+      const ext = (path.extname(local.path).replace(/^\./, '') || mime.split('/')[1] || 'png').replace('jpeg', 'jpg');
+      out.push({
+        buffer: fs.readFileSync(local.path),
+        mime,
+        ext,
+      });
+      continue;
+    }
+
+    const remote = await resolveMediaRef(value, {
+      target: 'url',
+      baseUrl: options.baseUrl,
+    });
+    const res = await fetchWithTimeout(remote.url || value, {
+      method: 'GET',
+      timeoutMs: options.timeoutMs || DEFAULT_IMAGE_TIMEOUT_MS,
+      fetchImpl: options.fetchImpl,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const mime = res.headers?.get?.('content-type') || 'image/png';
+    const ext = (mime.split('/')[1] || 'png').replace('jpeg', 'jpg');
+    out.push({
+      buffer: Buffer.from(await res.arrayBuffer()),
+      mime,
+      ext,
+    });
+  }
+  return out;
+}
+
 async function generateChat(provider, input = {}, options = {}) {
   const validation = validateProvider(provider, { apiKeyRequired: true });
   if (!validation.ok) return validation;
@@ -293,6 +356,54 @@ async function generateImage(provider, input = {}, options = {}) {
     if (refs.length) body.image = refs;
   } catch (e) {
     return { ok: false, code: 'invalid_reference', providerId: provider.id, protocol: provider.protocol, error: e?.message || '参考图解析失败。' };
+  }
+
+  if (Array.isArray(body.image) && body.image.length) {
+    try {
+      const refs = await resolveReferenceImageFiles(body.image, {
+        baseUrl: options.baseUrl,
+        timeoutMs: options.timeoutMs || DEFAULT_IMAGE_TIMEOUT_MS,
+        fetchImpl: options.fetchImpl,
+      });
+      if (refs.length) {
+        const form = new FormData();
+        form.append('model', model);
+        form.append('prompt', prompt);
+        if (input.size) form.append('size', String(input.size));
+        if (input.n != null) form.append('n', String(Number(input.n)));
+        if (input.quality) form.append('quality', String(input.quality));
+        if (input.response_format) form.append('response_format', String(input.response_format));
+        refs.forEach((ref, index) => {
+          form.append('image', new Blob([ref.buffer], { type: ref.mime }), `image_${index}.${ref.ext}`);
+        });
+        const editUrl = providerEndpointUrl(provider, '/images/edits', ['imageEditEndpoint', 'image_edit_endpoint']);
+        const res = await fetchWithTimeout(editUrl, {
+          method: 'POST',
+          headers: bearerHeaders(provider, { json: false }),
+          body: form,
+          timeoutMs: options.timeoutMs || DEFAULT_IMAGE_TIMEOUT_MS,
+          fetchImpl: options.fetchImpl,
+        });
+        const raw = await responseJson(res);
+        if (!res.ok) {
+          return {
+            ok: false,
+            code: 'http_error',
+            providerId: provider.id,
+            protocol: provider.protocol,
+            error: `扩展图像编辑调用失败：HTTP ${res.status}${raw?.message ? ` ${trimBodyForError(raw.message)}` : ''}`,
+            raw,
+          };
+        }
+        const imageUrls = extractImageUrls(raw);
+        if (!imageUrls.length) {
+          return { ok: false, code: 'empty_image', providerId: provider.id, protocol: provider.protocol, error: '扩展图像编辑接口没有返回图片。', raw };
+        }
+        return { ok: true, kind: 'image', code: 'completed', providerId: provider.id, protocol: provider.protocol, model, imageUrls, raw };
+      }
+    } catch (e) {
+      return { ok: false, code: 'invalid_reference', providerId: provider.id, protocol: provider.protocol, error: e?.message || '参考图解析失败。' };
+    }
   }
 
   const url = providerEndpointUrl(provider, '/images/generations', ['imageGenerationEndpoint', 'image_generation_endpoint']);
