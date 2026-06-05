@@ -123,6 +123,7 @@ import FramePairNode from './nodes/FramePairNode';
 import LoopNode from './nodes/LoopNode';
 import PickFromSetNode from './nodes/PickFromSetNode';
 import TextSplitNode from './nodes/TextSplitNode';
+import ImportCamProjectNode from './nodes/ImportCamProjectNode';
 import MaterialSetNode from './nodes/MaterialSetNode';
 import UploadNode from './nodes/UploadNode';
 import OutputNode from './nodes/OutputNode';
@@ -171,6 +172,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   loop: LoopNode,
   'pick-from-set': PickFromSetNode,
   'text-split': TextSplitNode,
+  'import-cam-project': ImportCamProjectNode,
   'material-set': MaterialSetNode,
   resize: ResizeNode,
   combine: CombineNode,
@@ -394,6 +396,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
   },
   upload: { uploadType: null },
   'material-set': { materialSetKind: null, materialSetItems: [] },
+  'import-cam-project': { camOutputRoot: 'C:\\cam-output' },
   // RH 工具节点（v1.2.10.1+）：启动器状态字段 + 运行状态字段（与 RunningHubNode 对齐）
   // 启动器：rhToolsActiveCategoryId / rhToolsActiveAppId / rhToolsSearchQuery
   // 运行态：appInfo / paramValues / instanceType / status / taskId / urls / error / rhCode / materialOrder
@@ -1562,6 +1565,74 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
     },
     [getMaterialSetMergeCandidate, screenToFlowPosition, assignActiveNodeSerials],
   );
+
+  useEffect(() => {
+    const onImportCamMaterialSet = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        sourceNodeId?: string;
+        sourcePosition?: { x: number; y: number };
+        sourceWidth?: number;
+        projectName?: string;
+        images?: Array<{ filename?: string; url?: string; size?: number; mime?: string }>;
+      }>).detail || {};
+      const sourceNodeId = typeof detail.sourceNodeId === 'string' ? detail.sourceNodeId : '';
+      const images = Array.isArray(detail.images) ? detail.images : [];
+      const cleanImages = images
+        .map((image, index): MaterialSetItem | null => {
+          const url = typeof image?.url === 'string' ? image.url.trim() : '';
+          if (!url) return null;
+          const name = typeof image.filename === 'string' && image.filename.trim()
+            ? image.filename.trim()
+            : fileNameFromUrl(url);
+          return {
+            id: `ms-image-cam-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+            kind: 'image',
+            url,
+            name,
+            size: typeof image.size === 'number' ? image.size : undefined,
+            mime: image.mime || 'image/*',
+          };
+        })
+        .filter(Boolean) as MaterialSetItem[];
+      if (!sourceNodeId || cleanImages.length === 0) return;
+
+      const sourceNode = nodesRef.current.find((node) => node.id === sourceNodeId);
+      const sourcePosition = detail.sourcePosition || sourceNode?.position || { x: 0, y: 0 };
+      const sourceWidth = detail.sourceWidth || (sourceNode as any)?.measured?.width || (sourceNode as any)?.width || defaultSizeOf('import-cam-project').w;
+      const desiredX = sourcePosition.x + sourceWidth + 80;
+      const desiredY = sourcePosition.y;
+      const finalPos = placeSingleNode(desiredX, desiredY, 'material-set', nodesRef.current, {
+        source: 'placement:import-cam-material-set',
+      });
+      const stamp = Date.now();
+      const newNodeId = `material-set-cam-${stamp}-${Math.random().toString(36).slice(2, 6)}`;
+      const newNode: Node = {
+        id: newNodeId,
+        type: 'material-set',
+        position: finalPos,
+        selected: true,
+        data: {
+          ...materialSetItemsToData('image', cleanImages),
+          label: detail.projectName ? `白模 ${detail.projectName}` : '项目白模',
+          camProjectName: detail.projectName || '',
+          camSourceNodeId: sourceNodeId,
+        },
+      };
+      const newEdge: Edge = {
+        id: `e-cam-import-${sourceNodeId}-${newNodeId}`,
+        source: sourceNodeId,
+        target: newNodeId,
+        type: 'deletable',
+      };
+      setNodes((prev) => [
+        ...prev.map((node) => ({ ...node, selected: false })),
+        ...assignActiveNodeSerials([newNode], prev),
+      ]);
+      setEdges((prev) => [...prev, newEdge]);
+    };
+    window.addEventListener('penguin:import-cam-material-set', onImportCamMaterialSet);
+    return () => window.removeEventListener('penguin:import-cam-material-set', onImportCamMaterialSet);
+  }, [assignActiveNodeSerials]);
 
   const getDownloadableItemsFromNodes = useCallback((ids: string[]): MediaItem[] => {
     const out: MediaItem[] = [];

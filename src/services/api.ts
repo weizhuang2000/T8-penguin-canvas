@@ -247,6 +247,39 @@ export async function decodeDuckFiles(
   return res.data || { items: [], decodedCount: 0 };
 }
 
+export interface CamOutputProject {
+  name: string;
+  imageCount: number;
+  mtime: number;
+}
+
+export interface CamOutputImage {
+  filename: string;
+  url: string;
+  size: number;
+  mtime: number;
+}
+
+export async function listCamOutputProjects(): Promise<{ root: string; projects: CamOutputProject[] }> {
+  const res = await request<{
+    success: boolean;
+    data: { root: string; projects: CamOutputProject[] };
+  }>(`${BASE}/files/cam-output/projects`);
+  return res.data || { root: '', projects: [] };
+}
+
+export async function listCamOutputProjectImages(project: string): Promise<{
+  project: string;
+  folder: string;
+  images: CamOutputImage[];
+}> {
+  const res = await request<{
+    success: boolean;
+    data: { project: string; folder: string; images: CamOutputImage[] };
+  }>(`${BASE}/files/cam-output/projects/${encodeURIComponent(project)}/images`);
+  return res.data || { project, folder: '', images: [] };
+}
+
 // ========== RH 工具节点 (v1.2.10+) ==========
 //   与顶层控件区分：仅供 RHToolsNode 使用，与 RH 应用创意包数据完全分开。
 //   后端走 T8 自己的 18766 服务。

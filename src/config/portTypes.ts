@@ -85,6 +85,7 @@ export const NODE_PORTS: Record<string, NodePorts> = {
   'pick-from-set': { inputs: ['text', 'image', 'video', 'audio'], outputs: ['text', 'image', 'video', 'audio'] },
   // 文本分割: 长文本/上游文本 → 多段 textSegments, 下游按多文本集合消费
   'text-split': { inputs: ['text'], outputs: ['text'] },
+  'import-cam-project': { inputs: [], outputs: ['image'] },
   resize: { inputs: ['image'], outputs: ['image'] },
   combine: { inputs: ['image'], outputs: ['image'] },
   'remove-bg': { inputs: ['image'], outputs: ['image'] },

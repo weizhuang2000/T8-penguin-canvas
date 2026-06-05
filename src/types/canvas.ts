@@ -31,6 +31,7 @@ export type NodeType =
   | 'loop'
   | 'pick-from-set'
   | 'text-split'
+  | 'import-cam-project'
   | 'resize'
   | 'combine'
   | 'remove-bg'

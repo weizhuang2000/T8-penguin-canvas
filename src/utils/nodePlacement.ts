@@ -55,6 +55,7 @@ export const NODE_DEFAULT_SIZE: Record<string, { w: number; h: number }> = {
   loop: { w: 320, h: 240 },
   'pick-from-set': { w: 280, h: 200 },
   'text-split': { w: 760, h: 520 },
+  'import-cam-project': { w: 300, h: 180 },
   resize: { w: 280, h: 220 },
   combine: { w: 280, h: 220 },
   'remove-bg': { w: 280, h: 220 },

@@ -22,6 +22,9 @@ const DEFAULT_ZHENZHEN_ROOT = process.platform === 'win32'
   : path.join(USER_HOME_DIR, 'zhenzhen');
 const DEFAULT_RESOURCE_LIBRARY_DIR = path.join(DEFAULT_ZHENZHEN_ROOT, 'resources');
 const DEFAULT_THEME_TEMPLATE_DIR = path.join(DEFAULT_ZHENZHEN_ROOT, 'theme-templates');
+const DEFAULT_CAM_OUTPUT_ROOT = process.platform === 'win32'
+  ? 'C:\\cam-output'
+  : path.join(USER_HOME_DIR, 'cam-output');
 
 const config = {
   // 服务器
@@ -83,6 +86,7 @@ const config = {
   // 用于旧版本配置迁移：Windows 继续沿用 D:\zhenzhen，非 Windows 遇到旧硬编码默认值时迁移到用户目录。
   LEGACY_WINDOWS_DEFAULT_ROOT,
   WINDOWS_DEFAULT_ROOT,
+  CAM_OUTPUT_ROOT: process.env.T8PC_CAM_OUTPUT_ROOT || DEFAULT_CAM_OUTPUT_ROOT,
 };
 
 // 提前创建打包后的数据目录(避免首次启动报错)

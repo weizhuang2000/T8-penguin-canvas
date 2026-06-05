@@ -10,6 +10,7 @@ const config = require('../config');
 const { tryDecodeDuckPayload } = require('../utils/duckPayload');
 
 const router = express.Router();
+const CAM_IMAGE_EXT_RE = /\.(png|jpe?g|webp|gif|bmp|tiff?|avif)$/i;
 
 // 配置 multer
 const storage = multer.diskStorage({
@@ -57,6 +58,124 @@ router.get('/list', (_req, res) => {
       })
       .sort((a, b) => b.mtime - a.mtime);
     res.json({ success: true, data: files });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+function isSafeCamSegment(value) {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value !== '.' &&
+    value !== '..' &&
+    !/[\\/\0]/.test(value)
+  );
+}
+
+function resolveInside(baseDir, ...parts) {
+  const base = path.resolve(baseDir);
+  const resolved = path.resolve(base, ...parts);
+  if (resolved !== base && !resolved.startsWith(base + path.sep)) return null;
+  return resolved;
+}
+
+function camRoot() {
+  return path.resolve(config.CAM_OUTPUT_ROOT || 'C:\\cam-output');
+}
+
+function camProjectDir(projectName) {
+  if (!isSafeCamSegment(projectName)) return null;
+  return resolveInside(camRoot(), projectName);
+}
+
+function camOutputDir(projectName) {
+  const projectDir = camProjectDir(projectName);
+  if (!projectDir) return null;
+  return resolveInside(projectDir, 'camoutput');
+}
+
+function listCamOutputImages(projectName) {
+  const dir = camOutputDir(projectName);
+  if (!dir || !fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && CAM_IMAGE_EXT_RE.test(entry.name))
+    .map((entry) => {
+      const filePath = path.join(dir, entry.name);
+      const stat = fs.statSync(filePath);
+      return {
+        filename: entry.name,
+        url: `/api/files/cam-output/projects/${encodeURIComponent(projectName)}/image/${encodeURIComponent(entry.name)}`,
+        size: stat.size,
+        mtime: stat.mtimeMs,
+      };
+    })
+    .sort((a, b) => a.filename.localeCompare(b.filename, 'zh-Hans-CN', { numeric: true, sensitivity: 'base' }));
+}
+
+// GET /api/files/cam-output/projects - list direct children of C:\cam-output
+router.get('/cam-output/projects', (_req, res) => {
+  try {
+    const root = camRoot();
+    if (!fs.existsSync(root)) {
+      return res.json({ success: true, data: { root, projects: [] } });
+    }
+    const projects = fs.readdirSync(root, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && isSafeCamSegment(entry.name))
+      .map((entry) => {
+        const projectPath = path.join(root, entry.name);
+        const stat = fs.statSync(projectPath);
+        let imageCount = 0;
+        try {
+          imageCount = listCamOutputImages(entry.name).length;
+        } catch {
+          imageCount = 0;
+        }
+        return {
+          name: entry.name,
+          imageCount,
+          mtime: stat.mtimeMs,
+        };
+      })
+      .sort((a, b) => b.mtime - a.mtime);
+    res.json({ success: true, data: { root, projects } });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// GET /api/files/cam-output/projects/:project/images - list images in <project>\camoutput
+router.get('/cam-output/projects/:project/images', (req, res) => {
+  try {
+    const project = String(req.params.project || '');
+    if (!isSafeCamSegment(project)) {
+      return res.status(400).json({ success: false, error: 'Invalid project name' });
+    }
+    const dir = camOutputDir(project);
+    if (!dir || !fs.existsSync(dir)) {
+      return res.status(404).json({ success: false, error: 'camoutput folder not found' });
+    }
+    const images = listCamOutputImages(project);
+    res.json({ success: true, data: { project, folder: dir, images } });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// GET /api/files/cam-output/projects/:project/image/:filename - serve one whitelisted image
+router.get('/cam-output/projects/:project/image/:filename', (req, res) => {
+  try {
+    const project = String(req.params.project || '');
+    const filename = String(req.params.filename || '');
+    if (!isSafeCamSegment(project) || !isSafeCamSegment(filename) || !CAM_IMAGE_EXT_RE.test(filename)) {
+      return res.status(400).json({ success: false, error: 'Invalid image path' });
+    }
+    const dir = camOutputDir(project);
+    const filePath = dir ? resolveInside(dir, filename) : null;
+    if (!filePath || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+      return res.status(404).json({ success: false, error: 'Image not found' });
+    }
+    res.sendFile(filePath);
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
