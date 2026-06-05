@@ -61,6 +61,38 @@ test('normalizeAdvancedProviders filters invalid providers and clamps unsafe fie
   assert.equal(providers.some((item: any) => item.id === 'remote-comfy'), false);
 });
 
+test('normalizeAdvancedProviders keeps multiple OpenAI compatible providers by id', () => {
+  const providers = normalizeAdvancedProviders([
+    {
+      id: 'openai-compatible',
+      label: 'Primary OpenAI',
+      protocol: 'openai-compatible',
+      enabled: true,
+      baseUrl: 'https://api.primary.example/v1',
+      apiKey: 'sk-primary',
+      imageModels: ['gpt-image-primary'],
+    },
+    {
+      id: 'openai-compatible-2',
+      label: 'Backup OpenAI',
+      protocol: 'openai-compatible',
+      enabled: true,
+      baseUrl: 'https://api.backup.example/v1',
+      apiKey: 'sk-backup',
+      imageModels: ['gpt-image-backup'],
+    },
+  ]);
+
+  const openaiProviders = providers.filter((item: any) => item.protocol === 'openai-compatible');
+  assert.deepEqual(openaiProviders.map((item: any) => item.id), ['openai-compatible', 'openai-compatible-2']);
+  assert.equal(openaiProviders[0].baseUrl, 'https://api.primary.example/v1');
+  assert.equal(openaiProviders[1].baseUrl, 'https://api.backup.example/v1');
+
+  const masked = maskAdvancedProviders(providers).filter((item: any) => item.protocol === 'openai-compatible');
+  assert.equal(masked[0].apiKey, '****mary');
+  assert.equal(masked[1].apiKey, '****ckup');
+});
+
 test('normalizeAdvancedProviders preserves stored secrets when incoming values are blank or masked', () => {
   const current = normalizeAdvancedProviders([
     {

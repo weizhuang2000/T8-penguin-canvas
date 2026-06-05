@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, FileUp, Info, KeyRound, Loader2, Lock, Save, Settings2, TestTube2, X, FolderOpen, ServerCog } from 'lucide-react';
+import { ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, FileUp, Info, KeyRound, Loader2, Lock, Plus, Save, Settings2, TestTube2, Trash2, X, FolderOpen, ServerCog } from 'lucide-react';
 import { useApiKeysStore, FIXED_ZHENZHEN_BASE, RH_BASE } from '../stores/apiKeys';
 import { useThemeStore } from '../stores/theme';
 import type { AdvancedProviderConfig, AdvancedProviderProtocol, ApiSettings } from '../types/canvas';
@@ -536,6 +536,49 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     || advancedProvidersInput[0]
     || null;
 
+  const makeOpenAiProviderId = (providers: AdvancedProviderConfig[]) => {
+    const used = new Set(providers.map((provider) => provider.id));
+    for (let i = 2; i < 1000; i += 1) {
+      const id = `openai-compatible-${i}`;
+      if (!used.has(id)) return id;
+    }
+    return `openai-compatible-${Date.now().toString(36).slice(-6)}`;
+  };
+
+  const handleAddOpenAiProvider = () => {
+    setAdvancedProvidersInput((prev) => {
+      const nextId = makeOpenAiProviderId(prev);
+      const openAiCount = prev.filter((provider) => provider.protocol === 'openai-compatible').length;
+      const nextProvider: AdvancedProviderConfig = {
+        id: nextId,
+        label: `OpenAI 兼容 ${openAiCount + 1}`,
+        protocol: 'openai-compatible',
+        baseUrl: '',
+        enabled: false,
+        imageModels: [],
+        videoModels: [],
+        chatModels: [],
+        defaults: {},
+      };
+      setActiveAdvancedProviderId(nextId);
+      return [...prev, nextProvider];
+    });
+    setAdvancedDirty(true);
+  };
+
+  const handleRemoveAdvancedProvider = (id: string) => {
+    setAdvancedProvidersInput((prev) => {
+      const target = prev.find((provider) => provider.id === id);
+      if (!target || target.protocol !== 'openai-compatible' || target.id === 'openai-compatible') return prev;
+      const next = prev.filter((provider) => provider.id !== id);
+      if (activeAdvancedProviderId === id) {
+        setActiveAdvancedProviderId(next[0]?.id || '');
+      }
+      return next;
+    });
+    setAdvancedDirty(true);
+  };
+
   const updateAdvancedProvider = (id: string, patch: Partial<AdvancedProviderConfig>) => {
     setAdvancedProvidersInput((prev) => prev.map((provider) => (
       provider.id === id ? { ...provider, ...patch } : provider
@@ -581,6 +624,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     const isComfy = provider.protocol === 'comfyui';
     const isJimeng = provider.protocol === 'jimeng-cli';
     const isVolc = provider.protocol === 'volcengine';
+    const canRemoveProvider = provider.protocol === 'openai-compatible' && provider.id !== 'openai-compatible';
     const sectionCls = isPixel
       ? 'border border-[var(--px-ink)] bg-white p-3 space-y-4 min-w-0'
       : `border rounded-xl p-3 sm:p-4 space-y-4 min-w-0 ${isDark ? 'border-white/10 bg-white/[0.03]' : 'border-black/10 bg-black/[0.02]'}`;
@@ -677,6 +721,22 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
             <TestTube2 size={12} />
             {advancedTestStatus[provider.id]?.loading ? '测试中...' : '测试连接'}
           </button>
+          {canRemoveProvider && (
+            <button
+              type="button"
+              onClick={() => handleRemoveAdvancedProvider(provider.id)}
+              className={
+                isPixel
+                  ? 'px-btn text-[11px] px-2 py-1 shrink-0'
+                  : `px-2 py-1 text-[11px] rounded border shrink-0 inline-flex items-center gap-1 ${
+                      isDark ? 'border-red-400/30 hover:bg-red-500/10 text-red-200' : 'border-red-300 hover:bg-red-50 text-red-700'
+                    }`
+              }
+            >
+              <Trash2 size={12} />
+              删除
+            </button>
+          )}
         </div>
 
         {advancedTestStatus[provider.id]?.message && (
@@ -1180,6 +1240,25 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                   这里不是必填项。它只用于 ModelScope、火山引擎、本地 ComfyUI、即梦 CLI 和 OpenAI 兼容接口；平台开启后，还需要在具体节点的“高级来源”里选择它才会生效。
                   当前状态：已启用 {advancedSummary.enabledCount} 个，已配置密钥 {advancedSummary.configuredKeyCount} 个，ComfyUI {advancedSummary.comfyuiConfigured ? '已填写地址' : '未填写地址'}，即梦 CLI {advancedSummary.jimengConfigured ? '已填写路径' : '未填写路径'}。
                 </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleAddOpenAiProvider}
+                    className={
+                      isPixel
+                        ? 'px-btn px-btn--mint text-[11px] px-2 py-1 inline-flex items-center gap-1'
+                        : `inline-flex items-center gap-1 px-2 py-1 text-[11px] rounded border ${
+                            isDark
+                              ? 'border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-200'
+                              : 'border-emerald-500/40 bg-emerald-50 hover:bg-emerald-100 text-emerald-700'
+                          }`
+                    }
+                  >
+                    <Plus size={12} />
+                    新增 OpenAI 兼容
+                  </button>
+                  <span className={`text-[11px] ${hintCls}`}>可添加多个中转站 / One API / New API，节点里按显示名称选择。</span>
+                </div>
                 {advancedProvidersInput.length === 0 ? (
                   <div className={`text-xs ${hintCls}`}>后端尚未返回扩展平台卡片，请先保存或刷新设置。</div>
                 ) : (
@@ -1206,7 +1285,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                         >
                           <div className="flex items-center gap-2 min-w-0 w-full">
                             <span className={`w-2 h-2 rounded-full shrink-0 ${provider.enabled ? 'bg-emerald-400' : 'bg-zinc-400'}`} />
-                            <span className="font-bold min-w-0 truncate">{ADVANCED_PROVIDER_LABELS[provider.protocol] || provider.label || provider.id}</span>
+                            <span className="font-bold min-w-0 truncate">{provider.label || ADVANCED_PROVIDER_LABELS[provider.protocol] || provider.id}</span>
                             <span className={`ml-auto text-[10px] shrink-0 ${provider.enabled ? 'text-emerald-500' : hintCls}`}>
                               {provider.enabled ? '已启用' : '未启用'}
                             </span>
