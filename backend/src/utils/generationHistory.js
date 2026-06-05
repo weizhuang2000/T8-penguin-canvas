@@ -154,6 +154,28 @@ function findCanvas(canvasId, canvases = loadCanvasList()) {
   return canvases.find((canvas) => canvas?.id === canvasId) || null;
 }
 
+function loadCanvasData(canvasId) {
+  const id = safeText(canvasId).replace(/[^a-zA-Z0-9_-]/g, '');
+  if (!id) return null;
+  const file = path.join(config.DATA_DIR, `canvas_${id}.json`);
+  try {
+    if (!fs.existsSync(file)) return null;
+    return JSON.parse(fs.readFileSync(file, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
+
+function seedFromCanvasNode(canvasData) {
+  const nodes = Array.isArray(canvasData?.nodes) ? canvasData.nodes : [];
+  return (nodeId) => {
+    if (!nodeId) return 0;
+    const node = nodes.find((entry) => entry?.id === nodeId);
+    const data = node?.data || {};
+    return normalizeSeed(data.lastSeed || data.seed || data.mjSeed || data.nbSeed);
+  };
+}
+
 function canViewProject(user, canvasId, canvases) {
   if (!canvasId || canvasId === UNARCHIVED_PROJECT_ID) return isAdminRole(user?.role);
   const canvas = findCanvas(canvasId, canvases);
@@ -191,8 +213,11 @@ function findOrMaterializeItem(db, id) {
 
 function decorateItem(item, user, canvases) {
   const canManage = canManageHistoryItem(user, item, canvases);
+  const canvasData = item.seed ? null : loadCanvasData(item.canvasId);
+  const fallbackSeed = item.seed || seedFromCanvasNode(canvasData)(item.sourceNodeId);
   return {
     ...item,
+    seed: fallbackSeed,
     access: {
       canView: true,
       canManage,

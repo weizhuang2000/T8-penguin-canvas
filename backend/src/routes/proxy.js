@@ -1244,6 +1244,31 @@ router.get('/mj/task/:id', async (req, res) => {
     let data;
     try { data = JSON.parse(raw); } catch { return res.status(500).json({ success: false, error: '上游响应非 JSON: ' + raw.slice(0, 200) }); }
     if (!r.ok) return res.status(r.status).json({ success: false, error: data?.error || data?.description || `上游 HTTP ${r.status}` });
+    if (String(data?.status || data?.data?.status || '').toUpperCase() === 'SUCCESS') {
+      const rawList = data?.image_urls ?? data?.imageUrls ?? data?.data?.image_urls ?? data?.data?.imageUrls;
+      const parsedList = typeof rawList === 'string'
+        ? (() => { try { return JSON.parse(rawList); } catch { return []; } })()
+        : rawList;
+      const candidates = [];
+      const pushUrl = (item) => {
+        const imageUrl = typeof item === 'string' ? item : (item && (item.url || item.image_url || item.imageUrl));
+        if (typeof imageUrl === 'string' && imageUrl && !candidates.includes(imageUrl)) candidates.push(imageUrl);
+      };
+      if (Array.isArray(parsedList)) parsedList.forEach(pushUrl);
+      pushUrl(data?.image_url || data?.imageUrl || data?.data?.image_url || data?.data?.imageUrl);
+      if (candidates.length) {
+        const localUrls = [];
+        for (const imageUrl of candidates) {
+          const local = /^https?:\/\//i.test(imageUrl) ? await saveRemoteImage(imageUrl, 'jpg') : imageUrl;
+          if (local) localUrls.push(local);
+        }
+        rememberGeneratedUrls(req, localUrls, { kind: 'image', provider: 'mj', model: speedSeg, taskId });
+        if (localUrls.length) {
+          data.image_urls = localUrls;
+          data.image_url = localUrls[0];
+        }
+      }
+    }
     // image_urls 可能是 JSON 字符串也可能已是数组，透传，让前端统一处理
     return res.json({ success: true, data });
   } catch (e) {

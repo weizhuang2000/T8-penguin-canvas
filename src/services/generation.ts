@@ -321,6 +321,7 @@ export interface MjImagineRequest {
   sv?: string;
   seed?: number;
   remix?: boolean;
+  historyContext?: GenerationHistoryContext;
 }
 
 export interface MjImagineResult {
@@ -355,8 +356,10 @@ export interface MjTaskResult {
   raw: any;
 }
 
-export async function queryMjTask(taskId: string, speed: MjSpeed = 'fast'): Promise<MjTaskResult> {
-  const r = await fetch(`/api/proxy/mj/task/${encodeURIComponent(taskId)}?speed=${encodeURIComponent(speed)}`);
+export async function queryMjTask(taskId: string, speed: MjSpeed = 'fast', historyContext?: GenerationHistoryContext): Promise<MjTaskResult> {
+  const qs = new URLSearchParams({ speed });
+  if (historyContext) qs.set('historyContext', JSON.stringify(historyContext));
+  const r = await fetch(`/api/proxy/mj/task/${encodeURIComponent(taskId)}?${qs.toString()}`);
   const data = await r.json();
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
   const d = data.data || {};

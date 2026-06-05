@@ -434,6 +434,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           speed: mjSpeed,
           base64Array,
           remix: true,
+          historyContext,
         });
         const taskId = submit.taskId;
         logBus.info(`MJ 任务已提交 taskId=${taskId} fullPrompt="${fullPrompt.slice(0, 120)}${fullPrompt.length > 120 ? '…' : ''}"`, src);
@@ -442,7 +443,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         const interval = Math.max(1, Math.min(30, mjPollInt || 3)) * 1000;
         for (let i = 0; i < maxPoll; i++) {
           await new Promise((r) => setTimeout(r, interval));
-          const q = await queryMjTask(taskId, mjSpeed);
+          const q = await queryMjTask(taskId, mjSpeed, historyContext);
           if (q.status === 'FAILURE') {
             throw new Error(`MJ 失败: ${q.failReason || '未知错误'}`);
           }
