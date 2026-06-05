@@ -77,6 +77,7 @@ app.use('/api/settings', settingsRouter);
 app.use('/api/proxy', proxyRouter);
 app.use('/api/proxy/external', externalProvidersRouter);
 app.use('/api/files', filesRouter);
+app.use('/files', filesRouter);
 app.use('/api/image', imageOpsRouter);
 app.use('/api/recharge', rechargeRouter.apiRouter);
 app.use('/api/resources', resourcesRouter);

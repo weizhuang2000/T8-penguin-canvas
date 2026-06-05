@@ -49,6 +49,77 @@ function extFromContentType(contentType) {
   return map[ct] || '';
 }
 
+const CAM_IMAGE_EXT_RE = /\.(png|jpe?g|webp|gif|bmp|tiff?|avif)$/i;
+
+function safeJoinInside(root, relative) {
+  const base = path.resolve(root);
+  const target = path.resolve(base, relative);
+  if (target !== base && !target.startsWith(`${base}${path.sep}`)) return '';
+  return target;
+}
+
+function decodeUrlPathPart(value) {
+  try {
+    return decodeURIComponent(String(value || '').replace(/^\/+/, ''));
+  } catch {
+    return String(value || '').replace(/^\/+/, '');
+  }
+}
+
+function localMediaPathFromRef(ref) {
+  const text = String(ref || '').trim().split(/[?#]/)[0];
+  const rules = [
+    ['/files/input/', config.INPUT_DIR],
+    ['/input/', config.INPUT_DIR],
+    ['/files/output/', config.OUTPUT_DIR],
+    ['/output/', config.OUTPUT_DIR],
+    ['/files/thumbnails/', config.THUMBNAILS_DIR],
+  ];
+  for (const [prefix, root] of rules) {
+    if (text.startsWith(prefix)) {
+      return safeJoinInside(root, decodeUrlPathPart(text.slice(prefix.length)));
+    }
+  }
+  const camPrefix = '/files/cam-output/';
+  if (text.startsWith(camPrefix)) {
+    const parts = text.slice(camPrefix.length).split('/').map(decodeUrlPathPart);
+    if (parts.length === 2 && parts[0] && parts[1] && CAM_IMAGE_EXT_RE.test(parts[1])) {
+      return safeJoinInside(path.join(config.CAM_OUTPUT_ROOT, parts[0], 'camoutput'), parts[1]);
+    }
+  }
+  const legacyCamPrefix = '/api/files/cam-output/projects/';
+  if (text.startsWith(legacyCamPrefix)) {
+    const rest = text.slice(legacyCamPrefix.length);
+    const marker = '/image/';
+    const markerIndex = rest.indexOf(marker);
+    if (markerIndex > 0) {
+      const project = decodeUrlPathPart(rest.slice(0, markerIndex));
+      const filename = decodeUrlPathPart(rest.slice(markerIndex + marker.length));
+      if (project && filename && CAM_IMAGE_EXT_RE.test(filename)) {
+        return safeJoinInside(path.join(config.CAM_OUTPUT_ROOT, project, 'camoutput'), filename);
+      }
+    }
+  }
+  return '';
+}
+
+function bufferFromLocalMediaRef(ref) {
+  const filePath = localMediaPathFromRef(ref);
+  if (!filePath || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return null;
+  const buf = fs.readFileSync(filePath);
+  const ext = path.extname(filePath).replace(/^\./, '').toLowerCase() || 'png';
+  const mime = {
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    webp: 'image/webp',
+    gif: 'image/gif',
+    bmp: 'image/bmp',
+    avif: 'image/avif',
+  }[ext] || 'image/png';
+  return { buf, mime, ext: ext === 'jpeg' ? 'jpg' : ext };
+}
+
 function inferRemoteOutputExt(url, contentType) {
   const tail = String(url || '').split(/[?#]/)[0];
   const m = tail.match(/\.([a-z0-9]{2,8})$/i);
@@ -270,6 +341,8 @@ async function refToBuffer(ref) {
     const ext = (mime.split('/')[1] || 'png').replace('jpeg', 'jpg');
     return { buf, mime, ext };
   }
+  const local = bufferFromLocalMediaRef(ref);
+  if (local) return local;
   if (ref.startsWith('http://') || ref.startsWith('https://') || ref.startsWith('/files/')) {
     // /files/* 是本地静态,走 127.0.0.1:18766
     const url = ref.startsWith('/') ? `http://127.0.0.1:${config.PORT}${ref}` : ref;
@@ -288,6 +361,8 @@ async function refToBananaImage(ref) {
   if (typeof ref !== 'string' || !ref) return null;
   if (ref.startsWith('data:')) return ref;
   if (ref.startsWith('http://') || ref.startsWith('https://')) return ref;
+  const local = bufferFromLocalMediaRef(ref);
+  if (local) return `data:${local.mime};base64,${local.buf.toString('base64')}`;
   if (ref.startsWith('/files/')) {
     // 本地资源 → 转 base64
     try {
@@ -305,6 +380,8 @@ async function refToBananaImage(ref) {
 async function refToGrokImage(ref) {
   if (typeof ref !== 'string' || !ref) return null;
   if (ref.startsWith('data:')) return ref.startsWith('data:image') ? ref : null;
+  const local = bufferFromLocalMediaRef(ref);
+  if (local) return `data:${local.mime};base64,${local.buf.toString('base64')}`;
   if (ref.startsWith('http://') || ref.startsWith('https://') || ref.startsWith('/files/')) {
     try {
       const url = ref.startsWith('/') ? `http://127.0.0.1:${config.PORT}${ref}` : ref;

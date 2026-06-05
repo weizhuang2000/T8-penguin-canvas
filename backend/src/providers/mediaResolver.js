@@ -90,6 +90,26 @@ function resolveT8LocalMediaPath(value) {
       return safeJoinInside(root, relative);
     }
   }
+  const camPrefix = '/files/cam-output/';
+  if (text.startsWith(camPrefix)) {
+    const parts = text.slice(camPrefix.length).split('/').map(decodeUrlPathPart);
+    if (parts.length === 2 && parts[0] && parts[1]) {
+      return safeJoinInside(path.join(config.CAM_OUTPUT_ROOT, parts[0], 'camoutput'), parts[1]);
+    }
+  }
+  const legacyCamPrefix = '/api/files/cam-output/projects/';
+  if (text.startsWith(legacyCamPrefix)) {
+    const rest = text.slice(legacyCamPrefix.length);
+    const marker = '/image/';
+    const markerIndex = rest.indexOf(marker);
+    if (markerIndex > 0) {
+      const project = decodeUrlPathPart(rest.slice(0, markerIndex));
+      const filename = decodeUrlPathPart(rest.slice(markerIndex + marker.length));
+      if (project && filename) {
+        return safeJoinInside(path.join(config.CAM_OUTPUT_ROOT, project, 'camoutput'), filename);
+      }
+    }
+  }
   return '';
 }
 

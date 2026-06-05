@@ -95,6 +95,14 @@ function camOutputDir(projectName) {
   return resolveInside(projectDir, 'camoutput');
 }
 
+function camImageFilePath(project, filename) {
+  if (!isSafeCamSegment(project) || !isSafeCamSegment(filename) || !CAM_IMAGE_EXT_RE.test(filename)) {
+    return null;
+  }
+  const dir = camOutputDir(project);
+  return dir ? resolveInside(dir, filename) : null;
+}
+
 function listCamOutputImages(projectName) {
   const dir = camOutputDir(projectName);
   if (!dir || !fs.existsSync(dir)) return [];
@@ -105,7 +113,7 @@ function listCamOutputImages(projectName) {
       const stat = fs.statSync(filePath);
       return {
         filename: entry.name,
-        url: `/api/files/cam-output/projects/${encodeURIComponent(projectName)}/image/${encodeURIComponent(entry.name)}`,
+        url: `/files/cam-output/${encodeURIComponent(projectName)}/${encodeURIComponent(entry.name)}`,
         size: stat.size,
         mtime: stat.mtimeMs,
       };
@@ -162,16 +170,14 @@ router.get('/cam-output/projects/:project/images', (req, res) => {
   }
 });
 
-// GET /api/files/cam-output/projects/:project/image/:filename - serve one whitelisted image
-router.get('/cam-output/projects/:project/image/:filename', (req, res) => {
+function sendCamOutputImage(req, res) {
   try {
     const project = String(req.params.project || '');
     const filename = String(req.params.filename || '');
-    if (!isSafeCamSegment(project) || !isSafeCamSegment(filename) || !CAM_IMAGE_EXT_RE.test(filename)) {
+    const filePath = camImageFilePath(project, filename);
+    if (!filePath) {
       return res.status(400).json({ success: false, error: 'Invalid image path' });
     }
-    const dir = camOutputDir(project);
-    const filePath = dir ? resolveInside(dir, filename) : null;
     if (!filePath || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
       return res.status(404).json({ success: false, error: 'Image not found' });
     }
@@ -179,7 +185,13 @@ router.get('/cam-output/projects/:project/image/:filename', (req, res) => {
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
-});
+}
+
+// GET /api/files/cam-output/projects/:project/image/:filename - legacy API image route
+router.get('/cam-output/projects/:project/image/:filename', sendCamOutputImage);
+
+// GET /api/files/cam-output/:project/:filename - image route that can also be mounted as /files/cam-output/*
+router.get('/cam-output/:project/:filename', sendCamOutputImage);
 
 // POST /api/files/upload-base64 — 从 base64 dataURL 保存 PNG/JPG 到 OUTPUT_DIR
 // 供手绘画板 / 抽帧等前端产生的图像使用
