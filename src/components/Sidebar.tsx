@@ -9,6 +9,7 @@ import {
   Loader2,
   Plus,
   Search,
+  Share2,
   Trash2,
   X,
 } from 'lucide-react';
@@ -16,10 +17,12 @@ import { NODE_GROUPS } from '../config/nodeRegistry';
 
 // vite.config.ts 中通过 define 注入的编译期常量（与 package.json version 同步）
 declare const __APP_VERSION__: string;
-import type { NodeMeta, NodeType } from '../types/canvas';
+import type { CanvasListItem, CanvasShareEntry, CanvasSharePermission, NodeMeta, NodeType } from '../types/canvas';
 import { useThemeStore } from '../stores/theme';
 import { useCanvasStore } from '../stores/canvas';
 import { resolveThemeTemplate } from '../theme/defaultTemplates';
+import * as api from '../services/api';
+import type { AuthUser } from '../services/api';
 const COLOR_HEX: Record<string, string> = {
   sky: '#7dd3fc',
   amber: '#fcd34d',
@@ -210,12 +213,14 @@ export default function Sidebar({ onAddNode }: SidebarProps) {
     createCanvas,
     deleteCanvas,
     renameCanvas,
+    updateCanvasShares,
     setActive,
   } = useCanvasStore();
   const [canvasPanelOpen, setCanvasPanelOpen] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [shareCanvas, setShareCanvas] = useState<CanvasListItem | null>(null);
 
   useEffect(() => {
     loadCanvases();
@@ -243,6 +248,9 @@ export default function Sidebar({ onAddNode }: SidebarProps) {
     setConfirmDelete(null);
   };
 
+  const activeCanvas = canvases.find((canvas) => canvas.id === activeId) || null;
+  const canEditActiveCanvas = activeCanvas?.access?.canEdit !== false;
+
   const toggle = (key: string) => setCollapsed((s) => ({ ...s, [key]: !s[key] }));
 
   const renderNode = (n: NodeMeta) => {
@@ -262,8 +270,12 @@ export default function Sidebar({ onAddNode }: SidebarProps) {
     return (
       <button
         key={n.type}
-        onClick={() => onAddNode(n.type)}
-        title={n.description}
+        onClick={() => {
+          if (!canEditActiveCanvas) return;
+          onAddNode(n.type);
+        }}
+        disabled={!canEditActiveCanvas}
+        title={canEditActiveCanvas ? n.description : '当前画布为只读，不能添加节点'}
         className={`t8-sidebar-node w-full text-left flex items-center gap-2 px-2 py-1.5 transition-colors text-xs ${
           isPixel
             ? 'px-row'
@@ -272,7 +284,7 @@ export default function Sidebar({ onAddNode }: SidebarProps) {
                   ? 'hover:bg-white/10 text-zinc-200'
                   : 'hover:bg-black/5 text-zinc-800'
               }`
-        }`}
+        } ${!canEditActiveCanvas ? 'opacity-45 cursor-not-allowed' : ''}`}
       >
         <span
           className={`w-6 h-6 flex items-center justify-center flex-shrink-0 ${
@@ -397,6 +409,7 @@ export default function Sidebar({ onAddNode }: SidebarProps) {
               const isActive = c.id === activeId;
               const isEditing = editingId === c.id;
               const needConfirm = confirmDelete === c.id;
+              const canManageCanvas = c.access?.canManageSharing !== false;
               return (
                 <div
                   key={c.id}
@@ -470,6 +483,20 @@ export default function Sidebar({ onAddNode }: SidebarProps) {
                           </>
                         ) : (
                           <>
+                            {canManageCanvas && (
+                            <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShareCanvas(c);
+                              }}
+                              className={`p-0.5 rounded ${
+                                isDark ? 'hover:bg-sky-500/20 text-sky-300' : 'hover:bg-sky-100 text-sky-700'
+                              }`}
+                              title="共享画布"
+                            >
+                              <Share2 size={10} />
+                            </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -496,6 +523,8 @@ export default function Sidebar({ onAddNode }: SidebarProps) {
                             >
                               <Trash2 size={10} />
                             </button>
+                            </>
+                            )}
                           </>
                         )}
                       </div>
@@ -567,6 +596,18 @@ export default function Sidebar({ onAddNode }: SidebarProps) {
       </div>
 
       {/* 底部版本信息 */}
+      {shareCanvas && (
+        <CanvasShareModal
+          canvas={canvases.find((canvas) => canvas.id === shareCanvas.id) || shareCanvas}
+          isDark={isDark}
+          isPixel={isPixel}
+          onClose={() => setShareCanvas(null)}
+          onSave={async (sharedWith) => {
+            await updateCanvasShares(shareCanvas.id, sharedWith);
+          }}
+        />
+      )}
+
       <div
         className={`px-3 py-2 border-t text-[10px] ${
           isPixel
@@ -581,6 +622,182 @@ export default function Sidebar({ onAddNode }: SidebarProps) {
         ) : (
           <>T8-penguin-canvas · v{__APP_VERSION__}</>
         )}
+      </div>
+    </div>
+  );
+}
+
+interface CanvasShareModalProps {
+  canvas: CanvasListItem;
+  isDark: boolean;
+  isPixel: boolean;
+  onClose: () => void;
+  onSave: (sharedWith: CanvasShareEntry[]) => Promise<void>;
+}
+
+function CanvasShareModal({ canvas, isDark, isPixel, onClose, onSave }: CanvasShareModalProps) {
+  const [shares, setShares] = useState<CanvasShareEntry[]>(() => canvas.sharedWith || []);
+  const [query, setQuery] = useState('');
+  const [users, setUsers] = useState<AuthUser[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    setShares(canvas.sharedWith || []);
+  }, [canvas.id, canvas.sharedWith]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingUsers(true);
+    const timer = window.setTimeout(() => {
+      api.searchUsers(query)
+        .then((items) => {
+          if (!cancelled) setUsers(items.filter((user) => user.id !== canvas.ownerUserId));
+        })
+        .catch((e) => {
+          if (!cancelled) setMessage(e?.message || '读取用户失败');
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingUsers(false);
+        });
+    }, 220);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [query, canvas.ownerUserId]);
+
+  const addUser = (user: AuthUser) => {
+    if (shares.some((share) => share.userId === user.id)) return;
+    setShares((prev) => [
+      ...prev,
+      {
+        userId: user.id,
+        username: user.username,
+        name: user.name || user.username,
+        role: user.role,
+        permission: 'view',
+        sharedAt: Date.now(),
+        sharedByUserId: '',
+      },
+    ]);
+  };
+
+  const setPermission = (userId: string, permission: CanvasSharePermission) => {
+    setShares((prev) => prev.map((share) => (share.userId === userId ? { ...share, permission } : share)));
+  };
+
+  const removeUser = (userId: string) => {
+    setShares((prev) => prev.filter((share) => share.userId !== userId));
+  };
+
+  const save = async () => {
+    setSaving(true);
+    setMessage('');
+    try {
+      await onSave(shares);
+      onClose();
+    } catch (e: any) {
+      setMessage(e?.message || '保存共享失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const modalCls = isPixel
+    ? 'px-card'
+    : `rounded-lg border shadow-2xl ${isDark ? 'bg-zinc-900 border-white/10 text-white' : 'bg-white border-black/10 text-zinc-900'}`;
+  const inputCls = isPixel
+    ? 'px-input'
+    : `rounded-md border px-2 py-1.5 text-xs outline-none ${isDark ? 'bg-zinc-950 border-white/15 text-white' : 'bg-white border-black/15'}`;
+  const btnCls = isPixel
+    ? 'px-btn px-btn--sm'
+    : `rounded-md px-2 py-1 text-xs font-semibold ${isDark ? 'bg-white/10 hover:bg-white/15' : 'bg-black/5 hover:bg-black/10'}`;
+  const primaryBtnCls = isPixel
+    ? 'px-btn px-btn--sm px-btn--mint'
+    : 'rounded-md px-3 py-1.5 text-xs font-semibold bg-emerald-500 text-white hover:bg-emerald-400 disabled:opacity-60';
+
+  return (
+    <div
+      className={`fixed inset-0 z-[80] flex items-center justify-center ${isPixel ? 'px-modal-mask' : 'bg-black/45'}`}
+      data-canvas-floating-ui="canvas-share-modal"
+      onMouseDown={onClose}
+    >
+      <div className={`${modalCls} w-[min(560px,calc(100vw-32px))] max-h-[82vh] overflow-hidden`} onMouseDown={(e) => e.stopPropagation()}>
+        <div className={`flex items-center justify-between px-4 py-3 border-b ${isDark ? 'border-white/10' : 'border-black/10'}`}>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold truncate">共享画布</div>
+            <div className={`text-[11px] truncate ${isDark ? 'text-white/45' : 'text-zinc-500'}`}>{canvas.name}</div>
+          </div>
+          <button className={btnCls} onClick={onClose} type="button">
+            <X size={14} />
+          </button>
+        </div>
+        <div className="p-4 space-y-4 overflow-y-auto max-h-[68vh]">
+          <div className="space-y-2">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="搜索用户名、姓名或邮箱"
+              className={`${inputCls} w-full`}
+            />
+            <div className={`rounded-md border ${isDark ? 'border-white/10' : 'border-black/10'} max-h-36 overflow-y-auto`}>
+              {loadingUsers && <div className="px-3 py-2 text-xs opacity-60">搜索中...</div>}
+              {!loadingUsers && users.length === 0 && <div className="px-3 py-2 text-xs opacity-60">没有可添加的用户</div>}
+              {!loadingUsers && users.map((user) => {
+                const exists = shares.some((share) => share.userId === user.id);
+                return (
+                  <button
+                    type="button"
+                    key={user.id}
+                    disabled={exists}
+                    className={`w-full flex items-center justify-between gap-3 px-3 py-2 text-left text-xs ${exists ? 'opacity-45 cursor-not-allowed' : isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}
+                    onClick={() => addUser(user)}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold">{user.name || user.username}</span>
+                      <span className="block truncate opacity-55">{user.username} · {user.role}</span>
+                    </span>
+                    <Plus size={13} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-[11px] font-semibold opacity-65">已共享用户</div>
+            {shares.length === 0 && <div className="text-xs opacity-55">还没有共享给其他用户</div>}
+            {shares.map((share) => (
+              <div key={share.userId} className={`flex items-center gap-2 rounded-md border px-3 py-2 ${isDark ? 'border-white/10 bg-white/5' : 'border-black/10 bg-black/[0.03]'}`}>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs font-semibold">{share.name || share.username}</div>
+                  <div className="truncate text-[10px] opacity-55">{share.username} · {share.role}</div>
+                </div>
+                <select
+                  value={share.permission}
+                  onChange={(e) => setPermission(share.userId, e.target.value as CanvasSharePermission)}
+                  className={inputCls}
+                >
+                  <option value="view">查看</option>
+                  <option value="edit">编辑</option>
+                </select>
+                <button type="button" className={btnCls} onClick={() => removeUser(share.userId)} title="移除共享">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {message && <div className="rounded-md border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">{message}</div>}
+        </div>
+        <div className={`flex justify-end gap-2 px-4 py-3 border-t ${isDark ? 'border-white/10' : 'border-black/10'}`}>
+          <button type="button" className={btnCls} onClick={onClose}>取消</button>
+          <button type="button" className={primaryBtnCls} onClick={save} disabled={saving}>
+            {saving ? '保存中...' : '保存共享'}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -2,14 +2,24 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const config = require('../config');
-const { deriveNextNodeSerialId, userCanAccessCanvas } = require('../auth/canvasAccess');
+const { findUserById } = require('../auth/designTeamDb');
+const {
+  canEditCanvas,
+  canManageCanvasSharing,
+  canViewCanvas,
+  canvasAccessForUser,
+  deriveNextNodeSerialId,
+  normalizeSharePermission,
+  normalizeSharedWith,
+} = require('../auth/canvasAccess');
 
 const router = express.Router();
 
 function loadCanvasList() {
   if (!fs.existsSync(config.CANVAS_FILE)) return [];
   try {
-    return JSON.parse(fs.readFileSync(config.CANVAS_FILE, 'utf-8'));
+    const parsed = JSON.parse(fs.readFileSync(config.CANVAS_FILE, 'utf-8'));
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
@@ -55,18 +65,74 @@ function atomicWriteJson(file, data) {
   fs.renameSync(tmp, file);
 }
 
+function normalizeCanvasMeta(item) {
+  if (!item || typeof item !== 'object') return item;
+  item.sharedWith = normalizeSharedWith(item.sharedWith);
+  return item;
+}
+
+function publicCanvasItem(item, user) {
+  normalizeCanvasMeta(item);
+  return {
+    ...item,
+    ownerUserId: item.ownerUserId || null,
+    ownerName: item.ownerName || '',
+    ownerRole: item.ownerRole || '',
+    sharedWith: normalizeSharedWith(item.sharedWith),
+    access: canvasAccessForUser(user, item),
+  };
+}
+
 function findCanvasForRequest(req, res) {
   const list = loadCanvasList();
   const item = list.find((x) => x.id === req.params.id);
   if (!item) {
-    res.status(404).json({ success: false, error: '画布不存在' });
+    res.status(404).json({ success: false, error: 'Canvas not found' });
     return null;
   }
-  if (!userCanAccessCanvas(req.user, item)) {
-    res.status(403).json({ success: false, error: '无权访问该画布' });
+  normalizeCanvasMeta(item);
+  if (!canViewCanvas(req.user, item)) {
+    res.status(403).json({ success: false, error: 'No permission to access this canvas' });
     return null;
   }
   return { list, item };
+}
+
+function requireCanvasEdit(req, res, found) {
+  if (!canEditCanvas(req.user, found.item)) {
+    res.status(403).json({ success: false, error: 'No permission to edit this canvas' });
+    return false;
+  }
+  return true;
+}
+
+function requireCanvasManage(req, res, found) {
+  if (!canManageCanvasSharing(req.user, found.item)) {
+    res.status(403).json({ success: false, error: 'No permission to manage this canvas' });
+    return false;
+  }
+  return true;
+}
+
+function syncCanvasFileMeta(id, item) {
+  const file = getCanvasFile(id);
+  if (!fs.existsSync(file)) return;
+  try {
+    const data = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        ...data,
+        ownerUserId: item.ownerUserId || data.ownerUserId || null,
+        ownerName: item.ownerName || data.ownerName || '',
+        ownerRole: item.ownerRole || data.ownerRole || '',
+        sharedWith: normalizeSharedWith(item.sharedWith),
+      }, null, 2),
+      'utf-8'
+    );
+  } catch {
+    // Best effort only; the canonical metadata lives in canvas_list.json.
+  }
 }
 
 function ownerFieldsFromUser(user) {
@@ -78,7 +144,10 @@ function ownerFieldsFromUser(user) {
 }
 
 router.get('/', (req, res) => {
-  const list = loadCanvasList().filter((item) => userCanAccessCanvas(req.user, item));
+  const list = loadCanvasList()
+    .map(normalizeCanvasMeta)
+    .filter((item) => canViewCanvas(req.user, item))
+    .map((item) => publicCanvasItem(item, req.user));
   res.json({ success: true, data: list });
 });
 
@@ -89,8 +158,9 @@ router.post('/', (req, res) => {
   const owner = ownerFieldsFromUser(req.user);
   const canvas = {
     id,
-    name: req.body?.name || '未命名画布',
+    name: req.body?.name || 'Untitled Canvas',
     ...owner,
+    sharedWith: [],
     nodeCount: 0,
     createdAt: now,
     updatedAt: now,
@@ -101,6 +171,7 @@ router.post('/', (req, res) => {
     getCanvasFile(id),
     JSON.stringify({
       ...owner,
+      sharedWith: [],
       nodes: [],
       edges: [],
       viewport: { x: 0, y: 0, zoom: 1 },
@@ -108,7 +179,59 @@ router.post('/', (req, res) => {
     }, null, 2),
     'utf-8'
   );
-  res.json({ success: true, data: canvas });
+  res.json({ success: true, data: publicCanvasItem(canvas, req.user) });
+});
+
+router.get('/:id/shares', (req, res) => {
+  const found = findCanvasForRequest(req, res);
+  if (!found) return;
+  if (!requireCanvasManage(req, res, found)) return;
+  res.json({ success: true, data: normalizeSharedWith(found.item.sharedWith) });
+});
+
+router.put('/:id/shares', async (req, res) => {
+  try {
+    const found = findCanvasForRequest(req, res);
+    if (!found) return;
+    if (!requireCanvasManage(req, res, found)) return;
+
+    const incoming = Array.isArray(req.body?.sharedWith) ? req.body.sharedWith : [];
+    const shares = [];
+    const seen = new Set();
+    for (const raw of incoming) {
+      const userId = String(raw?.userId ?? raw?.id ?? '').trim();
+      if (!userId || seen.has(userId)) continue;
+      if (found.item.ownerUserId && userId === String(found.item.ownerUserId)) {
+        return res.status(400).json({ success: false, error: 'Cannot share with the canvas owner' });
+      }
+      const permission = raw?.permission;
+      if (permission !== 'view' && permission !== 'edit') {
+        return res.status(400).json({ success: false, error: 'Share permission must be view or edit' });
+      }
+      const user = await findUserById(userId);
+      if (!user || user.status !== 'active') {
+        return res.status(400).json({ success: false, error: `User not found or inactive: ${userId}` });
+      }
+      seen.add(userId);
+      shares.push({
+        userId,
+        username: user.username || '',
+        name: user.name || user.realName || user.username || '',
+        role: user.role || '',
+        permission: normalizeSharePermission(permission),
+        sharedAt: Number(raw.sharedAt) || Date.now(),
+        sharedByUserId: String(req.user.id),
+      });
+    }
+
+    found.item.sharedWith = shares;
+    found.item.updatedAt = Date.now();
+    saveCanvasList(found.list);
+    syncCanvasFileMeta(req.params.id, found.item);
+    res.json({ success: true, data: shares });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e?.message || String(e) });
+  }
 });
 
 router.get('/:id', (req, res) => {
@@ -116,7 +239,7 @@ router.get('/:id', (req, res) => {
   if (!found) return;
   const file = getCanvasFile(req.params.id);
   if (!fs.existsSync(file)) {
-    return res.status(404).json({ success: false, error: '画布不存在' });
+    return res.status(404).json({ success: false, error: 'Canvas not found' });
   }
   try {
     const data = JSON.parse(fs.readFileSync(file, 'utf-8'));
@@ -127,16 +250,19 @@ router.get('/:id', (req, res) => {
         ownerUserId: data.ownerUserId || found.item.ownerUserId || null,
         ownerName: data.ownerName || found.item.ownerName || '',
         ownerRole: data.ownerRole || found.item.ownerRole || '',
+        sharedWith: normalizeSharedWith(found.item.sharedWith || data.sharedWith),
+        access: canvasAccessForUser(req.user, found.item),
       },
     });
   } catch (e) {
-    res.status(500).json({ success: false, error: `读取失败: ${e.message}` });
+    res.status(500).json({ success: false, error: `Read failed: ${e.message}` });
   }
 });
 
 router.put('/:id', (req, res) => {
   const found = findCanvasForRequest(req, res);
   if (!found) return;
+  if (!requireCanvasEdit(req, res, found)) return;
   const file = getCanvasFile(req.params.id);
   const incoming = req.body;
   const allowEmptyOverwrite = req.query?.allowEmpty === '1' || incoming?.allowEmpty === true;
@@ -147,7 +273,7 @@ router.put('/:id', (req, res) => {
   ) {
     const existing = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf-8')) : null;
     if (existing && Array.isArray(existing.nodes) && existing.nodes.length > 0) {
-      return res.status(400).json({ success: false, error: '拒绝空数据覆盖' });
+      return res.status(400).json({ success: false, error: 'Refusing to overwrite non-empty canvas with empty data' });
     }
   }
 
@@ -155,6 +281,7 @@ router.put('/:id', (req, res) => {
     ownerUserId: found.item.ownerUserId || null,
     ownerName: found.item.ownerName || '',
     ownerRole: found.item.ownerRole || '',
+    sharedWith: normalizeSharedWith(found.item.sharedWith),
     nodes: Array.isArray(incoming?.nodes) ? incoming.nodes : [],
     edges: Array.isArray(incoming?.edges) ? incoming.edges : [],
     viewport: incoming?.viewport || { x: 0, y: 0, zoom: 1 },
@@ -165,6 +292,7 @@ router.put('/:id', (req, res) => {
   found.item.ownerUserId = found.item.ownerUserId || persisted.ownerUserId;
   found.item.ownerName = found.item.ownerName || persisted.ownerName;
   found.item.ownerRole = found.item.ownerRole || persisted.ownerRole;
+  found.item.sharedWith = normalizeSharedWith(found.item.sharedWith);
   found.item.updatedAt = Date.now();
   saveCanvasList(found.list);
   res.json({ success: true });
@@ -174,13 +302,14 @@ router.post('/:id/auto-save', (req, res) => {
   try {
     const found = findCanvasForRequest(req, res);
     if (!found) return;
+    if (!requireCanvasEdit(req, res, found)) return;
     const incoming = req.body;
     if (!incoming || !Array.isArray(incoming.nodes) || !Array.isArray(incoming.edges)) {
-      return res.status(400).json({ success: false, error: '画布数据格式错误' });
+      return res.status(400).json({ success: false, error: 'Invalid canvas payload' });
     }
     const saveDir = getCanvasAutoSaveDir();
     if (!saveDir) {
-      return res.status(400).json({ success: false, error: '未配置 canvasAutoSavePath' });
+      return res.status(400).json({ success: false, error: 'canvasAutoSavePath is not configured' });
     }
 
     const name = found.item?.name || req.params.id;
@@ -198,6 +327,7 @@ router.post('/:id/auto-save', (req, res) => {
         ownerUserId: found.item.ownerUserId || null,
         ownerName: found.item.ownerName || '',
         ownerRole: found.item.ownerRole || '',
+        sharedWith: normalizeSharedWith(found.item.sharedWith),
         nodeCount: incoming.nodes.length,
         edgeCount: incoming.edges.length,
         createdAt: found.item?.createdAt || null,
@@ -219,6 +349,7 @@ router.post('/:id/auto-save', (req, res) => {
 router.delete('/:id', (req, res) => {
   const found = findCanvasForRequest(req, res);
   if (!found) return;
+  if (!requireCanvasManage(req, res, found)) return;
   saveCanvasList(found.list.filter((x) => x.id !== req.params.id));
   const file = getCanvasFile(req.params.id);
   if (fs.existsSync(file)) fs.unlinkSync(file);
@@ -228,10 +359,11 @@ router.delete('/:id', (req, res) => {
 router.patch('/:id/name', (req, res) => {
   const found = findCanvasForRequest(req, res);
   if (!found) return;
+  if (!requireCanvasManage(req, res, found)) return;
   found.item.name = req.body?.name || found.item.name;
   found.item.updatedAt = Date.now();
   saveCanvasList(found.list);
-  res.json({ success: true, data: found.item });
+  res.json({ success: true, data: publicCanvasItem(found.item, req.user) });
 });
 
 module.exports = router;

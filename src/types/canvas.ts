@@ -153,9 +153,35 @@ export interface CanvasNodeData {
 }
 
 // 画布列表项(后端返回)
+export type CanvasSharePermission = 'view' | 'edit';
+
+export interface CanvasShareEntry {
+  userId: string;
+  username: string;
+  name: string;
+  role: string;
+  permission: CanvasSharePermission;
+  sharedAt: number;
+  sharedByUserId: string;
+}
+
+export interface CanvasAccess {
+  canView: boolean;
+  canEdit: boolean;
+  canManageSharing: boolean;
+  isOwner: boolean;
+  isShared: boolean;
+  sharePermission?: CanvasSharePermission | null;
+}
+
 export interface CanvasListItem {
   id: string;
   name: string;
+  ownerUserId?: string | null;
+  ownerName?: string;
+  ownerRole?: string;
+  sharedWith?: CanvasShareEntry[];
+  access?: CanvasAccess;
   nodeCount: number;
   createdAt: number;
   updatedAt: number;
@@ -163,6 +189,11 @@ export interface CanvasListItem {
 
 // 画布完整数据
 export interface CanvasData {
+  ownerUserId?: string | null;
+  ownerName?: string;
+  ownerRole?: string;
+  sharedWith?: CanvasShareEntry[];
+  access?: CanvasAccess;
   nodes: any[];
   edges: any[];
   viewport: { x: number; y: number; zoom: number };

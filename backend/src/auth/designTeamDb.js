@@ -89,6 +89,35 @@ async function findUserById(id) {
   return normalizeUser(rows[0]);
 }
 
+async function listActiveUsers(search = '', limit = 20) {
+  const q = String(search || '').trim();
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 20, 50));
+  const params = [];
+  let where = "status = 'active'";
+  if (q) {
+    let searchable = ['username', 'email'];
+    try {
+      const columns = await getUserColumns();
+      searchable = searchable.filter((column) => columns.has(column));
+      if (columns.has('real_name')) searchable.push('real_name');
+      if (columns.has('name')) searchable.push('name');
+    } catch {
+      searchable = ['username', 'email', 'real_name'];
+    }
+    if (searchable.length > 0) {
+      where += ` AND (${searchable.map((column) => `${column} LIKE ?`).join(' OR ')})`;
+      const like = `%${q}%`;
+      params.push(...searchable.map(() => like));
+    }
+  }
+  params.push(safeLimit);
+  const rows = await query(
+    `SELECT * FROM users WHERE ${where} ORDER BY id ASC LIMIT ?`,
+    params
+  );
+  return rows.map(normalizeUser).filter(Boolean);
+}
+
 async function touchLastLogin(userId) {
   const columns = await getColumnNames();
   await query(`UPDATE users SET ${columns.lastLoginAt} = NOW() WHERE id = ?`, [Number(userId)]);
@@ -97,5 +126,6 @@ async function touchLastLogin(userId) {
 module.exports = {
   findActiveUserByLogin,
   findUserById,
+  listActiveUsers,
   touchLastLogin,
 };

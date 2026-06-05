@@ -1008,6 +1008,9 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
   const isYyh = visualStyle === 'yyh';
   const isSlamdunk = visualStyle === 'slamdunk';
   const themeTokens = getTemplateMode(currentTemplate, theme).tokens;
+  const activeCanvas = useMemo(() => canvases.find((canvas) => canvas.id === activeId) || null, [canvases, activeId]);
+  const canEditActiveCanvas = activeCanvas?.access?.canEdit !== false;
+  const isReadonlyCanvas = Boolean(activeCanvas && !canEditActiveCanvas);
   const { screenToFlowPosition, setCenter, getViewport, setViewport, fitView } = useReactFlow();
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -1290,6 +1293,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
 
   useEffect(() => {
     if (!activeId || !loaded || loadedCanvasId !== activeId) return;
+    if (!canEditActiveCanvas) return;
     if (altDragCloneRef.current) return;
     if (nodes.some((node) => node.id === BULK_PHANTOM_ID || String(node.id || '').startsWith('_alt-ph-'))) return;
     const normalized = normalizeCanvasNodeSerials(nodes, nextNodeSerialIdRef.current);
@@ -1297,7 +1301,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
     if (normalized.changed) {
       setNodes(normalized.nodes);
     }
-  }, [activeId, loaded, loadedCanvasId, nodes]);
+  }, [activeId, loaded, loadedCanvasId, nodes, canEditActiveCanvas]);
 
   // nodes/edges 变化后压栈(节流防止拖拽中海量入栈)
   useEffect(() => {
@@ -1309,6 +1313,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
   useEffect(() => {
     if (!activeId || !loaded || loadedCanvasId !== activeId) return;
     // 过滤 SHIFT 批量移线拖拽过程中的 phantom 节点与重定向边(不作为持久化快照)
+    if (!canEditActiveCanvas) return;
     const persistNodes = nodes.filter((n) => n.id !== BULK_PHANTOM_ID);
     const persistEdges = edges.filter(
       (ed) => ed.source !== BULK_PHANTOM_ID && ed.target !== BULK_PHANTOM_ID
@@ -1365,7 +1370,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
       }
     }, 800);
     saveTimersByCanvasRef.current.set(canvasIdForSave, timer);
-  }, [nodes, edges, activeId, loaded, loadedCanvasId, getViewport]);
+  }, [nodes, edges, activeId, loaded, loadedCanvasId, getViewport, canEditActiveCanvas]);
 
   // 添加节点(供 Sidebar 调用) —— 默认落在当前视口中心
   // 可选 atScreen 传入屏幕坐标，节点会落在该点(用于右键画布空白区添加)
@@ -1374,6 +1379,10 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
   //   兜底走最右侧 + 写日志 + setCenter 飞镜。
   const addNode = useCallback(
     (type: NodeType, options?: AddNodeOptions) => {
+      if (!canEditActiveCanvas) {
+        logBus.warn('当前画布为只读，不能添加节点', '画布权限');
+        return;
+      }
       const atScreen = options?.atScreen;
       const id = `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       let cx: number;
@@ -1410,7 +1419,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
       };
       setNodes((prev) => [...prev, ...assignActiveNodeSerials([newNode], prev)]);
     },
-    [screenToFlowPosition, nodes, getViewport, setCenter, assignActiveNodeSerials]
+    [screenToFlowPosition, nodes, getViewport, setCenter, assignActiveNodeSerials, canEditActiveCanvas]
   );
 
   const createUploadNodesFromFiles = useCallback(
@@ -1796,6 +1805,11 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
   const handleSendMaterialsToCanvas = useCallback(
     async (targetCanvasId: string, mode: SendTargetMode, switchAfter: boolean) => {
       if (!sendModal) return;
+      const targetMeta = canvases.find((canvas) => canvas.id === targetCanvasId);
+      if (targetMeta?.access?.canEdit === false) {
+        logBus.warn('目标画布为只读，不能发送内容', '画布权限');
+        return;
+      }
       const currentSend = {
         ...sendModal,
         materials: sendModal.materials.map((item) => ({ ...item })),
@@ -2103,6 +2117,10 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
   // 普通粘贴: 仅复制选中节点 + 其内部边(与原逻辑一致)
   // withLinks=true: Ctrl+Shift+V 额外复制原节点的外部入边/出边 —— 将新节点与原画布上还存在的邻居连接
   const handlePaste = useCallback((withLinks = false) => {
+    if (!canEditActiveCanvas) {
+      logBus.warn('当前画布为只读，不能粘贴节点', '画布权限');
+      return;
+    }
     const cb = clipboardRef.current as (typeof clipboardRef.current & {
       incomingEdges?: Edge[];
       outgoingEdges?: Edge[];
@@ -2185,15 +2203,20 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
     // 取消其他节点的选中,新粘贴节点设为选中
     setNodes((prev) => [...prev.map((n) => ({ ...n, selected: false })), ...assignedNewNodes]);
     setEdges((prev) => [...prev, ...newInternalEdges, ...extraEdges]);
-  }, [nodes, assignActiveNodeSerials]);
+  }, [nodes, assignActiveNodeSerials, canEditActiveCanvas]);
 
   const handleDuplicate = useCallback(() => {
+    if (!canEditActiveCanvas) return;
     handleCopy();
     // 在 copy 完成后下一帧执行 paste(由于上面的 setClipboardCount 是异步)
     setTimeout(() => handlePaste(false), 0);
-  }, [handleCopy, handlePaste]);
+  }, [handleCopy, handlePaste, canEditActiveCanvas]);
 
   const handleDeleteSelected = useCallback(() => {
+    if (!canEditActiveCanvas) {
+      logBus.warn('当前画布为只读，不能删除节点', '画布权限');
+      return;
+    }
     setNodes((prev) => {
       const removeIds = new Set(prev.filter((n) => n.selected).map((n) => n.id));
       if (removeIds.size === 0) return prev;
@@ -2204,7 +2227,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
       return prev.filter((n) => !removeIds.has(n.id));
     });
     setEdges((prev) => prev.filter((e) => !e.selected));
-  }, [markManualNodeDeletion]);
+  }, [markManualNodeDeletion, canEditActiveCanvas]);
 
   // ===== 导入 / 导出 =====
   const handleExport = useCallback(() => {
@@ -2230,11 +2253,16 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
   }, [nodes, edges, activeId, getViewport]);
 
   const handleImportClick = useCallback(() => {
+    if (!canEditActiveCanvas) {
+      logBus.warn('当前画布为只读，不能导入覆盖', '画布权限');
+      return;
+    }
     fileInputRef.current?.click();
-  }, []);
+  }, [canEditActiveCanvas]);
 
   const handleImportFile = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!canEditActiveCanvas) return;
       const file = e.target.files?.[0];
       if (!file) return;
       const reader = new FileReader();
@@ -2261,11 +2289,15 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
       // 允许重复选同一文件
       e.target.value = '';
     },
-    []
+    [canEditActiveCanvas]
   );
 
   // ===== 应用模板 =====
   const handleApplyTemplate = useCallback((tpl: CanvasTemplate) => {
+    if (!canEditActiveCanvas) {
+      logBus.warn('当前画布为只读，不能插入模板', '画布权限');
+      return;
+    }
     const built = tpl.build();
     // 偏移现有 nodes 数量,避免重叠
     setNodes((prev) => [
@@ -2273,7 +2305,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
       ...assignActiveNodeSerials(built.nodes.map((n) => ({ ...n, selected: true })), prev),
     ]);
     setEdges((prev) => [...prev, ...built.edges]);
-  }, [assignActiveNodeSerials]);
+  }, [assignActiveNodeSerials, canEditActiveCanvas]);
 
   // ===== 批量运行 =====
   // 通用: 在指定节点子集上拓扑排序 + 串行调 runBus
@@ -2319,6 +2351,10 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
   );
 
   const handleRunAll = useCallback(async () => {
+    if (!canEditActiveCanvas) {
+      logBus.warn('当前画布为只读，不能运行节点', '画布权限');
+      return;
+    }
     if (isRunning) return;
     const order = topologicalSort(nodes, edges, EXECUTABLE_NODE_TYPES);
     if (order.length === 0) {
@@ -2326,11 +2362,15 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
       return;
     }
     await runNodesByOrder(nodes, edges);
-  }, [isRunning, nodes, edges, runNodesByOrder]);
+  }, [isRunning, nodes, edges, runNodesByOrder, canEditActiveCanvas]);
 
   // 组执行: 仅在选中的节点子集上运行(仅保留子集内部边作为依赖)
   const handleRunGroup = useCallback(
     async (ids: string[]) => {
+      if (!canEditActiveCanvas) {
+        logBus.warn('当前画布为只读，不能运行节点', '画布权限');
+        return;
+      }
       if (isRunning) return;
       const idSet = new Set(ids);
       const subNodes = nodes.filter((n) => idSet.has(n.id));
@@ -2342,7 +2382,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
       }
       await runNodesByOrder(subNodes, subEdges);
     },
-    [isRunning, nodes, edges, runNodesByOrder]
+    [isRunning, nodes, edges, runNodesByOrder, canEditActiveCanvas]
   );
 
   // ===== ALT+拖动复制节点 =====
@@ -2787,12 +2827,17 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
   const onPaneContextMenu = useCallback(
     (e: React.MouseEvent | MouseEvent) => {
       e.preventDefault();
+      if (!canEditActiveCanvas) {
+        setContextMenu(null);
+        setPaneMenu(null);
+        return;
+      }
       setContextMenu(null);
       const x = (e as MouseEvent).clientX;
       const y = (e as MouseEvent).clientY;
       setPaneMenu({ x, y });
     },
-    []
+    [canEditActiveCanvas]
   );
 
   // 记录最新选中的节点 id 列表(以便 onSelectionEnd 读取)
@@ -2836,6 +2881,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
   // xyflow 事件
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
+      if (!canEditActiveCanvas && changes.some((change) => change.type !== 'select')) return;
       const removedIds = changes
         .filter((c) => c.type === 'remove' && typeof (c as any).id === 'string')
         .map((c) => (c as any).id as string);
@@ -2860,15 +2906,23 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
         return next;
       });
     },
-    [markManualNodeDeletion]
+    [markManualNodeDeletion, canEditActiveCanvas]
   );
   const onEdgesChange = useCallback(
-    (changes: EdgeChange[]) => setEdges((eds) => applyEdgeChanges(changes, eds)),
-    []
+    (changes: EdgeChange[]) => {
+      if (!canEditActiveCanvas && changes.some((change) => change.type !== 'select')) return;
+      setEdges((eds) => applyEdgeChanges(changes, eds));
+    },
+    [canEditActiveCanvas]
   );
 
   const onConnect = useCallback(
     (params: Connection) => {
+      if (!canEditActiveCanvas) {
+        resetConnectionPanMode();
+        logBus.warn('当前画布为只读，不能连接节点', '画布权限');
+        return;
+      }
       resetConnectionPanMode();
       // 批量移线过程中禁止普通连接逻辑(不然会多一条重复边)
       if (bulkReconnectRef.current) return;
@@ -2938,7 +2992,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
         )
       );
     },
-    [resetConnectionPanMode, assignActiveNodeSerials]
+    [resetConnectionPanMode, assignActiveNodeSerials, canEditActiveCanvas]
   );
 
   // ReactFlow 拖线连接时的实时校验(在连线处于“预览”阶段就拦截不兼容连接)
@@ -2955,6 +3009,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
   // ===== 拖线到空白处 → 弹出候选节点菜单 =====
   const onConnectStart = useCallback(
     (_e: any, params: { nodeId: string | null; handleType: 'source' | 'target' | null }) => {
+      if (!canEditActiveCanvas) return;
       if (!params.nodeId || !params.handleType) return;
       connectingFromRef.current = { nodeId: params.nodeId, handleType: params.handleType };
       isConnectionDraggingRef.current = true;
@@ -2984,7 +3039,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
         }
       }
     },
-    [edges, setConnectionPanMode]
+    [edges, setConnectionPanMode, canEditActiveCanvas]
   );
 
   const onConnectEnd = useCallback(
@@ -4516,6 +4571,14 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
         snapEnabled={snapEnabled}
         onToggleSnap={() => setSnapEnabled((v) => !v)}
       />
+      {isReadonlyCanvas && (
+        <div
+          className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-md border border-amber-300/40 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-100 shadow-lg backdrop-blur"
+          data-canvas-floating-ui="canvas-readonly-banner"
+        >
+          只读画布 · {activeCanvas?.access?.sharePermission === 'view' ? '共享查看权限' : '无编辑权限'}
+        </div>
+      )}
       <TerminalPanel />
       {connectionPanModeActive && (
         <div className="t8-connection-pan-hud" data-canvas-floating-ui="connection-pan-hud">
@@ -4552,6 +4615,10 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
         onDrop={onCanvasFileDrop}
         onSelectionChange={onSelectionChange}
         onSelectionEnd={onSelectionEnd}
+        nodesDraggable={canEditActiveCanvas}
+        nodesConnectable={canEditActiveCanvas}
+        elementsSelectable
+        deleteKeyCode={canEditActiveCanvas ? ['Backspace', 'Delete'] : null}
         selectionKeyCode={memoSelectionKeyCode}
         multiSelectionKeyCode={memoMultiSelectionKeyCode}
         selectionMode={SelectionMode.Partial}

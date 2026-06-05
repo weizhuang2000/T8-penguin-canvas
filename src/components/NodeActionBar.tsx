@@ -17,6 +17,7 @@ import { useNodes, useViewport, useReactFlow, type Node } from '@xyflow/react';
 import { Play, Square, X } from 'lucide-react';
 import { useThemeStore } from '../stores/theme';
 import { useRunBusStore } from '../stores/runBus';
+import { useCanvasStore } from '../stores/canvas';
 import { useHiddenFeatureStore, isRhDuckUploadEnabled, isYyhPortraitEnabled } from '../stores/hiddenFeatures';
 import { resolveThemeTemplate } from '../theme/defaultTemplates';
 import { getMediaItemsFromData } from '../utils/mediaCollection';
@@ -81,6 +82,8 @@ const NodeActionBar = () => {
   const holdTimerRef = useRef<number | null>(null);
   const suppressClickRef = useRef(false);
   const [holdArmed, setHoldArmed] = useState(false);
+  const activeCanvas = useCanvasStore((s) => s.canvases.find((canvas) => canvas.id === s.activeId) || null);
+  const canEditActiveCanvas = activeCanvas?.access?.canEdit !== false;
 
   // 找选中的可执行节点 (只取第一个; 多选时仅最后选中的那个显示)
   const selectedExe = useMemo<Node | null>(() => {
@@ -166,12 +169,13 @@ const NodeActionBar = () => {
       suppressClickRef.current = false;
       return;
     }
+    if (!canEditActiveCanvas) return;
     if (isRunning) return;
     triggerRun(selectedExe.id, 'single');
   };
   const onRunPointerDown = (e: React.PointerEvent) => {
     e.stopPropagation();
-    if (e.button !== 0 || isRunning || !hiddenHoldEligible || !selectedExe) return;
+    if (e.button !== 0 || isRunning || !hiddenHoldEligible || !selectedExe || !canEditActiveCanvas) return;
     try {
       (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
     } catch {

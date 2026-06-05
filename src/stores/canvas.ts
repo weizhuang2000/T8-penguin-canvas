@@ -12,6 +12,7 @@ interface CanvasStoreState {
   createCanvas: (name?: string) => Promise<CanvasListItem | null>;
   deleteCanvas: (id: string) => Promise<void>;
   renameCanvas: (id: string, name: string) => Promise<void>;
+  updateCanvasShares: (id: string, sharedWith: CanvasListItem['sharedWith']) => Promise<void>;
   setActive: (id: string) => void;
 }
 
@@ -26,11 +27,13 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
     try {
       const list = await api.listCanvases();
       const sorted = [...list].sort((a, b) => b.updatedAt - a.updatedAt);
+      const currentActiveId = get().activeId;
       set({
         canvases: sorted,
         loading: false,
-        // 若无激活画布,默认选中最新一个
-        activeId: get().activeId || sorted[0]?.id || null,
+        activeId: currentActiveId && sorted.some((canvas) => canvas.id === currentActiveId)
+          ? currentActiveId
+          : sorted[0]?.id || null,
       });
     } catch (e: any) {
       set({ loading: false, error: e?.message || '加载画布列表失败' });
@@ -69,6 +72,18 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
       }));
     } catch (e: any) {
       set({ error: e?.message || '重命名失败' });
+    }
+  },
+
+  async updateCanvasShares(id, sharedWith) {
+    try {
+      const updatedShares = await api.updateCanvasShares(id, sharedWith || []);
+      set((s) => ({
+        canvases: s.canvases.map((x) => (x.id === id ? { ...x, sharedWith: updatedShares } : x)),
+      }));
+    } catch (e: any) {
+      set({ error: e?.message || '更新共享失败' });
+      throw e;
     }
   },
 

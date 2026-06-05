@@ -2,7 +2,7 @@
  * T8-penguin-canvas 后端 API 封装
  * 所有请求走 Vite proxy → http://127.0.0.1:18766
  */
-import type { AdvancedProviderConfig, ApiSettings, CanvasData, CanvasListItem } from '../types/canvas';
+import type { AdvancedProviderConfig, ApiSettings, CanvasData, CanvasListItem, CanvasShareEntry } from '../types/canvas';
 import type { ThemeTemplate } from '../theme/types';
 import type { MediaKind } from '../utils/mediaCollection';
 
@@ -65,6 +65,15 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 
 export async function logout(): Promise<void> {
   await request(`${BASE}/auth/logout`, { method: 'POST' });
+}
+
+export async function searchUsers(q = ''): Promise<AuthUser[]> {
+  const sp = new URLSearchParams();
+  if (q.trim()) sp.set('q', q.trim());
+  const res = await request<{ success: boolean; data: AuthUser[] }>(
+    `${BASE}/auth/users${sp.toString() ? `?${sp.toString()}` : ''}`
+  );
+  return res.data || [];
 }
 
 // ========== 状态 ==========
@@ -131,6 +140,22 @@ export async function renameCanvas(id: string, name: string): Promise<CanvasList
     }
   );
   return res.data;
+}
+
+export async function getCanvasShares(id: string): Promise<CanvasShareEntry[]> {
+  const res = await request<{ success: boolean; data: CanvasShareEntry[] }>(`${BASE}/canvas/${id}/shares`);
+  return res.data || [];
+}
+
+export async function updateCanvasShares(
+  id: string,
+  sharedWith: Array<Pick<CanvasShareEntry, 'userId' | 'permission'> & Partial<CanvasShareEntry>>,
+): Promise<CanvasShareEntry[]> {
+  const res = await request<{ success: boolean; data: CanvasShareEntry[] }>(`${BASE}/canvas/${id}/shares`, {
+    method: 'PUT',
+    body: JSON.stringify({ sharedWith }),
+  });
+  return res.data || [];
 }
 
 // ========== 设置(三套通用 Key + 分类 Key) ==========

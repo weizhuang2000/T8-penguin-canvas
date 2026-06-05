@@ -3,7 +3,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { findActiveUserByLogin, findUserById, touchLastLogin } = require('../auth/designTeamDb');
+const { findActiveUserByLogin, findUserById, listActiveUsers, touchLastLogin } = require('../auth/designTeamDb');
 const {
   clearSessionCookie,
   createSession,
@@ -78,6 +78,19 @@ router.post('/sso', async (req, res) => {
 
 router.get('/me', requireAuth, (req, res) => {
   res.json({ success: true, data: req.user });
+});
+
+router.get('/users', requireAuth, async (req, res) => {
+  try {
+    const users = await listActiveUsers(req.query?.q || '', req.query?.limit || 20);
+    res.json({
+      success: true,
+      data: users.map((user) => publicUser(user)).filter(Boolean),
+    });
+  } catch (e) {
+    console.error('[auth] list users failed:', e);
+    res.status(500).json({ success: false, error: '读取用户列表失败' });
+  }
 });
 
 router.post('/logout', (req, res) => {
