@@ -65,6 +65,7 @@ const themesRouter = require('./routes/themes');
 const eagleRouter = require('./routes/eagle');
 const externalProvidersRouter = require('./routes/externalProviders');
 const aiWatermarkRouter = require('./routes/aiWatermark');
+const generationHistoryRouter = require('./routes/generationHistory');
 
 app.use('/api/auth', authRouter);
 app.use('/api', (req, res, next) => {
@@ -84,6 +85,7 @@ app.use('/api/resources', resourcesRouter);
 app.use('/api/themes', themesRouter);
 app.use('/api/eagle', eagleRouter);
 app.use('/api/ai-watermark', aiWatermarkRouter);
+app.use('/api/generation-history', generationHistoryRouter);
 app.use('/pay', rechargeRouter.payRouter);
 
 // ========== 前端静态资源(仅打包模式) ==========

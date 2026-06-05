@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const config = require('../config');
 const settingsRouter = require('./settings');
 const { normalizeImageOutputFormat, writeImageOutput } = require('../utils/imageOutput');
+const { addHistoryItems, kindFromUrl } = require('../utils/generationHistory');
 const { maskAdvancedProviders, normalizeAdvancedProviders } = require('../providers/registry');
 const {
   generateChatWithProvider,
@@ -147,6 +148,25 @@ function resultResponse(res, result, provider, dataPatch = {}) {
   });
 }
 
+function rememberExternalOutputs(req, urls, provider, extra = {}) {
+  const list = (Array.isArray(urls) ? urls : [])
+    .filter((url) => typeof url === 'string' && url)
+    .map((url) => ({ url, kind: extra.kind || kindFromUrl(url), ...extra }));
+  if (!list.length) return;
+  const ctx = req.body?.historyContext && typeof req.body.historyContext === 'object' ? req.body.historyContext : {};
+  try {
+    addHistoryItems(list, {
+      ...ctx,
+      prompt: req.body?.prompt || ctx.prompt,
+      provider: provider?.label || provider?.id || ctx.provider,
+      model: req.body?.providerModel || req.body?.model || ctx.model,
+      taskId: extra.taskId || ctx.taskId,
+    }, req.user);
+  } catch (e) {
+    console.warn('[generation-history] record external output failed:', e?.message || e);
+  }
+}
+
 router.post('/test-provider', async (req, res) => {
   try {
     const settings = settingsRouter.loadSettings({ persistMigrations: false });
@@ -232,6 +252,7 @@ router.post('/image', async (req, res) => {
     const imageUrls = await saveImageOutputs(remoteImageUrls, {
       outputFormat: req.body?.outputFormat,
     });
+    rememberExternalOutputs(req, imageUrls, resolved.provider, { kind: 'image', taskId: result.taskId });
     return resultResponse(res, result, resolved.provider, {
       remoteImageUrls,
       imageUrls,
@@ -265,6 +286,7 @@ router.post('/video', async (req, res) => {
     if (!result.ok) return resultResponse(res, result, resolved.provider);
     const remoteVideoUrls = Array.isArray(result.videoUrls) ? result.videoUrls : [];
     const videoUrls = await saveVideoOutputs(remoteVideoUrls);
+    rememberExternalOutputs(req, videoUrls, resolved.provider, { kind: 'video', taskId: result.taskId });
     return resultResponse(res, result, resolved.provider, {
       remoteVideoUrls,
       videoUrls,

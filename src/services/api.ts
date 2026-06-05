@@ -614,6 +614,94 @@ export function deleteResourceItem(id: string) {
   });
 }
 
+// ========== 生成历史 ==========
+export type GenerationHistoryKind = 'image' | 'video' | 'audio';
+
+export interface GenerationHistoryProject {
+  id: string;
+  name: string;
+  ownerUserId?: string | null;
+  readonly?: boolean;
+  counts: Record<GenerationHistoryKind, number> & { total: number };
+  updatedAt?: number;
+}
+
+export interface GenerationHistoryItem {
+  id: string;
+  kind: GenerationHistoryKind;
+  url: string;
+  fileName: string;
+  title: string;
+  canvasId: string;
+  sourceNodeId?: string;
+  sourceNodeType?: string;
+  prompt?: string;
+  provider?: string;
+  model?: string;
+  taskId?: string;
+  createdAt: number;
+  hidden: boolean;
+  favorite: boolean;
+  tags: string[];
+  access?: {
+    canView: boolean;
+    canManage: boolean;
+    canDeleteFile: boolean;
+  };
+}
+
+export function getGenerationHistoryProjects() {
+  return safeRequest<GenerationHistoryProject[]>(`${BASE}/generation-history/projects`);
+}
+
+export function getGenerationHistoryItems(params: {
+  canvasId?: string;
+  kind?: GenerationHistoryKind | 'all';
+  q?: string;
+  favorite?: boolean;
+  includeHidden?: boolean;
+} = {}) {
+  const sp = new URLSearchParams();
+  if (params.canvasId) sp.set('canvasId', params.canvasId);
+  if (params.kind && params.kind !== 'all') sp.set('kind', params.kind);
+  if (params.q) sp.set('q', params.q);
+  if (params.favorite) sp.set('favorite', '1');
+  if (params.includeHidden) sp.set('includeHidden', '1');
+  const qs = sp.toString();
+  return safeRequest<GenerationHistoryItem[]>(`${BASE}/generation-history/items${qs ? `?${qs}` : ''}`);
+}
+
+export function updateGenerationHistoryItem(
+  id: string,
+  patch: Partial<Pick<GenerationHistoryItem, 'title' | 'favorite' | 'hidden' | 'tags'>>,
+) {
+  return safeRequest<GenerationHistoryItem>(`${BASE}/generation-history/items/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteGenerationHistoryItem(id: string, mode: 'hide' | 'delete-file' = 'hide') {
+  return safeRequest<GenerationHistoryItem>(`${BASE}/generation-history/items/${encodeURIComponent(id)}?mode=${encodeURIComponent(mode)}`, {
+    method: 'DELETE',
+  });
+}
+
+export function addGenerationHistoryItemToResources(id: string, payload: {
+  title?: string;
+  tags?: string[];
+  favorite?: boolean;
+  categoryId?: string;
+} = {}) {
+  return safeRequest<ResourceItem & { duplicate?: boolean }>(
+    `${BASE}/generation-history/items/${encodeURIComponent(id)}/add-to-resources`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
 // ========== Eagle 本地库 ==========
 export interface EagleImportMaterial {
   id?: string;

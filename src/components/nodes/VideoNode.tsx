@@ -40,6 +40,7 @@ import { useDragMaterialStore, type MaterialPayload } from '../../stores/dragMat
 import { useMaterialDropTarget } from '../../hooks/useMaterialDropTarget';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useApiKeysStore } from '../../stores/apiKeys';
+import { useCanvasStore } from '../../stores/canvas';
 import {
   advancedProviderModelOptions,
   advancedProvidersForNode,
@@ -79,6 +80,8 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
   const { theme, style: themeStyle } = useThemeStore();
   const isDark = theme === 'dark';
   const isPixel = themeStyle === 'pixel';
+  const activeCanvasId = useCanvasStore((s) => s.activeId);
+  const historyContextRef = useRef<any>(null);
 
   const d = data as any;
   const advancedProviders = useApiKeysStore((s) => s.settings.advancedProviders);
@@ -290,7 +293,7 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
           return;
         }
         try {
-          const r = await queryVideo(tid, apiModel);
+          const r = await queryVideo(tid, apiModel, historyContextRef.current || undefined);
           if (r.progress && r.progress !== lastProgress) {
             lastProgress = r.progress;
             logBus.debug(`[${elapsed}/${MAX}] status=${r.status} progress=${r.progress}`, src);
@@ -340,7 +343,7 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
           return;
         }
         try {
-          const r = await queryVideoFal(falPollRef.current!);
+          const r = await queryVideoFal({ ...falPollRef.current!, historyContext: historyContextRef.current || undefined });
           if (elapsed % 10 === 0) logBus.debug(`[FAL ${elapsed}/${MAX}] status=${r.status}`, src);
           if (r.status === 'completed' && r.videoUrl) {
             stopPoll();
@@ -375,6 +378,13 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
       logBus.error('生成中止: 缺少 prompt', src);
       return;
     }
+    const historyContext = {
+      canvasId: activeCanvasId,
+      sourceNodeId: id,
+      sourceNodeType: 'video',
+      nodeTitle: '视频',
+    };
+    historyContextRef.current = historyContext;
     taskCompletionSound.primeAudio();
     update({ status: 'submitting', error: null, videoUrl: null, taskId: null });
     try {
@@ -397,6 +407,7 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
           seed: seed > 0 ? seed : undefined,
           images: refs,
           providerParams: d?.providerParams,
+          historyContext,
         });
         const nextVideoUrl = r.videoUrls[0];
         if (!nextVideoUrl) throw new Error('扩展平台没有返回视频。');
@@ -427,7 +438,7 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
           images = refs;
         }
 
-        const falReq: VideoFalSubmitRequest = { apiModel, prompt: finalPrompt };
+        const falReq: VideoFalSubmitRequest = { apiModel, prompt: finalPrompt, historyContext };
         if (images && images.length) falReq.images = images;
 
         if (falReg.paramKind === 'veo-fal') {
@@ -531,6 +542,7 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
         if (seed > 0) payload.seed = seed;
       }
       if (images && images.length) payload.images = images;
+      payload.historyContext = historyContext;
 
       logBus.info(
         `提交任务: kind=${modelDef.kind} model=${apiModel} ratio=${ratio}` +

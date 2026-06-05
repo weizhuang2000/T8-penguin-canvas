@@ -22,6 +22,7 @@ import { useDragMaterialStore, type MaterialPayload } from '../../stores/dragMat
 import { useMaterialDropTarget } from '../../hooks/useMaterialDropTarget';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useApiKeysStore } from '../../stores/apiKeys';
+import { useCanvasStore } from '../../stores/canvas';
 import {
   advancedProviderModelOptions,
   advancedProvidersForNode,
@@ -70,6 +71,8 @@ const SeedanceNode = ({ id, data, selected }: NodeProps) => {
   const { theme, style: themeStyle } = useThemeStore();
   const isDark = theme === 'dark';
   const isPixel = themeStyle === 'pixel';
+  const activeCanvasId = useCanvasStore((s) => s.activeId);
+  const historyContextRef = useRef<any>(null);
 
   const d = (data as any) || {};
   const advancedProviders = useApiKeysStore((s) => s.settings.advancedProviders);
@@ -244,7 +247,7 @@ const SeedanceNode = ({ id, data, selected }: NodeProps) => {
           return;
         }
         try {
-          const r = await querySeedance(tid);
+          const r = await querySeedance(tid, historyContextRef.current || undefined);
           // 进度条估算 (对齐主项目: 30 + a*65/max)
           const pct = Math.min(95, Math.round(30 + (elapsed * 65) / MAX));
           if (r.progress && r.progress !== lastProgress) {
@@ -287,6 +290,13 @@ const SeedanceNode = ({ id, data, selected }: NodeProps) => {
       logBus.error('生成中止: 缺少 prompt', src);
       return;
     }
+    const historyContext = {
+      canvasId: activeCanvasId,
+      sourceNodeId: id,
+      sourceNodeType: 'seedance',
+      nodeTitle: 'Seedance',
+    };
+    historyContextRef.current = historyContext;
     taskCompletionSound.primeAudio();
     update({ status: 'submitting', error: null, videoUrl: null, taskId: null });
 
@@ -318,6 +328,7 @@ const SeedanceNode = ({ id, data, selected }: NodeProps) => {
             web_search: webSearch,
             frameMode,
           },
+          historyContext,
         });
         const nextVideoUrl = r.videoUrls[0];
         if (!nextVideoUrl) throw new Error('扩展平台没有返回视频。');
@@ -370,6 +381,7 @@ const SeedanceNode = ({ id, data, selected }: NodeProps) => {
       if (refImages.length) payload.refImages = refImages;
       if (videoUrls.length) payload.videos = videoUrls;
       if (audioUrls.length) payload.audios = audioUrls;
+      payload.historyContext = historyContext;
 
       logBus.info(
         `提交 Seedance2.0: model=${model} ${duration}s ${ratio} ${resolution} ` +

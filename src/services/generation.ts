@@ -19,6 +19,14 @@ export interface GenerateImageRequest {
   size?: string;
   image?: string;
   outputFormat?: 'jpg' | 'png';
+  historyContext?: GenerationHistoryContext;
+}
+
+export interface GenerationHistoryContext {
+  canvasId?: string | null;
+  sourceNodeId?: string;
+  sourceNodeType?: string;
+  nodeTitle?: string;
 }
 
 export interface GenerateImageResult {
@@ -51,6 +59,7 @@ export interface GenerateExternalImageRequest {
   images?: string[];
   outputFormat?: 'jpg' | 'png';
   providerParams?: Record<string, any>;
+  historyContext?: GenerationHistoryContext;
 }
 
 export interface GenerateExternalImageResult {
@@ -95,6 +104,7 @@ export interface GenerateExternalVideoRequest {
   videos?: string[];
   audios?: string[];
   providerParams?: Record<string, any>;
+  historyContext?: GenerationHistoryContext;
 }
 
 export interface GenerateExternalVideoResult {
@@ -160,10 +170,11 @@ export interface ImageQueryResult {
 
 // apiModel 透传给后端，让轮询阶段复用与 submit 一致的分类 API Key
 // (否则 hint 为空时会 fallback 到通用 zhenzhenApiKey，分类 key 失效)
-export async function queryImageStatus(taskId: string, apiModel?: string, outputFormat?: 'jpg' | 'png'): Promise<ImageQueryResult> {
+export async function queryImageStatus(taskId: string, apiModel?: string, outputFormat?: 'jpg' | 'png', historyContext?: GenerationHistoryContext): Promise<ImageQueryResult> {
   const qs = new URLSearchParams();
   if (apiModel) qs.set('model', apiModel);
   if (outputFormat) qs.set('outputFormat', outputFormat);
+  if (historyContext) qs.set('historyContext', JSON.stringify(historyContext));
   const query = qs.toString() ? `?${qs.toString()}` : '';
   const r = await fetch(`/api/proxy/image/status/${encodeURIComponent(taskId)}${query}`);
   const data = await r.json();
@@ -215,6 +226,7 @@ export interface FalSubmitRequest {
   /** 'image_url'(上传百达取 URL) | 'base64' 默认 'image_url' */
   image_mode?: 'image_url' | 'base64';
   outputFormat?: 'jpg' | 'png';
+  historyContext?: GenerationHistoryContext;
 }
 
 export interface FalSubmitResult {
@@ -243,7 +255,7 @@ export interface FalQueryResult {
   falStatus?: string;
 }
 
-export async function queryImageFal(params: { responseUrl?: string; endpoint?: string; requestId?: string; outputFormat?: 'jpg' | 'png' }): Promise<FalQueryResult> {
+export async function queryImageFal(params: { responseUrl?: string; endpoint?: string; requestId?: string; outputFormat?: 'jpg' | 'png'; historyContext?: GenerationHistoryContext }): Promise<FalQueryResult> {
   const r = await fetch('/api/proxy/image/fal/query', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -582,6 +594,7 @@ export interface VideoFalSubmitRequest {
   soraBlockIp?: boolean;
   /** sora-fal: 最多 2 个 character id，逗号分隔 */
   soraCharacterIds?: string;
+  historyContext?: GenerationHistoryContext;
 }
 
 export interface VideoFalSubmitResult {
@@ -610,7 +623,7 @@ export interface VideoFalQueryResult {
   falStatus?: string;
 }
 
-export async function queryVideoFal(params: { responseUrl?: string; endpoint?: string; requestId?: string }): Promise<VideoFalQueryResult> {
+export async function queryVideoFal(params: { responseUrl?: string; endpoint?: string; requestId?: string; historyContext?: GenerationHistoryContext }): Promise<VideoFalQueryResult> {
   const r = await fetch('/api/proxy/video/fal/query', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -648,6 +661,7 @@ export interface VideoSubmitRequest {
    *  - seedance: base64 dataURL,最多 3 张(同 veo)
    */
   images?: string[];
+  historyContext?: GenerationHistoryContext;
 }
 
 export async function submitVideo(req: VideoSubmitRequest): Promise<{ taskId: string }> {
@@ -669,9 +683,10 @@ export interface VideoQueryResult {
 }
 
 // model 透传给后端，让轮询阶段复用与 submit 一致的分类 API Key
-export async function queryVideo(taskId: string, model?: string): Promise<VideoQueryResult> {
+export async function queryVideo(taskId: string, model?: string, historyContext?: GenerationHistoryContext): Promise<VideoQueryResult> {
   const extra = model ? `&model=${encodeURIComponent(model)}` : '';
-  const r = await fetch(`/api/proxy/video/query?taskId=${encodeURIComponent(taskId)}${extra}`);
+  const history = historyContext ? `&historyContext=${encodeURIComponent(JSON.stringify(historyContext))}` : '';
+  const r = await fetch(`/api/proxy/video/query?taskId=${encodeURIComponent(taskId)}${extra}${history}`);
   const data = await r.json();
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
   return data.data;
@@ -712,6 +727,7 @@ export interface SeedanceSubmitRequest {
   videos?: string[];
   /** 参考音频 URL 多个 */
   audios?: string[];
+  historyContext?: GenerationHistoryContext;
 }
 
 export async function submitSeedance(req: SeedanceSubmitRequest): Promise<{ taskId: string }> {
@@ -733,8 +749,9 @@ export interface SeedanceQueryResult {
   failReason?: string | null;
 }
 
-export async function querySeedance(taskId: string): Promise<SeedanceQueryResult> {
-  const r = await fetch(`/api/proxy/seedance/query?taskId=${encodeURIComponent(taskId)}`);
+export async function querySeedance(taskId: string, historyContext?: GenerationHistoryContext): Promise<SeedanceQueryResult> {
+  const history = historyContext ? `&historyContext=${encodeURIComponent(JSON.stringify(historyContext))}` : '';
+  const r = await fetch(`/api/proxy/seedance/query?taskId=${encodeURIComponent(taskId)}${history}`);
   const data = await r.json();
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
   return data.data;
@@ -759,6 +776,7 @@ export interface AudioSubmitRequest {
   continue_clip_id?: string;
   continue_at?: number;
   cover_clip_id?: string;
+  historyContext?: GenerationHistoryContext;
 }
 
 export async function submitAudio(
@@ -797,9 +815,10 @@ export interface AudioQueryResult {
  * @param clipIds 任务中的 clip id 列表
  * @param saveLocal 是否让后端将完成的音频转存到本地 output（默认 true）
  */
-export async function queryAudio(clipIds: string[], saveLocal: boolean = true): Promise<AudioQueryResult> {
+export async function queryAudio(clipIds: string[], saveLocal: boolean = true, historyContext?: GenerationHistoryContext): Promise<AudioQueryResult> {
   const ids = clipIds.join(',');
   const params = new URLSearchParams({ clipIds: ids, saveLocal: String(saveLocal) });
+  if (historyContext) params.set('historyContext', JSON.stringify(historyContext));
   const r = await fetch(`/api/proxy/audio/query?${params.toString()}`);
   const data = await r.json();
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
@@ -850,8 +869,10 @@ export interface RhQueryResult {
   code?: number;
 }
 
-export async function queryRh(taskId: string): Promise<RhQueryResult> {
-  const url = `/api/proxy/runninghub/query?taskId=${encodeURIComponent(taskId)}`;
+export async function queryRh(taskId: string, historyContext?: GenerationHistoryContext): Promise<RhQueryResult> {
+  const qs = new URLSearchParams({ taskId });
+  if (historyContext) qs.set('historyContext', JSON.stringify(historyContext));
+  const url = `/api/proxy/runninghub/query?${qs.toString()}`;
   const r = await fetch(url);
   const data = await r.json();
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);

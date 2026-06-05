@@ -43,6 +43,7 @@ import { useDragMaterialStore, type MaterialPayload } from '../../stores/dragMat
 import { useMaterialDropTarget } from '../../hooks/useMaterialDropTarget';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useApiKeysStore } from '../../stores/apiKeys';
+import { useCanvasStore } from '../../stores/canvas';
 import {
   advancedProviderModelOptions,
   advancedProvidersForNode,
@@ -67,6 +68,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
   const hasAutoOutput = useHasAutoOutput(id);
   const { getEdges, getNodes } = useReactFlow();
   const { style, theme } = useThemeStore();
+  const activeCanvasId = useCanvasStore((s) => s.activeId);
   const isPixel = style === 'pixel';
   const isDark = theme === 'dark';
   // 主参考图(referenceImages)上传入口 - 与下面 MJ sref/oref 上传隔离
@@ -318,6 +320,12 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
     const resolvedLocalPrompt = resolveMediaMentions(localPrompt, promptMentions, mentionMaterials);
     const finalPrompt = (upstreamPrompt || resolvedLocalPrompt || '').trim();
     const src = `image:${id.slice(0, 6)}`;
+    const historyContext = {
+      canvasId: activeCanvasId,
+      sourceNodeId: id,
+      sourceNodeType: 'image',
+      nodeTitle: '图像',
+    };
     if (!finalPrompt) {
       setError('未连接 text 节点也未填写 prompt');
       logBus.error('生成中止: 缺少 prompt', src);
@@ -348,6 +356,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           outputFormat,
           n: Math.max(1, Math.min(4, Number(d?.providerParams?.n || 1))),
           providerParams: d?.providerParams || {},
+          historyContext,
         });
         const urls = res.imageUrls || [];
         if (!urls.length) throw new Error('扩展平台完成但未返回图片');
@@ -494,6 +503,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           enable_web_search: falKind === 'nbpro-fal' ? nbWebSearch : undefined,
           image_mode: falKind === 'nbpro-fal' ? nbImgMode : undefined,
           outputFormat,
+          historyContext,
         });
 
         // 同步完成
@@ -524,7 +534,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         const interval = 3000;
         for (let i = 0; i < maxPoll; i++) {
           await new Promise((r) => setTimeout(r, interval));
-          const q = await queryImageFal({ responseUrl, endpoint, requestId, outputFormat });
+          const q = await queryImageFal({ responseUrl, endpoint, requestId, outputFormat, historyContext });
           const st = String(q.status || '').toLowerCase();
           if (st === 'completed') {
             const url = q.urls?.[0];
@@ -568,6 +578,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         images: allRefs,
         n: 1,
         outputFormat,
+        historyContext,
       });
 
       // 分支一:同步完成
@@ -597,7 +608,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
       let lastProg = '5%';
       for (let i = 0; i < maxPoll; i++) {
         await new Promise((r) => setTimeout(r, interval));
-        const q = await queryImageStatus(taskId, apiModel, outputFormat);
+        const q = await queryImageStatus(taskId, apiModel, outputFormat, historyContext);
         if (q.progress && q.progress !== lastProg) {
           lastProg = q.progress;
           update({ progress: q.progress });

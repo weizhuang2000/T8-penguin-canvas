@@ -17,6 +17,7 @@ import { resolveMediaMentions, type MediaMention } from './mediaMentions';
 import { useDragMaterialStore, type MaterialPayload } from '../../stores/dragMaterial';
 import { useMaterialDropTarget } from '../../hooks/useMaterialDropTarget';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
+import { useCanvasStore } from '../../stores/canvas';
 import {
   countExcludedMaterials,
   excludeMaterialId,
@@ -49,6 +50,8 @@ const AudioNode = ({ id, data, selected }: NodeProps) => {
   const { theme, style: themeStyle } = useThemeStore();
   const isDark = theme === 'dark';
   const isPixel = themeStyle === 'pixel';
+  const activeCanvasId = useCanvasStore((s) => s.activeId);
+  const historyContextRef = useRef<any>(null);
 
   const d = data as any;
   const mode: AudioMode = d?.mode || 'generate';
@@ -205,7 +208,7 @@ const AudioNode = ({ id, data, selected }: NodeProps) => {
           return;
         }
         try {
-          const r = await queryAudio(clipIds, true);
+          const r = await queryAudio(clipIds, true, historyContextRef.current || undefined);
           if (r.status === 'SUCCESS' && r.tracks.length > 0) {
             stopPoll();
             // 双输出口: audioUrl=轨1, audioUrl_1=轨2
@@ -239,6 +242,13 @@ const AudioNode = ({ id, data, selected }: NodeProps) => {
       setError('请填写歌词 / 提示词');
       return;
     }
+    const historyContext = {
+      canvasId: activeCanvasId,
+      sourceNodeId: id,
+      sourceNodeType: 'audio',
+      nodeTitle: '音频',
+    };
+    historyContextRef.current = historyContext;
     taskCompletionSound.primeAudio();
     update({ status: 'submitting', error: null, tracks: [], audioUrl: undefined });
     try {
@@ -263,6 +273,7 @@ const AudioNode = ({ id, data, selected }: NodeProps) => {
         cover_clip_id: mode === 'cover' ? clipIdForRef : undefined,
         continue_clip_id: mode === 'extend' ? clipIdForRef : undefined,
         continue_at: mode === 'extend' ? continueAt : undefined,
+        historyContext,
       });
       logBus.success(`taskId=${r.taskId} clips=${(r.clipIds || []).join(',') || '?'}`, src);
       update({ status: 'polling', taskId: r.taskId, clipIds: r.clipIds, lastPrompt: finalPrompt, progress: '0/?' });

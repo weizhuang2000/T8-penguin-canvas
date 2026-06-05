@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { LogOut, Moon, Settings, Sun, Wifi, WifiOff, Sparkles, Cloud, ExternalLink, Copy, Check, Gift, Heart, Youtube, PlayCircle, Bell, Globe, Library, Palette, Skull, Sailboat } from 'lucide-react';
+import { LogOut, Moon, Settings, Sun, Wifi, WifiOff, Sparkles, Cloud, ExternalLink, Copy, Check, Gift, Heart, Youtube, PlayCircle, Bell, Globe, Library, Palette, Skull, Sailboat, Clock3 } from 'lucide-react';
 import { useThemeStore } from './stores/theme';
 import { useApiKeysStore } from './stores/apiKeys';
 import { useShortcutStore } from './stores/shortcuts';
@@ -7,6 +7,7 @@ import Sidebar from './components/Sidebar';
 import Canvas, { type AddNodeFn, type InsertWorkflowFn } from './components/Canvas';
 import ApiSettingsModal from './components/ApiSettings';
 import ResourceLibraryDrawer from './components/ResourceLibraryDrawer';
+import GenerationHistoryDrawer from './components/GenerationHistoryDrawer';
 import MaterialContextMenu from './components/MaterialContextMenu';
 import ThemeTemplateManager from './components/ThemeTemplateManager';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -168,6 +169,7 @@ function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [resourceOpen, setResourceOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [themeManagerOpen, setThemeManagerOpen] = useState(false);
   // 「在线画布」推广浮层开关 + 容器 ref(用于点击外部关闭)
   const [cloudOpen, setCloudOpen] = useState(false);
@@ -217,7 +219,7 @@ function App() {
   }, [videoOpen]);
 
   useEffect(() => {
-    const hasOpenTopSurface = cloudOpen || videoOpen || resourceOpen;
+    const hasOpenTopSurface = cloudOpen || videoOpen || resourceOpen || historyOpen;
     if (!hasOpenTopSurface) return;
 
     const onDocPointerDown = (e: PointerEvent) => {
@@ -226,6 +228,7 @@ function App() {
       if (
         target.closest('.t8-topbar') ||
         target.closest('.resource-library-drawer') ||
+        target.closest('.generation-history-drawer') ||
         target.closest('[data-canvas-floating-ui]') ||
         target.closest('.react-flow__node') ||
         target.closest('.react-flow__edge') ||
@@ -239,13 +242,14 @@ function App() {
       setCloudOpen(false);
       setVideoOpen(false);
       setResourceOpen(false);
+      setHistoryOpen(false);
     };
 
     document.addEventListener('pointerdown', onDocPointerDown, true);
     return () => {
       document.removeEventListener('pointerdown', onDocPointerDown, true);
     };
-  }, [cloudOpen, videoOpen, resourceOpen]);
+  }, [cloudOpen, videoOpen, resourceOpen, historyOpen]);
 
   const handleCopyWx = async () => {
     try {
@@ -900,6 +904,22 @@ function App() {
             <Library size={14} />
             <span className="text-[11px]">资源库</span>
           </button>
+          <button
+            onClick={() => setHistoryOpen(true)}
+            className={
+              isPixel
+                ? 'px-btn px-btn--sm px-btn--yellow'
+                : `flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors border ${
+                    isDark
+                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20'
+                      : 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100'
+                  }`
+            }
+            title="历史生成"
+          >
+            <Clock3 size={14} />
+            <span className="text-[11px]">历史生成</span>
+          </button>
           {canManageSettings && (
           <button
             onClick={() => setSettingsOpen(true)}
@@ -966,6 +986,11 @@ function App() {
         open={resourceOpen}
         onClose={() => setResourceOpen(false)}
         onInsertMaterial={handleInsertResource}
+      />
+      <GenerationHistoryDrawer
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        userRole={authUser.role}
       />
       <MaterialContextMenu />
     </div>

@@ -13,6 +13,7 @@ import LoopingVideo from '../LoopingVideo';
 import { resolveMediaMentions, type MediaMention } from './mediaMentions';
 import { useThemeStore } from '../../stores/theme';
 import { logBus } from '../../stores/logs';
+import { useCanvasStore } from '../../stores/canvas';
 import {
   countExcludedMaterials,
   excludeMaterialId,
@@ -234,6 +235,8 @@ const RunningHubNode = ({ id, data, selected, type }: NodeProps) => {
   const { style, theme } = useThemeStore();
   const isPixel = style === 'pixel';
   const isDark = theme === 'dark';
+  const activeCanvasId = useCanvasStore((s) => s.activeId);
+  const historyContextRef = useRef<any>(null);
 
   // 如今需要按“字段在同 kind 下的出现顺序”取第 idx 个排序后的上游素材 url，
   // 实现多个 image/video/audio 字段逆向分配上游多个素材。并受 MaterialPreviewSection 的拖拽排序控制。
@@ -484,7 +487,7 @@ const RunningHubNode = ({ id, data, selected, type }: NodeProps) => {
           return;
         }
         try {
-          const r = await queryRh(tid);
+          const r = await queryRh(tid, historyContextRef.current || undefined);
           console.log('[RH/poll] taskId=', tid, 'status=', r.status, 'code=', r.code, 'urls=', r.urls?.length || 0);
           // 轮询进度写入面板：每 30s 一条 debug，避免刷屏
           if (elapsed % 6 === 0) {
@@ -634,6 +637,12 @@ const RunningHubNode = ({ id, data, selected, type }: NodeProps) => {
     if (Object.keys(effectiveValues).length > 0) {
       update({ paramValues: effectiveValues });
     }
+    historyContextRef.current = {
+      canvasId: activeCanvasId,
+      sourceNodeId: id,
+      sourceNodeType: 'runninghub',
+      nodeTitle: titleText || 'RunningHub',
+    };
     update({ status: 'submitting', error: null, urls: [], taskId: null });
     try {
       const rawList = buildRawNodeInfoList(effectiveList, effectiveValues);

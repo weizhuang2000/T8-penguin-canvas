@@ -12,6 +12,7 @@ const config = require('../config');
 const { getWhitePng } = require('../utils/whitePng');
 const { tryDecodeDuckPayload } = require('../utils/duckPayload');
 const { normalizeImageOutputFormat, writeImageOutput } = require('../utils/imageOutput');
+const { addHistoryItems, kindFromUrl } = require('../utils/generationHistory');
 
 const router = express.Router();
 
@@ -245,6 +246,36 @@ function rememberTaskImageFormat(taskId, format) {
 }
 function recallTaskImageFormat(taskId) {
   return normalizeImageOutputFormat(taskId ? taskImageFormatMap.get(String(taskId)) : undefined);
+}
+
+function historyContextFromBody(body, extra = {}) {
+  let ctx = body && typeof body.historyContext === 'object' ? body.historyContext : {};
+  if ((!ctx || Object.keys(ctx).length === 0) && typeof body?.historyContext === 'string') {
+    try {
+      ctx = JSON.parse(body.historyContext);
+    } catch {
+      ctx = {};
+    }
+  }
+  return {
+    ...ctx,
+    prompt: extra.prompt ?? body?.prompt ?? ctx.prompt,
+    provider: extra.provider ?? ctx.provider,
+    model: extra.model ?? body?.apiModel ?? body?.model ?? ctx.model,
+    taskId: extra.taskId ?? body?.taskId ?? ctx.taskId,
+  };
+}
+
+function rememberGeneratedUrls(req, urls, extra = {}) {
+  const list = (Array.isArray(urls) ? urls : [])
+    .filter((url) => typeof url === 'string' && url)
+    .map((url) => ({ url, kind: extra.kind || kindFromUrl(url), ...extra }));
+  if (!list.length) return;
+  try {
+    addHistoryItems(list, historyContextFromBody({ ...(req.query || {}), ...(req.body || {}) }, extra), req.user);
+  } catch (e) {
+    console.warn('[generation-history] record failed:', e?.message || e);
+  }
 }
 
 // ========== 工具:保存上游返回的图像到本地 ==========
@@ -699,12 +730,14 @@ router.post('/image', async (req, res) => {
       return res.status(500).json({ success: false, error: norm.error || '上游图像任务失败', raw: data });
     }
     if (norm.kind === 'sync') {
+      rememberGeneratedUrls(req, norm.urls, { kind: 'image', prompt, provider: 'zhenzhen', model: finalApiModel });
       return res.json({ success: true, data: { urls: norm.urls, raw: data, model: finalApiModel, prompt } });
     }
     if (norm.kind === 'async') {
       // 同步接口需要同步返回结果 → 内部轮询
       const url = await pollImageTask(norm.taskId, settings.zhenzhenApiKey, imageOutputFormat);
       if (!url) return res.status(500).json({ success: false, error: '异步任务轮询超时/失败', taskId: norm.taskId });
+      rememberGeneratedUrls(req, [url], { kind: 'image', prompt, provider: 'zhenzhen', model: finalApiModel, taskId: norm.taskId });
       return res.json({ success: true, data: { urls: [url], raw: data, taskId: norm.taskId, model: finalApiModel, prompt } });
     }
     return res.status(500).json({ success: false, error: '上游未返回图片也未返 task_id: ' + JSON.stringify(data).slice(0, 300) });
@@ -752,6 +785,7 @@ router.post('/image/submit', async (req, res) => {
       return res.status(500).json({ success: false, error: norm.error || '上游图像任务失败', raw: data });
     }
     if (norm.kind === 'sync') {
+      rememberGeneratedUrls(req, norm.urls, { kind: 'image', prompt, provider: 'zhenzhen', model: finalApiModel });
       return res.json({ success: true, data: { sync: true, status: 'completed', progress: '100%', urls: norm.urls, raw: data } });
     }
     if (norm.kind === 'async') {
@@ -799,6 +833,7 @@ router.get('/image/status/:tid', async (req, res) => {
     const FAILURE = ['failure', 'failed', 'error', 'cancelled', 'canceled'];
     const urls = await saveImageItemsFromResult(data, imageOutputFormat);
     if (SUCCESS.includes(status) || urls.length) {
+      rememberGeneratedUrls(req, urls, { kind: 'image', provider: 'zhenzhen', model: String(req.query.model || ''), taskId: tid });
       return res.json({ success: true, data: { status: 'completed', progress: '100%', urls, raw: data } });
     }
     if (FAILURE.includes(status)) {
@@ -1036,6 +1071,7 @@ router.post('/image/fal/submit', async (req, res) => {
           urls.push(local);
         }
       }
+      rememberGeneratedUrls(req, urls, { kind: 'image', prompt, provider: 'fal', model: apiModel });
       return res.json({ success: true, data: { sync: true, urls, endpoint, raw: data } });
     }
 
@@ -1098,6 +1134,7 @@ router.post('/image/fal/query', async (req, res) => {
           urls.push(local);
         }
       }
+      rememberGeneratedUrls(req, urls, { kind: 'image', provider: 'fal', model: endpoint, taskId: requestId });
       return res.json({ success: true, data: { status: 'completed', urls, raw: data } });
     }
     const st = String(data.status || '').toUpperCase();
@@ -1730,6 +1767,7 @@ router.post('/video/fal/query', async (req, res) => {
     const finishedVideoUrl = getFalVideoUrl(data);
     if (finishedVideoUrl) {
       const local = await saveRemoteVideo(finishedVideoUrl);
+      rememberGeneratedUrls(req, [local], { kind: 'video', provider: 'fal', model: endpoint, taskId: requestId });
       return res.json({ success: true, data: { status: 'completed', videoUrl: local, raw: data } });
     }
     const st = String(data.status || '').toUpperCase();
@@ -1876,6 +1914,9 @@ router.get('/video/query', async (req, res) => {
           videoUrl = remote;
         }
       }
+    }
+    if (st === 'SUCCESS' && videoUrl) {
+      rememberGeneratedUrls(req, [videoUrl], { kind: 'video', provider: 'zhenzhen', model: String(req.query.model || ''), taskId: req.query.taskId });
     }
     res.json({
       success: true,
@@ -2083,6 +2124,9 @@ router.get('/seedance/query', async (req, res) => {
       }
     }
 
+    if ((st === 'succeeded' || st === 'success' || st === 'completed' || st === 'done') && videoUrl) {
+      rememberGeneratedUrls(req, [videoUrl], { kind: 'video', provider: 'seedance', model: String(req.query.model || ''), taskId: req.query.taskId });
+    }
     return res.json({
       success: true,
       data: {
@@ -2217,6 +2261,13 @@ router.get('/audio/query', async (req, res) => {
       }
     }
     const allDone = clips.length > 0 && tracks.length === clips.length;
+    if (allDone) {
+      rememberGeneratedUrls(
+        req,
+        tracks.map((track) => track.audioUrl),
+        { kind: 'audio', provider: 'suno', model: 'suno', taskId: ids },
+      );
+    }
     res.json({
       success: true,
       data: {
@@ -2458,6 +2509,9 @@ router.get('/runninghub/query', async (req, res) => {
       } else {
         failReasonStr = String(failReasonRaw);
       }
+    }
+    if (status === 'SUCCESS' && urls.length) {
+      rememberGeneratedUrls(req, urls, { provider: 'runninghub', taskId });
     }
     res.json({
       success: true,

@@ -40,6 +40,7 @@ import { resolveMediaMentions, type MediaMention } from './mediaMentions';
 import { useRHToolsSafe } from '../../providers/RHToolsProvider';
 import { useThemeStore } from '../../stores/theme';
 import { logBus } from '../../stores/logs';
+import { useCanvasStore } from '../../stores/canvas';
 import { fuzzyMatch } from '../../utils/pinyinMatch';
 import {
   countExcludedMaterials,
@@ -140,6 +141,8 @@ const RHToolsNode = ({ id, data, selected }: NodeProps) => {
   const isLight = theme === 'light';
   const isPixel = themeStyle === 'pixel';
   const isDark = theme === 'dark';
+  const activeCanvasId = useCanvasStore((s) => s.activeId);
+  const historyContextRef = useRef<any>(null);
 
   const ctx = useRHToolsSafe();
   const categories = ctx?.categories ?? [];
@@ -554,7 +557,7 @@ const RHToolsNode = ({ id, data, selected }: NodeProps) => {
           return;
         }
         try {
-          const r = await queryRh(tid);
+          const r = await queryRh(tid, historyContextRef.current || undefined);
           if (elapsed % 6 === 0) {
             logBus.debug(`[${elapsed * 5}s] status=${r.status} code=${r.code} urls=${r.urls?.length || 0}`, src);
           }
@@ -691,6 +694,12 @@ const RHToolsNode = ({ id, data, selected }: NodeProps) => {
     if (Object.keys(effectiveValues).length > 0) {
       update({ paramValues: effectiveValues });
     }
+    historyContextRef.current = {
+      canvasId: activeCanvasId,
+      sourceNodeId: id,
+      sourceNodeType: 'rh-tools',
+      nodeTitle: activeApp?.title || 'RH工具',
+    };
     update({ status: 'submitting', error: null, urls: [], taskId: null });
     try {
       const rawList = buildRawNodeInfoList(effectiveList, effectiveValues);
