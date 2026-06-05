@@ -63,6 +63,17 @@ import {
  * 参数:模型 TAB / 比例 / 尺寸 / 多张参考图 / 本地 prompt
  * 上游 text 节点 → prompt(优先);上游 image 节点 → 参考图(并入 references)
  */
+const MAX_IMAGE_SEED = 2147483647;
+
+function randomImageSeed(): number {
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const values = new Uint32Array(1);
+    crypto.getRandomValues(values);
+    return (values[0] % MAX_IMAGE_SEED) + 1;
+  }
+  return Math.floor(Math.random() * MAX_IMAGE_SEED) + 1;
+}
+
 const ImageNode = ({ id, data, selected }: NodeProps) => {
   const update = useUpdateNodeData(id);
   const hasAutoOutput = useHasAutoOutput(id);
@@ -161,7 +172,6 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
   const effectiveSeed = isMj
     ? (mjSeed > 0 ? mjSeed : seed)
     : (falKind === 'nbpro-fal' ? (nbSeed > 0 ? nbSeed : seed) : seed);
-  const historySeed = effectiveSeed > 0 ? effectiveSeed : undefined;
   const mjMaxPoll: number = d?.mjMaxPoll ?? 300;
   const mjPollInt: number = d?.mjPollInt ?? 3;
   const mjSrefImages: string[] = Array.isArray(d?.mjSrefImages) ? d.mjSrefImages : [];
@@ -326,11 +336,12 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
     const resolvedLocalPrompt = resolveMediaMentions(localPrompt, promptMentions, mentionMaterials);
     const finalPrompt = (upstreamPrompt || resolvedLocalPrompt || '').trim();
     const src = `image:${id.slice(0, 6)}`;
+    const runSeed = effectiveSeed > 0 ? effectiveSeed : randomImageSeed();
     const historyContext = {
       canvasId: activeCanvasId,
       sourceNodeId: id,
       sourceNodeType: 'image',
-      seed: historySeed,
+      seed: runSeed,
       nodeTitle: '图像',
     };
     if (!finalPrompt) {
@@ -339,7 +350,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
       return;
     }
     taskCompletionSound.primeAudio();
-    update({ status: 'generating', progress: '0%', error: null });
+    update({ status: 'generating', progress: '0%', error: null, lastSeed: runSeed });
     try {
       // collectUpstream 已返回「本地上传 + 上游接入」按用户拖拽顺序合并后的列表,
       // 这里不再二次叠加 refImages, 避免本地参考图重复传递。
@@ -361,7 +372,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           size,
           images: allRefs,
           outputFormat,
-          seed: historySeed,
+          seed: runSeed,
           n: Math.max(1, Math.min(4, Number(d?.providerParams?.n || 1))),
           providerParams: d?.providerParams || {},
           historyContext,
@@ -375,7 +386,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           imageUrls: urls,
           remoteImageUrls: res.remoteImageUrls,
           lastPrompt: finalPrompt,
-          lastSeed: historySeed,
+          lastSeed: runSeed,
           usedI2I: allRefs.length > 0,
           taskId: res.taskId || d?.taskId,
         });
@@ -430,7 +441,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           sw: mjSw || undefined,
           sv: mjSv || undefined,
           no: mjNo || undefined,
-          seed: historySeed,
+          seed: runSeed,
           speed: mjSpeed,
           base64Array,
           remix: true,
@@ -473,7 +484,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
               imageUrl: final,
               imageUrls: all,
               lastPrompt: finalPrompt,
-              lastSeed: historySeed,
+              lastSeed: runSeed,
               usedI2I: allRefs.length > 0 || mjSrefImages.length > 0 || mjOrefImages.length > 0,
             });
             taskCompletionSound.notifyComplete(id, 'image');
@@ -509,7 +520,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           aspect_ratio: falKind === 'nbpro-fal' ? nbAspect : undefined,
           resolution: falKind === 'nbpro-fal' ? nbResolution : undefined,
           safety_tolerance: falKind === 'nbpro-fal' ? nbSafety : undefined,
-          seed: falKind === 'nbpro-fal' ? historySeed : undefined,
+          seed: falKind === 'nbpro-fal' ? runSeed : undefined,
           system_prompt: falKind === 'nbpro-fal' ? nbSysPrompt : undefined,
           enable_web_search: falKind === 'nbpro-fal' ? nbWebSearch : undefined,
           image_mode: falKind === 'nbpro-fal' ? nbImgMode : undefined,
@@ -525,7 +536,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
             progress: '100%',
             imageUrl: submit.urls[0],
             lastPrompt: finalPrompt,
-            lastSeed: historySeed,
+            lastSeed: runSeed,
             usedI2I: allRefs.length > 0,
           });
           taskCompletionSound.notifyComplete(id, 'image');
@@ -557,7 +568,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
               progress: '100%',
               imageUrl: url,
               lastPrompt: finalPrompt,
-              lastSeed: historySeed,
+              lastSeed: runSeed,
               usedI2I: allRefs.length > 0,
             });
             taskCompletionSound.notifyComplete(id, 'image');
@@ -591,7 +602,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         images: allRefs,
         n: 1,
         outputFormat,
-        seed: historySeed,
+        seed: runSeed,
         historyContext,
       });
 
@@ -604,7 +615,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           imageUrl: submit.urls[0],
           imageUrls: submit.urls,
           lastPrompt: finalPrompt,
-          lastSeed: historySeed,
+          lastSeed: runSeed,
           usedI2I: allRefs.length > 0,
         });
         taskCompletionSound.notifyComplete(id, 'image');
@@ -640,7 +651,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
             imageUrl: url,
             imageUrls: q.urls,
             lastPrompt: finalPrompt,
-            lastSeed: historySeed,
+            lastSeed: runSeed,
             usedI2I: allRefs.length > 0,
           });
           taskCompletionSound.notifyComplete(id, 'image');
@@ -906,7 +917,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         </div>
 
         <div>
-          <label className="text-[10px] text-white/50 block mb-1" title="0 = random / do not send">Seed (0=random)</label>
+          <label className="text-[10px] text-white/50 block mb-1" title="0 = 自动生成并记录随机 seed">Seed (0=random)</label>
           <input
             type="number"
             min={0}
