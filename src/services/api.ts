@@ -183,6 +183,15 @@ export interface ExhibitionPromptLibraryItem {
   updatedAt: number;
 }
 
+export interface ExhibitionPromptPresetItem {
+  id: string;
+  label: string;
+  text: string;
+  order: number;
+}
+
+export type ExhibitionPromptPresetMap = Partial<Record<ExhibitionPromptDimension, ExhibitionPromptPresetItem[]>>;
+
 export async function listExhibitionPromptLibrary(options?: {
   dimension?: ExhibitionPromptDimension;
   includePersonal?: boolean;
@@ -219,6 +228,25 @@ export async function updateExhibitionPromptLibraryItem(
 
 export async function deleteExhibitionPromptLibraryItem(id: string): Promise<void> {
   await request(`${BASE}/prompt-library/exhibition/${id}`, { method: 'DELETE' });
+}
+
+export async function getExhibitionPromptPresets(): Promise<ExhibitionPromptPresetMap> {
+  const res = await request<{ success: boolean; data: ExhibitionPromptPresetMap }>(`${BASE}/prompt-library/exhibition/presets`);
+  return res.data || {};
+}
+
+export async function updateExhibitionPromptPresets(
+  dimension: ExhibitionPromptDimension,
+  presets: Array<Pick<ExhibitionPromptPresetItem, 'label' | 'text'> & Partial<Pick<ExhibitionPromptPresetItem, 'id' | 'order'>>>,
+): Promise<ExhibitionPromptPresetItem[]> {
+  const res = await request<{ success: boolean; data: ExhibitionPromptPresetItem[] }>(
+    `${BASE}/prompt-library/exhibition/presets/${dimension}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ presets }),
+    },
+  );
+  return res.data || [];
 }
 
 export async function getSettings(): Promise<ApiSettings> {

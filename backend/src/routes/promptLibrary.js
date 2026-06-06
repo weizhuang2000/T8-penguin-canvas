@@ -35,17 +35,20 @@ function safeText(value, max = 2000) {
 
 function readDb() {
   try {
-    if (!fs.existsSync(DB_FILE)) return { items: [] };
+    if (!fs.existsSync(DB_FILE)) return { items: [], presets: {} };
     const raw = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
-    return { items: Array.isArray(raw?.items) ? raw.items : [] };
+    return {
+      items: Array.isArray(raw?.items) ? raw.items : [],
+      presets: raw?.presets && typeof raw.presets === 'object' && !Array.isArray(raw.presets) ? raw.presets : {},
+    };
   } catch {
-    return { items: [] };
+    return { items: [], presets: {} };
   }
 }
 
 function writeDb(db) {
   fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
-  fs.writeFileSync(DB_FILE, JSON.stringify({ items: db.items || [] }, null, 2), 'utf-8');
+  fs.writeFileSync(DB_FILE, JSON.stringify({ items: db.items || [], presets: db.presets || {} }, null, 2), 'utf-8');
 }
 
 function publicItem(item) {
@@ -67,6 +70,31 @@ function canManageItem(user, item) {
   if (!user) return false;
   if (item.scope === 'team') return isAdminRole(user.role);
   return isAdminRole(user.role) || String(item.ownerUserId) === String(user.id);
+}
+
+function normalizePresetList(value) {
+  if (!Array.isArray(value)) return [];
+  const used = new Set();
+  return value
+    .map((raw, index) => {
+      const label = safeText(raw?.label, 120);
+      const text = safeText(raw?.text, 4000);
+      if (!label || !text) return null;
+      let id = safeText(raw?.id, 96).replace(/[^a-zA-Z0-9_-]/g, '');
+      if (!id) id = `preset_${index + 1}`;
+      while (used.has(id)) id = `${id}_${index + 1}`;
+      used.add(id);
+      return {
+        id,
+        label,
+        text,
+        order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 80)
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+    .map((item, index) => ({ ...item, order: index }));
 }
 
 function normalizeIncoming(body, user, previous) {
@@ -110,6 +138,32 @@ router.get('/exhibition', (req, res) => {
   if (dimension) items = items.filter((item) => item.dimension === dimension);
   items.sort((a, b) => (a.order || 0) - (b.order || 0) || (b.updatedAt || 0) - (a.updatedAt || 0));
   res.json({ success: true, data: items });
+});
+
+router.get('/exhibition/presets', (_req, res) => {
+  const db = readDb();
+  const data = {};
+  for (const dimension of DIMENSIONS) {
+    data[dimension] = normalizePresetList(db.presets?.[dimension]);
+  }
+  res.json({ success: true, data });
+});
+
+router.put('/exhibition/presets/:dimension', (req, res) => {
+  const user = req.user;
+  if (!isAdminRole(user?.role)) {
+    return res.status(403).json({ success: false, error: '只有管理员可以维护展陈维度预设' });
+  }
+  const dimension = safeText(req.params.dimension, 80);
+  if (!DIMENSIONS.has(dimension)) {
+    return res.status(400).json({ success: false, error: '无效的展陈提示词维度' });
+  }
+  const presets = normalizePresetList(req.body?.presets);
+  const db = readDb();
+  db.presets = db.presets || {};
+  db.presets[dimension] = presets;
+  writeDb(db);
+  res.json({ success: true, data: presets });
 });
 
 router.post('/exhibition', (req, res) => {
@@ -173,4 +227,3 @@ router.delete('/exhibition/:id', (req, res) => {
 });
 
 module.exports = router;
-

@@ -100,3 +100,32 @@ test('admin can manage team entries and reject invalid dimensions', async (t) =>
   ]);
 });
 
+test('admin can configure dimension presets while regular users cannot', async (t) => {
+  const adminBase = await startApp(t, { id: 'admin', username: 'root', name: 'Root', role: 'admin' });
+
+  const saved = await fetch(`${adminBase}/api/prompt-library/exhibition/presets/spaceType`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      presets: [
+        { label: '企业馆', text: '企业品牌展馆，强调品牌历程与核心产品' },
+        { label: '艺术馆', text: '当代艺术展厅，强调策展叙事与观众停留体验' },
+      ],
+    }),
+  }).then((res) => res.json());
+
+  assert.equal(saved.success, true);
+  assert.deepEqual(saved.data.map((item) => [item.label, item.order]), [['企业馆', 0], ['艺术馆', 1]]);
+
+  const presets = await fetch(`${adminBase}/api/prompt-library/exhibition/presets`).then((res) => res.json());
+  assert.equal(presets.success, true);
+  assert.equal(presets.data.spaceType[0].text, '企业品牌展馆，强调品牌历程与核心产品');
+
+  const userBase = await startApp(t, { id: 'u1', username: 'alice', name: 'Alice', role: 'designer' });
+  const denied = await fetch(`${userBase}/api/prompt-library/exhibition/presets/spaceType`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ presets: [{ label: '普通用户', text: '不能保存' }] }),
+  });
+  assert.equal(denied.status, 403);
+});

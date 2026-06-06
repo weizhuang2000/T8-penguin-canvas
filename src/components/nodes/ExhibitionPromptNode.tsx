@@ -11,9 +11,13 @@ import {
   createExhibitionPromptLibraryItem,
   deleteExhibitionPromptLibraryItem,
   getCurrentUser,
+  getExhibitionPromptPresets,
   listExhibitionPromptLibrary,
+  updateExhibitionPromptPresets,
   type AuthUser,
   type ExhibitionPromptLibraryItem,
+  type ExhibitionPromptPresetItem,
+  type ExhibitionPromptPresetMap,
 } from '../../services/api';
 import { uploadFile } from '../../services/generation';
 import { useThemeStore } from '../../stores/theme';
@@ -39,16 +43,48 @@ function selectedText(data: any, id: ExhibitionPromptDimension): string {
   return [preset, custom].filter(Boolean).join('；');
 }
 
-function valuesFromData(data: any, upstreamText: string, hasReferenceImages: boolean) {
+function selectedTextWithPresets(data: any, id: ExhibitionPromptDimension, presetMap: ExhibitionPromptPresetMap): string {
+  const custom = String(data?.[`${id}Custom`] || '').trim();
+  const presetId = String(data?.[`${id}Preset`] || '');
+  const configuredPreset = (presetMap[id] || []).find((preset) => preset.id === presetId)?.text || '';
+  const preset = configuredPreset || presetTextForDimension(id, presetId);
+  return [preset, custom].filter(Boolean).join('；');
+}
+
+function valuesFromData(data: any, upstreamText: string, hasReferenceImages: boolean, presetMap: ExhibitionPromptPresetMap) {
   const values: Record<string, string | boolean> = {
     supplement: String(data?.supplement || ''),
     upstreamText,
     hasReferenceImages,
   };
   for (const dimension of EXHIBITION_DIMENSIONS) {
-    values[dimension.id] = selectedText(data, dimension.id);
+    values[dimension.id] = selectedTextWithPresets(data, dimension.id, presetMap);
   }
   return values as any;
+}
+
+function presetEditorText(presets: ExhibitionPromptPresetItem[]): string {
+  return presets.map((preset) => `${preset.label}｜${preset.text}`).join('\n');
+}
+
+function parsePresetEditorText(text: string) {
+  return text
+    .split(/\r?\n/)
+    .map((line, index) => {
+      const raw = line.trim();
+      if (!raw) return null;
+      const [labelRaw, ...rest] = raw.split(/[｜|]/);
+      const label = String(labelRaw || '').trim();
+      const body = rest.join('｜').trim();
+      if (!label || !body) return null;
+      return {
+        id: `${label.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5_-]+/gi, '-').slice(0, 40) || 'preset'}-${index + 1}`,
+        label,
+        text: body,
+        order: index,
+      };
+    })
+    .filter(Boolean) as Array<{ id: string; label: string; text: string; order: number }>;
 }
 
 const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
@@ -81,9 +117,14 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
   const orderedTexts = useOrderedMaterials(upstream.texts, materialOrder);
   const upstreamText = orderedTexts.map((item) => item.url).filter(Boolean).join('\n');
   const outputImageUrls = orderedImages.map((item) => item.url).filter(Boolean);
+  const [presetMap, setPresetMap] = useState<ExhibitionPromptPresetMap>({});
+  const [presetEditorOpen, setPresetEditorOpen] = useState(false);
+  const [presetEditorValue, setPresetEditorValue] = useState('');
+  const [presetSaving, setPresetSaving] = useState(false);
+  const [presetError, setPresetError] = useState('');
   const prompt = useMemo(
-    () => buildExhibitionPrompt(valuesFromData(d, upstreamText, outputImageUrls.length > 0)),
-    [d, upstreamText, outputImageUrls.length],
+    () => buildExhibitionPrompt(valuesFromData(d, upstreamText, outputImageUrls.length > 0, presetMap)),
+    [d, presetMap, upstreamText, outputImageUrls.length],
   );
 
   const [libraryItems, setLibraryItems] = useState<ExhibitionPromptLibraryItem[]>([]);
@@ -94,10 +135,21 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
     ? d.activeDimension
     : EXHIBITION_DIMENSIONS[0].id;
   const activeDimensionMeta = EXHIBITION_DIMENSIONS.find((dimension) => dimension.id === activeDimension) || EXHIBITION_DIMENSIONS[0];
+  const activePresets = presetMap[activeDimension]?.length ? presetMap[activeDimension] : activeDimensionMeta.presets;
 
   useEffect(() => {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
   }, []);
+
+  useEffect(() => {
+    getExhibitionPromptPresets().then(setPresetMap).catch(() => setPresetMap({}));
+  }, []);
+
+  useEffect(() => {
+    if (!presetEditorOpen) return;
+    setPresetEditorValue(presetEditorText(presetMap[activeDimension] || activeDimensionMeta.presets));
+    setPresetError('');
+  }, [presetEditorOpen, activeDimension, activeDimensionMeta.presets, presetMap]);
 
   useEffect(() => {
     if (!canManageTeam && scopeFilter === 'allPersonal') {
@@ -157,7 +209,7 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
 
   const saveCurrentToLibrary = async (dimension: ExhibitionPromptDimension, scope: 'team' | 'personal') => {
     if (isReadonly) return;
-    const text = selectedText(d, dimension);
+    const text = selectedTextWithPresets(d, dimension, presetMap);
     if (!text.trim()) return;
     if (scope === 'team' && !canManageTeam) return;
     const label = window.prompt('词条名称', text.slice(0, 18));
@@ -192,6 +244,26 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
     if (scopeFilter === 'personal') return item.scope === 'personal';
     return canManageTeam && item.scope === 'personal';
   });
+
+  const saveActivePresets = async () => {
+    if (!canManageTeam) return;
+    const presets = parsePresetEditorText(presetEditorValue);
+    if (presets.length === 0) {
+      setPresetError('请至少保留一条“标签｜内容”格式的预设。');
+      return;
+    }
+    setPresetSaving(true);
+    setPresetError('');
+    try {
+      const saved = await updateExhibitionPromptPresets(activeDimension, presets);
+      setPresetMap((prev) => ({ ...prev, [activeDimension]: saved }));
+      setPresetEditorOpen(false);
+    } catch (e: any) {
+      setPresetError(e?.message || '保存预设失败');
+    } finally {
+      setPresetSaving(false);
+    }
+  };
 
   return (
     <div
@@ -247,6 +319,15 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
           <div className="rounded border border-cyan-300/15 bg-black/20 p-2">
             <div className="mb-1.5 flex items-center gap-1.5">
               <span className="text-[11px] font-semibold text-cyan-100">{activeDimensionMeta.label}</span>
+              {canManageTeam && (
+                <button
+                  type="button"
+                  className="text-[10px] text-white/45 hover:text-white"
+                  onClick={() => setPresetEditorOpen((value) => !value)}
+                >
+                  设置预设
+                </button>
+              )}
               <button
                 type="button"
                 className="ml-auto text-[10px] text-white/45 hover:text-white disabled:opacity-40"
@@ -271,10 +352,40 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
               onChange={(event) => patchDimension(activeDimension, { [`${activeDimension}Preset`]: event.target.value })}
             >
               <option value="">不使用预设</option>
-              {activeDimensionMeta.presets.map((preset) => (
+              {activePresets.map((preset) => (
                 <option key={preset.id} value={preset.id}>{preset.label}</option>
               ))}
             </select>
+            {canManageTeam && presetEditorOpen && (
+              <div className="mt-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
+                <div className="mb-1 text-[10px] text-white/45">每行一个预设：标签｜内容</div>
+                <textarea
+                  className={`${FIELD_CLASS} min-h-[96px] resize-y font-mono`}
+                  value={presetEditorValue}
+                  disabled={presetSaving}
+                  onChange={(event) => setPresetEditorValue(event.target.value)}
+                />
+                {presetError && <div className="mt-1 text-[10px] text-red-300">{presetError}</div>}
+                <div className="mt-1.5 flex justify-end gap-1">
+                  <button
+                    type="button"
+                    className={BTN_CLASS}
+                    disabled={presetSaving}
+                    onClick={() => setPresetEditorOpen(false)}
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    className={BTN_CLASS}
+                    disabled={presetSaving}
+                    onClick={saveActivePresets}
+                  >
+                    {presetSaving ? '保存中' : '保存预设'}
+                  </button>
+                </div>
+              </div>
+            )}
             <textarea
               className={`${FIELD_CLASS} mt-1.5 min-h-[58px] resize-y`}
               value={d?.[`${activeDimension}Custom`] || ''}
