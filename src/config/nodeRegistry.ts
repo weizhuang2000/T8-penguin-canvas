@@ -69,6 +69,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: 'cinematic', label: '电影感', category: 'toolbox', description: '电影感组合器：风格 / 镜头 / 光影 / 调色 / 质感各 50 项，支持收藏与 JSON 导入/导出', icon: 'Clapperboard', color: 'pink' },
   { type: 'video-motion', label: '视频运镜', category: 'toolbox', description: '视频运镜组合器：场景 / 动作 / 路径 / 节奏 / 稳定 / 主体约束各 50 项，支持收藏与 JSON 导入/导出', icon: 'Camera', color: 'pink' },
   { type: 'exhibition-prompt', label: '展陈提示词', category: 'exhibition', description: '展陈设计生图 Prompt 组合器：空间、功能、工艺、色彩、灯光、材质、构图、风格和排除项', icon: 'GalleryHorizontalEnd', color: 'cyan' },
+  { type: 'elevation-prompt', label: '立面提示词', category: 'exhibition', description: '解析 DOCX / 文本 PDF / TXT，AI 提炼内容并生成彩立面概念 Prompt 与准确图文工艺排版清单', icon: 'PanelsTopLeft', color: 'cyan' },
   { type: 'multi-angle-visual', label: '可视化多角度', category: 'toolbox', description: '可视化调节方位 / 俯仰 / 远近，支持批量角度、Prompt 模式、前后缀、镜头收藏、JSON 导入/导出与紧凑双栏 UI', icon: 'Compass', color: 'pink' },
   { type: 'portrait-master', label: '肖像大师', category: 'toolbox', description: '捏人 Prompt 设计器：五官、发型、服饰、配饰、气质神情等 9 大类词库，支持随机、锁定、权重和运行输出文本', icon: 'UserRoundCog', color: 'pink' },
   { type: 'pose-master', label: '姿势大师', category: 'toolbox', description: '人体线稿姿态编辑器：支持多人姿势、抓取移动、OpenPose/COCO 预览输出、keypoints JSON 与中英文 prompt', icon: 'PersonStanding', color: 'pink' },

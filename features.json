@@ -1,7 +1,7 @@
 {
   "$schema": "本文件为 T8-penguin-canvas 节点清单防丢失锁,任何节点删减都需要在 roadmap.md 中说明并更新本文件。",
   "version": "1.9.1",
-  "lastUpdated": "2026-06-01-custom-shortcuts",
+  "lastUpdated": "2026-06-06-elevation-prompt",
   "packaging": {
     "description": "Electron NSIS 桌面端打包链路(v1.2.1 起标准化, 严禁未明确指令主动打包)。完整产物拓扑: app.asar(electron/{main,loader,preload}.cjs + node_modules) + app.asar.unpacked(node_modules/sharp + @img) + resources/backend-enc/*.t8c(extraResources, asar 外) + resources/frontend(extraResources, asar 外)。前端版本号由 vite define 注入 __APP_VERSION__、Sidebar 左下角自动同步。",
     "scripts": {
@@ -24,7 +24,7 @@
       "运行 npm run encrypt 前确认已 npm install bytenode 且使用 Electron 内置 Node",
       "backend/src/ 任何文件修改后必须重新 npm run encrypt 再打包",
       "main.cjs 的窗口标题 / log 窗口 / IPC version 三处版本号，以及 backend/src/config.js APP_VERSION 必须与 package.json 同步",
-      "_post_build.cjs 验证 24 个 .t8c 必存在: server/config + routes/{canvas,settings,proxy,externalProviders,files,imageOps,recharge,resources,themes,eagle,aiWatermark} + providers/{registry,mediaResolver,adapters,openaiCompatible,modelscope,volcengine,comfyui,jimengCli} + tools/aiWatermark/{runner,media} + utils/duckPayload",
+      "_post_build.cjs 验证加密后端关键 .t8c 必存在: server/config + routes/{canvas,settings,proxy,externalProviders,files,documents,imageOps,recharge,resources,themes,eagle,aiWatermark} + providers/{registry,mediaResolver,adapters,openaiCompatible,modelscope,volcengine,comfyui,jimengCli} + tools/aiWatermark/{runner,media} + utils/{duckPayload,documentExtractor}",
       "_post_build.cjs 验证 resources/frontend/index.html + assets/ 必存在",
       "_post_build.cjs 必须让 src/assets/theme-music/*.mp3 经 Vite 输出到 resources/frontend/assets，主题音乐默认静音且随前端资源一起打包",
       "_post_build.cjs 必须检查 resources/tools/remove-ai-watermarks sidecar runtime slot；普通源码构建缺少 runtime 时只警告，正式用户包设置 T8_REQUIRE_AI_WATERMARK_RUNTIME=1 后缺少 remove-ai-watermarks.exe / Scripts/remove-ai-watermarks.exe / python.exe 等入口必须失败",
@@ -2019,6 +2019,27 @@
         }
       ]
     },
+    "exhibition": {
+      "label": "展陈工具",
+      "count": 3,
+      "nodes": [
+        {
+          "type": "import-cam-project",
+          "label": "导入项目白模",
+          "description": "读取本机 C:\\cam-output 项目目录，并将选中项目 camoutput 文件夹中的图片导入为图像素材集"
+        },
+        {
+          "type": "exhibition-prompt",
+          "label": "展陈提示词",
+          "description": "展陈空间效果图 Prompt 组合器，支持空间、功能、工艺、色彩、灯光、材质、构图、风格和排除项及团队/个人词库"
+        },
+        {
+          "type": "elevation-prompt",
+          "label": "立面提示词",
+          "description": "上传 DOCX、文本型 PDF 或 TXT 后自动调用 LLM 提炼主题、章节和准确原文；支持单/多立面、逐面集合/整套总览、13 类展陈工艺、自定义工艺、概念生图 Prompt 与准确图文工艺排版清单"
+        }
+      ]
+    },
     "auxiliary": {
       "label": "辅助节点",
       "count": 6,
@@ -2588,6 +2609,9 @@
         "GET /api/ai-watermark/status — 检测 remove-ai-watermarks CLI/Python 包或 Electron sidecar runtime、版本、已知 visible mark 与 optionalFeatures(invisible/lama/detect/trustmark)",
         "POST /api/ai-watermark/process — 去AI水印辅助节点处理入口，支持 smart/visible/erase(cv2/LaMA)/invisible/metadata-check/metadata-remove/identify，输出统一转存 /files/output 或返回文本报告"
       ],
+      "documents": [
+        "POST /api/documents/extract — 内存解析 10MB 内 DOCX、文本型 PDF、UTF-8/UTF-16 TXT；返回清洗后的正文、字符数、页数和警告，不保存原始文档，扫描 PDF 明确提示暂不支持 OCR"
+      ],
       "proxy": [
         "POST /api/proxy/image — 图像生成(百达工坊,自动转存)",
         "POST /api/proxy/image/fal/submit — FAL Queue 提交(gpt-image-2-fal / nano-banana-pro-fal,同步返 images[] 或异步返 requestId+responseUrl)",
@@ -2653,6 +2677,7 @@
     "multi-angle-visual",
     "portrait-master",
     "pose-master",
+    "elevation-prompt",
     "remove-ai-watermark"
   ],
   "nonExecutableNodeTypes": {

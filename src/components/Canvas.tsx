@@ -107,6 +107,7 @@ import RemoveBgNode from './nodes/RemoveBgNode';
 import ImageCompareNode from './nodes/ImageCompareNode';
 import ToolboxParamNode from './nodes/ToolboxParamNode';
 import ExhibitionPromptNode from './nodes/ExhibitionPromptNode';
+import ElevationPromptNode from './nodes/ElevationPromptNode';
 import PortraitMasterNode from './nodes/PortraitMasterNode';
 import PoseMasterNode from './nodes/PoseMasterNode';
 import IdeaNode from './nodes/IdeaNode';
@@ -191,6 +192,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   cinematic: ToolboxParamNode,
   'video-motion': ToolboxParamNode,
   'exhibition-prompt': ExhibitionPromptNode,
+  'elevation-prompt': ElevationPromptNode,
   'multi-angle-visual': ToolboxParamNode,
   'portrait-master': PortraitMasterNode,
   'pose-master': PoseMasterNode,
@@ -331,6 +333,34 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
   cinematic: { kind: 'cinematic', cinematicLanguage: 'en', cinematicStrength: 'balanced' },
   'video-motion': { kind: 'video-motion', motionLanguage: 'en' },
   'exhibition-prompt': { prompt: '', outputText: '', text: '', imageUrls: [], referenceImages: [], materialOrder: [] },
+  'elevation-prompt': {
+    model: 'gemini-3.1-flash-lite-preview',
+    sourceText: '',
+    documentMeta: null,
+    analysis: null,
+    walls: [],
+    wallMode: 'multi',
+    wallCount: 3,
+    outputMode: 'segments',
+    downstreamContent: 'concept',
+    selectedCrafts: ['panel', 'dimensional-letters', 'soft-film-lightbox'],
+    aspectRatio: '3:1',
+    dimensions: '',
+    density: '适中，图文层级均衡',
+    colorMaterial: '',
+    visualStyle: '',
+    supplement: '',
+    prompt: '',
+    outputText: '',
+    text: '',
+    textSegments: [],
+    segments: [],
+    conceptPrompts: [],
+    layoutSchedule: '',
+    layoutScheduleOverride: '',
+    status: 'idle',
+    error: '',
+  },
   'portrait-master': {
     portraitLanguage: 'en',
     portraitSelection: {},
@@ -471,6 +501,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'loop', 'pick-from-set',
   // v1.4.8: 工具箱文本节点也可点击 RUN 直接外挂 OutputNode
   'cinematic', 'video-motion', 'multi-angle-visual', 'portrait-master', 'pose-master',
+  'elevation-prompt',
   'remove-ai-watermark',
 ]);
 

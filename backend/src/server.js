@@ -67,6 +67,7 @@ const externalProvidersRouter = require('./routes/externalProviders');
 const aiWatermarkRouter = require('./routes/aiWatermark');
 const generationHistoryRouter = require('./routes/generationHistory');
 const promptLibraryRouter = require('./routes/promptLibrary');
+const documentsRouter = require('./routes/documents');
 
 app.use('/api/auth', authRouter);
 app.use('/api', (req, res, next) => {
@@ -88,6 +89,7 @@ app.use('/api/eagle', eagleRouter);
 app.use('/api/ai-watermark', aiWatermarkRouter);
 app.use('/api/generation-history', generationHistoryRouter);
 app.use('/api/prompt-library', promptLibraryRouter);
+app.use('/api/documents', documentsRouter);
 app.use('/pay', rechargeRouter.payRouter);
 
 // ========== 前端静态资源(仅打包模式) ==========

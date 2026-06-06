@@ -86,6 +86,33 @@ export async function checkBackendStatus(): Promise<boolean> {
   }
 }
 
+export interface ExtractedDocument {
+  name: string;
+  kind: 'docx' | 'pdf' | 'txt';
+  mime: string;
+  size: number;
+  text: string;
+  charCount: number;
+  pageCount?: number;
+  warnings: string[];
+}
+
+export async function extractDocument(file: File): Promise<ExtractedDocument> {
+  const body = new FormData();
+  body.append('file', file);
+  const res = await fetch(`${BASE}/documents/extract`, { method: 'POST', body });
+  let payload: any = null;
+  try {
+    payload = await res.json();
+  } catch {
+    /* ignore */
+  }
+  if (!res.ok || !payload?.success) {
+    throw new Error(payload?.error || `HTTP ${res.status}`);
+  }
+  return payload.data;
+}
+
 // ========== 画布列表 ==========
 export async function listCanvases(): Promise<CanvasListItem[]> {
   const res = await request<{ success: boolean; data: CanvasListItem[] }>(`${BASE}/canvas`);
