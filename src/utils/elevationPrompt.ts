@@ -15,6 +15,12 @@ export interface ElevationSection {
   suggestedCrafts: string[];
 }
 
+export interface ElevationCraft {
+  id: string;
+  label: string;
+  prompt: string;
+}
+
 export interface ElevationAnalysis {
   projectTheme: string;
   coreMessage: string;

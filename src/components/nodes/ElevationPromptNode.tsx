@@ -20,6 +20,7 @@ import {
   parseElevationAnalysisResponse,
   wallsFromAnalysis,
   type ElevationAnalysis,
+  type ElevationCraft,
   type ElevationWall,
 } from '../../utils/elevationPrompt';
 import {
@@ -502,7 +503,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
         <section className="rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1.5 text-[11px] font-semibold text-cyan-100">4. 工艺与版式</div>
           <div className="grid grid-cols-3 gap-1">
-            {ELEVATION_CRAFTS.map((craft) => {
+            {ELEVATION_CRAFTS.map((craft: ElevationCraft) => {
               const active = selectedCrafts.includes(craft.id);
               return (
                 <button
