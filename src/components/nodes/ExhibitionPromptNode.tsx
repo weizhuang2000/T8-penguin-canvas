@@ -40,7 +40,7 @@ const LIBRARY_SCOPE_TABS: Array<{ value: ScopeFilter; label: string }> = [
 function selectedText(data: any, id: ExhibitionPromptDimension): string {
   const custom = String(data?.[`${id}Custom`] || '').trim();
   const preset = presetTextForDimension(id, data?.[`${id}Preset`]);
-  return [preset, custom].filter(Boolean).join('；');
+  return custom || preset;
 }
 
 function selectedTextWithPresets(data: any, id: ExhibitionPromptDimension, presetMap: ExhibitionPromptPresetMap): string {
@@ -48,7 +48,11 @@ function selectedTextWithPresets(data: any, id: ExhibitionPromptDimension, prese
   const presetId = String(data?.[`${id}Preset`] || '');
   const configuredPreset = (presetMap[id] || []).find((preset) => preset.id === presetId)?.text || '';
   const preset = configuredPreset || presetTextForDimension(id, presetId);
-  return [preset, custom].filter(Boolean).join('；');
+  return custom || preset;
+}
+
+function presetTextFromList(presets: Array<Pick<ExhibitionPromptPresetItem, 'id' | 'text'>>, presetId: string): string {
+  return presets.find((preset) => preset.id === presetId)?.text || '';
 }
 
 function valuesFromData(data: any, upstreamText: string, hasReferenceImages: boolean, presetMap: ExhibitionPromptPresetMap) {
@@ -349,7 +353,14 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
               className={FIELD_CLASS}
               value={d?.[`${activeDimension}Preset`] || ''}
               disabled={isReadonly}
-              onChange={(event) => patchDimension(activeDimension, { [`${activeDimension}Preset`]: event.target.value })}
+              onChange={(event) => {
+                const nextPresetId = event.target.value;
+                const nextPresetText = presetTextFromList(activePresets, nextPresetId);
+                patchDimension(activeDimension, {
+                  [`${activeDimension}Preset`]: nextPresetId,
+                  ...(nextPresetText ? { [`${activeDimension}Custom`]: nextPresetText } : {}),
+                });
+              }}
             >
               <option value="">不使用预设</option>
               {activePresets.map((preset) => (
