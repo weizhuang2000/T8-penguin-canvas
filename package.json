@@ -52,7 +52,6 @@
     "express": "^4.21.0",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.468.0",
-    "mammoth": "^1.9.1",
     "multer": "^2.0.2",
     "mysql2": "^3.11.0",
     "pdf-parse": "1.1.1",

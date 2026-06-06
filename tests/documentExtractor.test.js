@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { deflateRawSync } from 'node:zlib';
 
 const require = createRequire(import.meta.url);
 const {
@@ -14,25 +15,67 @@ function file(name, mime, buffer) {
   return { originalname: name, mimetype: mime, buffer, size: buffer.length };
 }
 
-test('document extractor parses docx through mammoth-compatible result and cleans text', async () => {
+function createZip(entries) {
+  const localParts = [];
+  const centralParts = [];
+  let localOffset = 0;
+  for (const [name, content] of entries) {
+    const nameBuffer = Buffer.from(name, 'utf8');
+    const raw = Buffer.from(content, 'utf8');
+    const compressed = deflateRawSync(raw);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(8, 8);
+    local.writeUInt32LE(compressed.length, 18);
+    local.writeUInt32LE(raw.length, 22);
+    local.writeUInt16LE(nameBuffer.length, 26);
+    localParts.push(local, nameBuffer, compressed);
+
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(8, 10);
+    central.writeUInt32LE(compressed.length, 20);
+    central.writeUInt32LE(raw.length, 24);
+    central.writeUInt16LE(nameBuffer.length, 28);
+    central.writeUInt32LE(localOffset, 42);
+    centralParts.push(central, nameBuffer);
+    localOffset += local.length + nameBuffer.length + compressed.length;
+  }
+  const centralDirectory = Buffer.concat(centralParts);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(centralDirectory.length, 12);
+  eocd.writeUInt32LE(localOffset, 16);
+  return Buffer.concat([...localParts, centralDirectory, eocd]);
+}
+
+test('document extractor parses a real minimal docx zip without external dependencies', async () => {
+  const docx = createZip([
+    ['[Content_Types].xml', '<Types />'],
+    [
+      'word/document.xml',
+      '<w:document><w:body><w:p><w:r><w:t>主题 &amp; 导语</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p><w:r><w:t>展板</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>灯箱</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>',
+    ],
+  ]);
   const data = await extractDocument(
     file(
       '方案.docx',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      Buffer.from('PK fake word/document.xml'),
+      docx,
     ),
-    {
-      docxParser: async () => ({
-        value: '主题\u0000  \r\n\r\n\r\n\r\n第一章',
-        messages: [{ message: '忽略了一个批注' }],
-      }),
-    },
   );
 
   assert.equal(data.kind, 'docx');
-  assert.equal(data.text, '主题\n\n\n第一章');
+  assert.match(data.text, /主题 & 导语/);
+  assert.match(data.text, /展板/);
+  assert.match(data.text, /灯箱/);
   assert.equal(data.charCount, data.text.length);
-  assert.deepEqual(data.warnings, ['忽略了一个批注']);
+  assert.deepEqual(data.warnings, []);
 });
 
 test('document extractor rejects mismatched signatures and scanned pdf', async () => {
@@ -73,6 +116,18 @@ test('document extractor returns pdf pages and truncates oversized text', async 
   assert.equal(data.pageCount, 8);
   assert.equal(data.text.length, MAX_EXTRACTED_CHARS);
   assert.match(data.warnings[0], /已截断/);
+});
+
+test('missing pdf parser dependency returns a deployable diagnostic', async () => {
+  await assert.rejects(
+    extractDocument(file('text.pdf', 'application/pdf', Buffer.from('%PDF-1.7 textual placeholder'))),
+    (error) => {
+      assert.equal(error.status, 503);
+      assert.equal(error.code, 'document_parser_dependency_missing');
+      assert.match(error.message, /npm install/);
+      return true;
+    },
+  );
 });
 
 test('txt decoder supports utf-8 and utf-16 little endian', async () => {

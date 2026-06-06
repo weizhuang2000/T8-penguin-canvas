@@ -1,8 +1,11 @@
 'use strict';
 
 const path = require('path');
+const { inflateRawSync } = require('zlib');
 
 const MAX_EXTRACTED_CHARS = 120000;
+const MAX_DOCX_ENTRY_BYTES = 16 * 1024 * 1024;
+const MAX_DOCX_TOTAL_BYTES = 32 * 1024 * 1024;
 const MIN_PDF_TEXT_CHARS = 10;
 const SUPPORTED_KINDS = new Set(['docx', 'pdf', 'txt']);
 const MIME_BY_KIND = {
@@ -80,6 +83,130 @@ function assertSignature(kind, buffer) {
   }
 }
 
+function publicError(message, status = 400, code = 'invalid_document') {
+  const error = new Error(message);
+  error.status = status;
+  error.code = code;
+  return error;
+}
+
+function findZipEndOfCentralDirectory(buffer) {
+  const minOffset = Math.max(0, buffer.length - 0xffff - 22);
+  for (let offset = buffer.length - 22; offset >= minOffset; offset -= 1) {
+    if (buffer.readUInt32LE(offset) === 0x06054b50) return offset;
+  }
+  return -1;
+}
+
+function listZipEntries(buffer) {
+  const eocdOffset = findZipEndOfCentralDirectory(buffer);
+  if (eocdOffset < 0) throw publicError('DOCX 压缩目录损坏', 422, 'invalid_docx_zip');
+  const entryCount = buffer.readUInt16LE(eocdOffset + 10);
+  if (entryCount > 10000) throw publicError('DOCX 文件项数量异常', 422, 'invalid_docx_zip');
+  const centralOffset = buffer.readUInt32LE(eocdOffset + 16);
+  const entries = [];
+  let offset = centralOffset;
+  for (let index = 0; index < entryCount; index += 1) {
+    if (offset + 46 > buffer.length || buffer.readUInt32LE(offset) !== 0x02014b50) {
+      throw publicError('DOCX 压缩目录损坏', 422, 'invalid_docx_zip');
+    }
+    const compression = buffer.readUInt16LE(offset + 10);
+    const compressedSize = buffer.readUInt32LE(offset + 20);
+    const uncompressedSize = buffer.readUInt32LE(offset + 24);
+    const nameLength = buffer.readUInt16LE(offset + 28);
+    const extraLength = buffer.readUInt16LE(offset + 30);
+    const commentLength = buffer.readUInt16LE(offset + 32);
+    const localHeaderOffset = buffer.readUInt32LE(offset + 42);
+    const nameStart = offset + 46;
+    const name = buffer.subarray(nameStart, nameStart + nameLength).toString('utf8').replace(/\\/g, '/');
+    entries.push({ name, compression, compressedSize, uncompressedSize, localHeaderOffset });
+    offset = nameStart + nameLength + extraLength + commentLength;
+  }
+  return entries;
+}
+
+function readZipEntry(buffer, entry) {
+  const offset = entry.localHeaderOffset;
+  if (offset + 30 > buffer.length || buffer.readUInt32LE(offset) !== 0x04034b50) {
+    throw publicError('DOCX 文件项损坏', 422, 'invalid_docx_zip');
+  }
+  const nameLength = buffer.readUInt16LE(offset + 26);
+  const extraLength = buffer.readUInt16LE(offset + 28);
+  const dataStart = offset + 30 + nameLength + extraLength;
+  const dataEnd = dataStart + entry.compressedSize;
+  if (dataEnd > buffer.length) throw publicError('DOCX 文件项不完整', 422, 'invalid_docx_zip');
+  const compressed = buffer.subarray(dataStart, dataEnd);
+  if (entry.uncompressedSize > MAX_DOCX_ENTRY_BYTES) {
+    throw publicError('DOCX 单个文件项解压后过大', 413, 'docx_content_too_large');
+  }
+  let output;
+  try {
+    if (entry.compression === 0) output = compressed;
+    else if (entry.compression === 8) output = inflateRawSync(compressed, { maxOutputLength: MAX_DOCX_ENTRY_BYTES });
+    else throw publicError(`DOCX 使用了不支持的压缩方式：${entry.compression}`, 422, 'unsupported_docx_compression');
+  } catch (error) {
+    if (error?.status) throw error;
+    throw publicError('DOCX 压缩内容损坏或解压后过大', 422, 'invalid_docx_zip');
+  }
+  if (entry.uncompressedSize && output.length !== entry.uncompressedSize) {
+    throw publicError('DOCX 文件项长度校验失败', 422, 'invalid_docx_zip');
+  }
+  return output;
+}
+
+function decodeXmlEntities(value) {
+  return String(value || '')
+    .replace(/&#x([0-9a-f]+);/gi, (match, hex) => {
+      const point = parseInt(hex, 16);
+      return Number.isInteger(point) && point <= 0x10ffff ? String.fromCodePoint(point) : match;
+    })
+    .replace(/&#(\d+);/g, (match, decimal) => {
+      const point = parseInt(decimal, 10);
+      return Number.isInteger(point) && point <= 0x10ffff ? String.fromCodePoint(point) : match;
+    })
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+function wordXmlToText(xml) {
+  return decodeXmlEntities(
+    String(xml || '')
+      .replace(/<w:tab\b[^>]*\/?>/gi, '\t')
+      .replace(/<w:(?:br|cr)\b[^>]*\/?>/gi, '\n')
+      .replace(/<\/w:tc>/gi, '\t')
+      .replace(/<\/w:tr>/gi, '\n')
+      .replace(/<\/w:p>/gi, '\n')
+      .replace(/<[^>]+>/g, ''),
+  );
+}
+
+async function builtInDocxParser(buffer) {
+  const entries = listZipEntries(buffer);
+  const contentEntries = entries.filter((entry) => (
+    entry.name === 'word/document.xml' ||
+    /^word\/(?:header|footer)\d+\.xml$/i.test(entry.name) ||
+    entry.name === 'word/footnotes.xml' ||
+    entry.name === 'word/endnotes.xml'
+  ));
+  const main = contentEntries.find((entry) => entry.name === 'word/document.xml');
+  if (!main) throw publicError('DOCX 缺少 word/document.xml', 422, 'invalid_docx_structure');
+  const ordered = [main, ...contentEntries.filter((entry) => entry !== main)];
+  const totalSize = ordered.reduce((sum, entry) => sum + (entry.uncompressedSize || 0), 0);
+  if (totalSize > MAX_DOCX_TOTAL_BYTES) {
+    throw publicError('DOCX 可提取文字内容过大', 413, 'docx_content_too_large');
+  }
+  return {
+    value: ordered
+      .map((entry) => wordXmlToText(readZipEntry(buffer, entry).toString('utf8')))
+      .filter(Boolean)
+      .join('\n'),
+    messages: [],
+  };
+}
+
 function validateInput(file) {
   const kind = documentKind(file?.originalname);
   if (!SUPPORTED_KINDS.has(kind)) {
@@ -97,14 +224,25 @@ function validateInput(file) {
   return kind;
 }
 
-async function defaultDocxParser(buffer) {
-  const mammoth = require('mammoth');
-  return mammoth.extractRawText({ buffer });
-}
-
 async function defaultPdfParser(buffer) {
-  const pdfParse = require('pdf-parse');
-  return pdfParse(buffer);
+  let pdfParse;
+  try {
+    pdfParse = require('pdf-parse');
+  } catch (error) {
+    if (error?.code === 'MODULE_NOT_FOUND') {
+      throw publicError(
+        '服务器缺少 PDF 解析依赖 pdf-parse，请在部署目录执行 npm install 后重启服务',
+        503,
+        'document_parser_dependency_missing',
+      );
+    }
+    throw error;
+  }
+  const parse = typeof pdfParse === 'function' ? pdfParse : pdfParse?.default;
+  if (typeof parse !== 'function') {
+    throw publicError('服务器 PDF 解析器版本不兼容', 503, 'document_parser_incompatible');
+  }
+  return parse(buffer);
 }
 
 async function extractDocument(file, parsers = {}) {
@@ -114,7 +252,7 @@ async function extractDocument(file, parsers = {}) {
   let pageCount;
 
   if (kind === 'docx') {
-    const result = await (parsers.docxParser || defaultDocxParser)(file.buffer);
+    const result = await (parsers.docxParser || builtInDocxParser)(file.buffer);
     rawText = result?.value || '';
     for (const message of result?.messages || []) {
       const text = sanitizeExtractedText(message?.message || message);
@@ -161,5 +299,7 @@ module.exports = {
   documentKind,
   sanitizeExtractedText,
   decodeTxt,
+  builtInDocxParser,
+  wordXmlToText,
   extractDocument,
 };

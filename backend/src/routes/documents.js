@@ -27,9 +27,12 @@ router.post('/extract', (req, res) => {
       return res.json({ success: true, data });
     } catch (error) {
       const status = Number(error?.status) || 500;
-      const message = status >= 500 ? '文档解析失败' : (error?.message || '文档解析失败');
-      if (status >= 500) console.error('[documents/extract]', error?.message || error);
-      return res.status(status).json({ success: false, error: message });
+      const code = String(error?.code || (status >= 500 ? 'document_parse_failed' : 'invalid_document'));
+      const message = status >= 500 && !error?.status
+        ? '文档解析失败，请查看后端日志'
+        : (error?.message || '文档解析失败');
+      if (status >= 500) console.error('[documents/extract]', error?.stack || error?.message || error);
+      return res.status(status).json({ success: false, error: message, code });
     }
   });
 });

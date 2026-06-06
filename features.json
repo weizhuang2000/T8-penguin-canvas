@@ -2610,7 +2610,7 @@
         "POST /api/ai-watermark/process — 去AI水印辅助节点处理入口，支持 smart/visible/erase(cv2/LaMA)/invisible/metadata-check/metadata-remove/identify，输出统一转存 /files/output 或返回文本报告"
       ],
       "documents": [
-        "POST /api/documents/extract — 内存解析 10MB 内 DOCX、文本型 PDF、UTF-8/UTF-16 TXT；返回清洗后的正文、字符数、页数和警告，不保存原始文档，扫描 PDF 明确提示暂不支持 OCR"
+        "POST /api/documents/extract — 内存解析 10MB 内 DOCX、文本型 PDF、UTF-8/UTF-16 TXT；DOCX 使用 Node zlib 内置解析，不依赖 Office/mammoth；PDF 使用 pdf-parse，缺失时返回明确 503 错误码；返回清洗后的正文、字符数、页数和警告，不保存原始文档，扫描 PDF 明确提示暂不支持 OCR"
       ],
       "proxy": [
         "POST /api/proxy/image — 图像生成(百达工坊,自动转存)",
