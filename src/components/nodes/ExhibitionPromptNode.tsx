@@ -90,6 +90,10 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryError, setLibraryError] = useState('');
   const scopeFilter: ScopeFilter = d.libraryScopeFilter === 'allPersonal' ? 'allPersonal' : d.libraryScopeFilter === 'personal' ? 'personal' : 'team';
+  const activeDimension: ExhibitionPromptDimension = EXHIBITION_DIMENSIONS.some((dimension) => dimension.id === d.activeDimension)
+    ? d.activeDimension
+    : EXHIBITION_DIMENSIONS[0].id;
+  const activeDimensionMeta = EXHIBITION_DIMENSIONS.find((dimension) => dimension.id === activeDimension) || EXHIBITION_DIMENSIONS[0];
 
   useEffect(() => {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
@@ -110,7 +114,10 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
     setLibraryLoading(true);
     setLibraryError('');
     try {
-      const items = await listExhibitionPromptLibrary({ includePersonal: scopeFilter === 'allPersonal' });
+      const items = await listExhibitionPromptLibrary({
+        dimension: activeDimension,
+        includePersonal: scopeFilter === 'allPersonal',
+      });
       setLibraryItems(items);
     } catch (e: any) {
       setLibraryError(e?.message || '读取词库失败');
@@ -121,7 +128,7 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
 
   useEffect(() => {
     void loadLibrary();
-  }, [scopeFilter]);
+  }, [scopeFilter, activeDimension]);
 
   const patchDimension = (dimension: ExhibitionPromptDimension, patch: Record<string, string>) => {
     if (isReadonly) return;
@@ -213,48 +220,69 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-2">
-          {EXHIBITION_DIMENSIONS.map((dimension) => (
-            <div key={dimension.id} className="rounded border border-white/10 bg-white/[0.035] p-2">
-              <div className="mb-1.5 flex items-center gap-1.5">
-                <span className="text-[11px] font-semibold text-cyan-100">{dimension.label}</span>
+        <div className="rounded border border-white/10 bg-white/[0.035] p-2">
+          <div className="mb-2 grid grid-cols-3 gap-1">
+            {EXHIBITION_DIMENSIONS.map((dimension) => {
+              const hasValue = !!selectedText(d, dimension.id);
+              const isActive = activeDimension === dimension.id;
+              return (
                 <button
+                  key={dimension.id}
                   type="button"
-                  className="ml-auto text-[10px] text-white/45 hover:text-white disabled:opacity-40"
-                  disabled={isReadonly}
-                  onClick={() => saveCurrentToLibrary(dimension.id, 'personal')}
+                  className={`min-w-0 rounded border px-1.5 py-1 text-[10px] transition-colors ${
+                    isActive
+                      ? 'border-cyan-300/60 bg-cyan-300/15 text-cyan-100'
+                      : 'border-white/10 bg-black/15 text-white/55 hover:bg-white/[0.08]'
+                  }`}
+                  onClick={() => update({ activeDimension: dimension.id })}
+                  title={dimension.label}
                 >
-                  存个人
+                  <span className="block truncate">{dimension.label}</span>
+                  {hasValue && <span className="mx-auto mt-0.5 block h-1 w-1 rounded-full bg-cyan-200" />}
                 </button>
-                <button
-                  type="button"
-                  className="text-[10px] text-white/45 hover:text-white disabled:opacity-40"
-                  disabled={isReadonly || !canManageTeam}
-                  onClick={() => saveCurrentToLibrary(dimension.id, 'team')}
-                >
-                  存团队
-                </button>
-              </div>
-              <select
-                className={FIELD_CLASS}
-                value={d?.[`${dimension.id}Preset`] || ''}
+              );
+            })}
+          </div>
+
+          <div className="rounded border border-cyan-300/15 bg-black/20 p-2">
+            <div className="mb-1.5 flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-cyan-100">{activeDimensionMeta.label}</span>
+              <button
+                type="button"
+                className="ml-auto text-[10px] text-white/45 hover:text-white disabled:opacity-40"
                 disabled={isReadonly}
-                onChange={(event) => patchDimension(dimension.id, { [`${dimension.id}Preset`]: event.target.value })}
+                onClick={() => saveCurrentToLibrary(activeDimension, 'personal')}
               >
-                <option value="">不使用预设</option>
-                {dimension.presets.map((preset) => (
-                  <option key={preset.id} value={preset.id}>{preset.label}</option>
-                ))}
-              </select>
-              <textarea
-                className={`${FIELD_CLASS} mt-1.5 min-h-[44px] resize-y`}
-                value={d?.[`${dimension.id}Custom`] || ''}
-                disabled={isReadonly}
-                placeholder={`自定义${dimension.label}`}
-                onChange={(event) => patchDimension(dimension.id, { [`${dimension.id}Custom`]: event.target.value })}
-              />
+                存个人
+              </button>
+              <button
+                type="button"
+                className="text-[10px] text-white/45 hover:text-white disabled:opacity-40"
+                disabled={isReadonly || !canManageTeam}
+                onClick={() => saveCurrentToLibrary(activeDimension, 'team')}
+              >
+                存团队
+              </button>
             </div>
-          ))}
+            <select
+              className={FIELD_CLASS}
+              value={d?.[`${activeDimension}Preset`] || ''}
+              disabled={isReadonly}
+              onChange={(event) => patchDimension(activeDimension, { [`${activeDimension}Preset`]: event.target.value })}
+            >
+              <option value="">不使用预设</option>
+              {activeDimensionMeta.presets.map((preset) => (
+                <option key={preset.id} value={preset.id}>{preset.label}</option>
+              ))}
+            </select>
+            <textarea
+              className={`${FIELD_CLASS} mt-1.5 min-h-[58px] resize-y`}
+              value={d?.[`${activeDimension}Custom`] || ''}
+              disabled={isReadonly}
+              placeholder={`自定义${activeDimensionMeta.label}`}
+              onChange={(event) => patchDimension(activeDimension, { [`${activeDimension}Custom`]: event.target.value })}
+            />
+          </div>
         </div>
 
         <div className="rounded border border-white/10 bg-white/[0.035] p-2">
@@ -289,7 +317,7 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
         <div className="rounded border border-white/10 bg-black/20 p-2">
           <div className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold text-cyan-100">
             <Library size={13} />
-            <span>提示词库</span>
+            <span>提示词库 · {activeDimensionMeta.label}</span>
             {libraryLoading && <Loader2 size={12} className="animate-spin" />}
           </div>
           <div className="mb-2 grid grid-cols-3 gap-1">
