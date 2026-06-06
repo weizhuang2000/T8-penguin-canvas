@@ -439,14 +439,14 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
             ))}
           </div>
           {libraryError && <div className="mb-1 text-[10px] text-red-300">{libraryError}</div>}
-          <div className="grid max-h-36 grid-cols-2 gap-1.5 overflow-y-auto">
+          <div className="grid max-h-36 grid-cols-4 gap-1 overflow-y-auto">
             {visibleLibrary.length === 0 ? (
-              <div className="col-span-2 text-[10px] text-white/35">暂无词条</div>
+              <div className="col-span-4 text-[10px] text-white/35">暂无词条</div>
             ) : visibleLibrary.map((item) => (
               <div key={item.id} className="relative min-w-0">
                 <button
                   type="button"
-                  className={`h-[50px] w-full min-w-0 rounded border border-white/10 bg-white/[0.04] px-2 py-1 text-left text-[10px] text-white/70 hover:bg-white/[0.08] disabled:cursor-not-allowed ${
+                  className={`h-[44px] w-full min-w-0 rounded border border-white/10 bg-white/[0.04] px-1.5 py-1 text-left text-[10px] text-white/70 hover:bg-white/[0.08] disabled:cursor-not-allowed ${
                     isReadonly ? 'disabled:opacity-55' : ''
                   }`}
                   title={`${item.label}\n${item.text}`}
@@ -454,7 +454,9 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
                   onClick={() => applyLibraryItem(item)}
                 >
                   <span className="block truncate">{item.label}</span>
-                  <span className="block truncate text-white/35">{item.ownerName || item.scope}</span>
+                  {canManageTeam && (
+                    <span className="block truncate text-white/35">{item.ownerName || (item.scope === 'team' ? '团队' : '个人')}</span>
+                  )}
                 </button>
                 {libraryDeleteMode && canDeleteLibraryItem(item) && (
                   <button
