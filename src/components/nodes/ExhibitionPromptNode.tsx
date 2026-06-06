@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { GalleryHorizontalEnd, Library, Loader2, Save, Trash2 } from 'lucide-react';
+import { GalleryHorizontalEnd, Library, Loader2, Save, X } from 'lucide-react';
 import {
   buildExhibitionPrompt,
   EXHIBITION_DIMENSIONS,
@@ -119,6 +119,7 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
   const [libraryItems, setLibraryItems] = useState<ExhibitionPromptLibraryItem[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryError, setLibraryError] = useState('');
+  const [libraryDeleteMode, setLibraryDeleteMode] = useState(false);
   const scopeFilter: ScopeFilter = d.libraryScopeFilter === 'allPersonal' ? 'allPersonal' : d.libraryScopeFilter === 'personal' ? 'personal' : 'team';
   const activeDimension: ExhibitionPromptDimension = EXHIBITION_DIMENSIONS.some((dimension) => dimension.id === d.activeDimension)
     ? d.activeDimension
@@ -171,6 +172,10 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
     void loadLibrary();
   }, [scopeFilter, activeDimension]);
 
+  useEffect(() => {
+    setLibraryDeleteMode(false);
+  }, [scopeFilter, activeDimension]);
+
   const patchDimension = (dimension: ExhibitionPromptDimension, patch: Record<string, string>) => {
     if (isReadonly) return;
     update(patch);
@@ -208,11 +213,19 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
     }
   };
 
+  const canDeleteLibraryItem = (item: ExhibitionPromptLibraryItem) => {
+    if (isReadonly) return false;
+    if (item.scope === 'team') return canManageTeam;
+    if (item.scope === 'personal') return canManageTeam || item.ownerUserId === currentUser?.id;
+    return false;
+  };
+
   const visibleLibrary = libraryItems.filter((item) => {
     if (scopeFilter === 'team') return item.scope === 'team';
     if (scopeFilter === 'personal') return item.scope === 'personal';
     return canManageTeam && item.scope === 'personal';
   });
+  const hasDeletableLibrary = visibleLibrary.some(canDeleteLibraryItem);
 
   const saveActivePresets = async () => {
     if (!canManageTeam) return;
@@ -399,6 +412,18 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
             <Library size={13} />
             <span>提示词库 · {activeDimensionMeta.label}</span>
             {libraryLoading && <Loader2 size={12} className="animate-spin" />}
+            <button
+              type="button"
+              className={`ml-auto h-6 rounded border px-2 text-[10px] font-normal ${
+                libraryDeleteMode
+                  ? 'border-red-300/50 bg-red-400/15 text-red-100'
+                  : 'border-white/10 text-white/55 hover:bg-white/10 hover:text-white'
+              } disabled:cursor-not-allowed disabled:opacity-35`}
+              disabled={!hasDeletableLibrary}
+              onClick={() => setLibraryDeleteMode((value) => !value)}
+            >
+              删除
+            </button>
           </div>
           <div className="mb-2 grid grid-cols-3 gap-1">
             {LIBRARY_SCOPE_TABS.map(({ value, label }) => (
@@ -414,30 +439,33 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
             ))}
           </div>
           {libraryError && <div className="mb-1 text-[10px] text-red-300">{libraryError}</div>}
-          <div className="max-h-36 space-y-1 overflow-y-auto">
+          <div className="grid max-h-36 grid-cols-2 gap-1.5 overflow-y-auto">
             {visibleLibrary.length === 0 ? (
-              <div className="text-[10px] text-white/35">暂无词条</div>
+              <div className="col-span-2 text-[10px] text-white/35">暂无词条</div>
             ) : visibleLibrary.map((item) => (
-              <div key={item.id} className="grid grid-cols-[1fr_24px] items-center gap-1">
+              <div key={item.id} className="relative min-w-0">
                 <button
                   type="button"
-                  className="min-w-0 rounded border border-white/10 bg-white/[0.04] px-2 py-1 text-left text-[10px] text-white/70 hover:bg-white/[0.08]"
+                  className={`h-[50px] w-full min-w-0 rounded border border-white/10 bg-white/[0.04] px-2 py-1 text-left text-[10px] text-white/70 hover:bg-white/[0.08] disabled:cursor-not-allowed ${
+                    isReadonly ? 'disabled:opacity-55' : ''
+                  }`}
                   title={`${item.label}\n${item.text}`}
-                  disabled={isReadonly}
+                  disabled={isReadonly || libraryDeleteMode}
                   onClick={() => applyLibraryItem(item)}
                 >
                   <span className="block truncate">{item.label}</span>
                   <span className="block truncate text-white/35">{item.ownerName || item.scope}</span>
                 </button>
-                <button
-                  type="button"
-                  className="flex h-6 w-6 items-center justify-center rounded border border-white/10 text-white/45 hover:text-red-200 disabled:opacity-35"
-                  disabled={isReadonly || (item.scope === 'team' && !canManageTeam) || (item.scope === 'personal' && !canManageTeam && item.ownerUserId !== currentUser?.id)}
-                  onClick={() => removeLibraryItem(item)}
-                  title="删除词条"
-                >
-                  <Trash2 size={12} />
-                </button>
+                {libraryDeleteMode && canDeleteLibraryItem(item) && (
+                  <button
+                    type="button"
+                    className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full border border-red-200/70 bg-red-500 text-white shadow shadow-red-950/40 hover:bg-red-400"
+                    onClick={() => removeLibraryItem(item)}
+                    title="删除词条"
+                  >
+                    <X size={10} strokeWidth={3} />
+                  </button>
+                )}
               </div>
             ))}
           </div>
