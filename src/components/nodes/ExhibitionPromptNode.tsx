@@ -1,6 +1,6 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { GalleryHorizontalEnd, ImagePlus, Library, Loader2, Save, Trash2 } from 'lucide-react';
+import { GalleryHorizontalEnd, Library, Loader2, Save, Trash2 } from 'lucide-react';
 import {
   buildExhibitionPrompt,
   EXHIBITION_DIMENSIONS,
@@ -19,11 +19,10 @@ import {
   type ExhibitionPromptPresetItem,
   type ExhibitionPromptPresetMap,
 } from '../../services/api';
-import { uploadFile } from '../../services/generation';
 import { useThemeStore } from '../../stores/theme';
 import { useCanvasStore } from '../../stores/canvas';
 import { useUpdateNodeData } from './useUpdateNodeData';
-import { useUpstreamMaterials, type Material } from './useUpstreamMaterials';
+import { useUpstreamMaterials } from './useUpstreamMaterials';
 import { useOrderedMaterials } from './useOrderedMaterials';
 import MaterialPreviewSection from './MaterialPreviewSection';
 
@@ -101,23 +100,9 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
   const canManageTeam = currentUser?.role === 'admin' || currentUser?.role === 'manager';
   const isDark = theme === 'dark';
   const isPixel = style === 'pixel';
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const upstream = useUpstreamMaterials(id);
-  const localRefs: string[] = Array.isArray(d.referenceImages) ? d.referenceImages : [];
   const materialOrder: string[] = Array.isArray(d.materialOrder) ? d.materialOrder : [];
-  const localImageMaterials: Material[] = useMemo(
-    () => localRefs.map((url, index) => ({
-      id: `local::exhibition:${url}`,
-      kind: 'image' as const,
-      url,
-      sourceNodeId: id,
-      origin: 'local' as const,
-      label: `本地参考${index + 1}`,
-    })),
-    [id, localRefs],
-  );
-  const allImages = useMemo(() => [...localImageMaterials, ...upstream.images], [localImageMaterials, upstream.images]);
-  const orderedImages = useOrderedMaterials(allImages, materialOrder);
+  const orderedImages = useOrderedMaterials(upstream.images, materialOrder);
   const orderedTexts = useOrderedMaterials(upstream.texts, materialOrder);
   const upstreamText = orderedTexts.map((item) => item.url).filter(Boolean).join('\n');
   const outputImageUrls = orderedImages.map((item) => item.url).filter(Boolean);
@@ -189,26 +174,6 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
   const patchDimension = (dimension: ExhibitionPromptDimension, patch: Record<string, string>) => {
     if (isReadonly) return;
     update(patch);
-  };
-
-  const handleFiles = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    if (!files.length || isReadonly) return;
-    try {
-      const uploaded: string[] = [];
-      for (const file of files.slice(0, 9 - localRefs.length)) {
-        const result = await uploadFile(file);
-        uploaded.push(result.url);
-      }
-      update({ referenceImages: [...localRefs, ...uploaded] });
-    } finally {
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  const removeLocal = (material: Material) => {
-    if (isReadonly || material.origin !== 'local') return;
-    update({ referenceImages: localRefs.filter((url) => url !== material.url) });
   };
 
   const saveCurrentToLibrary = async (dimension: ExhibitionPromptDimension, scope: 'team' | 'personal') => {
@@ -292,7 +257,7 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
       <div className="nodrag nopan max-h-[720px] space-y-2 overflow-y-auto p-2.5" onMouseDown={(e) => e.stopPropagation()}>
         {isReadonly && (
           <div className="rounded border border-amber-300/30 bg-amber-300/10 px-2 py-1.5 text-[10px] text-amber-100">
-            当前画布为只读，不能修改提示词、上传参考图或维护词库。
+            当前画布为只读，不能修改提示词或维护词库。
           </div>
         )}
 
@@ -423,18 +388,11 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
           images={orderedImages}
           order={materialOrder}
           onReorder={(next) => !isReadonly && update({ materialOrder: next })}
-          onRemoveLocal={removeLocal}
           isDark={isDark}
           isPixel={isPixel}
           groups={['text', 'image']}
-          title={`上游与参考图 · 输出参考 ${outputImageUrls.length}`}
-          imageUploadAction={isReadonly ? undefined : {
-            onClick: () => fileInputRef.current?.click(),
-            title: '上传参考图',
-            remaining: Math.max(0, 9 - localRefs.length),
-          }}
+          title={`上游参考 · 输出参考 ${outputImageUrls.length}`}
         />
-        <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFiles} />
 
         <div className="rounded border border-white/10 bg-black/20 p-2">
           <div className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold text-cyan-100">
@@ -503,15 +461,6 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
           </div>
         </div>
 
-        <button
-          type="button"
-          className={`${BTN_CLASS} w-full`}
-          disabled={isReadonly || localRefs.length >= 9}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <ImagePlus size={13} />
-          上传参考图
-        </button>
       </div>
     </div>
   );
