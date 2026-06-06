@@ -386,7 +386,7 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
         </div>
 
         <div className="rounded border border-white/10 bg-white/[0.035] p-2">
-          <div className="mb-1.5 text-[11px] font-semibold text-cyan-100">特别补充</div>
+          <div className="mb-1.5 text-[11px] font-semibold text-cyan-100">用户补充</div>
           <textarea
             className={`${FIELD_CLASS} min-h-[54px] resize-y`}
             value={d.supplement || ''}
@@ -446,17 +446,14 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
               <div key={item.id} className="relative min-w-0">
                 <button
                   type="button"
-                  className={`h-[44px] w-full min-w-0 rounded border border-white/10 bg-white/[0.04] px-1.5 py-1 text-left text-[10px] text-white/70 hover:bg-white/[0.08] disabled:cursor-not-allowed ${
+                  className={`h-7 w-full min-w-0 rounded border border-white/10 bg-white/[0.04] px-1.5 text-left text-[10px] text-white/70 hover:bg-white/[0.08] disabled:cursor-not-allowed ${
                     isReadonly ? 'disabled:opacity-55' : ''
                   }`}
-                  title={`${item.label}\n${item.text}`}
+                  title={canManageTeam ? `${item.label}\n${item.ownerName || (item.scope === 'team' ? '团队' : '个人')}\n${item.text}` : `${item.label}\n${item.text}`}
                   disabled={isReadonly || libraryDeleteMode}
                   onClick={() => applyLibraryItem(item)}
                 >
                   <span className="block truncate">{item.label}</span>
-                  {canManageTeam && (
-                    <span className="block truncate text-white/35">{item.ownerName || (item.scope === 'team' ? '团队' : '个人')}</span>
-                  )}
                 </button>
                 {libraryDeleteMode && canDeleteLibraryItem(item) && (
                   <button

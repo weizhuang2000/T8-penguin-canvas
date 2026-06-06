@@ -120,11 +120,10 @@ export function buildExhibitionPrompt(values) {
   const upstreamText = String(values.upstreamText || '').trim();
   if (upstreamText) lines.push(`补充需求：${upstreamText}`);
   const supplement = String(values.supplement || '').trim();
-  if (supplement) lines.push(`特别补充：${supplement}`);
+  if (supplement) lines.push(supplement);
   if (values.hasReferenceImages) {
     lines.push('参考图说明：参考上游或本地参考图中的空间比例、展项关系、材料气质和视觉氛围，不要照搬无关内容。');
   }
   lines.push('渲染要求：真实展陈空间效果图，建筑室内摄影级构图，材质细节清晰，灯光层次准确，空间尺度可信，画面干净完整。');
   return lines.join('\n');
 }
-
