@@ -9,6 +9,7 @@ const {
   normalizeAdvancedProviders,
   summarizeAdvancedProviders,
 } = require('../providers/registry');
+const { normalizeLlmBaseUrl } = require('../utils/llmBaseUrl');
 
 const router = express.Router();
 
@@ -22,7 +23,7 @@ const DEFAULT_SETTINGS = {
   rhBaseUrl: config.RH_BASE_URL,
   // v1.2.9.16: 取消 rhWalletApiKey —— RH 钱包应用节点与普通 RunningHub 节点统一使用 rhApiKey
   llmApiKey: '',
-  llmBaseUrl: config.ZHENZHEN_BASE_URL, // 同百达工坊上游
+  llmBaseUrl: config.ZHENZHEN_BASE_URL, // 默认同百达工坊，可单独设置
   // 分类 Key（留空时 fallback 到 zhenzhenApiKey）
   gptImageApiKey: '',
   nanoBananaApiKey: '',
@@ -105,7 +106,7 @@ function loadSettings({ persistMigrations = true } = {}) {
       ...DEFAULT_SETTINGS,
       ...data,
       zhenzhenBaseUrl: config.ZHENZHEN_BASE_URL,
-      llmBaseUrl: config.ZHENZHEN_BASE_URL,
+      llmBaseUrl: normalizeLlmBaseUrl(data.llmBaseUrl, config.ZHENZHEN_BASE_URL) || config.ZHENZHEN_BASE_URL,
     };
     merged.advancedProviders = normalizeAdvancedProviders(data.advancedProviders);
     const migrated = migrateLegacyDefaultPaths(merged);
@@ -173,12 +174,19 @@ router.post('/', requireAdmin, (req, res) => {
   const current = loadSettings();
   const incoming = req.body || {};
   const hasAdvancedProviders = Object.prototype.hasOwnProperty.call(incoming, 'advancedProviders');
+  const hasLlmBaseUrl = Object.prototype.hasOwnProperty.call(incoming, 'llmBaseUrl');
+  const llmBaseUrl = hasLlmBaseUrl
+    ? normalizeLlmBaseUrl(incoming.llmBaseUrl, config.ZHENZHEN_BASE_URL)
+    : normalizeLlmBaseUrl(current.llmBaseUrl, config.ZHENZHEN_BASE_URL);
+  if (!llmBaseUrl) {
+    return res.status(400).json({ success: false, error: 'LLM Base URL 必须是有效的 http/https 地址' });
+  }
   const merged = {
     ...current,
     ...incoming,
-    // base URL 强制为配置值,不允许覆盖
+    // 百达工坊地址保持锁定；LLM 地址允许单独配置。
     zhenzhenBaseUrl: config.ZHENZHEN_BASE_URL,
-    llmBaseUrl: config.ZHENZHEN_BASE_URL,
+    llmBaseUrl,
   };
   merged.advancedProviders = hasAdvancedProviders
     ? normalizeAdvancedProviders(incoming.advancedProviders, current.advancedProviders)

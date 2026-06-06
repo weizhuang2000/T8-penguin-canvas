@@ -148,6 +148,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   const [inputs, setInputs] = useState<Record<KeyField, string>>(emptyMap());
   const [shows, setShows] = useState<Record<KeyField, boolean>>(emptyShow());
   const [enableZhenzhenFallback, setEnableZhenzhenFallback] = useState(true);
+  const [llmBaseUrlInput, setLlmBaseUrlInput] = useState(FIXED_ZHENZHEN_BASE);
   const [saved, setSaved] = useState(false);
   // v1.2.10.2: 文件自动保存路径输入
   const [fileSavePathInput, setFileSavePathInput] = useState<string>('');
@@ -182,6 +183,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       setInputs(emptyMap());
       setShows(emptyShow());
       setEnableZhenzhenFallback((settings as any)?.enableZhenzhenFallback !== false);
+      setLlmBaseUrlInput((settings as any)?.llmBaseUrl || FIXED_ZHENZHEN_BASE);
       revealedRef.current = {};
       setSaved(false);
       setBackupMessage('');
@@ -215,6 +217,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     enableZhenzhenFallback,
     rhApiKey: inputs.rhApiKey.trim(),
     llmApiKey: inputs.llmApiKey.trim(),
+    llmBaseUrl: llmBaseUrlInput.trim() || FIXED_ZHENZHEN_BASE,
     gptImageApiKey: inputs.gptImageApiKey.trim(),
     nanoBananaApiKey: inputs.nanoBananaApiKey.trim(),
     mjApiKey: inputs.mjApiKey.trim(),
@@ -263,6 +266,9 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     if (typeof (source as any).enableZhenzhenFallback === 'boolean') {
       next.enableZhenzhenFallback = (source as any).enableZhenzhenFallback;
     }
+    if (typeof (source as any).llmBaseUrl === 'string' && (source as any).llmBaseUrl.trim()) {
+      next.llmBaseUrl = (source as any).llmBaseUrl.trim();
+    }
     if (Array.isArray((source as any).advancedProviders)) {
       next.advancedProviders = (source as any).advancedProviders;
     }
@@ -298,7 +304,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
           ))
         ),
         zhenzhenBaseUrl: FIXED_ZHENZHEN_BASE,
-        llmBaseUrl: FIXED_ZHENZHEN_BASE,
+        llmBaseUrl: editable.llmBaseUrl || raw?.llmBaseUrl || FIXED_ZHENZHEN_BASE,
         rhBaseUrl: RH_BASE,
       };
       const payload = {
@@ -333,6 +339,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     if (typeof patch.resourceLibraryPath === 'string') setResourceLibraryPathInput(patch.resourceLibraryPath);
     if (typeof patch.themeTemplatePath === 'string') setThemeTemplatePathInput(patch.themeTemplatePath);
     if (typeof patch.eagleApiBase === 'string') setEagleApiBaseInput(patch.eagleApiBase);
+    if (typeof patch.llmBaseUrl === 'string') setLlmBaseUrlInput(patch.llmBaseUrl);
     if (typeof patch.enableZhenzhenFallback === 'boolean') {
       setEnableZhenzhenFallback(patch.enableZhenzhenFallback);
     }
@@ -384,6 +391,17 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   };
 
   const handleSave = async () => {
+    const newLlmBaseUrl = llmBaseUrlInput.trim() || FIXED_ZHENZHEN_BASE;
+    try {
+      const parsed = new URL(newLlmBaseUrl);
+      if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
+        throw new Error();
+      }
+    } catch {
+      setBackupMessage('LLM Base URL 格式不正确，请填写有效的 http/https 地址，且不要包含账号、查询参数或锚点。');
+      return;
+    }
+
     const patch: Partial<ApiSettings> = {};
     for (const f of ALL_FIELDS) {
       const v = inputs[f].trim();
@@ -425,6 +443,10 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     const oldFallback = (settings as any)?.enableZhenzhenFallback !== false;
     if (enableZhenzhenFallback !== oldFallback) {
       (patch as any).enableZhenzhenFallback = enableZhenzhenFallback;
+    }
+    const oldLlmBaseUrl = String((settings as any)?.llmBaseUrl || FIXED_ZHENZHEN_BASE).trim();
+    if (newLlmBaseUrl !== oldLlmBaseUrl) {
+      patch.llmBaseUrl = newLlmBaseUrl;
     }
     if (Object.keys(patch).length === 0) {
       onClose();
@@ -1109,7 +1131,25 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
             </span>
           </label>
           {renderKey(COMMON_KEYS[1], { baseUrlNote: `Base URL: ${RH_BASE}` })}
-          {renderKey(COMMON_KEYS[2], { baseUrlNote: `Base URL 锁定: ${FIXED_ZHENZHEN_BASE} (与百达同地址, Key 独立)` })}
+          {renderKey(COMMON_KEYS[2], {})}
+          <label className="block space-y-2">
+            <span className={`text-sm font-medium flex items-center gap-2 ${labelCls}`}>
+              <ServerCog size={14} />
+              LLM Base URL
+              <span className={`text-[11px] font-normal ${hintCls}`}>· Key 独立 · 支持 OpenAI 兼容地址</span>
+            </span>
+            <input
+              type="url"
+              value={llmBaseUrlInput}
+              onChange={(e) => setLlmBaseUrlInput(e.target.value)}
+              placeholder={FIXED_ZHENZHEN_BASE}
+              className={`${inputCls} w-full`}
+              autoComplete="off"
+            />
+            <span className={`block text-[11px] ${hintCls}`}>
+              可填写站点根地址或以 /v1 结尾的地址；留空恢复默认 {FIXED_ZHENZHEN_BASE}
+            </span>
+          </label>
 
           {/* 分类独立 Key（默认折叠，点击展开 —— 新手友好） */}
           <div className={`pt-3 border-t ${isPixel ? 'border-[var(--px-ink)]/30' : isDark ? 'border-white/10' : 'border-black/10'}`}>

@@ -212,7 +212,7 @@ export interface ApiSettings {
   rhApiKey: string;
   rhBaseUrl: string; // https://www.runninghub.cn
   llmApiKey: string;
-  llmBaseUrl: string; // 锁定 https://ai.t8star.org
+  llmBaseUrl: string;
   // 分类 API Key（留空时 fallback 到 zhenzhenApiKey）
   gptImageApiKey?: string;
   nanoBananaApiKey?: string;

@@ -13,6 +13,7 @@ const { getWhitePng } = require('../utils/whitePng');
 const { tryDecodeDuckPayload } = require('../utils/duckPayload');
 const { normalizeImageOutputFormat, writeImageOutput } = require('../utils/imageOutput');
 const { addHistoryItems, kindFromUrl } = require('../utils/generationHistory');
+const { resolveLlmChatCompletionsUrl } = require('../utils/llmBaseUrl');
 
 const router = express.Router();
 
@@ -1339,7 +1340,7 @@ router.post('/llm', async (req, res) => {
     return res.status(400).json({ success: false, error: e.message || '参考图预处理失败' });
   }
 
-  const upstream = `${config.ZHENZHEN_BASE_URL}/v1/chat/completions`;
+  const upstream = resolveLlmChatCompletionsUrl(settings.llmBaseUrl, config.ZHENZHEN_BASE_URL);
   const payload = {
     model,
     messages: normalizedMessages,

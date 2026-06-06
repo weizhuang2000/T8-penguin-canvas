@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { ApiSettings } from '../types/canvas';
 import * as api from '../services/api';
 
-// 三套 Key 的固定 base URL
+// 百达工坊固定地址，也是 LLM 独立 Key 的默认地址
 export const FIXED_ZHENZHEN_BASE = 'https://ai.t8star.org';
 export const RH_BASE = 'https://www.runninghub.cn';
 
@@ -59,7 +59,7 @@ export const useApiKeysStore = create<ApiKeysState>((set) => ({
     try {
       const data = await api.getSettings();
       set({
-        settings: { ...DEFAULT, ...data, zhenzhenBaseUrl: FIXED_ZHENZHEN_BASE, llmBaseUrl: FIXED_ZHENZHEN_BASE },
+        settings: { ...DEFAULT, ...data, zhenzhenBaseUrl: FIXED_ZHENZHEN_BASE },
         loading: false,
         loaded: true,
       });
@@ -75,7 +75,7 @@ export const useApiKeysStore = create<ApiKeysState>((set) => ({
       // 重新拉取(后端会返回脱敏后的 Key)
       const data = await api.getSettings();
       set({
-        settings: { ...DEFAULT, ...data, zhenzhenBaseUrl: FIXED_ZHENZHEN_BASE, llmBaseUrl: FIXED_ZHENZHEN_BASE },
+        settings: { ...DEFAULT, ...data, zhenzhenBaseUrl: FIXED_ZHENZHEN_BASE },
         loading: false,
       });
     } catch (e: any) {

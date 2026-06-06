@@ -47,6 +47,7 @@ test('settings route persists advancedProviders with masking and secret preserva
   const initial = await fetch(base).then((res) => res.json());
   assert.equal(initial.success, true);
   assert.equal(initial.data.enableZhenzhenFallback, true);
+  assert.equal(initial.data.llmBaseUrl, 'https://ai.t8star.org');
   assert.ok(Array.isArray(initial.data.advancedProviders));
   assert.equal(initial.data.advancedProviderSummary.enabledCount, 0);
   assert.equal(initial.data.advancedProviders.find((p: any) => p.id === 'modelscope')?.apiKey, '');
@@ -81,8 +82,16 @@ test('settings route persists advancedProviders with masking and secret preserva
   }).then((res) => res.json());
   assert.equal(disableFallback.success, true);
 
+  const saveLlmBaseUrl = await fetch(base, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ llmBaseUrl: 'https://llm.example.com/openai/v1/' }),
+  }).then((res) => res.json());
+  assert.equal(saveLlmBaseUrl.success, true);
+
   const masked = await fetch(base).then((res) => res.json());
   assert.equal(masked.data.enableZhenzhenFallback, false);
+  assert.equal(masked.data.llmBaseUrl, 'https://llm.example.com/openai/v1');
   const modelscope = masked.data.advancedProviders.find((p: any) => p.id === 'modelscope');
   assert.equal(modelscope.apiKey, '****3456');
   assert.equal(modelscope.hasApiKey, true);
@@ -93,6 +102,7 @@ test('settings route persists advancedProviders with masking and secret preserva
 
   const raw = await fetch(`${base}/raw`).then((res) => res.json());
   assert.equal(raw.data.enableZhenzhenFallback, false);
+  assert.equal(raw.data.llmBaseUrl, 'https://llm.example.com/openai/v1');
   assert.equal(raw.data.advancedProviders.find((p: any) => p.id === 'modelscope').apiKey, 'ms-secret-123456');
 
   const preserve = await fetch(base, {
@@ -108,4 +118,13 @@ test('settings route persists advancedProviders with masking and secret preserva
 
   const preservedRaw = await fetch(`${base}/raw`).then((res) => res.json());
   assert.equal(preservedRaw.data.advancedProviders.find((p: any) => p.id === 'modelscope').apiKey, 'ms-secret-123456');
+
+  const invalidBaseUrlResponse = await fetch(base, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ llmBaseUrl: 'ftp://llm.example.com' }),
+  });
+  assert.equal(invalidBaseUrlResponse.status, 400);
+  const afterInvalid = await fetch(`${base}/raw`).then((res) => res.json());
+  assert.equal(afterInvalid.data.llmBaseUrl, 'https://llm.example.com/openai/v1');
 });
