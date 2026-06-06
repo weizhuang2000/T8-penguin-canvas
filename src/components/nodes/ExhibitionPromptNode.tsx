@@ -386,7 +386,7 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
         </div>
 
         <div className="rounded border border-white/10 bg-white/[0.035] p-2">
-          <div className="mb-1.5 text-[11px] font-semibold text-cyan-100">用户补充</div>
+          <div className="mb-1.5 text-[11px] font-semibold text-cyan-100">特别补充</div>
           <textarea
             className={`${FIELD_CLASS} min-h-[54px] resize-y`}
             value={d.supplement || ''}
