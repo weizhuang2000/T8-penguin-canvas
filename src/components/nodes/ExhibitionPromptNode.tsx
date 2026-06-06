@@ -63,7 +63,7 @@ function valuesFromData(data: any, upstreamText: string, hasReferenceImages: boo
   return values as any;
 }
 
-function presetEditorText(presets: ExhibitionPromptPresetItem[]): string {
+function presetEditorText(presets: Array<Pick<ExhibitionPromptPresetItem, 'label' | 'text'>>): string {
   return presets.map((preset) => `${preset.label}｜${preset.text}`).join('\n');
 }
 
