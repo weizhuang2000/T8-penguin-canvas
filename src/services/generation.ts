@@ -3,6 +3,17 @@
  * 所有请求走 /api/proxy/* (后端会注入对应 Key 并转存结果)
  */
 
+async function parseJsonResponse<T = any>(res: Response): Promise<T> {
+  const text = await res.text();
+  if (!text.trim()) return {} as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    const preview = text.replace(/\s+/g, ' ').trim().slice(0, 240);
+    throw new Error(`接口返回非 JSON，可能是上游/代理临时错误：HTTP ${res.status}。响应片段：${preview}`);
+  }
+}
+
 export interface GenerateImageRequest {
   model: string;          // 节点 id (gpt-image-2 / nano-banana-2 / nano-banana-pro / grok-image)
   apiModel?: string;       // 上游真实模型名(优先使用)
@@ -42,7 +53,7 @@ export async function generateImage(req: GenerateImageRequest): Promise<Generate
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) {
     throw new Error(data?.error || `HTTP ${r.status}`);
   }
@@ -79,7 +90,7 @@ export async function generateExternalImage(req: GenerateExternalImageRequest): 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) {
     throw new Error(data?.error || `HTTP ${r.status}`);
   }
@@ -124,7 +135,7 @@ export async function generateExternalVideo(req: GenerateExternalVideoRequest): 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) {
     throw new Error(data?.error || `HTTP ${r.status}`);
   }
@@ -159,7 +170,7 @@ export async function submitImageAsync(req: GenerateImageRequest): Promise<Image
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
   return data.data;
 }
@@ -180,7 +191,7 @@ export async function queryImageStatus(taskId: string, apiModel?: string, output
   if (historyContext) qs.set('historyContext', JSON.stringify(historyContext));
   const query = qs.toString() ? `?${qs.toString()}` : '';
   const r = await fetch(`/api/proxy/image/status/${encodeURIComponent(taskId)}${query}`);
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
   // 失败状态下 success=false 但返回 body 中仍包含 status:'failed'
   return data.data || { status: data.success ? 'pending' : 'failed', progress: '0%', error: data?.error };
@@ -246,7 +257,7 @@ export async function submitImageFal(req: FalSubmitRequest): Promise<FalSubmitRe
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
   return data.data;
 }
@@ -264,7 +275,7 @@ export async function queryImageFal(params: { responseUrl?: string; endpoint?: s
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   });
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   // 后端在 FAILED 时会 success=false 但 data.status='failed',这里返回结果供上层判断
   if (!r.ok && !data.data) throw new Error(data?.error || `HTTP ${r.status}`);
   return data.data || { status: 'failed', error: data?.error || 'unknown' };
@@ -335,7 +346,7 @@ export async function submitMjImagine(req: MjImagineRequest): Promise<MjImagineR
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
   const upstream = data.data || {};
   // upstream.code === 1 表示提交成功(主项目 L4658)
@@ -360,7 +371,7 @@ export async function queryMjTask(taskId: string, speed: MjSpeed = 'fast', histo
   const qs = new URLSearchParams({ speed });
   if (historyContext) qs.set('historyContext', JSON.stringify(historyContext));
   const r = await fetch(`/api/proxy/mj/task/${encodeURIComponent(taskId)}?${qs.toString()}`);
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
   const d = data.data || {};
   // 主项目 L4675~L4694: image_urls 可能是 JSON 字符串 / 对象数组 / 字符串数组
@@ -397,7 +408,7 @@ export async function uploadMjImage(file: File, speed: MjSpeed = 'fast'): Promis
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ base64Data: dataUrl, speed }),
   });
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
   const url = data.data?.url || '';
   if (!url) throw new Error('MJ upload 未返回 URL');
@@ -439,7 +450,7 @@ export async function generateLlm(req: GenerateLlmRequest): Promise<GenerateLlmR
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...req, stream: false }),
   });
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) {
     throw new Error(data?.error || `HTTP ${r.status}`);
   }
@@ -458,7 +469,7 @@ export async function generateExternalLlm(req: GenerateExternalLlmRequest): Prom
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) {
     throw new Error(data?.error || `HTTP ${r.status}`);
   }
@@ -493,10 +504,10 @@ export async function generateLlmStream(
     // 后端在 stream 错路仍返 JSON
     let msg = `HTTP ${r.status}`;
     try {
-      const j = await r.json();
+      const j = await parseJsonResponse(r);
       msg = j?.error || msg;
-    } catch {
-      /* noop */
+    } catch (e: any) {
+      msg = e?.message || msg;
     }
     throw new Error(msg);
   }
@@ -548,7 +559,7 @@ export async function uploadFile(file: File): Promise<{ url: string; filename: s
   const fd = new FormData();
   fd.append('file', file);
   const r = await fetch('/api/files/upload', { method: 'POST', body: fd });
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) {
     throw new Error(data?.error || `HTTP ${r.status}`);
   }
@@ -617,7 +628,7 @@ export async function submitVideoFal(req: VideoFalSubmitRequest): Promise<VideoF
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
   return data.data;
 }
@@ -635,7 +646,7 @@ export async function queryVideoFal(params: { responseUrl?: string; endpoint?: s
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   });
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok && !data.data) throw new Error(data?.error || `HTTP ${r.status}`);
   return data.data || { status: 'failed', error: data?.error || 'unknown' };
 }
@@ -676,7 +687,7 @@ export async function submitVideo(req: VideoSubmitRequest): Promise<{ taskId: st
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
   return data.data;
 }
@@ -693,7 +704,7 @@ export async function queryVideo(taskId: string, model?: string, historyContext?
   const extra = model ? `&model=${encodeURIComponent(model)}` : '';
   const history = historyContext ? `&historyContext=${encodeURIComponent(JSON.stringify(historyContext))}` : '';
   const r = await fetch(`/api/proxy/video/query?taskId=${encodeURIComponent(taskId)}${extra}${history}`);
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
   return data.data;
 }
@@ -742,7 +753,7 @@ export async function submitSeedance(req: SeedanceSubmitRequest): Promise<{ task
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
   return data.data;
 }
@@ -758,7 +769,7 @@ export interface SeedanceQueryResult {
 export async function querySeedance(taskId: string, historyContext?: GenerationHistoryContext): Promise<SeedanceQueryResult> {
   const history = historyContext ? `&historyContext=${encodeURIComponent(JSON.stringify(historyContext))}` : '';
   const r = await fetch(`/api/proxy/seedance/query?taskId=${encodeURIComponent(taskId)}${history}`);
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
   return data.data;
 }
@@ -793,7 +804,7 @@ export async function submitAudio(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
   return data.data;
 }
@@ -826,7 +837,7 @@ export async function queryAudio(clipIds: string[], saveLocal: boolean = true, h
   const params = new URLSearchParams({ clipIds: ids, saveLocal: String(saveLocal) });
   if (historyContext) params.set('historyContext', JSON.stringify(historyContext));
   const r = await fetch(`/api/proxy/audio/query?${params.toString()}`);
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
   return data.data;
 }
@@ -841,7 +852,7 @@ export async function uploadAudioForSuno(
   const fd = new FormData();
   fd.append('file', file, file.name);
   const r = await fetch('/api/proxy/audio/upload', { method: 'POST', body: fd });
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
   return data.data;
 }
@@ -863,7 +874,7 @@ export async function submitRh(req: RhSubmitRequest): Promise<{ taskId: string }
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
   return data.data;
 }
@@ -880,7 +891,7 @@ export async function queryRh(taskId: string, historyContext?: GenerationHistory
   if (historyContext) qs.set('historyContext', JSON.stringify(historyContext));
   const url = `/api/proxy/runninghub/query?${qs.toString()}`;
   const r = await fetch(url);
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
   return data.data;
 }
@@ -888,7 +899,7 @@ export async function queryRh(taskId: string, historyContext?: GenerationHistory
 export async function fetchRhAppInfo(webappId: string): Promise<any> {
   const url = `/api/proxy/runninghub/app-info?webappId=${encodeURIComponent(webappId)}`;
   const r = await fetch(url);
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
   return data.data;
 }
@@ -903,7 +914,7 @@ export async function uploadRhAsset(url: string): Promise<{ fileName: string; fi
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url }),
   });
-  const data = await r.json();
+  const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
   return data.data;
 }
