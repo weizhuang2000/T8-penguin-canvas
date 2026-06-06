@@ -49,7 +49,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
   // 从合集获取 (v1.2.8): 多素材 → 按序号取单个传给下游
   { type: 'pick-from-set', label: '从合集获取', category: 'utility', description: '从上游多素材中按序号取出单一素材，kind 可在节点内切换', icon: 'Filter', color: 'orange' },
   { type: 'text-split', label: '文本分割', category: 'utility', description: '将长提示词/分镜按段落、行、智能分镜、正则、自定义分隔符或字数切成多段文本，支持收藏与循环器链路', icon: 'SplitSquareVertical', color: 'orange' },
-  { type: 'import-cam-project', label: '导入项目白模', category: 'utility', description: '列出 C:\\cam-output 项目目录，并将选中项目 camoutput 文件夹内的图像导入为图像素材集', icon: 'Box', color: 'orange' },
+  { type: 'import-cam-project', label: '导入项目白模', category: 'exhibition', description: '列出 C:\\cam-output 项目目录，并将选中项目 camoutput 文件夹内的图像导入为图像素材集', icon: 'Box', color: 'cyan' },
   { type: 'resize', label: '尺寸调整', category: 'utility', description: '图像尺寸调整', icon: 'Maximize2', color: 'orange' },
   { type: 'combine', label: '合并', category: 'utility', description: '图像合并', icon: 'Combine', color: 'orange' },
   { type: 'remove-bg', label: '抠图', category: 'utility', description: '去除背景', icon: 'Eraser', color: 'orange', hidden: true },
@@ -68,7 +68,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
   // ========== Toolbox 工具箱(5) ==========
   { type: 'cinematic', label: '电影感', category: 'toolbox', description: '电影感组合器：风格 / 镜头 / 光影 / 调色 / 质感各 50 项，支持收藏与 JSON 导入/导出', icon: 'Clapperboard', color: 'pink' },
   { type: 'video-motion', label: '视频运镜', category: 'toolbox', description: '视频运镜组合器：场景 / 动作 / 路径 / 节奏 / 稳定 / 主体约束各 50 项，支持收藏与 JSON 导入/导出', icon: 'Camera', color: 'pink' },
-  { type: 'exhibition-prompt', label: '展陈提示词', category: 'toolbox', description: '展陈设计生图 Prompt 组合器：空间、功能、工艺、色彩、灯光、材质、构图、风格和排除项', icon: 'GalleryHorizontalEnd', color: 'cyan' },
+  { type: 'exhibition-prompt', label: '展陈提示词', category: 'exhibition', description: '展陈设计生图 Prompt 组合器：空间、功能、工艺、色彩、灯光、材质、构图、风格和排除项', icon: 'GalleryHorizontalEnd', color: 'cyan' },
   { type: 'multi-angle-visual', label: '可视化多角度', category: 'toolbox', description: '可视化调节方位 / 俯仰 / 远近，支持批量角度、Prompt 模式、前后缀、镜头收藏、JSON 导入/导出与紧凑双栏 UI', icon: 'Compass', color: 'pink' },
   { type: 'portrait-master', label: '肖像大师', category: 'toolbox', description: '捏人 Prompt 设计器：五官、发型、服饰、配饰、气质神情等 9 大类词库，支持随机、锁定、权重和运行输出文本', icon: 'UserRoundCog', color: 'pink' },
   { type: 'pose-master', label: '姿势大师', category: 'toolbox', description: '人体线稿姿态编辑器：支持多人姿势、抓取移动、OpenPose/COCO 预览输出、keypoints JSON 与中英文 prompt', icon: 'PersonStanding', color: 'pink' },
@@ -78,6 +78,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
 export const NODE_GROUPS: Record<string, { label: string; nodes: NodeMeta[] }> = {
   input: { label: '素材资源', nodes: NODE_REGISTRY.filter((n) => n.category === 'input' && !n.hidden) },
   core: { label: '核心节点', nodes: NODE_REGISTRY.filter((n) => n.category === 'core' && !n.hidden) },
+  exhibition: { label: '展陈工具', nodes: NODE_REGISTRY.filter((n) => n.category === 'exhibition' && !n.hidden) },
   rh: { label: 'RH', nodes: NODE_REGISTRY.filter((n) => n.category === 'rh' && !n.hidden) },
   special: { label: '特殊节点', nodes: NODE_REGISTRY.filter((n) => n.category === 'special' && !n.hidden) },
   utility: { label: '工具节点', nodes: NODE_REGISTRY.filter((n) => n.category === 'utility' && !n.hidden) },

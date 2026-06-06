@@ -110,7 +110,7 @@ export function presetTextForDimension(dimensionId, presetId) {
 }
 
 export function buildExhibitionPrompt(values) {
-  const lines = ['生成一张专业的展陈设计效果图，画面用于空间方案汇报与生图控制。'];
+  const lines = ['生成一张专业的展陈设计效果图，达到国际一流水准。'];
   for (const dimension of EXHIBITION_DIMENSIONS) {
     const text = String(values[dimension.id] || '').trim();
     if (!text) continue;
