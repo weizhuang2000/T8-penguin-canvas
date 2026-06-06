@@ -18,7 +18,7 @@ test('exhibition prompt skips empty dimensions and outputs Chinese control text'
   assert.match(prompt, /空间类型：博物馆展厅/);
   assert.match(prompt, /展陈工艺：恒温恒湿展柜/);
   assert.match(prompt, /排除项：避免乱码文字/);
-  assert.match(prompt, /重点突出宋代瓷器/);
+  assert.match(prompt, /特别要求：重点突出宋代瓷器/);
   assert.equal(prompt.includes('用户补充：'), false);
   assert.equal(prompt.includes('功能分区：'), false);
 });

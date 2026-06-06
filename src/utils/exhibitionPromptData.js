@@ -120,7 +120,7 @@ export function buildExhibitionPrompt(values) {
   const upstreamText = String(values.upstreamText || '').trim();
   if (upstreamText) lines.push(`补充需求：${upstreamText}`);
   const supplement = String(values.supplement || '').trim();
-  if (supplement) lines.push(supplement);
+  if (supplement) lines.push(`特别要求：${supplement}`);
   if (values.hasReferenceImages) {
     lines.push('参考图说明：参考上游或本地参考图中的空间比例、展项关系、材料气质和视觉氛围，不要照搬无关内容。');
   }
