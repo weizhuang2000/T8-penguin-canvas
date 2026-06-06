@@ -39,6 +39,7 @@ interface ResourceLibraryDrawerProps {
   open: boolean;
   onClose: () => void;
   onInsertMaterial: (item: ResourceItem) => void | Promise<void>;
+  userRole?: string;
 }
 
 function formatSize(size: number) {
@@ -156,10 +157,11 @@ function resultData<T>(r: api.Result<T> | any): T | null {
   return r?.success ? (r.data as T) : null;
 }
 
-export default function ResourceLibraryDrawer({ open, onClose, onInsertMaterial }: ResourceLibraryDrawerProps) {
+export default function ResourceLibraryDrawer({ open, onClose, onInsertMaterial, userRole }: ResourceLibraryDrawerProps) {
   const { theme, style } = useThemeStore();
   const isDark = theme === 'dark';
   const isPixel = style === 'pixel';
+  const canManageCategories = userRole === 'admin' || userRole === 'manager';
   const [kind, setKind] = useState<ResourceKind>('image');
   const [categoryId, setCategoryId] = useState('all');
   const [q, setQ] = useState('');
@@ -433,7 +435,7 @@ export default function ResourceLibraryDrawer({ open, onClose, onInsertMaterial 
               >
                 {cat.name}
               </button>
-              {!cat.system && (
+              {canManageCategories && !cat.system && (
                 <div className="hidden group-hover:flex items-center">
                   <button onClick={() => renameCategory(cat)} className="p-1 opacity-70 hover:opacity-100" title="重命名"><Pencil size={10} /></button>
                   <button onClick={() => removeCategory(cat)} className="p-1 opacity-70 hover:opacity-100 text-red-400" title="删除"><Trash2 size={10} /></button>
@@ -441,9 +443,11 @@ export default function ResourceLibraryDrawer({ open, onClose, onInsertMaterial 
               )}
             </div>
           ))}
-          <button onClick={addCategory} className={`w-full mt-2 ${itemBtn} flex items-center justify-center gap-1`} title="新建分类">
-            <FolderPlus size={12} /> 分类
-          </button>
+          {canManageCategories && (
+            <button onClick={addCategory} className={`w-full mt-2 ${itemBtn} flex items-center justify-center gap-1`} title="新建分类">
+              <FolderPlus size={12} /> 分类
+            </button>
+          )}
         </aside>
 
         <main className="flex-1 min-w-0 overflow-y-auto p-3">

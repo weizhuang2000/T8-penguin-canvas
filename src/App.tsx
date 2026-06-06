@@ -800,13 +800,14 @@ function App() {
         open={resourceOpen}
         onClose={() => setResourceOpen(false)}
         onInsertMaterial={handleInsertResource}
+        userRole={authUser.role}
       />
       <GenerationHistoryDrawer
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
         userRole={authUser.role}
       />
-      <MaterialContextMenu />
+      <MaterialContextMenu userRole={authUser.role} />
     </div>
     </RHToolsProvider>
   );

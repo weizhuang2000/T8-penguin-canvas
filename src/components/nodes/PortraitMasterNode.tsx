@@ -1009,10 +1009,12 @@ const PortraitMasterNode = ({ id, data, selected }: NodeProps) => {
       let categoryId = 'set_uncategorized';
       const cats = await api.getResourceCategories('set');
       if (cats.success) {
-        const existing = cats.data.find((cat) => cat.name === '角色' || cat.name === '肖像角色');
+        const existing = cats.data.find((cat) => cat.name === '通史类' || cat.name === '角色' || cat.name === '肖像角色');
         if (existing) categoryId = existing.id;
-        else {
-          const created = await api.addResourceCategory('set', '角色');
+        else if (cats.data.some((cat) => cat.id === 'set_uncategorized')) {
+          categoryId = 'set_uncategorized';
+        } else {
+          const created = await api.addResourceCategory('set', '通史类');
           if (created.success) categoryId = created.data.id;
         }
       }
@@ -1033,7 +1035,7 @@ const PortraitMasterNode = ({ id, data, selected }: NodeProps) => {
       });
       if (!saved.success) throw new Error(saved.error || '保存资源库失败');
       window.dispatchEvent(new CustomEvent('penguin:resources-changed'));
-      logBus.success((saved as any).duplicate ? '资源库已有相同肖像配置' : '已保存到资源库角色分类', '肖像大师');
+      logBus.success((saved as any).duplicate ? '资源库已有相同肖像配置' : '已保存到资源库', '肖像大师');
     } catch (e: any) {
       logBus.warn(e?.message || '保存到资源库失败', '肖像大师');
     }

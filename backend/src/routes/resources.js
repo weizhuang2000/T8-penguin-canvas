@@ -8,6 +8,7 @@ const dns = require('dns').promises;
 const net = require('net');
 const sharp = require('sharp');
 const config = require('../config');
+const { isAdminRole } = require('../auth/middleware');
 
 const router = express.Router();
 
@@ -19,12 +20,19 @@ const REMOTE_FETCH_TIMEOUT_MS = 30_000;
 const REMOTE_MAX_BYTES = 512 * 1024 * 1024;
 
 const DEFAULT_CATEGORY_NAMES = {
-  image: ['未分类', '角色', '场景', '风格参考', '成品'],
+  image: ['未分类', '通史类', '远古类', '革命类', '科技类'],
   video: ['未分类', '镜头', '动作', '成片'],
   audio: ['未分类', '音乐', '人声', '音效'],
   set: ['未分类', '图像集', '视频集', '音频集', '文本集'],
   pose: ['未分类', '常用姿势', '动作参考', '分镜姿势'],
   workflow: ['未分类', '常用工作流', '图像流程', '视频流程', '工具链'],
+};
+
+const CATEGORY_ID_ALIASES = {
+  image_1_角色: 'image_1_',
+  image_2_场景: 'image_2_',
+  image_3_风格参考: 'image_3_',
+  image_4_成品: 'image_4_',
 };
 
 const MIME_BY_EXT = {
@@ -303,6 +311,10 @@ function defaultCategories() {
   return out;
 }
 
+function canManageCategories(req) {
+  return isAdminRole(req.user?.role);
+}
+
 function normalizeDb(raw) {
   const db = raw && typeof raw === 'object' ? raw : {};
   const defaults = defaultCategories();
@@ -314,7 +326,8 @@ function normalizeDb(raw) {
     const kind = normalizeKind(c?.kind);
     const name = safeText(c?.name);
     if (!kind || !name) continue;
-    const id = safeText(c?.id, genId('rescat')).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 96) || genId('rescat');
+    const rawId = safeText(c?.id, genId('rescat')).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 96) || genId('rescat');
+    const id = CATEGORY_ID_ALIASES[rawId] || rawId;
     if (catMap.has(id)) continue;
     catMap.set(id, {
       id,
@@ -350,7 +363,9 @@ function normalizeDb(raw) {
     const workflowPreview = kind === 'workflow' ? normalizeWorkflowTopologyPreview(item?.workflowPreview) : null;
     seen.add(id);
     const fallbackCat = `${kind}_uncategorized`;
-    const categoryId = catIds.has(item?.categoryId) ? item.categoryId : fallbackCat;
+    const rawCategoryId = safeText(item?.categoryId);
+    const remappedCategoryId = CATEGORY_ID_ALIASES[rawCategoryId] || rawCategoryId;
+    const categoryId = catIds.has(remappedCategoryId) ? remappedCategoryId : fallbackCat;
     normalizedItems.push({
       id,
       kind,
@@ -644,6 +659,7 @@ router.get('/categories', (_req, res) => {
 
 router.post('/categories', express.json({ limit: '1mb' }), (req, res) => {
   try {
+    if (!canManageCategories(req)) return res.status(403).json({ success: false, error: '无权限管理资源库分类' });
     const kind = normalizeKind(req.body?.kind);
     const name = safeText(req.body?.name);
     if (!kind || !name) return res.status(400).json({ success: false, error: '缺少分类类型或名称' });
@@ -660,6 +676,7 @@ router.post('/categories', express.json({ limit: '1mb' }), (req, res) => {
 
 router.put('/categories/:id', express.json({ limit: '1mb' }), (req, res) => {
   try {
+    if (!canManageCategories(req)) return res.status(403).json({ success: false, error: '无权限管理资源库分类' });
     const name = safeText(req.body?.name);
     if (!name) return res.status(400).json({ success: false, error: '缺少分类名称' });
     const { root, db } = readDb();
@@ -675,6 +692,7 @@ router.put('/categories/:id', express.json({ limit: '1mb' }), (req, res) => {
 
 router.delete('/categories/:id', (req, res) => {
   try {
+    if (!canManageCategories(req)) return res.status(403).json({ success: false, error: '无权限管理资源库分类' });
     const { root, db } = readDb();
     const item = db.categories.find((c) => c.id === req.params.id);
     if (!item) return res.status(404).json({ success: false, error: '分类不存在' });

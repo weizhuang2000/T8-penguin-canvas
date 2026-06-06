@@ -31,11 +31,16 @@ function baseName(url: string) {
   }
 }
 
-export default function MaterialContextMenu() {
+interface MaterialContextMenuProps {
+  userRole?: string;
+}
+
+export default function MaterialContextMenu({ userRole }: MaterialContextMenuProps) {
   const { theme, style } = useThemeStore();
   const activeCanvasId = useCanvasStore((s) => s.activeId);
   const isDark = theme === 'dark';
   const isPixel = style === 'pixel';
+  const canManageCategories = userRole === 'admin' || userRole === 'manager';
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [categories, setCategories] = useState<ResourceCategory[]>([]);
   const [message, setMessage] = useState('');
@@ -150,6 +155,10 @@ export default function MaterialContextMenu() {
 
   const createCategory = async () => {
     if (!menu) return;
+    if (!canManageCategories) {
+      setMessage('只有系统管理和经理可以新建分类');
+      return;
+    }
     const name = window.prompt('新建分类');
     if (!name?.trim()) return;
     const r = await api.addResourceCategory(menu.kind, name.trim());
@@ -214,10 +223,12 @@ export default function MaterialContextMenu() {
             <span className="truncate">{cat.name}</span>
           </button>
         ))}
-        <button className={itemCls} onClick={createCategory}>
-          <FolderPlus size={12} />
-          <span>新建分类...</span>
-        </button>
+        {canManageCategories && (
+          <button className={itemCls} onClick={createCategory}>
+            <FolderPlus size={12} />
+            <span>新建分类...</span>
+          </button>
+        )}
       </div>
       {message && (
         <div className={`px-3 py-2 text-[11px] ${isPixel ? 'border-t-2 border-[var(--px-ink)] bg-[var(--px-yellow)]' : isDark ? 'border-t border-white/10 text-white/70' : 'border-t border-black/10 text-zinc-600'}`}>
