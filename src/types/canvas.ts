@@ -47,6 +47,7 @@ export type NodeType =
   // Toolbox (5)
   | 'cinematic'
   | 'video-motion'
+  | 'exhibition-prompt'
   | 'multi-angle-visual'
   | 'portrait-master'
   | 'pose-master'

@@ -159,6 +159,68 @@ export async function updateCanvasShares(
 }
 
 // ========== 设置(三套通用 Key + 分类 Key) ==========
+export type ExhibitionPromptDimension =
+  | 'spaceType'
+  | 'functionalZones'
+  | 'exhibitionCraft'
+  | 'colorSystem'
+  | 'lightingStrategy'
+  | 'materialExpression'
+  | 'viewComposition'
+  | 'styleReference'
+  | 'negativeItems';
+
+export interface ExhibitionPromptLibraryItem {
+  id: string;
+  scope: 'team' | 'personal';
+  ownerUserId: string;
+  ownerName: string;
+  dimension: ExhibitionPromptDimension;
+  label: string;
+  text: string;
+  order: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export async function listExhibitionPromptLibrary(options?: {
+  dimension?: ExhibitionPromptDimension;
+  includePersonal?: boolean;
+}): Promise<ExhibitionPromptLibraryItem[]> {
+  const sp = new URLSearchParams();
+  if (options?.dimension) sp.set('dimension', options.dimension);
+  if (options?.includePersonal) sp.set('includePersonal', '1');
+  const res = await request<{ success: boolean; data: ExhibitionPromptLibraryItem[] }>(
+    `${BASE}/prompt-library/exhibition${sp.toString() ? `?${sp.toString()}` : ''}`,
+  );
+  return res.data || [];
+}
+
+export async function createExhibitionPromptLibraryItem(
+  item: Pick<ExhibitionPromptLibraryItem, 'scope' | 'dimension' | 'label' | 'text'> & Partial<Pick<ExhibitionPromptLibraryItem, 'order'>>,
+): Promise<ExhibitionPromptLibraryItem> {
+  const res = await request<{ success: boolean; data: ExhibitionPromptLibraryItem }>(`${BASE}/prompt-library/exhibition`, {
+    method: 'POST',
+    body: JSON.stringify(item),
+  });
+  return res.data;
+}
+
+export async function updateExhibitionPromptLibraryItem(
+  id: string,
+  patch: Partial<Pick<ExhibitionPromptLibraryItem, 'scope' | 'dimension' | 'label' | 'text' | 'order'>>,
+): Promise<ExhibitionPromptLibraryItem> {
+  const res = await request<{ success: boolean; data: ExhibitionPromptLibraryItem }>(`${BASE}/prompt-library/exhibition/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(patch),
+  });
+  return res.data;
+}
+
+export async function deleteExhibitionPromptLibraryItem(id: string): Promise<void> {
+  await request(`${BASE}/prompt-library/exhibition/${id}`, { method: 'DELETE' });
+}
+
 export async function getSettings(): Promise<ApiSettings> {
   const res = await request<{ success: boolean; data: ApiSettings }>(`${BASE}/settings`);
   return res.data;

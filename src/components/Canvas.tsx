@@ -106,6 +106,7 @@ import CombineNode from './nodes/CombineNode';
 import RemoveBgNode from './nodes/RemoveBgNode';
 import ImageCompareNode from './nodes/ImageCompareNode';
 import ToolboxParamNode from './nodes/ToolboxParamNode';
+import ExhibitionPromptNode from './nodes/ExhibitionPromptNode';
 import PortraitMasterNode from './nodes/PortraitMasterNode';
 import PoseMasterNode from './nodes/PoseMasterNode';
 import IdeaNode from './nodes/IdeaNode';
@@ -189,6 +190,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   // Toolbox (5)
   cinematic: ToolboxParamNode,
   'video-motion': ToolboxParamNode,
+  'exhibition-prompt': ExhibitionPromptNode,
   'multi-angle-visual': ToolboxParamNode,
   'portrait-master': PortraitMasterNode,
   'pose-master': PoseMasterNode,
@@ -328,6 +330,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
   },
   cinematic: { kind: 'cinematic', cinematicLanguage: 'en', cinematicStrength: 'balanced' },
   'video-motion': { kind: 'video-motion', motionLanguage: 'en' },
+  'exhibition-prompt': { prompt: '', outputText: '', text: '', imageUrls: [], referenceImages: [], materialOrder: [] },
   'portrait-master': {
     portraitLanguage: 'en',
     portraitSelection: {},
