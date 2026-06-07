@@ -6,10 +6,19 @@ import {
   FileText,
   Loader2,
   RefreshCw,
+  Settings,
   Sparkles,
   Upload,
 } from 'lucide-react';
-import { extractDocument, type ExtractedDocument } from '../../services/api';
+import {
+  extractDocument,
+  getCurrentUser,
+  getElevationPromptPresets,
+  updateElevationColorMaterialPresets,
+  type AuthUser,
+  type ElevationColorMaterialPresetItem,
+  type ExtractedDocument,
+} from '../../services/api';
 import { generateExternalLlm, generateLlm } from '../../services/generation';
 import { DEFAULT_LLM_MODEL, LLM_MODELS } from '../../providers/models';
 import {
@@ -47,6 +56,29 @@ function documentLabel(meta?: Omit<ExtractedDocument, 'text'> | null) {
   return `${meta.name} · ${meta.charCount} 字${pages}`;
 }
 
+function colorPresetEditorText(presets: ElevationColorMaterialPresetItem[]): string {
+  return presets.map((preset) => (preset.info ? `${preset.label}｜${preset.info}` : preset.label)).join('\n');
+}
+
+function parseColorPresetEditorText(text: string) {
+  return text
+    .split(/\r?\n/)
+    .map((line, index) => {
+      const raw = line.trim();
+      if (!raw) return null;
+      const [labelRaw, ...rest] = raw.split(/[｜|]/);
+      const label = String(labelRaw || '').trim();
+      if (!label) return null;
+      return {
+        id: `${label.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'preset'}-${index + 1}`,
+        label,
+        info: rest.join('｜').trim(),
+        order: index,
+      };
+    })
+    .filter(Boolean) as Array<{ id: string; label: string; info: string; order: number }>;
+}
+
 const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
@@ -55,6 +87,13 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
   const isReadonly = activeCanvas?.access?.canEdit === false;
   const [analysisDraft, setAnalysisDraft] = useState('');
   const [draftMessage, setDraftMessage] = useState('');
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const canManageTeam = currentUser?.role === 'admin' || currentUser?.role === 'manager';
+  const [colorMaterialPresets, setColorMaterialPresets] = useState<ElevationColorMaterialPresetItem[]>([]);
+  const [presetEditorOpen, setPresetEditorOpen] = useState(false);
+  const [presetEditorValue, setPresetEditorValue] = useState('');
+  const [presetSaving, setPresetSaving] = useState(false);
+  const [presetError, setPresetError] = useState('');
 
   const sourceText = String(d.sourceText || '');
   const wallMode: 'single' | 'multi' = d.wallMode === 'single' ? 'single' : 'multi';
@@ -64,6 +103,10 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
     [d.analysis],
   );
   const selectedCrafts: string[] = Array.isArray(d.selectedCrafts) ? d.selectedCrafts : DEFAULT_CRAFTS;
+  const selectedColorMaterialPreset = useMemo(
+    () => colorMaterialPresets.find((preset) => preset.id === d.colorMaterialPreset) || null,
+    [colorMaterialPresets, d.colorMaterialPreset],
+  );
   const status = String(d.status || 'idle');
   const busy = status === 'extracting' || status === 'refining';
 
@@ -84,9 +127,13 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
     : [];
   const externalModel = providerSelection.providerModel || externalModels[0] || '';
   const savedModel = String(d.model || '').trim();
-  const model = savedModel || configuredLlmModel;
+  const shouldUseConfiguredDefault = savedModel === DEFAULT_LLM_MODEL && configuredLlmModel !== DEFAULT_LLM_MODEL && !d.modelMigratedFromDefault;
+  const model = shouldUseConfiguredDefault ? configuredLlmModel : (savedModel || configuredLlmModel);
   const llmModelOptions = useMemo(() => {
-    const options = LLM_MODELS.filter((item) => !item.imageOutput);
+    const options = LLM_MODELS.filter((item) => {
+      if (item.imageOutput) return false;
+      return configuredLlmModel === DEFAULT_LLM_MODEL || item.id !== DEFAULT_LLM_MODEL;
+    });
     if (!options.some((item) => item.id === model)) {
       return [
         {
@@ -166,6 +213,19 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
   useEffect(() => {
     setAnalysisDraft(JSON.stringify(analysis, null, 2));
   }, [analysis]);
+
+  useEffect(() => {
+    getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
+    getElevationPromptPresets()
+      .then((presets) => setColorMaterialPresets(presets.colorMaterial || []))
+      .catch(() => setColorMaterialPresets([]));
+  }, []);
+
+  useEffect(() => {
+    if (!presetEditorOpen) return;
+    setPresetEditorValue(colorPresetEditorText(colorMaterialPresets));
+    setPresetError('');
+  }, [colorMaterialPresets, presetEditorOpen]);
 
   useEffect(() => {
     if (savedModel === DEFAULT_LLM_MODEL && configuredLlmModel !== DEFAULT_LLM_MODEL && !d.modelMigratedFromDefault) {
@@ -286,6 +346,26 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
       ? selectedCrafts.filter((idValue) => idValue !== craftId)
       : [...selectedCrafts, craftId];
     update({ selectedCrafts: next });
+  };
+
+  const saveColorMaterialPresets = async () => {
+    if (!canManageTeam) return;
+    const presets = parseColorPresetEditorText(presetEditorValue);
+    if (presets.length === 0) {
+      setPresetError('请至少保留一条“名称｜信息提示”格式的预设。');
+      return;
+    }
+    setPresetSaving(true);
+    setPresetError('');
+    try {
+      const saved = await updateElevationColorMaterialPresets(presets);
+      setColorMaterialPresets(saved);
+      setPresetEditorOpen(false);
+    } catch (error: any) {
+      setPresetError(error?.message || '保存预设失败');
+    } finally {
+      setPresetSaving(false);
+    }
   };
 
   return (
@@ -524,7 +604,20 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
         </section>
 
         <section className="rounded border border-white/10 bg-white/[0.035] p-2">
-          <div className="mb-1.5 text-[11px] font-semibold text-cyan-100">4. 工艺与版式</div>
+          <div className="mb-1.5 flex items-center gap-2">
+            <span className="text-[11px] font-semibold text-cyan-100">4. 工艺与版式</span>
+            {canManageTeam && (
+              <button
+                type="button"
+                className={`${BUTTON} ml-auto`}
+                disabled={presetSaving}
+                onClick={() => setPresetEditorOpen((value) => !value)}
+              >
+                <Settings size={11} />
+                设置色材预设
+              </button>
+            )}
+          </div>
           <div className="grid grid-cols-3 gap-1">
             {ELEVATION_CRAFTS.map((craft: ElevationCraft) => {
               const active = selectedCrafts.includes(craft.id);
@@ -563,7 +656,62 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
             </select>
             <input className={FIELD} value={d.visualStyle || ''} disabled={isReadonly} placeholder="视觉风格" onChange={(event) => update({ visualStyle: event.target.value })} />
           </div>
-          <textarea className={`${FIELD} mt-1 min-h-[46px] resize-y`} value={d.colorMaterial || ''} disabled={isReadonly} placeholder="色彩与材质体系" onChange={(event) => update({ colorMaterial: event.target.value })} />
+          <select
+            className={`${FIELD} mt-1`}
+            value={d.colorMaterialPreset || ''}
+            disabled={isReadonly}
+            onChange={(event) => {
+              const presetId = event.target.value;
+              const preset = colorMaterialPresets.find((item) => item.id === presetId);
+              update({
+                colorMaterialPreset: presetId,
+                ...(preset ? { colorMaterial: preset.label } : {}),
+              });
+            }}
+          >
+            <option value="">不使用色彩与材质预设</option>
+            {colorMaterialPresets.map((preset) => (
+              <option key={preset.id} value={preset.id} title={preset.info}>
+                {preset.label}
+              </option>
+            ))}
+          </select>
+          {selectedColorMaterialPreset?.info && (
+            <div className="mt-1 rounded border border-cyan-300/15 bg-cyan-300/10 px-2 py-1 text-[10px] leading-relaxed text-cyan-50/75">
+              {selectedColorMaterialPreset.info}
+            </div>
+          )}
+          {canManageTeam && presetEditorOpen && (
+            <div className="mt-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
+              <div className="mb-1 text-[10px] text-white/45">每行一个预设：名称｜信息提示。选择预设时仅把名称写入输入框。</div>
+              <textarea
+                className={`${FIELD} min-h-[120px] resize-y font-mono`}
+                value={presetEditorValue}
+                disabled={presetSaving}
+                onChange={(event) => setPresetEditorValue(event.target.value)}
+              />
+              {presetError && <div className="mt-1 text-[10px] text-red-300">{presetError}</div>}
+              <div className="mt-1.5 flex justify-end gap-1">
+                <button
+                  type="button"
+                  className={BUTTON}
+                  disabled={presetSaving}
+                  onClick={() => setPresetEditorOpen(false)}
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  className={BUTTON}
+                  disabled={presetSaving}
+                  onClick={saveColorMaterialPresets}
+                >
+                  {presetSaving ? '保存中' : '保存预设'}
+                </button>
+              </div>
+            </div>
+          )}
+          <textarea className={`${FIELD} mt-1 min-h-[46px] resize-y`} value={d.colorMaterial || ''} disabled={isReadonly} placeholder="色彩与材质体系" onChange={(event) => update({ colorMaterial: event.target.value, colorMaterialPreset: '' })} />
           <textarea className={`${FIELD} mt-1 min-h-[46px] resize-y`} value={d.supplement || ''} disabled={isReadonly} placeholder="特殊限制、品牌语气、施工要求等" onChange={(event) => update({ supplement: event.target.value })} />
         </section>
 

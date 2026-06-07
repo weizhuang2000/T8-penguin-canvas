@@ -167,7 +167,9 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
   const model: string = d?.model || configuredLlmModel;
   const advancedProviders = useApiKeysStore((s) => s.settings.advancedProviders);
   const llmModelOptions = useMemo(() => {
-    const options = [...LLM_MODELS];
+    const options = LLM_MODELS.filter((item) => (
+      configuredLlmModel === DEFAULT_LLM_MODEL || item.id !== DEFAULT_LLM_MODEL
+    ));
     if (!options.some((item) => item.id === model)) {
       options.unshift({
         id: model,
@@ -177,7 +179,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
       });
     }
     return options;
-  }, [model]);
+  }, [configuredLlmModel, model]);
   const llmAdvancedProviders = useMemo(
     () => advancedProvidersForNode(advancedProviders, 'llm'),
     [advancedProviders],

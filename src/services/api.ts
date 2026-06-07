@@ -219,6 +219,17 @@ export interface ExhibitionPromptPresetItem {
 
 export type ExhibitionPromptPresetMap = Partial<Record<ExhibitionPromptDimension, ExhibitionPromptPresetItem[]>>;
 
+export interface ElevationColorMaterialPresetItem {
+  id: string;
+  label: string;
+  info: string;
+  order: number;
+}
+
+export interface ElevationPromptPresetMap {
+  colorMaterial: ElevationColorMaterialPresetItem[];
+}
+
 export async function listExhibitionPromptLibrary(options?: {
   dimension?: ExhibitionPromptDimension;
   includePersonal?: boolean;
@@ -268,6 +279,24 @@ export async function updateExhibitionPromptPresets(
 ): Promise<ExhibitionPromptPresetItem[]> {
   const res = await request<{ success: boolean; data: ExhibitionPromptPresetItem[] }>(
     `${BASE}/prompt-library/exhibition/presets/${dimension}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ presets }),
+    },
+  );
+  return res.data || [];
+}
+
+export async function getElevationPromptPresets(): Promise<ElevationPromptPresetMap> {
+  const res = await request<{ success: boolean; data: ElevationPromptPresetMap }>(`${BASE}/prompt-library/elevation/presets`);
+  return res.data || { colorMaterial: [] };
+}
+
+export async function updateElevationColorMaterialPresets(
+  presets: Array<Pick<ElevationColorMaterialPresetItem, 'label'> & Partial<Pick<ElevationColorMaterialPresetItem, 'id' | 'info' | 'order'>>>,
+): Promise<ElevationColorMaterialPresetItem[]> {
+  const res = await request<{ success: boolean; data: ElevationColorMaterialPresetItem[] }>(
+    `${BASE}/prompt-library/elevation/presets/colorMaterial`,
     {
       method: 'PUT',
       body: JSON.stringify({ presets }),
