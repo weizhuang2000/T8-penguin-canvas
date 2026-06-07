@@ -163,8 +163,21 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
   const chatRef = useCallback((el: HTMLDivElement | null) => attachWheelBlock(el), []);
 
   const d = data as any;
-  const model: string = d?.model || DEFAULT_LLM_MODEL;
+  const configuredLlmModel = useApiKeysStore((s) => s.settings.llmModel)?.trim() || DEFAULT_LLM_MODEL;
+  const model: string = d?.model || configuredLlmModel;
   const advancedProviders = useApiKeysStore((s) => s.settings.advancedProviders);
+  const llmModelOptions = useMemo(() => {
+    const options = [...LLM_MODELS];
+    if (!options.some((item) => item.id === model)) {
+      options.unshift({
+        id: model,
+        label: `${model}（设置默认）`,
+        provider: 'llm-direct',
+        vision: true,
+      });
+    }
+    return options;
+  }, [model]);
   const llmAdvancedProviders = useMemo(
     () => advancedProvidersForNode(advancedProviders, 'llm'),
     [advancedProviders],
@@ -693,7 +706,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
             onChange={(e) => update({ model: e.target.value })}
             className="w-full rounded bg-white/5 border border-white/10 px-2 py-1 text-xs text-white outline-none focus:border-white/30"
           >
-            {LLM_MODELS.map((m) => (
+            {llmModelOptions.map((m) => (
               <option key={m.id} value={m.id} className="bg-zinc-900">
                 {m.label}
               </option>

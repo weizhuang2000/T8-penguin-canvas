@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const {
   normalizeLlmBaseUrl,
+  normalizeLlmModelName,
   resolveLlmChatCompletionsUrl,
 } = require('../backend/src/utils/llmBaseUrl.js');
 
@@ -31,4 +32,11 @@ test('builds the OpenAI-compatible chat completions endpoint', () => {
     resolveLlmChatCompletionsUrl('', fallback),
     'https://ai.t8star.org/v1/chat/completions',
   );
+});
+
+test('normalizes editable LLM model names', () => {
+  assert.equal(normalizeLlmModelName(' custom-chat-model '), 'custom-chat-model');
+  assert.equal(normalizeLlmModelName('', 'default-model'), 'default-model');
+  assert.equal(normalizeLlmModelName('bad\nmodel', 'default-model'), '');
+  assert.equal(normalizeLlmModelName('x'.repeat(241), 'default-model'), '');
 });

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { ApiSettings } from '../types/canvas';
 import * as api from '../services/api';
+import { DEFAULT_LLM_MODEL } from '../providers/models';
 
 // 百达工坊固定地址，也是 LLM 独立 Key 的默认地址
 export const FIXED_ZHENZHEN_BASE = 'https://ai.t8star.org';
@@ -24,6 +25,7 @@ const DEFAULT: ApiSettings = {
   rhBaseUrl: RH_BASE,
   llmApiKey: '',
   llmBaseUrl: FIXED_ZHENZHEN_BASE,
+  llmModel: DEFAULT_LLM_MODEL,
   // 分类独立 Key（留空时 fallback 到 zhenzhenApiKey）
   gptImageApiKey: '',
   nanoBananaApiKey: '',

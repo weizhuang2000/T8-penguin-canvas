@@ -9,7 +9,7 @@ const {
   normalizeAdvancedProviders,
   summarizeAdvancedProviders,
 } = require('../providers/registry');
-const { normalizeLlmBaseUrl } = require('../utils/llmBaseUrl');
+const { normalizeLlmBaseUrl, normalizeLlmModelName } = require('../utils/llmBaseUrl');
 
 const router = express.Router();
 
@@ -24,6 +24,7 @@ const DEFAULT_SETTINGS = {
   // v1.2.9.16: 取消 rhWalletApiKey —— RH 钱包应用节点与普通 RunningHub 节点统一使用 rhApiKey
   llmApiKey: '',
   llmBaseUrl: config.ZHENZHEN_BASE_URL, // 默认同百达工坊，可单独设置
+  llmModel: config.LLM_DEFAULT_MODEL,
   // 分类 Key（留空时 fallback 到 zhenzhenApiKey）
   gptImageApiKey: '',
   nanoBananaApiKey: '',
@@ -107,6 +108,7 @@ function loadSettings({ persistMigrations = true } = {}) {
       ...data,
       zhenzhenBaseUrl: config.ZHENZHEN_BASE_URL,
       llmBaseUrl: normalizeLlmBaseUrl(data.llmBaseUrl, config.ZHENZHEN_BASE_URL) || config.ZHENZHEN_BASE_URL,
+      llmModel: normalizeLlmModelName(data.llmModel, config.LLM_DEFAULT_MODEL) || config.LLM_DEFAULT_MODEL,
     };
     merged.advancedProviders = normalizeAdvancedProviders(data.advancedProviders);
     const migrated = migrateLegacyDefaultPaths(merged);
@@ -181,12 +183,20 @@ router.post('/', requireAdmin, (req, res) => {
   if (!llmBaseUrl) {
     return res.status(400).json({ success: false, error: 'LLM Base URL 必须是有效的 http/https 地址' });
   }
+  const hasLlmModel = Object.prototype.hasOwnProperty.call(incoming, 'llmModel');
+  const llmModel = hasLlmModel
+    ? normalizeLlmModelName(incoming.llmModel, config.LLM_DEFAULT_MODEL)
+    : normalizeLlmModelName(current.llmModel, config.LLM_DEFAULT_MODEL);
+  if (!llmModel) {
+    return res.status(400).json({ success: false, error: 'LLM 模型名称格式不正确' });
+  }
   const merged = {
     ...current,
     ...incoming,
     // 百达工坊地址保持锁定；LLM 地址允许单独配置。
     zhenzhenBaseUrl: config.ZHENZHEN_BASE_URL,
     llmBaseUrl,
+    llmModel,
   };
   merged.advancedProviders = hasAdvancedProviders
     ? normalizeAdvancedProviders(incoming.advancedProviders, current.advancedProviders)

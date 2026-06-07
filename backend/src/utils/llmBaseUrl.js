@@ -20,7 +20,15 @@ function resolveLlmChatCompletionsUrl(value, fallback) {
     : `${normalizedBase}/v1/chat/completions`;
 }
 
+function normalizeLlmModelName(value, fallback = '') {
+  const text = String(value || '').trim();
+  if (!text) return fallback;
+  if (text.length > 240 || /[\u0000-\u001f\u007f]/.test(text)) return '';
+  return text;
+}
+
 module.exports = {
   normalizeLlmBaseUrl,
+  normalizeLlmModelName,
   resolveLlmChatCompletionsUrl,
 };

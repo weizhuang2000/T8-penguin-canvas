@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, FileUp, Info, KeyRound, Loader2, Lock, Plus, Save, Settings2, TestTube2, Trash2, X, FolderOpen, ServerCog } from 'lucide-react';
+import { BrainCircuit, ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, FileUp, Info, KeyRound, Loader2, Lock, Plus, Save, Settings2, TestTube2, Trash2, X, FolderOpen, ServerCog } from 'lucide-react';
 import { useApiKeysStore, FIXED_ZHENZHEN_BASE, RH_BASE } from '../stores/apiKeys';
 import { useThemeStore } from '../stores/theme';
 import type { AdvancedProviderConfig, AdvancedProviderProtocol, ApiSettings } from '../types/canvas';
@@ -9,6 +9,7 @@ import {
   parseAdvancedProviderModelText,
   stringifyAdvancedProviderModels,
 } from '../utils/advancedProviders';
+import { DEFAULT_LLM_MODEL } from '../providers/models';
 
 interface ApiSettingsModalProps {
   open: boolean;
@@ -149,6 +150,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   const [shows, setShows] = useState<Record<KeyField, boolean>>(emptyShow());
   const [enableZhenzhenFallback, setEnableZhenzhenFallback] = useState(true);
   const [llmBaseUrlInput, setLlmBaseUrlInput] = useState(FIXED_ZHENZHEN_BASE);
+  const [llmModelInput, setLlmModelInput] = useState(DEFAULT_LLM_MODEL);
   const [saved, setSaved] = useState(false);
   // v1.2.10.2: 文件自动保存路径输入
   const [fileSavePathInput, setFileSavePathInput] = useState<string>('');
@@ -184,6 +186,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       setShows(emptyShow());
       setEnableZhenzhenFallback((settings as any)?.enableZhenzhenFallback !== false);
       setLlmBaseUrlInput((settings as any)?.llmBaseUrl || FIXED_ZHENZHEN_BASE);
+      setLlmModelInput((settings as any)?.llmModel || DEFAULT_LLM_MODEL);
       revealedRef.current = {};
       setSaved(false);
       setBackupMessage('');
@@ -218,6 +221,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     rhApiKey: inputs.rhApiKey.trim(),
     llmApiKey: inputs.llmApiKey.trim(),
     llmBaseUrl: llmBaseUrlInput.trim() || FIXED_ZHENZHEN_BASE,
+    llmModel: llmModelInput.trim() || DEFAULT_LLM_MODEL,
     gptImageApiKey: inputs.gptImageApiKey.trim(),
     nanoBananaApiKey: inputs.nanoBananaApiKey.trim(),
     mjApiKey: inputs.mjApiKey.trim(),
@@ -269,6 +273,9 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     if (typeof (source as any).llmBaseUrl === 'string' && (source as any).llmBaseUrl.trim()) {
       next.llmBaseUrl = (source as any).llmBaseUrl.trim();
     }
+    if (typeof (source as any).llmModel === 'string' && (source as any).llmModel.trim()) {
+      next.llmModel = (source as any).llmModel.trim();
+    }
     if (Array.isArray((source as any).advancedProviders)) {
       next.advancedProviders = (source as any).advancedProviders;
     }
@@ -305,6 +312,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
         ),
         zhenzhenBaseUrl: FIXED_ZHENZHEN_BASE,
         llmBaseUrl: editable.llmBaseUrl || raw?.llmBaseUrl || FIXED_ZHENZHEN_BASE,
+        llmModel: editable.llmModel || raw?.llmModel || DEFAULT_LLM_MODEL,
         rhBaseUrl: RH_BASE,
       };
       const payload = {
@@ -340,6 +348,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     if (typeof patch.themeTemplatePath === 'string') setThemeTemplatePathInput(patch.themeTemplatePath);
     if (typeof patch.eagleApiBase === 'string') setEagleApiBaseInput(patch.eagleApiBase);
     if (typeof patch.llmBaseUrl === 'string') setLlmBaseUrlInput(patch.llmBaseUrl);
+    if (typeof patch.llmModel === 'string') setLlmModelInput(patch.llmModel);
     if (typeof patch.enableZhenzhenFallback === 'boolean') {
       setEnableZhenzhenFallback(patch.enableZhenzhenFallback);
     }
@@ -392,6 +401,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
 
   const handleSave = async () => {
     const newLlmBaseUrl = llmBaseUrlInput.trim() || FIXED_ZHENZHEN_BASE;
+    const newLlmModel = llmModelInput.trim() || DEFAULT_LLM_MODEL;
     try {
       const parsed = new URL(newLlmBaseUrl);
       if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
@@ -399,6 +409,10 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       }
     } catch {
       setBackupMessage('LLM Base URL 格式不正确，请填写有效的 http/https 地址，且不要包含账号、查询参数或锚点。');
+      return;
+    }
+    if (newLlmModel.length > 240 || /[\u0000-\u001f\u007f]/.test(newLlmModel)) {
+      setBackupMessage('LLM 模型名称格式不正确，请填写不超过 240 个字符的模型 ID。');
       return;
     }
 
@@ -447,6 +461,10 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     const oldLlmBaseUrl = String((settings as any)?.llmBaseUrl || FIXED_ZHENZHEN_BASE).trim();
     if (newLlmBaseUrl !== oldLlmBaseUrl) {
       patch.llmBaseUrl = newLlmBaseUrl;
+    }
+    const oldLlmModel = String((settings as any)?.llmModel || DEFAULT_LLM_MODEL).trim();
+    if (newLlmModel !== oldLlmModel) {
+      patch.llmModel = newLlmModel;
     }
     if (Object.keys(patch).length === 0) {
       onClose();
@@ -1148,6 +1166,24 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
             />
             <span className={`block text-[11px] ${hintCls}`}>
               可填写站点根地址或以 /v1 结尾的地址；留空恢复默认 {FIXED_ZHENZHEN_BASE}
+            </span>
+          </label>
+          <label className="block space-y-2">
+            <span className={`text-sm font-medium flex items-center gap-2 ${labelCls}`}>
+              <BrainCircuit size={14} />
+              LLM 模型名称
+              <span className={`text-[11px] font-normal ${hintCls}`}>· 作为新建 LLM 节点的默认模型</span>
+            </span>
+            <input
+              type="text"
+              value={llmModelInput}
+              onChange={(e) => setLlmModelInput(e.target.value)}
+              placeholder={DEFAULT_LLM_MODEL}
+              className={`${inputCls} w-full`}
+              autoComplete="off"
+            />
+            <span className={`block text-[11px] ${hintCls}`}>
+              填写上游支持的模型 ID；留空恢复默认 {DEFAULT_LLM_MODEL}
             </span>
           </label>
 

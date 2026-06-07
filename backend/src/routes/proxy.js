@@ -1325,7 +1325,8 @@ router.post('/llm', async (req, res) => {
   if (!settings?.llmApiKey) {
     return res.status(400).json({ success: false, error: '未配置 LLM 独立 API Key' });
   }
-  const { model, messages, temperature, max_tokens, stream } = req.body || {};
+  const { model: requestedModel, messages, temperature, max_tokens, stream } = req.body || {};
+  const model = String(requestedModel || settings.llmModel || config.LLM_DEFAULT_MODEL || '').trim();
   if (!model || !messages) {
     return res.status(400).json({ success: false, error: 'model 和 messages 必填' });
   }

@@ -67,6 +67,7 @@ const config = {
   // 三套 API Key 默认值(均可在 settings 中覆盖)
   // 百达工坊固定地址；LLM 独立 Key 默认使用此地址，但可在设置中覆盖。
   ZHENZHEN_BASE_URL: 'https://ai.t8star.org',
+  LLM_DEFAULT_MODEL: 'gemini-3.1-flash-lite-preview',
   RH_BASE_URL: 'https://www.runninghub.cn',
 
   // v1.2.10.2: 全局生成素材自动保存到本地的默认路径

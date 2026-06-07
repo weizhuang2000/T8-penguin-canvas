@@ -419,7 +419,6 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
   'penguin-portrait': { preset: 'penguin-portrait' },
   audio: { mode: 'generate', version: 'v5.5', title: '', tags: '', seed: 0, continueAt: 28 },
   llm: {
-    model: 'gemini-3.1-flash-lite-preview',
     system: '',
     prompt: '',
     temperature: 0.7,

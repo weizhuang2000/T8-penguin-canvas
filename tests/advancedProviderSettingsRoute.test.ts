@@ -48,6 +48,7 @@ test('settings route persists advancedProviders with masking and secret preserva
   assert.equal(initial.success, true);
   assert.equal(initial.data.enableZhenzhenFallback, true);
   assert.equal(initial.data.llmBaseUrl, 'https://ai.t8star.org');
+  assert.equal(initial.data.llmModel, 'gemini-3.1-flash-lite-preview');
   assert.ok(Array.isArray(initial.data.advancedProviders));
   assert.equal(initial.data.advancedProviderSummary.enabledCount, 0);
   assert.equal(initial.data.advancedProviders.find((p: any) => p.id === 'modelscope')?.apiKey, '');
@@ -85,13 +86,17 @@ test('settings route persists advancedProviders with masking and secret preserva
   const saveLlmBaseUrl = await fetch(base, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ llmBaseUrl: 'https://llm.example.com/openai/v1/' }),
+    body: JSON.stringify({
+      llmBaseUrl: 'https://llm.example.com/openai/v1/',
+      llmModel: 'custom-chat-model',
+    }),
   }).then((res) => res.json());
   assert.equal(saveLlmBaseUrl.success, true);
 
   const masked = await fetch(base).then((res) => res.json());
   assert.equal(masked.data.enableZhenzhenFallback, false);
   assert.equal(masked.data.llmBaseUrl, 'https://llm.example.com/openai/v1');
+  assert.equal(masked.data.llmModel, 'custom-chat-model');
   const modelscope = masked.data.advancedProviders.find((p: any) => p.id === 'modelscope');
   assert.equal(modelscope.apiKey, '****3456');
   assert.equal(modelscope.hasApiKey, true);
@@ -103,6 +108,7 @@ test('settings route persists advancedProviders with masking and secret preserva
   const raw = await fetch(`${base}/raw`).then((res) => res.json());
   assert.equal(raw.data.enableZhenzhenFallback, false);
   assert.equal(raw.data.llmBaseUrl, 'https://llm.example.com/openai/v1');
+  assert.equal(raw.data.llmModel, 'custom-chat-model');
   assert.equal(raw.data.advancedProviders.find((p: any) => p.id === 'modelscope').apiKey, 'ms-secret-123456');
 
   const preserve = await fetch(base, {
@@ -127,4 +133,14 @@ test('settings route persists advancedProviders with masking and secret preserva
   assert.equal(invalidBaseUrlResponse.status, 400);
   const afterInvalid = await fetch(`${base}/raw`).then((res) => res.json());
   assert.equal(afterInvalid.data.llmBaseUrl, 'https://llm.example.com/openai/v1');
+  assert.equal(afterInvalid.data.llmModel, 'custom-chat-model');
+
+  const invalidModelResponse = await fetch(base, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ llmModel: 'bad\nmodel' }),
+  });
+  assert.equal(invalidModelResponse.status, 400);
+  const afterInvalidModel = await fetch(`${base}/raw`).then((res) => res.json());
+  assert.equal(afterInvalidModel.data.llmModel, 'custom-chat-model');
 });
