@@ -6,8 +6,10 @@ import {
   FileText,
   Loader2,
   RefreshCw,
+  Save,
   Settings,
   Sparkles,
+  Trash2,
   Upload,
 } from 'lucide-react';
 import {
@@ -46,9 +48,26 @@ const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 tex
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
 const DEFAULT_CRAFTS = ['panel', 'dimensional-letters', 'soft-film-lightbox'];
 const DEFAULT_REFINE_WORD_COUNT = 1200;
+const SUPPLEMENT_PRESET_KEY = 't8-elevation-supplement-presets';
 
 function same(valueA: unknown, valueB: unknown) {
   return JSON.stringify(valueA) === JSON.stringify(valueB);
+}
+
+function loadSupplementPresets(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(SUPPLEMENT_PRESET_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function saveSupplementPresets(map: Record<string, string>) {
+  try {
+    localStorage.setItem(SUPPLEMENT_PRESET_KEY, JSON.stringify(map));
+  } catch {
+    /* noop */
+  }
 }
 
 function documentLabel(meta?: Omit<ExtractedDocument, 'text'> | null) {
@@ -121,6 +140,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
   const [presetEditorValue, setPresetEditorValue] = useState('');
   const [presetSaving, setPresetSaving] = useState(false);
   const [presetError, setPresetError] = useState('');
+  const [supplementPresetMap, setSupplementPresetMap] = useState<Record<string, string>>(() => loadSupplementPresets());
 
   const sourceText = String(d.sourceText || '');
   const wallMode: 'single' | 'multi' = d.wallMode === 'single' ? 'single' : 'multi';
@@ -396,6 +416,27 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
     } finally {
       setPresetSaving(false);
     }
+  };
+
+  const saveSupplementPreset = () => {
+    if (isReadonly) return;
+    const text = String(d.supplement || '').trim();
+    if (!text) {
+      window.alert('当前内容为空，无法保存为预设');
+      return;
+    }
+    const name = window.prompt('为当前特殊要求预设命名:', '');
+    if (!name?.trim()) return;
+    const next = { ...supplementPresetMap, [name.trim()]: text };
+    saveSupplementPresets(next);
+    setSupplementPresetMap(next);
+  };
+
+  const deleteSupplementPreset = (name: string) => {
+    const { [name]: _deleted, ...rest } = supplementPresetMap;
+    void _deleted;
+    saveSupplementPresets(rest);
+    setSupplementPresetMap(rest);
   };
 
   return (
@@ -755,7 +796,54 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
             </div>
           )}
           <textarea className={`${FIELD} mt-1 min-h-[46px] resize-y`} value={d.colorMaterial || ''} disabled={isReadonly} placeholder="色彩与材质体系" onChange={(event) => update({ colorMaterial: event.target.value, colorMaterialPreset: '' })} />
-          <textarea className={`${FIELD} mt-1 min-h-[46px] resize-y`} value={d.supplement || ''} disabled={isReadonly} placeholder="特殊限制、品牌语气、施工要求等" onChange={(event) => update({ supplement: event.target.value })} />
+          <div className="mt-1.5">
+            <div className="mb-1 flex items-center gap-1.5">
+              <label className="text-[10px] text-white/50">特殊限制、品牌语气、施工要求等</label>
+              <div className="ml-auto flex items-center gap-1">
+                <select
+                  className="rounded border border-white/10 bg-white/5 px-1 py-0.5 text-[10px] text-white/70 outline-none disabled:opacity-45"
+                  value=""
+                  disabled={isReadonly}
+                  title="加载预设"
+                  onChange={(event) => {
+                    const name = event.target.value;
+                    if (name) update({ supplement: supplementPresetMap[name] || '' });
+                  }}
+                >
+                  <option value="" className="bg-zinc-900">— 预设 —</option>
+                  {Object.keys(supplementPresetMap).map((name) => (
+                    <option key={name} value={name} className="bg-zinc-900">
+                      {name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="text-emerald-300 hover:text-emerald-200 disabled:opacity-40"
+                  disabled={isReadonly}
+                  onClick={saveSupplementPreset}
+                  title="保存当前为预设"
+                >
+                  <Save size={11} />
+                </button>
+                {Object.keys(supplementPresetMap).length > 0 && (
+                  <button
+                    type="button"
+                    className="text-rose-300 hover:text-rose-200 disabled:opacity-40"
+                    disabled={isReadonly}
+                    onClick={() => {
+                      const name = window.prompt('删除预设(输入名字):', '');
+                      if (name && supplementPresetMap[name]) deleteSupplementPreset(name);
+                    }}
+                    title="删除预设"
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                )}
+              </div>
+            </div>
+            <textarea className={`${FIELD} min-h-[46px] resize-y`} value={d.supplement || ''} disabled={isReadonly} placeholder="特殊限制、品牌语气、施工要求等" onChange={(event) => update({ supplement: event.target.value })} />
+          </div>
         </section>
 
         <section className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
