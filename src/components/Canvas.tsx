@@ -334,7 +334,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
   'video-motion': { kind: 'video-motion', motionLanguage: 'en' },
   'exhibition-prompt': { prompt: '', outputText: '', text: '', imageUrls: [], referenceImages: [], materialOrder: [] },
   'elevation-prompt': {
-    model: 'gemini-3.1-flash-lite-preview',
+    model: '',
     sourceText: '',
     documentMeta: null,
     analysis: null,

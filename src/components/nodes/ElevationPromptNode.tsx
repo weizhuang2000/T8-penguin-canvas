@@ -68,6 +68,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
   const busy = status === 'extracting' || status === 'refining';
 
   const advancedProviders = useApiKeysStore((state) => state.settings.advancedProviders);
+  const configuredLlmModel = useApiKeysStore((state) => state.settings.llmModel)?.trim() || DEFAULT_LLM_MODEL;
   const llmProviders = useMemo(() => advancedProvidersForNode(advancedProviders, 'llm'), [advancedProviders]);
   const providerSelection = useMemo(
     () => resolveAdvancedProviderSelection(advancedProviders, 'llm', {
@@ -82,7 +83,23 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
     ? advancedProviderModelOptions(providerSelection.provider, 'llm')
     : [];
   const externalModel = providerSelection.providerModel || externalModels[0] || '';
-  const model = String(d.model || DEFAULT_LLM_MODEL);
+  const savedModel = String(d.model || '').trim();
+  const model = savedModel || configuredLlmModel;
+  const llmModelOptions = useMemo(() => {
+    const options = LLM_MODELS.filter((item) => !item.imageOutput);
+    if (!options.some((item) => item.id === model)) {
+      return [
+        {
+          id: model,
+          label: `${model}（设置默认）`,
+          provider: 'llm-direct' as const,
+          vision: true,
+        },
+        ...options,
+      ];
+    }
+    return options;
+  }, [model]);
 
   const outputs = useMemo(
     () => buildElevationOutputs({
@@ -149,6 +166,12 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
   useEffect(() => {
     setAnalysisDraft(JSON.stringify(analysis, null, 2));
   }, [analysis]);
+
+  useEffect(() => {
+    if (savedModel === DEFAULT_LLM_MODEL && configuredLlmModel !== DEFAULT_LLM_MODEL && !d.modelMigratedFromDefault) {
+      update({ model: configuredLlmModel, modelMigratedFromDefault: true });
+    }
+  }, [configuredLlmModel, d.modelMigratedFromDefault, savedModel, update]);
 
   const refineText = useCallback(async (textOverride?: string, rethrow = false) => {
     if (isReadonly) return;
@@ -383,7 +406,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
                   value={model}
                   onChange={(event) => update({ model: event.target.value })}
                 >
-                  {LLM_MODELS.filter((item) => !item.imageOutput).map((item) => (
+                  {llmModelOptions.map((item) => (
                     <option key={item.id} value={item.id}>{item.label}</option>
                   ))}
                 </select>
