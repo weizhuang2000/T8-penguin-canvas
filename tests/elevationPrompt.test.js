@@ -52,6 +52,27 @@ test('elevation outputs include crafts, concept prompts and accurate schedule', 
   assert.match(result.textSegments[0], /准确排版清单/);
 });
 
+test('multi-wall segments omit wall number prefixes', () => {
+  const combined = buildElevationOutputs({
+    analysis,
+    walls: wallsFromAnalysis(analysis, 'multi', 3),
+    wallMode: 'multi',
+    outputMode: 'segments',
+    downstreamContent: 'combined',
+  });
+  const schedule = buildElevationOutputs({
+    analysis,
+    walls: wallsFromAnalysis(analysis, 'multi', 3),
+    wallMode: 'multi',
+    outputMode: 'segments',
+    downstreamContent: 'schedule',
+  });
+
+  assert.doesNotMatch(combined.overviewPrompt, /【立面\s*1】/u);
+  assert.doesNotMatch(combined.textSegments[0], /准确排版清单\s*---\s*\n立面\s*1/u);
+  assert.doesNotMatch(schedule.textSegments[0], /^立面\s*1/u);
+});
+
 test('single-wall mode collapses multiple walls and never emits segments', () => {
   const result = buildElevationOutputs({
     analysis,
@@ -66,9 +87,10 @@ test('single-wall mode collapses multiple walls and never emits segments', () =>
 });
 
 test('analysis messages request strict JSON and preserve document text', () => {
-  const messages = buildElevationAnalysisMessages('原始文档正文', 'multi', 4);
+  const messages = buildElevationAnalysisMessages('原始文档正文', 'multi', 4, 800);
   assert.match(messages[0].content, /只输出 JSON/);
   assert.match(messages[0].content, /约 4 个连续立面/);
+  assert.match(messages[0].content, /约 800 字/);
   assert.equal(messages[1].content, '原始文档正文');
 });
 

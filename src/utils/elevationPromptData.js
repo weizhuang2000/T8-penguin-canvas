@@ -143,6 +143,12 @@ function buildWallSchedule(values, wall, index) {
   ].join('\n');
 }
 
+function stripWallSegmentHeading(text) {
+  return cleanText(text, 50000)
+    .replace(/^【立面\s*\d+】\s*\n*/u, '')
+    .replace(/^立面\s*\d+\s*[｜|]\s*/u, '');
+}
+
 export function buildElevationOutputs(values = {}) {
   const mode = values.wallMode === 'single' ? 'single' : 'multi';
   const analysis = normalizeElevationAnalysis(values.analysis);
@@ -160,7 +166,7 @@ export function buildElevationOutputs(values = {}) {
   const scheduleSegments = walls.map((wall, index) => buildWallSchedule({ ...values, analysis }, wall, index));
   const overviewPrompt = [
     `整套展陈彩立面设计，共 ${walls.length} 面，保持统一的视觉识别、网格、色彩、材质和工艺语言。`,
-    ...conceptPrompts.map((prompt, index) => `\n【立面 ${index + 1}】\n${prompt}`),
+    ...conceptPrompts.map((prompt) => `\n${prompt}`),
   ].join('\n');
   const generatedLayoutSchedule = [
     `项目：${analysis.projectTheme || '未命名展陈项目'}`,
@@ -175,8 +181,9 @@ export function buildElevationOutputs(values = {}) {
       ? 'combined'
       : 'concept';
   const segmentOutputs = conceptPrompts.map((prompt, index) => {
-    if (contentMode === 'schedule') return scheduleSegments[index];
-    if (contentMode === 'combined') return `${prompt}\n\n--- 准确排版清单 ---\n${scheduleSegments[index]}`;
+    const scheduleForSegment = stripWallSegmentHeading(scheduleSegments[index]);
+    if (contentMode === 'schedule') return scheduleForSegment;
+    if (contentMode === 'combined') return `${prompt}\n\n--- 准确排版清单 ---\n${scheduleForSegment}`;
     return prompt;
   });
   const mainOutput = contentMode === 'schedule'
@@ -197,10 +204,12 @@ export function buildElevationOutputs(values = {}) {
   };
 }
 
-export function buildElevationAnalysisMessages(sourceText, wallMode = 'multi', wallCount = 3) {
+export function buildElevationAnalysisMessages(sourceText, wallMode = 'multi', wallCount = 3, wordCount = 1200) {
+  const targetWordCount = Math.max(200, Math.min(3000, Number(wordCount) || 1200));
   const countInstruction = wallMode === 'single'
     ? '按一个主题立面组织内容'
     : `建议拆分为约 ${Math.max(1, Math.min(12, Number(wallCount) || 3))} 个连续立面章节`;
+  const wordInstruction = `提炼总字数控制在约 ${targetWordCount} 字，允许上下浮动 20%；projectTheme 简短，coreMessage 和各章节 displayFocus 只保留关键设计信息，keyQuotes 为原文摘录且不计入改写字数。`;
   return [
     {
       role: 'system',
@@ -210,6 +219,7 @@ export function buildElevationAnalysisMessages(sourceText, wallMode = 'multi', w
         '结构必须为：{"projectTheme":"项目主题","coreMessage":"核心信息","sections":[{"title":"章节原题","shortTitle":"适合上墙的短标题","keyQuotes":["必须准确保留的原文"],"displayFocus":"本章展示重点","suggestedCrafts":["建议工艺"]}]}。',
         'keyQuotes 只摘录原文，不得改写；shortTitle 控制在 12 个汉字以内；不要虚构文档没有的信息。',
         countInstruction,
+        wordInstruction,
       ].join('\n'),
     },
     {

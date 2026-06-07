@@ -73,4 +73,5 @@ export function buildElevationAnalysisMessages(
   sourceText: string,
   wallMode?: 'single' | 'multi',
   wallCount?: number,
+  wordCount?: number,
 ): ElevationAnalysisMessage[];

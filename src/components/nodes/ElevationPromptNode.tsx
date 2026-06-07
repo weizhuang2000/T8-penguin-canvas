@@ -45,6 +45,7 @@ import { useUpdateNodeData } from './useUpdateNodeData';
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
 const DEFAULT_CRAFTS = ['panel', 'dimensional-letters', 'soft-film-lightbox'];
+const DEFAULT_REFINE_WORD_COUNT = 1200;
 
 function same(valueA: unknown, valueB: unknown) {
   return JSON.stringify(valueA) === JSON.stringify(valueB);
@@ -124,6 +125,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
   const sourceText = String(d.sourceText || '');
   const wallMode: 'single' | 'multi' = d.wallMode === 'single' ? 'single' : 'multi';
   const wallCount = Math.max(1, Math.min(12, Number(d.wallCount) || 3));
+  const refineWordCount = Math.max(200, Math.min(3000, Number(d.refineWordCount) || DEFAULT_REFINE_WORD_COUNT));
   const analysis = useMemo(
     () => normalizeElevationAnalysis(d.analysis) as ElevationAnalysis,
     [d.analysis],
@@ -268,7 +270,8 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
     }
     update({ status: 'refining', error: '' });
     try {
-      const messages = buildElevationAnalysisMessages(text, wallMode, wallCount);
+      const messages = buildElevationAnalysisMessages(text, wallMode, wallCount, refineWordCount);
+      const maxTokens = Math.max(1200, Math.min(8192, Math.ceil(refineWordCount * 3.2)));
       const response = externalSelected && providerSelection.provider
         ? await generateExternalLlm({
             providerId: providerSelection.provider.id,
@@ -276,14 +279,14 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
             model: externalModel,
             messages: messages as any,
             temperature: 0.2,
-            max_tokens: 8192,
+            max_tokens: maxTokens,
             providerParams: d.providerParams || {},
           })
         : await generateLlm({
             model,
             messages: messages as any,
             temperature: 0.2,
-            max_tokens: 8192,
+            max_tokens: maxTokens,
           });
       const nextAnalysis = parseElevationAnalysisResponse(response.content) as ElevationAnalysis;
       const nextWalls = wallsFromAnalysis(nextAnalysis, wallMode, wallCount) as ElevationWall[];
@@ -308,6 +311,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
     isReadonly,
     model,
     providerSelection.provider,
+    refineWordCount,
     sourceText,
     update,
     wallCount,
@@ -466,9 +470,22 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
         <section className="rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1.5 flex items-center gap-2">
             <span className="text-[11px] font-semibold text-cyan-100">2. AI 提炼</span>
+            <label className="ml-auto flex min-w-[150px] items-center gap-1.5 text-[10px] text-white/55" title="控制 AI 结构化提炼的目标字数">
+              <span className="whitespace-nowrap">字数 {refineWordCount}</span>
+              <input
+                type="range"
+                min={200}
+                max={3000}
+                step={100}
+                value={refineWordCount}
+                disabled={busy || isReadonly}
+                className="h-1 w-20 accent-cyan-300"
+                onChange={(event) => update({ refineWordCount: Number(event.target.value) })}
+              />
+            </label>
             <button
               type="button"
-              className={`${BUTTON} ml-auto`}
+              className={BUTTON}
               disabled={busy || isReadonly || !sourceText.trim()}
               onClick={() => void refineText()}
             >

@@ -341,6 +341,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     walls: [],
     wallMode: 'multi',
     wallCount: 3,
+    refineWordCount: 1200,
     outputMode: 'segments',
     downstreamContent: 'concept',
     selectedCrafts: ['panel', 'dimensional-letters', 'soft-film-lightbox'],
