@@ -222,6 +222,9 @@ export type ExhibitionPromptPresetMap = Partial<Record<ExhibitionPromptDimension
 export interface ElevationColorMaterialPresetItem {
   id: string;
   label: string;
+  core?: string;
+  features?: string;
+  usage?: string;
   info: string;
   order: number;
 }
@@ -293,7 +296,7 @@ export async function getElevationPromptPresets(): Promise<ElevationPromptPreset
 }
 
 export async function updateElevationColorMaterialPresets(
-  presets: Array<Pick<ElevationColorMaterialPresetItem, 'label'> & Partial<Pick<ElevationColorMaterialPresetItem, 'id' | 'info' | 'order'>>>,
+  presets: Array<Pick<ElevationColorMaterialPresetItem, 'label'> & Partial<Pick<ElevationColorMaterialPresetItem, 'id' | 'core' | 'features' | 'usage' | 'info' | 'order'>>>,
 ): Promise<ElevationColorMaterialPresetItem[]> {
   const res = await request<{ success: boolean; data: ElevationColorMaterialPresetItem[] }>(
     `${BASE}/prompt-library/elevation/presets/colorMaterial`,

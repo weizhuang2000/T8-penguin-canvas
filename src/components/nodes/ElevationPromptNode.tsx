@@ -57,7 +57,15 @@ function documentLabel(meta?: Omit<ExtractedDocument, 'text'> | null) {
 }
 
 function colorPresetEditorText(presets: ElevationColorMaterialPresetItem[]): string {
-  return presets.map((preset) => (preset.info ? `${preset.label}｜${preset.info}` : preset.label)).join('\n');
+  return presets
+    .map((preset) => {
+      const core = String(preset.core || '').trim();
+      const features = String(preset.features || '').trim();
+      const usage = String(preset.usage || '').trim();
+      if (core || features || usage) return [preset.label, core, features, usage].join('｜');
+      return preset.info ? `${preset.label}｜${preset.info}` : preset.label;
+    })
+    .join('\n');
 }
 
 function parseColorPresetEditorText(text: string) {
@@ -69,14 +77,32 @@ function parseColorPresetEditorText(text: string) {
       const [labelRaw, ...rest] = raw.split(/[｜|]/);
       const label = String(labelRaw || '').trim();
       if (!label) return null;
+      const core = String(rest[0] || '').trim();
+      const features = String(rest[1] || '').trim();
+      const usage = rest.slice(2).join('｜').trim();
+      const info = rest.length > 2
+        ? [core && `核心：${core}`, features && `特征：${features}`, usage && `适用：${usage}`].filter(Boolean).join('')
+        : rest.join('｜').trim();
       return {
         id: `${label.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'preset'}-${index + 1}`,
         label,
-        info: rest.join('｜').trim(),
+        core,
+        features,
+        usage,
+        info,
         order: index,
       };
     })
-    .filter(Boolean) as Array<{ id: string; label: string; info: string; order: number }>;
+    .filter(Boolean) as Array<{ id: string; label: string; core: string; features: string; usage: string; info: string; order: number }>;
+}
+
+function colorMaterialTextFromPreset(preset: ElevationColorMaterialPresetItem): string {
+  const values = [
+    preset.label,
+    String(preset.core || '').trim(),
+    String(preset.features || '').trim(),
+  ].filter(Boolean);
+  return values.join('，');
 }
 
 const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
@@ -352,7 +378,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
     if (!canManageTeam) return;
     const presets = parseColorPresetEditorText(presetEditorValue);
     if (presets.length === 0) {
-      setPresetError('请至少保留一条“名称｜信息提示”格式的预设。');
+      setPresetError('请至少保留一条“名称｜核心内容｜特征内容｜适用提示”格式的预设。');
       return;
     }
     setPresetSaving(true);
@@ -665,7 +691,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
               const preset = colorMaterialPresets.find((item) => item.id === presetId);
               update({
                 colorMaterialPreset: presetId,
-                ...(preset ? { colorMaterial: preset.label } : {}),
+                ...(preset ? { colorMaterial: colorMaterialTextFromPreset(preset) } : {}),
               });
             }}
           >
@@ -683,7 +709,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
           )}
           {canManageTeam && presetEditorOpen && (
             <div className="mt-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
-              <div className="mb-1 text-[10px] text-white/45">每行一个预设：名称｜信息提示。选择预设时仅把名称写入输入框。</div>
+              <div className="mb-1 text-[10px] text-white/45">每行一个预设：名称｜核心内容｜特征内容｜适用提示。输入框只写入名称、核心内容和特征内容。</div>
               <textarea
                 className={`${FIELD} min-h-[120px] resize-y font-mono`}
                 value={presetEditorValue}

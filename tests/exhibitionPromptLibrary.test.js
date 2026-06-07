@@ -136,6 +136,8 @@ test('elevation color material presets expose info and are admin managed', async
   const defaults = await fetch(`${adminBase}/api/prompt-library/elevation/presets`).then((res) => res.json());
   assert.equal(defaults.success, true);
   assert.equal(defaults.data.colorMaterial[0].label, '极简主义 / 少即是多');
+  assert.match(defaults.data.colorMaterial[0].core, /大量留白/);
+  assert.match(defaults.data.colorMaterial[0].features, /黑白灰/);
   assert.match(defaults.data.colorMaterial[0].info, /核心/);
 
   const saved = await fetch(`${adminBase}/api/prompt-library/elevation/presets/colorMaterial`, {
@@ -143,16 +145,16 @@ test('elevation color material presets expose info and are admin managed', async
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       presets: [
-        { label: '测试色材体系', info: '核心：仅作为提示，不写入节点输入框。' },
-        { label: '第二套体系', info: '适用：测试。' },
+        { label: '测试色材体系', core: '只写内容本身', features: '不要字段名前缀', usage: '仅作提示' },
+        { label: '第二套体系', info: '核心：信息可拆分。特征：自动提取。适用：测试。' },
       ],
     }),
   }).then((res) => res.json());
 
   assert.equal(saved.success, true);
-  assert.deepEqual(saved.data.map((item) => [item.label, item.info, item.order]), [
-    ['测试色材体系', '核心：仅作为提示，不写入节点输入框。', 0],
-    ['第二套体系', '适用：测试。', 1],
+  assert.deepEqual(saved.data.map((item) => [item.label, item.core, item.features, item.usage, item.order]), [
+    ['测试色材体系', '只写内容本身', '不要字段名前缀', '仅作提示', 0],
+    ['第二套体系', '信息可拆分。', '自动提取。', '测试。', 1],
   ]);
 
   const userBase = await startApp(t, { id: 'u1', username: 'alice', name: 'Alice', role: 'designer' });

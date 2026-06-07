@@ -117,6 +117,18 @@ function safeText(value, max = 2000) {
   return String(value || '').trim().slice(0, max);
 }
 
+function splitElevationPresetInfo(raw) {
+  const text = safeText(raw, 4000);
+  const core = text.match(/核心[：:]\s*([\s\S]*?)(?=特征[：:]|适用[：:]|$)/)?.[1] || '';
+  const features = text.match(/特征[：:]\s*([\s\S]*?)(?=适用[：:]|$)/)?.[1] || '';
+  const usage = text.match(/适用[：:]\s*([\s\S]*?)$/)?.[1] || '';
+  return {
+    core: safeText(core, 1200),
+    features: safeText(features, 1600),
+    usage: safeText(usage, 1200),
+  };
+}
+
 function readDb() {
   try {
     if (!fs.existsSync(DB_FILE)) return { items: [], presets: {} };
@@ -146,10 +158,17 @@ function normalizeElevationPresetList(value) {
       if (!id) id = `preset_${index + 1}`;
       while (used.has(id)) id = `${id}_${index + 1}`;
       used.add(id);
+      const splitInfo = splitElevationPresetInfo(raw?.info);
+      const core = safeText(raw?.core, 1200) || splitInfo.core;
+      const features = safeText(raw?.features, 1600) || splitInfo.features;
+      const usage = safeText(raw?.usage, 1200) || splitInfo.usage;
       return {
         id,
         label,
-        info: safeText(raw?.info, 4000),
+        core,
+        features,
+        usage,
+        info: safeText(raw?.info, 4000) || [core && `核心：${core}`, features && `特征：${features}`, usage && `适用：${usage}`].filter(Boolean).join(''),
         order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,
       };
     })
