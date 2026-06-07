@@ -2,6 +2,7 @@ export interface ElevationCraft {
   id: string;
   label: string;
   prompt: string;
+  order?: number;
 }
 
 export interface ElevationSection {
@@ -33,6 +34,7 @@ export interface ElevationPromptValues {
   outputMode?: 'segments' | 'overview';
   downstreamContent?: 'concept' | 'schedule' | 'combined';
   selectedCrafts?: string[];
+  craftPresets?: ElevationCraft[];
   customCraft?: string;
   aspectRatio?: string;
   dimensions?: string;

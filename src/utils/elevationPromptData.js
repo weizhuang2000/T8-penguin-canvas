@@ -93,9 +93,10 @@ export function wallsFromAnalysis(analysisValue, mode = 'multi', count = 3) {
   });
 }
 
-function craftText(selectedIds, customCraft) {
+function craftText(selectedIds, customCraft, craftPresets) {
   const selected = new Set(Array.isArray(selectedIds) ? selectedIds : []);
-  const values = ELEVATION_CRAFTS.filter((craft) => selected.has(craft.id)).map((craft) => craft.prompt);
+  const source = Array.isArray(craftPresets) && craftPresets.length > 0 ? craftPresets : ELEVATION_CRAFTS;
+  const values = source.filter((craft) => selected.has(craft.id)).map((craft) => craft.prompt);
   const custom = cleanText(customCraft, 800);
   if (custom) values.push(custom);
   return values.join('；');
@@ -108,7 +109,7 @@ function exactTextInstruction(wall) {
 }
 
 function buildWallPrompt(values, wall, index, total) {
-  const crafts = craftText(values.selectedCrafts, values.customCraft);
+  const crafts = craftText(values.selectedCrafts, values.customCraft, values.craftPresets);
   const lines = [
     `生成一张专业展陈彩立面平面设计概念图，第 ${index + 1}/${total} 面，正立面、无透视、完整展示墙面边界。`,
     `项目主题：${cleanText(values.analysis?.projectTheme || wall.title || '展陈主题')}`,
@@ -128,7 +129,8 @@ function buildWallPrompt(values, wall, index, total) {
 }
 
 function buildWallSchedule(values, wall, index) {
-  const craftLabels = ELEVATION_CRAFTS
+  const craftSource = Array.isArray(values.craftPresets) && values.craftPresets.length > 0 ? values.craftPresets : ELEVATION_CRAFTS;
+  const craftLabels = craftSource
     .filter((craft) => (values.selectedCrafts || []).includes(craft.id))
     .map((craft) => craft.label);
   if (cleanText(values.customCraft)) craftLabels.push(cleanText(values.customCraft, 200));

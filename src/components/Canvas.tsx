@@ -24,6 +24,7 @@ import '@xyflow/react/dist/style.css';
 import { Play, Copy, CopyPlus, Trash2, FolderPlus, PackagePlus, Library, Download, Workflow, Send as SendIcon } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { useCanvasStore } from '../stores/canvas';
+import { MATERIAL_CANVAS_DROP_EVENT, type MaterialCanvasDropEventDetail, type MaterialPayload } from '../stores/dragMaterial';
 import { useThemeStore } from '../stores/theme';
 import { useShortcutStore } from '../stores/shortcuts';
 import { getTemplateMode, resolveThemeTemplate } from '../theme/defaultTemplates';
@@ -723,6 +724,30 @@ function sourceNodeIdsFromMaterials(materials: SendableMaterial[]): string[] {
     }
   });
   return [...ids].sort();
+}
+
+function sendableFromMaterialPayload(payload: MaterialPayload): SendableMaterial | null {
+  if (payload.kind === 'text') {
+    const text = String(payload.text || '').trim();
+    if (!text) return null;
+    return {
+      id: `drag-text-${Date.now()}`,
+      kind: 'text',
+      text,
+      name: text.slice(0, 24) || '拖拽文本',
+      sourceNodeId: payload.sourceNodeId,
+      sourceType: 'drag-material',
+    };
+  }
+  if (!payload.url) return null;
+  return {
+    id: `drag-${payload.kind}-${Date.now()}`,
+    kind: payload.kind,
+    url: payload.url,
+    name: fileNameFromUrl(payload.url),
+    sourceNodeId: payload.sourceNodeId,
+    sourceType: 'drag-material',
+  };
 }
 
 function removeDuplicateSendBridgeNodes(
@@ -1835,6 +1860,43 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
     },
     [activeId, assignActiveNodeSerials, basePositionForActiveSend, getViewport, screenToFlowPosition],
   );
+
+  const insertDraggedMaterialToCanvas = useCallback(
+    (payload: MaterialPayload, atScreen: { x: number; y: number }) => {
+      if (!canEditActiveCanvas) {
+        logBus.warn('当前画布为只读，不能拖入历史素材', '画布权限');
+        return;
+      }
+      const material = sendableFromMaterialPayload(payload);
+      if (!material) return;
+      const specs = buildSendNodeSpecs([material], 'upload');
+      if (specs.length === 0) return;
+      const anchor = screenToFlowPosition(atScreen);
+      const firstSize = defaultSizeOf(specs[0].type);
+      const base = { x: anchor.x - firstSize.w / 2, y: anchor.y - firstSize.h / 2 };
+      const nodesBefore = nodesRef.current;
+      const newNodes = materialNodesFromSpecs(specs, nodesBefore, base, {
+        signature: sendableMaterialSignature([material]),
+        mode: 'upload',
+        sourceCanvasId: activeId,
+        sourceNodeIds: sourceNodeIdsFromMaterials([material]),
+      });
+      const assignedNewNodes = assignActiveNodeSerials(newNodes, nodesBefore);
+      setNodes([...nodesBefore.map((node) => ({ ...node, selected: false })), ...assignedNewNodes]);
+      logBus.success(`已拖入 ${summarizeSendableMaterials([material])}`, '历史生成');
+    },
+    [activeId, assignActiveNodeSerials, canEditActiveCanvas, screenToFlowPosition],
+  );
+
+  useEffect(() => {
+    const onCanvasMaterialDrop = (event: Event) => {
+      const detail = (event as CustomEvent<MaterialCanvasDropEventDetail>).detail;
+      if (!detail?.payload || !detail.atScreen) return;
+      insertDraggedMaterialToCanvas(detail.payload, detail.atScreen);
+    };
+    window.addEventListener(MATERIAL_CANVAS_DROP_EVENT, onCanvasMaterialDrop as EventListener);
+    return () => window.removeEventListener(MATERIAL_CANVAS_DROP_EVENT, onCanvasMaterialDrop as EventListener);
+  }, [insertDraggedMaterialToCanvas]);
 
   const handleSendMaterialsToCanvas = useCallback(
     async (targetCanvasId: string, mode: SendTargetMode, switchAfter: boolean) => {

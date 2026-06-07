@@ -52,6 +52,23 @@ test('elevation outputs include crafts, concept prompts and accurate schedule', 
   assert.match(result.textSegments[0], /准确排版清单/);
 });
 
+test('elevation outputs use configured craft presets', () => {
+  const result = buildElevationOutputs({
+    analysis,
+    walls: wallsFromAnalysis(analysis, 'multi', 1),
+    wallMode: 'multi',
+    outputMode: 'segments',
+    downstreamContent: 'combined',
+    selectedCrafts: ['custom-craft'],
+    craftPresets: [
+      { id: 'custom-craft', label: '定制工艺', prompt: '定制工艺提示词' },
+    ],
+  });
+
+  assert.match(result.conceptPrompts[0], /定制工艺提示词/);
+  assert.match(result.layoutSchedule, /定制工艺/);
+});
+
 test('multi-wall segments omit wall number prefixes', () => {
   const combined = buildElevationOutputs({
     analysis,

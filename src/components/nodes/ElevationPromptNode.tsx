@@ -17,8 +17,10 @@ import {
   getCurrentUser,
   getElevationPromptPresets,
   updateElevationColorMaterialPresets,
+  updateElevationCraftPresets,
   type AuthUser,
   type ElevationColorMaterialPresetItem,
+  type ElevationCraftPresetItem,
   type ExtractedDocument,
 } from '../../services/api';
 import { generateExternalLlm, generateLlm } from '../../services/generation';
@@ -125,6 +127,30 @@ function colorMaterialTextFromPreset(preset: ElevationColorMaterialPresetItem): 
   return values.join('，');
 }
 
+function craftPresetEditorText(presets: ElevationCraftPresetItem[]): string {
+  return presets.map((preset) => `${preset.label}｜${preset.prompt}`).join('\n');
+}
+
+function parseCraftPresetEditorText(text: string) {
+  return text
+    .split(/\r?\n/)
+    .map((line, index) => {
+      const raw = line.trim();
+      if (!raw) return null;
+      const [labelRaw, ...rest] = raw.split(/[｜|]/);
+      const label = String(labelRaw || '').trim();
+      const prompt = rest.join('｜').trim();
+      if (!label || !prompt) return null;
+      return {
+        id: `${label.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'craft'}-${index + 1}`,
+        label,
+        prompt,
+        order: index,
+      };
+    })
+    .filter(Boolean) as Array<{ id: string; label: string; prompt: string; order: number }>;
+}
+
 const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
@@ -136,10 +162,15 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const canManageTeam = currentUser?.role === 'admin' || currentUser?.role === 'manager';
   const [colorMaterialPresets, setColorMaterialPresets] = useState<ElevationColorMaterialPresetItem[]>([]);
+  const [craftPresets, setCraftPresets] = useState<ElevationCraftPresetItem[]>([]);
   const [presetEditorOpen, setPresetEditorOpen] = useState(false);
   const [presetEditorValue, setPresetEditorValue] = useState('');
   const [presetSaving, setPresetSaving] = useState(false);
   const [presetError, setPresetError] = useState('');
+  const [craftEditorOpen, setCraftEditorOpen] = useState(false);
+  const [craftEditorValue, setCraftEditorValue] = useState('');
+  const [craftSaving, setCraftSaving] = useState(false);
+  const [craftError, setCraftError] = useState('');
   const [supplementPresetMap, setSupplementPresetMap] = useState<Record<string, string>>(() => loadSupplementPresets());
 
   const sourceText = String(d.sourceText || '');
@@ -154,6 +185,10 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
   const selectedColorMaterialPreset = useMemo(
     () => colorMaterialPresets.find((preset) => preset.id === d.colorMaterialPreset) || null,
     [colorMaterialPresets, d.colorMaterialPreset],
+  );
+  const craftPresetOptions = useMemo<ElevationCraft[]>(
+    () => (craftPresets.length > 0 ? craftPresets : ELEVATION_CRAFTS),
+    [craftPresets],
   );
   const status = String(d.status || 'idle');
   const busy = status === 'extracting' || status === 'refining';
@@ -213,6 +248,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
       visualStyle: d.visualStyle,
       supplement: d.supplement,
       layoutScheduleOverride: d.layoutScheduleOverride,
+      craftPresets,
     }),
     [
       analysis,
@@ -230,6 +266,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
       d.visualStyle,
       d.supplement,
       d.layoutScheduleOverride,
+      craftPresets,
     ],
   );
 
@@ -265,8 +302,14 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
   useEffect(() => {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
     getElevationPromptPresets()
-      .then((presets) => setColorMaterialPresets(presets.colorMaterial || []))
-      .catch(() => setColorMaterialPresets([]));
+      .then((presets) => {
+        setColorMaterialPresets(presets.colorMaterial || []);
+        setCraftPresets(presets.crafts || []);
+      })
+      .catch(() => {
+        setColorMaterialPresets([]);
+        setCraftPresets([]);
+      });
   }, []);
 
   useEffect(() => {
@@ -274,6 +317,12 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
     setPresetEditorValue(colorPresetEditorText(colorMaterialPresets));
     setPresetError('');
   }, [colorMaterialPresets, presetEditorOpen]);
+
+  useEffect(() => {
+    if (!craftEditorOpen) return;
+    setCraftEditorValue(craftPresetEditorText(craftPresets));
+    setCraftError('');
+  }, [craftEditorOpen, craftPresets]);
 
   useEffect(() => {
     if (savedModel === DEFAULT_LLM_MODEL && configuredLlmModel !== DEFAULT_LLM_MODEL && !d.modelMigratedFromDefault) {
@@ -418,6 +467,26 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
     }
   };
 
+  const saveCraftPresets = async () => {
+    if (!canManageTeam) return;
+    const presets = parseCraftPresetEditorText(craftEditorValue);
+    if (presets.length === 0) {
+      setCraftError('请至少保留一条“名称｜提示词”格式的工艺预设。');
+      return;
+    }
+    setCraftSaving(true);
+    setCraftError('');
+    try {
+      const saved = await updateElevationCraftPresets(presets);
+      setCraftPresets(saved);
+      setCraftEditorOpen(false);
+    } catch (error: any) {
+      setCraftError(error?.message || '保存工艺预设失败');
+    } finally {
+      setCraftSaving(false);
+    }
+  };
+
   const saveSupplementPreset = () => {
     if (isReadonly) return;
     const text = String(d.supplement || '').trim();
@@ -433,6 +502,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
   };
 
   const deleteSupplementPreset = (name: string) => {
+    if (!canManageTeam) return;
     const { [name]: _deleted, ...rest } = supplementPresetMap;
     void _deleted;
     saveSupplementPresets(rest);
@@ -694,16 +764,16 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
               <button
                 type="button"
                 className={`${BUTTON} ml-auto`}
-                disabled={presetSaving}
-                onClick={() => setPresetEditorOpen((value) => !value)}
+                disabled={craftSaving}
+                onClick={() => setCraftEditorOpen((value) => !value)}
               >
                 <Settings size={11} />
-                设置色材预设
+                设置工艺预设
               </button>
             )}
           </div>
-          <div className="grid grid-cols-3 gap-1">
-            {ELEVATION_CRAFTS.map((craft: ElevationCraft) => {
+          <div className="grid grid-cols-4 gap-1">
+            {craftPresetOptions.map((craft: ElevationCraft) => {
               const active = selectedCrafts.includes(craft.id);
               return (
                 <button
@@ -723,6 +793,36 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
               );
             })}
           </div>
+          {canManageTeam && craftEditorOpen && (
+            <div className="mt-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
+              <div className="mb-1 text-[10px] text-white/45">每行一个工艺预设：名称｜提示词。新增一行即新增，删除一行即删除。</div>
+              <textarea
+                className={`${FIELD} min-h-[96px] resize-y font-mono`}
+                value={craftEditorValue}
+                disabled={craftSaving}
+                onChange={(event) => setCraftEditorValue(event.target.value)}
+              />
+              {craftError && <div className="mt-1 text-[10px] text-red-300">{craftError}</div>}
+              <div className="mt-1.5 flex justify-end gap-1">
+                <button
+                  type="button"
+                  className={BUTTON}
+                  disabled={craftSaving}
+                  onClick={() => setCraftEditorOpen(false)}
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  className={BUTTON}
+                  disabled={craftSaving}
+                  onClick={saveCraftPresets}
+                >
+                  {craftSaving ? '保存中' : '保存工艺'}
+                </button>
+              </div>
+            </div>
+          )}
           <input className={`${FIELD} mt-1.5`} value={d.customCraft || ''} disabled={isReadonly} placeholder="自定义工艺" onChange={(event) => update({ customCraft: event.target.value })} />
           <div className="mt-1 grid grid-cols-2 gap-1">
             <select className={FIELD} value={d.aspectRatio || '3:1'} disabled={isReadonly} onChange={(event) => update({ aspectRatio: event.target.value })}>
@@ -826,7 +926,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
                 >
                   <Save size={11} />
                 </button>
-                {Object.keys(supplementPresetMap).length > 0 && (
+                {canManageTeam && Object.keys(supplementPresetMap).length > 0 && (
                   <button
                     type="button"
                     className="text-rose-300 hover:text-rose-200 disabled:opacity-40"

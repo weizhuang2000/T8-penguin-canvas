@@ -44,6 +44,14 @@ function validSeed(value: unknown): number {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 }
 
+function dragKindForHistoryItem(item: GenerationHistoryItem): GenerationHistoryKind {
+  return item.kind;
+}
+
+function dragSourceNodeId(item: GenerationHistoryItem): string {
+  return item.sourceNodeId || `generation-history-${item.id}`;
+}
+
 export default function GenerationHistoryDrawer({ open, onClose, userRole }: GenerationHistoryDrawerProps) {
   const { theme, style } = useThemeStore();
   const isDark = theme === 'dark';
@@ -259,7 +267,18 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
               const Icon = KIND_META[item.kind].icon;
               const seed = validSeed(item.seed);
               return (
-                <article key={item.id} className={`overflow-hidden ${isPixel ? 'border-2 border-[var(--px-ink)] bg-[var(--px-surface)] shadow-[3px_3px_0_var(--px-ink)]' : isDark ? 'rounded-lg border border-white/10 bg-white/[0.04]' : 'rounded-lg border border-black/10 bg-black/[0.03]'}`}>
+                <article
+                  key={item.id}
+                  data-drag-source
+                  data-drag-direct="true"
+                  data-drag-kind={dragKindForHistoryItem(item)}
+                  data-drag-url={item.url}
+                  data-drag-preview={item.url}
+                  data-drag-node-id={dragSourceNodeId(item)}
+                  data-resource-title={item.title}
+                  title={`${item.title}\n拖拽到画布可直接插入`}
+                  className={`overflow-hidden ${isPixel ? 'border-2 border-[var(--px-ink)] bg-[var(--px-surface)] shadow-[3px_3px_0_var(--px-ink)]' : isDark ? 'rounded-lg border border-white/10 bg-white/[0.04]' : 'rounded-lg border border-black/10 bg-black/[0.03]'}`}
+                >
                   <div className="relative h-32 overflow-hidden bg-black/80">
                     {item.kind === 'image' && <img src={item.url} alt={item.title} className="h-full w-full object-cover" draggable={false} />}
                     {item.kind === 'video' && <LoopingVideo src={item.url} muted className="h-full w-full object-cover" />}

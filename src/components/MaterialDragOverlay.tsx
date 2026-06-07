@@ -14,8 +14,10 @@
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
+  MATERIAL_CANVAS_DROP_EVENT,
   MATERIAL_DROP_EVENT,
   useDragMaterialStore,
+  type MaterialCanvasDropEventDetail,
   type MaterialDropEventDetail,
   type MaterialKind,
 } from '../stores/dragMaterial';
@@ -46,10 +48,11 @@ const MaterialDragOverlay = () => {
     const handleDown = (e: PointerEvent | MouseEvent): boolean => {
       // 仅响应 Ctrl/Meta + 左键
       if (e.button !== 0) return false;
-      if (!(e.ctrlKey || e.metaKey)) return false;
       if ('isPrimary' in e && (e as PointerEvent).isPrimary === false) return false;
       // 已在拖拽中不重复启动
       if (useDragMaterialStore.getState().dragging) return false;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('button,input,textarea,select,a,[role="button"]')) return false;
 
       // elementsFromPoint 穿透覆盖层取堆叠元素
       const stack = document.elementsFromPoint(e.clientX, e.clientY);
@@ -67,6 +70,8 @@ const MaterialDragOverlay = () => {
         }
       }
       if (!dragEl) return false;
+      const directDrag = dragEl.getAttribute('data-drag-direct') === 'true';
+      if (!directDrag && !(e.ctrlKey || e.metaKey)) return false;
 
       const kind = dragEl.getAttribute('data-drag-kind') as MaterialKind | null;
       if (!kind) return false;
@@ -154,6 +159,20 @@ const MaterialDragOverlay = () => {
           payload: cur.payload,
         };
         window.dispatchEvent(new CustomEvent(MATERIAL_DROP_EVENT, { detail }));
+      } else if (cur.dragging && cur.payload) {
+        const stack = document.elementsFromPoint(e.clientX, e.clientY);
+        const onCanvasPane = stack.some((el) => (
+          el instanceof HTMLElement &&
+          !el.closest('[data-canvas-floating-ui]') &&
+          !!el.closest('.react-flow__pane')
+        ));
+        if (onCanvasPane) {
+          const detail: MaterialCanvasDropEventDetail = {
+            payload: cur.payload,
+            atScreen: { x: e.clientX, y: e.clientY },
+          };
+          window.dispatchEvent(new CustomEvent(MATERIAL_CANVAS_DROP_EVENT, { detail }));
+        }
       }
       end();
       e.stopPropagation();

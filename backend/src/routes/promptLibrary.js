@@ -105,6 +105,22 @@ const DEFAULT_ELEVATION_COLOR_MATERIAL_PRESETS = [
   },
 ].map((item, index) => ({ ...item, order: index }));
 
+const DEFAULT_ELEVATION_CRAFT_PRESETS = [
+  { id: 'panel', label: '展板', prompt: '模块化高清展板，边缘与分缝收口精细' },
+  { id: 'dimensional-letters', label: '立体字', prompt: '精工立体字标题，层级明确，厚度与投影真实' },
+  { id: 'luminous-letters', label: '发光字', prompt: '隐藏光源发光字，亮度克制且轮廓清晰' },
+  { id: 'soft-film-lightbox', label: '软膜灯箱', prompt: '无边软膜灯箱，画面均匀透亮' },
+  { id: 'fabric-lightbox', label: '卡布灯箱', prompt: '卡布灯箱图文模块，画面平整且便于更换' },
+  { id: 'uv-print', label: 'UV 喷绘', prompt: '高精度 UV 喷绘图文，色彩稳定，文字边缘锐利' },
+  { id: 'acrylic', label: '亚克力', prompt: '透明或半透明亚克力叠层，形成轻盈的信息层次' },
+  { id: 'metal-panel', label: '金属板', prompt: '哑光金属板与精细折边，体现耐久和高级质感' },
+  { id: 'relief', label: '浮雕造型', prompt: '浅浮雕主题造型，体块与墙面自然衔接' },
+  { id: 'led-screen', label: 'LED 屏', prompt: '嵌入式 LED 屏，与图文版式形成完整构图' },
+  { id: 'interactive-screen', label: '互动屏', prompt: '嵌入式互动触控屏，设备边框和走线隐藏' },
+  { id: 'showcase-niche', label: '展柜/壁龛', prompt: '嵌墙展柜或壁龛，重点照明准确，尺度可信' },
+  { id: 'wayfinding', label: '导视标识', prompt: '统一的导视标识系统，编号与方向信息清晰' },
+].map((item, index) => ({ ...item, order: index }));
+
 function now() {
   return Date.now();
 }
@@ -178,17 +194,49 @@ function normalizeElevationPresetList(value) {
     .map((item, index) => ({ ...item, order: index }));
 }
 
+function normalizeElevationCraftPresetList(value) {
+  const source = Array.isArray(value) && value.length > 0 ? value : DEFAULT_ELEVATION_CRAFT_PRESETS;
+  const used = new Set();
+  return source
+    .map((raw, index) => {
+      const label = safeText(raw?.label, 120);
+      const prompt = safeText(raw?.prompt || raw?.text, 4000);
+      if (!label || !prompt) return null;
+      let id = safeText(raw?.id, 96).replace(/[^a-zA-Z0-9_-]/g, '');
+      if (!id) id = `craft_${index + 1}`;
+      while (used.has(id)) id = `${id}_${index + 1}`;
+      used.add(id);
+      return {
+        id,
+        label,
+        prompt,
+        order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 80)
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+    .map((item, index) => ({ ...item, order: index }));
+}
+
 function readElevationDb() {
   try {
     if (!fs.existsSync(ELEVATION_DB_FILE)) {
-      return { colorMaterialPresets: normalizeElevationPresetList(DEFAULT_ELEVATION_COLOR_MATERIAL_PRESETS) };
+      return {
+        colorMaterialPresets: normalizeElevationPresetList(DEFAULT_ELEVATION_COLOR_MATERIAL_PRESETS),
+        craftPresets: normalizeElevationCraftPresetList(DEFAULT_ELEVATION_CRAFT_PRESETS),
+      };
     }
     const raw = JSON.parse(fs.readFileSync(ELEVATION_DB_FILE, 'utf-8'));
     return {
       colorMaterialPresets: normalizeElevationPresetList(raw?.colorMaterialPresets),
+      craftPresets: normalizeElevationCraftPresetList(raw?.craftPresets),
     };
   } catch {
-    return { colorMaterialPresets: normalizeElevationPresetList(DEFAULT_ELEVATION_COLOR_MATERIAL_PRESETS) };
+    return {
+      colorMaterialPresets: normalizeElevationPresetList(DEFAULT_ELEVATION_COLOR_MATERIAL_PRESETS),
+      craftPresets: normalizeElevationCraftPresetList(DEFAULT_ELEVATION_CRAFT_PRESETS),
+    };
   }
 }
 
@@ -196,7 +244,10 @@ function writeElevationDb(db) {
   fs.mkdirSync(path.dirname(ELEVATION_DB_FILE), { recursive: true });
   fs.writeFileSync(
     ELEVATION_DB_FILE,
-    JSON.stringify({ colorMaterialPresets: normalizeElevationPresetList(db?.colorMaterialPresets) }, null, 2),
+    JSON.stringify({
+      colorMaterialPresets: normalizeElevationPresetList(db?.colorMaterialPresets),
+      craftPresets: normalizeElevationCraftPresetList(db?.craftPresets),
+    }, null, 2),
     'utf-8',
   );
 }
@@ -322,6 +373,7 @@ router.get('/elevation/presets', (_req, res) => {
     success: true,
     data: {
       colorMaterial: normalizeElevationPresetList(db.colorMaterialPresets),
+      crafts: normalizeElevationCraftPresetList(db.craftPresets),
     },
   });
 });
@@ -329,10 +381,22 @@ router.get('/elevation/presets', (_req, res) => {
 router.put('/elevation/presets/colorMaterial', (req, res) => {
   const user = req.user;
   if (!isAdminRole(user?.role)) {
-    return res.status(403).json({ success: false, error: '只有管理员可以维护立面色彩与材质预设' });
+    return res.status(403).json({ success: false, error: '只有系统管理员或经理可以维护立面色彩与材质预设' });
   }
   const presets = normalizeElevationPresetList(req.body?.presets);
-  writeElevationDb({ colorMaterialPresets: presets });
+  const db = readElevationDb();
+  writeElevationDb({ ...db, colorMaterialPresets: presets });
+  res.json({ success: true, data: presets });
+});
+
+router.put('/elevation/presets/crafts', (req, res) => {
+  const user = req.user;
+  if (!isAdminRole(user?.role)) {
+    return res.status(403).json({ success: false, error: '只有系统管理员或经理可以维护立面工艺预设' });
+  }
+  const db = readElevationDb();
+  const presets = normalizeElevationCraftPresetList(req.body?.presets);
+  writeElevationDb({ ...db, craftPresets: presets });
   res.json({ success: true, data: presets });
 });
 

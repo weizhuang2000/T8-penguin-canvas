@@ -61,8 +61,14 @@ export const useDragMaterialStore = create<DragMaterialState>((set) => ({
 
 /** 投放事件名 (CustomEvent.detail = { targetNodeId, payload }) */
 export const MATERIAL_DROP_EVENT = 'penguin:material-drop';
+export const MATERIAL_CANVAS_DROP_EVENT = 'penguin:material-drop-canvas';
 
 export interface MaterialDropEventDetail {
   targetNodeId: string;
   payload: MaterialPayload;
+}
+
+export interface MaterialCanvasDropEventDetail {
+  payload: MaterialPayload;
+  atScreen: { x: number; y: number };
 }

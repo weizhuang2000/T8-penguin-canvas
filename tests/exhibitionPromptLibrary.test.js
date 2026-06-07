@@ -139,6 +139,8 @@ test('elevation color material presets expose info and are admin managed', async
   assert.match(defaults.data.colorMaterial[0].core, /大量留白/);
   assert.match(defaults.data.colorMaterial[0].features, /黑白灰/);
   assert.match(defaults.data.colorMaterial[0].info, /核心/);
+  assert.equal(defaults.data.crafts[0].label, '展板');
+  assert.match(defaults.data.crafts[0].prompt, /展板/);
 
   const saved = await fetch(`${adminBase}/api/prompt-library/elevation/presets/colorMaterial`, {
     method: 'PUT',
@@ -162,6 +164,35 @@ test('elevation color material presets expose info and are admin managed', async
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ presets: [{ label: '普通用户不能保存', info: 'deny' }] }),
+  });
+  assert.equal(denied.status, 403);
+});
+
+test('elevation craft presets are managed by admin and manager only', async (t) => {
+  const managerBase = await startApp(t, { id: 'm1', username: 'manager', name: 'Manager', role: 'manager' });
+
+  const saved = await fetch(`${managerBase}/api/prompt-library/elevation/presets/crafts`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      presets: [
+        { label: '定制工艺', prompt: '定制工艺提示词' },
+        { label: '第二工艺', prompt: '第二工艺提示词' },
+      ],
+    }),
+  }).then((res) => res.json());
+
+  assert.equal(saved.success, true);
+  assert.deepEqual(saved.data.map((item) => [item.label, item.prompt, item.order]), [
+    ['定制工艺', '定制工艺提示词', 0],
+    ['第二工艺', '第二工艺提示词', 1],
+  ]);
+
+  const userBase = await startApp(t, { id: 'u1', username: 'alice', name: 'Alice', role: 'designer' });
+  const denied = await fetch(`${userBase}/api/prompt-library/elevation/presets/crafts`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ presets: [{ label: '普通用户不能保存', prompt: 'deny' }] }),
   });
   assert.equal(denied.status, 403);
 });

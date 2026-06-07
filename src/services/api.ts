@@ -229,8 +229,16 @@ export interface ElevationColorMaterialPresetItem {
   order: number;
 }
 
+export interface ElevationCraftPresetItem {
+  id: string;
+  label: string;
+  prompt: string;
+  order: number;
+}
+
 export interface ElevationPromptPresetMap {
   colorMaterial: ElevationColorMaterialPresetItem[];
+  crafts: ElevationCraftPresetItem[];
 }
 
 export async function listExhibitionPromptLibrary(options?: {
@@ -292,7 +300,7 @@ export async function updateExhibitionPromptPresets(
 
 export async function getElevationPromptPresets(): Promise<ElevationPromptPresetMap> {
   const res = await request<{ success: boolean; data: ElevationPromptPresetMap }>(`${BASE}/prompt-library/elevation/presets`);
-  return res.data || { colorMaterial: [] };
+  return res.data || { colorMaterial: [], crafts: [] };
 }
 
 export async function updateElevationColorMaterialPresets(
@@ -300,6 +308,19 @@ export async function updateElevationColorMaterialPresets(
 ): Promise<ElevationColorMaterialPresetItem[]> {
   const res = await request<{ success: boolean; data: ElevationColorMaterialPresetItem[] }>(
     `${BASE}/prompt-library/elevation/presets/colorMaterial`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ presets }),
+    },
+  );
+  return res.data || [];
+}
+
+export async function updateElevationCraftPresets(
+  presets: Array<Pick<ElevationCraftPresetItem, 'label' | 'prompt'> & Partial<Pick<ElevationCraftPresetItem, 'id' | 'order'>>>,
+): Promise<ElevationCraftPresetItem[]> {
+  const res = await request<{ success: boolean; data: ElevationCraftPresetItem[] }>(
+    `${BASE}/prompt-library/elevation/presets/crafts`,
     {
       method: 'PUT',
       body: JSON.stringify({ presets }),
