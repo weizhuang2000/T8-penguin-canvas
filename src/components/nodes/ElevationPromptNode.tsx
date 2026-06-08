@@ -3,6 +3,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import {
   Check,
   Clipboard,
+  Download,
   FileText,
   Loader2,
   RefreshCw,
@@ -155,6 +156,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
   const fileRef = useRef<HTMLInputElement>(null);
+  const jsonFileRef = useRef<HTMLInputElement>(null);
   const activeCanvas = useCanvasStore((state) => state.canvases.find((canvas) => canvas.id === state.activeId) || null);
   const isReadonly = activeCanvas?.access?.canEdit === false;
   const [analysisDraft, setAnalysisDraft] = useState('');
@@ -439,6 +441,43 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
     }
   };
 
+  const importAnalysisJson = async (file?: File) => {
+    if (!file || isReadonly) return;
+    try {
+      const text = await file.text();
+      const next = parseElevationAnalysisResponse(text) as ElevationAnalysis;
+      setAnalysisDraft(JSON.stringify(next, null, 2));
+      setDraftMessage('已导入');
+    } catch (error: any) {
+      setDraftMessage(error?.message || 'JSON 无法解析');
+    } finally {
+      if (jsonFileRef.current) jsonFileRef.current.value = '';
+    }
+  };
+
+  const exportAnalysisJson = () => {
+    try {
+      const next = parseElevationAnalysisResponse(analysisDraft) as ElevationAnalysis;
+      const content = JSON.stringify(next, null, 2);
+      const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const theme = String(next.projectTheme || 'elevation-analysis')
+        .trim()
+        .replace(/[\\/:*?"<>|]+/g, '-')
+        .slice(0, 48) || 'elevation-analysis';
+      link.href = url;
+      link.download = `${theme}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setDraftMessage('已导出');
+    } catch (error: any) {
+      setDraftMessage(error?.message || 'JSON 无法解析');
+    }
+  };
+
   const toggleCraft = (craftId: string) => {
     if (isReadonly) return;
     const next = selectedCrafts.includes(craftId)
@@ -662,6 +701,13 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
           />
           <details className="mt-1.5 text-[10px] text-white/55">
             <summary className="cursor-pointer select-none">编辑结构化分析 JSON</summary>
+            <input
+              ref={jsonFileRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(event) => importAnalysisJson(event.target.files?.[0])}
+            />
             <textarea
               className={`${FIELD} mt-1 min-h-[150px] resize-y font-mono`}
               value={analysisDraft}
@@ -672,7 +718,17 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
               }}
             />
             <div className="mt-1 flex items-center justify-end gap-2">
-              {draftMessage && <span className={draftMessage === '已应用' ? 'text-emerald-300' : 'text-red-300'}>{draftMessage}</span>}
+              {draftMessage && (
+                <span className={['已应用', '已导入', '已导出'].includes(draftMessage) ? 'text-emerald-300' : 'text-red-300'}>
+                  {draftMessage}
+                </span>
+              )}
+              <button type="button" className={BUTTON} disabled={isReadonly} onClick={() => jsonFileRef.current?.click()}>
+                <Upload size={11} />导入 JSON
+              </button>
+              <button type="button" className={BUTTON} onClick={exportAnalysisJson}>
+                <Download size={11} />导出 JSON
+              </button>
               <button type="button" className={BUTTON} disabled={isReadonly} onClick={applyAnalysisDraft}>
                 <Check size={11} />应用 JSON
               </button>
