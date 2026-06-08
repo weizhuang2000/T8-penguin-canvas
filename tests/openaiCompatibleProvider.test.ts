@@ -199,3 +199,54 @@ test('OpenAI compatible video generation posts to video endpoint and normalizes 
   assert.equal(calls[0].body.duration, 6);
   assert.deepEqual(calls[0].body.images, ['data:image/png;base64,AAA']);
 });
+
+test('OpenAI compatible provider test falls back to chat when models endpoint is unavailable', async () => {
+  const calls: any[] = [];
+  const provider = {
+    id: 'custom-openai',
+    protocol: 'openai-compatible',
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'sk-secret',
+    chatModels: ['deepseek-v3.2'],
+  };
+
+  const result = await openaiCompatible.testProvider(provider, {
+    fetchImpl: async (url: string, init: any) => {
+      calls.push({ url, init, body: init.body ? JSON.parse(init.body) : null });
+      if (String(url).endsWith('/models')) return jsonResponse({ error: 'not found' }, 404);
+      return jsonResponse({ choices: [{ message: { content: 'pong' } }] });
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.code, 'connected_chat_fallback');
+  assert.equal(result.model, 'deepseek-v3.2');
+  assert.equal(calls[0].url, 'https://api.example.com/v1/models');
+  assert.equal(calls[1].url, 'https://api.example.com/v1/chat/completions');
+  assert.equal(calls[1].init.headers.Authorization, 'Bearer sk-secret');
+  assert.equal(calls[1].body.model, 'deepseek-v3.2');
+  assert.equal(calls[1].body.max_tokens, 1);
+});
+
+test('OpenAI compatible provider test does not hide auth failures behind chat fallback', async () => {
+  const calls: any[] = [];
+  const provider = {
+    id: 'custom-openai',
+    protocol: 'openai-compatible',
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'bad-secret',
+    chatModels: ['gpt-4o-mini'],
+  };
+
+  const result = await openaiCompatible.testProvider(provider, {
+    fetchImpl: async (url: string, init: any) => {
+      calls.push({ url, init });
+      return jsonResponse({ error: 'unauthorized' }, 401);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'http_error');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://api.example.com/v1/models');
+});

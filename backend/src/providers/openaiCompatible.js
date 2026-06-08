@@ -184,6 +184,37 @@ function extractTaskId(raw) {
   ).trim();
 }
 
+function isAuthStatus(status) {
+  return Number(status) === 401 || Number(status) === 403;
+}
+
+function pickTestChatModel(provider) {
+  return selectedModel(
+    provider?.defaults?.testModel,
+    provider?.chatModels,
+    provider?.defaults?.chatModel || 'gpt-4o-mini',
+  );
+}
+
+async function probeChatCompletion(provider, options = {}) {
+  const model = pickTestChatModel(provider);
+  const url = providerEndpointUrl(provider, '/chat/completions', ['chatEndpoint', 'chat_endpoint']);
+  const res = await fetchWithTimeout(url, {
+    method: 'POST',
+    headers: bearerHeaders(provider),
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: 'ping' }],
+      max_tokens: 1,
+      stream: false,
+    }),
+    timeoutMs: options.timeoutMs,
+    fetchImpl: options.fetchImpl,
+  });
+  const raw = await responseJson(res);
+  return { res, raw, model };
+}
+
 async function resolveReferenceImages(refs, options = {}) {
   const out = [];
   for (const ref of Array.isArray(refs) ? refs : []) {
@@ -535,7 +566,16 @@ async function testProvider(provider, options = {}) {
       timeoutMs: options.timeoutMs,
       fetchImpl: options.fetchImpl,
     });
-    if (!res.ok) {
+    if (res.ok) {
+      return {
+        ok: true,
+        code: 'connected',
+        providerId: provider.id,
+        protocol: provider.protocol,
+        message: '连接成功。',
+      };
+    }
+    if (isAuthStatus(res.status)) {
       return {
         ok: false,
         code: 'http_error',
@@ -544,12 +584,27 @@ async function testProvider(provider, options = {}) {
         error: `测试连接失败：HTTP ${res.status}`,
       };
     }
+
+    const modelProbe = await probeChatCompletion(provider, options);
+    if (modelProbe.res.ok) {
+      return {
+        ok: true,
+        code: 'connected_chat_fallback',
+        providerId: provider.id,
+        protocol: provider.protocol,
+        model: modelProbe.model,
+        message: '连接成功。',
+        detail: `/models HTTP ${res.status}; chat/completions fallback ok`,
+      };
+    }
+
     return {
-      ok: true,
-      code: 'connected',
+      ok: false,
+      code: 'http_error',
       providerId: provider.id,
       protocol: provider.protocol,
-      message: '连接成功。',
+      error: `测试连接失败：HTTP ${res.status}; chat/completions HTTP ${modelProbe.res.status}`,
+      raw: modelProbe.raw,
     };
   } catch (e) {
     return {
