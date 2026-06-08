@@ -205,9 +205,10 @@ const SLAMDUNK_ICON_BY_TYPE: Record<string, string> = {
 
 interface SidebarProps {
   onAddNode: (type: NodeType) => void;
+  visibleNodeTypes?: string[];
 }
 
-export default function Sidebar({ onAddNode }: SidebarProps) {
+export default function Sidebar({ onAddNode, visibleNodeTypes }: SidebarProps) {
   const { theme, style, templateId, customTemplates } = useThemeStore();
   const currentTemplate = useMemo(
     () => resolveThemeTemplate(templateId, customTemplates),
@@ -216,6 +217,19 @@ export default function Sidebar({ onAddNode }: SidebarProps) {
   const visualStyle = currentTemplate.visuals?.style || style;
   const isDark = theme === 'dark';
   const isPixel = style === 'pixel';
+  const visibleNodeTypeSet = useMemo(() => new Set(visibleNodeTypes || []), [visibleNodeTypes]);
+  const nodeGroups = useMemo(() => {
+    if (!visibleNodeTypes) return NODE_GROUPS;
+    return Object.fromEntries(
+      Object.entries(NODE_GROUPS).map(([key, group]) => [
+        key,
+        {
+          ...group,
+          nodes: group.nodes.filter((node) => visibleNodeTypeSet.has(node.type)),
+        },
+      ]),
+    ) as typeof NODE_GROUPS;
+  }, [visibleNodeTypeSet, visibleNodeTypes]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [keyword, setKeyword] = useState('');
 
@@ -584,7 +598,7 @@ export default function Sidebar({ onAddNode }: SidebarProps) {
 
       {/* 节点分组列表 */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-hide">
-        {Object.entries(NODE_GROUPS).map(([key, group]) => {
+        {Object.entries(nodeGroups).map(([key, group]) => {
           const visible = filterNodes(group.nodes);
           if (visible.length === 0) return null;
           const isCollapsed = collapsed[key];

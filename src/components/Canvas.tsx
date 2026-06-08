@@ -1049,9 +1049,10 @@ function getReactFlowHandleInfo(target: EventTarget | null): {
 interface CanvasInnerProps {
   onAddNodeRef?: React.MutableRefObject<AddNodeFn | null>;
   onInsertWorkflowRef?: React.MutableRefObject<InsertWorkflowFn | null>;
+  allowedNodeTypes?: string[];
 }
 
-function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
+function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: CanvasInnerProps) {
   const { activeId, canvases, loadCanvases, setActive } = useCanvasStore();
   const { theme, style, templateId, customTemplates } = useThemeStore();
   const shortcuts = useShortcutStore((s) => s.shortcuts);
@@ -1070,6 +1071,29 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
   const activeCanvas = useMemo(() => canvases.find((canvas) => canvas.id === activeId) || null, [canvases, activeId]);
   const canEditActiveCanvas = activeCanvas?.access?.canEdit !== false;
   const isReadonlyCanvas = Boolean(activeCanvas && !canEditActiveCanvas);
+  const allowedNodeTypeSet = useMemo(() => new Set(allowedNodeTypes || []), [allowedNodeTypes]);
+  const canUseNodeType = useCallback(
+    (type: unknown) => !allowedNodeTypes || allowedNodeTypeSet.has(String(type || '')),
+    [allowedNodeTypeSet, allowedNodeTypes],
+  );
+  const blockedNodeTypes = useCallback(
+    (candidateNodes: Array<{ type?: unknown }>) => {
+      if (!allowedNodeTypes) return [];
+      const seen = new Set<string>();
+      const blocked: string[] = [];
+      candidateNodes.forEach((node) => {
+        const type = String(node?.type || '');
+        if (!type || allowedNodeTypeSet.has(type) || seen.has(type)) return;
+        seen.add(type);
+        blocked.push(type);
+      });
+      return blocked;
+    },
+    [allowedNodeTypeSet, allowedNodeTypes],
+  );
+  const warnBlockedNodes = useCallback((types: string[], source = '工具权限') => {
+    if (types.length) logBus.warn(`无权限使用这些工具: ${types.join(', ')}`, source);
+  }, []);
   const { screenToFlowPosition, setCenter, getViewport, setViewport, fitView } = useReactFlow();
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -1442,6 +1466,10 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
         logBus.warn('当前画布为只读，不能添加节点', '画布权限');
         return;
       }
+      if (!canUseNodeType(type)) {
+        warnBlockedNodes([type], '工具权限');
+        return;
+      }
       const atScreen = options?.atScreen;
       const id = `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       let cx: number;
@@ -1478,7 +1506,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
       };
       setNodes((prev) => [...prev, ...assignActiveNodeSerials([newNode], prev)]);
     },
-    [screenToFlowPosition, nodes, getViewport, setCenter, assignActiveNodeSerials, canEditActiveCanvas]
+    [screenToFlowPosition, nodes, getViewport, setCenter, assignActiveNodeSerials, canEditActiveCanvas, canUseNodeType, warnBlockedNodes]
   );
 
   const createUploadNodesFromFiles = useCallback(
@@ -1845,6 +1873,11 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
         ...placedInstance,
         nodes: assignActiveNodeSerials(placedInstance.nodes, nodesRef.current),
       };
+      const blocked = blockedNodeTypes(instance.nodes);
+      if (blocked.length) {
+        warnBlockedNodes(blocked, '资源库');
+        return;
+      }
       const focusCenter = centerOfMaterialNodes(instance.nodes);
       if (activeId && focusCenter) {
         const { zoom } = getViewport();
@@ -1858,7 +1891,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
       setNodes([...nodesRef.current.map((node) => ({ ...node, selected: false })), ...instance.nodes]);
       logBus.success(`已插入 ${options.title || summarizeSendNodeFragment(fragment)}`, '资源库');
     },
-    [activeId, assignActiveNodeSerials, basePositionForActiveSend, getViewport, screenToFlowPosition],
+    [activeId, assignActiveNodeSerials, basePositionForActiveSend, blockedNodeTypes, getViewport, screenToFlowPosition, warnBlockedNodes],
   );
 
   const insertDraggedMaterialToCanvas = useCallback(
@@ -1882,10 +1915,15 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
         sourceNodeIds: sourceNodeIdsFromMaterials([material]),
       });
       const assignedNewNodes = assignActiveNodeSerials(newNodes, nodesBefore);
+      const blocked = blockedNodeTypes(assignedNewNodes);
+      if (blocked.length) {
+        warnBlockedNodes(blocked, '历史生成');
+        return;
+      }
       setNodes([...nodesBefore.map((node) => ({ ...node, selected: false })), ...assignedNewNodes]);
       logBus.success(`已拖入 ${summarizeSendableMaterials([material])}`, '历史生成');
     },
-    [activeId, assignActiveNodeSerials, canEditActiveCanvas, screenToFlowPosition],
+    [activeId, assignActiveNodeSerials, blockedNodeTypes, canEditActiveCanvas, screenToFlowPosition, warnBlockedNodes],
   );
 
   useEffect(() => {
@@ -1928,6 +1966,11 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
             ...placedInstance,
             nodes: assignActiveNodeSerials(placedInstance.nodes, nodesRef.current),
           };
+          const blocked = blockedNodeTypes(instance.nodes);
+          if (blocked.length) {
+            warnBlockedNodes(blocked, '发送节点');
+            return;
+          }
           const focusCenter = centerOfMaterialNodes(instance.nodes);
           if (activeId && focusCenter) {
             const { zoom } = getViewport();
@@ -1955,6 +1998,11 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
         );
         const freshSerials = assignFreshNodeSerials(placedInstance.nodes, targetNodes, normalizedTarget.nextNodeSerialId);
         const instance = { ...placedInstance, nodes: freshSerials.nodes };
+        const blocked = blockedNodeTypes(instance.nodes);
+        if (blocked.length) {
+          warnBlockedNodes(blocked, '发送节点');
+          return;
+        }
         const focusCenter = centerOfMaterialNodes(instance.nodes);
         if (switchAfter && focusCenter) {
           pendingSendFocusRef.current = {
@@ -2006,6 +2054,11 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
           sourceNodeIds: bridgeSourceNodeIds,
         });
         const assignedNewNodes = assignActiveNodeSerials(newNodes, cleaned.nodes);
+        const blocked = blockedNodeTypes(assignedNewNodes);
+        if (blocked.length) {
+          warnBlockedNodes(blocked, '发送素材');
+          return;
+        }
         const focusCenter = centerOfMaterialNodes(assignedNewNodes);
         if (activeId && focusCenter) {
           const { zoom } = getViewport();
@@ -2044,6 +2097,11 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
         sourceNodeIds: bridgeSourceNodeIds,
       });
       const freshSerials = assignFreshNodeSerials(newNodes, cleaned.nodes as Node[], normalizedTarget.nextNodeSerialId);
+      const blocked = blockedNodeTypes(freshSerials.nodes);
+      if (blocked.length) {
+        warnBlockedNodes(blocked, '发送素材');
+        return;
+      }
       const focusCenter = centerOfMaterialNodes(freshSerials.nodes);
       if (switchAfter && focusCenter) {
         pendingSendFocusRef.current = {
@@ -5331,6 +5389,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
 interface CanvasProps {
   onAddNodeRef?: React.MutableRefObject<AddNodeFn | null>;
   onInsertWorkflowRef?: React.MutableRefObject<InsertWorkflowFn | null>;
+  allowedNodeTypes?: string[];
 }
 
 export default function Canvas(props: CanvasProps) {

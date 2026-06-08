@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { LogOut, Moon, Settings, Sun, Wifi, WifiOff, Sparkles, Cloud, ExternalLink, Youtube, PlayCircle, Bell, Globe, Library, Palette, Skull, Sailboat, Clock3 } from 'lucide-react';
+import { LogOut, Moon, Settings, Sun, Wifi, WifiOff, Sparkles, Cloud, ExternalLink, Youtube, PlayCircle, Bell, Globe, Library, Palette, Skull, Sailboat, Clock3, UserCog } from 'lucide-react';
 import { useThemeStore } from './stores/theme';
 import { useApiKeysStore } from './stores/apiKeys';
 import { useShortcutStore } from './stores/shortcuts';
@@ -10,6 +10,7 @@ import ResourceLibraryDrawer from './components/ResourceLibraryDrawer';
 import GenerationHistoryDrawer from './components/GenerationHistoryDrawer';
 import MaterialContextMenu from './components/MaterialContextMenu';
 import ThemeTemplateManager from './components/ThemeTemplateManager';
+import UserManagementModal from './components/UserManagementModal';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoginScreen from './components/LoginScreen';
 import { RHToolsProvider } from './providers/RHToolsProvider';
@@ -171,6 +172,7 @@ function App() {
   const [resourceOpen, setResourceOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [themeManagerOpen, setThemeManagerOpen] = useState(false);
+  const [userManagementOpen, setUserManagementOpen] = useState(false);
   // 「视频教程」推广浮层开关
   const [videoOpen, setVideoOpen] = useState(false);
   const videoWrapRef = useRef<HTMLDivElement>(null);
@@ -329,10 +331,17 @@ function App() {
   const isYyh = currentTemplate.visuals?.style === 'yyh';
   const isSlamdunk = currentTemplate.visuals?.style === 'slamdunk';
   const canManageSettings = authUser?.role === 'admin' || authUser?.role === 'manager';
+  const visibleNodeTypes = authUser?.permissions?.visibleNodeTypes;
+  const allowedNodeTypes = authUser?.permissions?.allowedNodeTypes;
 
   const handleLogout = async () => {
     await api.logout().catch(() => {});
     setAuthUser(null);
+  };
+
+  const refreshAuthUser = async () => {
+    const user = await api.getCurrentUser();
+    if (user) setAuthUser(user);
   };
 
   const handleAddNode = (type: NodeType) => {
@@ -736,6 +745,19 @@ function App() {
           </button>
           {canManageSettings && (
           <button
+            onClick={() => setUserManagementOpen(true)}
+            className={
+              isPixel
+                ? 'px-btn px-btn--icon px-btn--ghost'
+                : `p-2 rounded-md ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`
+            }
+            title="用户管理"
+          >
+            <UserCog size={isPixel ? 14 : 16} />
+          </button>
+          )}
+          {canManageSettings && (
+          <button
             onClick={() => setSettingsOpen(true)}
             className={
               isPixel
@@ -787,13 +809,20 @@ function App() {
 
       {/* 主体两栏布局 */}
       <div className="flex-1 flex overflow-hidden">
-        <Sidebar onAddNode={handleAddNode} />
+        <Sidebar onAddNode={handleAddNode} visibleNodeTypes={visibleNodeTypes} />
         <ErrorBoundary fallbackTitle="画布渲染出错了，已被错误边界捕获">
-          <Canvas onAddNodeRef={addNodeRef} onInsertWorkflowRef={insertWorkflowRef} />
+          <Canvas onAddNodeRef={addNodeRef} onInsertWorkflowRef={insertWorkflowRef} allowedNodeTypes={allowedNodeTypes} />
         </ErrorBoundary>
       </div>
 
       {/* API 设置弹窗 */}
+      {canManageSettings && (
+        <UserManagementModal
+          open={userManagementOpen}
+          onClose={() => setUserManagementOpen(false)}
+          onPermissionsChanged={refreshAuthUser}
+        />
+      )}
       {canManageSettings && <ApiSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />}
       <ThemeTemplateManager open={themeManagerOpen} onClose={() => setThemeManagerOpen(false)} />
       <ResourceLibraryDrawer

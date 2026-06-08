@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const config = require('../config');
 const { canManageCanvasSharing, canViewCanvas, isCanvasOwner } = require('../auth/canvasAccess');
 const { isAdminRole } = require('../auth/middleware');
+const { findUserById } = require('../auth/designTeamDb');
 
 const KINDS = new Set(['image', 'video', 'audio']);
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.avif']);
@@ -109,6 +110,8 @@ function normalizeItem(raw) {
     deletedAt: Number(raw.deletedAt) || 0,
     deletedByUserId: raw.deletedByUserId != null ? String(raw.deletedByUserId) : '',
     createdByUserId: raw.createdByUserId != null ? String(raw.createdByUserId) : '',
+    createdByUserName: safeText(raw.createdByUserName),
+    createdByUserRole: safeText(raw.createdByUserRole),
   };
 }
 
@@ -261,6 +264,8 @@ function addHistoryItems(items, context = {}, user = null) {
       taskId: safeText(raw?.taskId || context.taskId),
       seed: normalizeSeed(raw?.seed ?? context.seed),
       createdByUserId: user?.id != null ? String(user.id) : '',
+      createdByUserName: safeText(user?.name || user?.realName || user?.username),
+      createdByUserRole: safeText(user?.role),
     };
     if (existing) {
       Object.assign(existing, Object.fromEntries(Object.entries(patch).filter(([key, value]) => value !== '' && (key !== 'seed' || value > 0))));
@@ -316,6 +321,7 @@ function scanOutputItems() {
 function listVisibleItems(user, params = {}) {
   const canvases = loadCanvasList();
   const db = readDb();
+  const admin = isAdminRole(user?.role);
   const seen = new Set();
   const merged = [];
   for (const item of db.items) {
@@ -335,6 +341,11 @@ function listVisibleItems(user, params = {}) {
   const includeHidden = params.includeHidden === true || params.includeHidden === '1' || params.includeHidden === 'true';
   const favoriteOnly = params.favorite === true || params.favorite === '1' || params.favorite === 'true';
   const canvasId = safeText(params.canvasId);
+  const userId = admin ? safeText(params.userId) : '';
+  const role = admin ? safeText(params.role).toLowerCase() : '';
+  const provider = admin ? safeText(params.provider).toLowerCase() : '';
+  const model = admin ? safeText(params.model).toLowerCase() : '';
+  const sourceNodeType = admin ? safeText(params.sourceNodeType).toLowerCase() : '';
   return merged
     .filter((item) => {
       if (item.deletedAt) return false;
@@ -342,15 +353,58 @@ function listVisibleItems(user, params = {}) {
       if (kind && item.kind !== kind) return false;
       if (favoriteOnly && !item.favorite) return false;
       if (canvasId && item.canvasId !== canvasId) return false;
+      if (userId && item.createdByUserId !== userId) return false;
+      if (role && String(item.createdByUserRole || '').toLowerCase() !== role) return false;
+      if (provider && !String(item.provider || '').toLowerCase().includes(provider)) return false;
+      if (model && !String(item.model || '').toLowerCase().includes(model)) return false;
+      if (sourceNodeType && String(item.sourceNodeType || '').toLowerCase() !== sourceNodeType) return false;
       if (!canViewProject(user, item.canvasId, canvases)) return false;
       if (q) {
-        const haystack = `${item.title} ${item.fileName} ${item.prompt} ${item.provider} ${item.model} ${item.seed || ''} ${item.tags.join(' ')}`.toLowerCase();
+        const haystack = `${item.title} ${item.fileName} ${item.prompt} ${item.provider} ${item.model} ${item.seed || ''} ${item.tags.join(' ')} ${item.createdByUserName} ${item.createdByUserRole} ${item.sourceNodeType}`.toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       return true;
     })
     .sort((a, b) => b.createdAt - a.createdAt)
     .map((item) => decorateItem(item, user, canvases));
+}
+
+async function listHistoryUsers(user) {
+  if (!isAdminRole(user?.role)) return [];
+  const db = readDb();
+  const counts = new Map();
+  for (const item of db.items) {
+    if (item.deletedAt || !item.createdByUserId) continue;
+    const current = counts.get(item.createdByUserId) || {
+      userId: item.createdByUserId,
+      username: '',
+      name: item.createdByUserName || item.createdByUserId,
+      role: item.createdByUserRole || '',
+      counts: { image: 0, video: 0, audio: 0, total: 0 },
+      lastCreatedAt: 0,
+    };
+    current.counts[item.kind] = (current.counts[item.kind] || 0) + 1;
+    current.counts.total += 1;
+    current.lastCreatedAt = Math.max(current.lastCreatedAt, Number(item.createdAt) || 0);
+    if (item.createdByUserName) current.name = item.createdByUserName;
+    if (item.createdByUserRole) current.role = item.createdByUserRole;
+    counts.set(item.createdByUserId, current);
+  }
+  const out = [];
+  for (const entry of counts.values()) {
+    try {
+      const found = await findUserById(entry.userId);
+      if (found) {
+        entry.username = found.username || entry.username;
+        entry.name = found.name || found.realName || found.username || entry.name;
+        entry.role = found.role || entry.role;
+      }
+    } catch {
+      // Best effort enrichment only.
+    }
+    out.push(entry);
+  }
+  return out.sort((a, b) => b.lastCreatedAt - a.lastCreatedAt);
 }
 
 function listProjects(user) {
@@ -431,6 +485,7 @@ module.exports = {
   addHistoryItems,
   deleteHistoryItem,
   kindFromUrl,
+  listHistoryUsers,
   listProjects,
   listVisibleItems,
   outputPathForItem,

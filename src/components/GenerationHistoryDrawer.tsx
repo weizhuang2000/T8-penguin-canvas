@@ -15,6 +15,7 @@ import {
 import { useThemeStore } from '../stores/theme';
 import * as api from '../services/api';
 import type { GenerationHistoryItem, GenerationHistoryKind, GenerationHistoryProject } from '../services/api';
+import type { GenerationHistoryUserSummary } from '../services/api';
 import LoopingVideo from './LoopingVideo';
 
 interface GenerationHistoryDrawerProps {
@@ -63,6 +64,11 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
   const [q, setQ] = useState('');
   const [favoriteOnly, setFavoriteOnly] = useState(false);
   const [includeHidden, setIncludeHidden] = useState(false);
+  const [historyUsers, setHistoryUsers] = useState<GenerationHistoryUserSummary[]>([]);
+  const [userId, setUserId] = useState('');
+  const [provider, setProvider] = useState('');
+  const [model, setModel] = useState('');
+  const [sourceNodeType, setSourceNodeType] = useState('');
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');
   const [preview, setPreview] = useState<GenerationHistoryItem | null>(null);
@@ -73,6 +79,10 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
     setLoading(true);
     const projectRes = await api.getGenerationHistoryProjects();
     const nextProjects = resultData<GenerationHistoryProject[]>(projectRes) || [];
+    if (isAdmin) {
+      const usersRes = await api.getGenerationHistoryUsers();
+      if (usersRes.success) setHistoryUsers(usersRes.data || []);
+    }
     setProjects(nextProjects);
     const nextProjectId = projectId || nextProjects.find((project) => project.counts.total > 0)?.id || nextProjects[0]?.id || '';
     if (!projectId && nextProjectId) setProjectId(nextProjectId);
@@ -82,12 +92,16 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
       q,
       favorite: favoriteOnly,
       includeHidden,
+      userId: isAdmin ? userId : undefined,
+      provider: isAdmin ? provider : undefined,
+      model: isAdmin ? model : undefined,
+      sourceNodeType: isAdmin ? sourceNodeType : undefined,
     });
     const nextItems = resultData<GenerationHistoryItem[]>(itemRes);
     if (nextItems) setItems(nextItems);
     if (!projectRes.success || !itemRes.success) setMsg((projectRes as any).error || (itemRes as any).error || '加载历史失败');
     setLoading(false);
-  }, [favoriteOnly, includeHidden, kind, open, projectId, q]);
+  }, [favoriteOnly, includeHidden, isAdmin, kind, model, open, projectId, provider, q, sourceNodeType, userId]);
 
   useEffect(() => {
     load();
@@ -243,6 +257,22 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
         </button>
       </div>
 
+      {isAdmin && (
+        <div className={`grid grid-cols-2 gap-2 px-3 py-2 shrink-0 ${isPixel ? 'border-b-2 border-[var(--px-ink)]' : isDark ? 'border-b border-white/10' : 'border-b border-black/10'}`}>
+          <select value={userId} onChange={(e) => setUserId(e.target.value)} className={`${inputCls} w-full text-xs`}>
+            <option value="">全部用户</option>
+            {historyUsers.map((user) => (
+              <option key={user.userId} value={user.userId}>
+                {(user.name || user.username || user.userId)} · {user.counts.total}
+              </option>
+            ))}
+          </select>
+          <input value={sourceNodeType} onChange={(e) => setSourceNodeType(e.target.value)} className={`${inputCls} w-full text-xs`} placeholder="工具类型 image / video" />
+          <input value={provider} onChange={(e) => setProvider(e.target.value)} className={`${inputCls} w-full text-xs`} placeholder="平台 provider" />
+          <input value={model} onChange={(e) => setModel(e.target.value)} className={`${inputCls} w-full text-xs`} placeholder="模型 model" />
+        </div>
+      )}
+
       <div className="flex-1 min-h-0 flex">
         <aside className={`w-40 shrink-0 overflow-y-auto p-2 space-y-1 ${isPixel ? 'border-r-2 border-[var(--px-ink)] bg-[var(--px-muted)]' : isDark ? 'border-r border-white/10 bg-white/[0.02]' : 'border-r border-black/10 bg-black/[0.02]'}`}>
           {projects.map((project) => (
@@ -295,6 +325,11 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
                       <span className="truncate" title={item.title}>{item.title}</span>
                     </div>
                     <div className={`text-[10px] truncate ${subtle}`}>{item.provider || item.model || item.fileName}</div>
+                    {isAdmin && (
+                      <div className={`text-[10px] truncate ${subtle}`}>
+                        {item.createdByUserName || item.createdByUserId || '未知用户'} · {item.sourceNodeType || '-'}
+                      </div>
+                    )}
                     {seed > 0 && <div className={`text-[10px] truncate ${subtle}`}>Seed: {seed}</div>}
                     <div className={`text-[10px] truncate ${subtle}`}>{formatTime(item.createdAt)}</div>
                     {item.kind === 'audio' && <audio src={item.url} controls className="w-full h-8" />}

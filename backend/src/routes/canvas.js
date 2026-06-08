@@ -12,6 +12,7 @@ const {
   normalizeSharePermission,
   normalizeSharedWith,
 } = require('../auth/canvasAccess');
+const { findUnauthorizedNewNodes } = require('../auth/toolPermissions');
 
 const router = express.Router();
 
@@ -141,6 +142,28 @@ function ownerFieldsFromUser(user) {
     ownerName: user.name || user.username || '',
     ownerRole: user.role || '',
   };
+}
+
+function readCanvasDataFile(id) {
+  const file = getCanvasFile(id);
+  if (!fs.existsSync(file)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
+
+function rejectUnauthorizedNewNodes(req, res, incomingNodes) {
+  const existing = readCanvasDataFile(req.params.id);
+  const blocked = findUnauthorizedNewNodes(req.user, incomingNodes, existing?.nodes || []);
+  if (blocked.length === 0) return false;
+  res.status(403).json({
+    success: false,
+    error: `No permission to add these node types: ${blocked.join(', ')}`,
+    data: { nodeTypes: blocked },
+  });
+  return true;
 }
 
 router.get('/', (req, res) => {
@@ -287,6 +310,7 @@ router.put('/:id', (req, res) => {
     viewport: incoming?.viewport || { x: 0, y: 0, zoom: 1 },
     nextNodeSerialId: deriveNextNodeSerialId(incoming?.nodes, incoming?.nextNodeSerialId),
   };
+  if (rejectUnauthorizedNewNodes(req, res, persisted.nodes)) return;
   fs.writeFileSync(file, JSON.stringify(persisted, null, 2), 'utf-8');
   found.item.nodeCount = persisted.nodes.length;
   found.item.ownerUserId = found.item.ownerUserId || persisted.ownerUserId;
@@ -307,6 +331,7 @@ router.post('/:id/auto-save', (req, res) => {
     if (!incoming || !Array.isArray(incoming.nodes) || !Array.isArray(incoming.edges)) {
       return res.status(400).json({ success: false, error: 'Invalid canvas payload' });
     }
+    if (rejectUnauthorizedNewNodes(req, res, incoming.nodes)) return;
     const saveDir = getCanvasAutoSaveDir();
     if (!saveDir) {
       return res.status(400).json({ success: false, error: 'canvasAutoSavePath is not configured' });

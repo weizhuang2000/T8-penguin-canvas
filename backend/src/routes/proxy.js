@@ -14,6 +14,7 @@ const { tryDecodeDuckPayload } = require('../utils/duckPayload');
 const { normalizeImageOutputFormat, writeImageOutput } = require('../utils/imageOutput');
 const { addHistoryItems, kindFromUrl } = require('../utils/generationHistory');
 const { resolveLlmChatCompletionsUrl } = require('../utils/llmBaseUrl');
+const { requireNodePermission } = require('../auth/toolPermissions');
 const settingsRouter = require('./settings');
 
 const router = express.Router();
@@ -721,7 +722,7 @@ async function normalizeImageResponse(data, outputFormat = 'jpg') {
   return { kind: 'unknown' };
 }
 
-router.post('/image', async (req, res) => {
+router.post('/image', requireNodePermission('image'), async (req, res) => {
   const settings = loadRawSettings();
   const {
     model, apiModel, paramKind: paramKindIn,
@@ -783,7 +784,7 @@ router.post('/image', async (req, res) => {
 // POST /api/proxy/image/submit -> { taskId }(同 submit 逻辑,但不同步轮询)
 // GET  /api/proxy/image/status/:tid -> { status, progress, urls? }
 // ========================================================================
-router.post('/image/submit', async (req, res) => {
+router.post('/image/submit', requireNodePermission('image'), async (req, res) => {
   const settings = loadRawSettings();
   try {
     const { model, apiModel, paramKind: paramKindIn, prompt, n,
@@ -832,7 +833,7 @@ router.post('/image/submit', async (req, res) => {
 });
 
 // 查询异步图像任务状态
-router.get('/image/status/:tid', async (req, res) => {
+router.get('/image/status/:tid', requireNodePermission('image'), async (req, res) => {
   const settings = loadRawSettings();
   // 优先从 submit 阶段记录的 (taskId → key) 映射恢复，防止前端未传 model 导致 fallback 错 key。
   const remembered = recallTaskKey(req.params.tid);
@@ -972,7 +973,7 @@ function fixFalResponseUrl(responseUrl, baseUrl, endpoint, requestId) {
 //   body 公用: { apiModel, prompt, images?, n?, format?, sync?, ... }
 //   gpt-fal 专属: { mode?: 'edit'|'gen', size?: '1024x1024'|'square'|...|'custom', customW?, customH?, quality?: low|medium|high|auto }
 //   nbpro-fal 专属: { aspect_ratio, resolution, safety_tolerance, seed?, system_prompt?, enable_web_search?, image_mode?: 'image_url'|'base64' }
-router.post('/image/fal/submit', async (req, res) => {
+router.post('/image/fal/submit', requireNodePermission('image'), async (req, res) => {
   const settings = loadRawSettings();
   const {
     apiModel, prompt, images, n, format, sync,
@@ -1127,7 +1128,7 @@ router.post('/image/fal/submit', async (req, res) => {
 // POST /api/proxy/image/fal/query
 //   body: { responseUrl, endpoint, requestId }
 //   返回: { status: 'pending'|'completed'|'failed', urls?, error? }
-router.post('/image/fal/query', async (req, res) => {
+router.post('/image/fal/query', requireNodePermission('image'), async (req, res) => {
   const settings = loadRawSettings();
   const { responseUrl: rawUrl, endpoint, requestId, outputFormat } = req.body || {};
   const imageOutputFormat = normalizeImageOutputFormat(outputFormat || recallTaskImageFormat(requestId));
@@ -1198,7 +1199,7 @@ function mjSpeedSeg(speed) {
 // ---- POST /api/proxy/mj/imagine ----
 // body: { prompt, ar?, no?, c?, s?, iw?, sw?, cw?, sv?, seed?, base64Array?, speed?, modes?, instanceId?, notifyHook?, remix? }
 // 返回上游 imagine 原始响应 { code, description, result(taskId), properties }
-router.post('/mj/imagine', async (req, res) => {
+router.post('/mj/imagine', requireNodePermission('image'), async (req, res) => {
   const settings = loadRawSettings();
   // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
   if (!ensureKey(settings, res, 'mj', 'MJ')) return;
@@ -1250,7 +1251,7 @@ router.post('/mj/imagine', async (req, res) => {
 
 // ---- GET /api/proxy/mj/task/:id?speed=fast ----
 // 轮询任务状态
-router.get('/mj/task/:id', async (req, res) => {
+router.get('/mj/task/:id', requireNodePermission('image'), async (req, res) => {
   const settings = loadRawSettings();
   // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
   if (!ensureKey(settings, res, 'mj', 'MJ')) return;
@@ -1306,7 +1307,7 @@ router.get('/mj/task/:id', async (req, res) => {
 // ---- POST /api/proxy/mj/upload ----
 // body: { base64Data: 'data:image/png;base64,xxxx', speed? }
 // 上传参考图到 MJ Discord，返回 URL（主项目 uploadMJImage L4407 + server.py L2457）
-router.post('/mj/upload', async (req, res) => {
+router.post('/mj/upload', requireNodePermission('image'), async (req, res) => {
   const settings = loadRawSettings();
   // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
   if (!ensureKey(settings, res, 'mj', 'MJ')) return;
@@ -1345,7 +1346,7 @@ router.post('/mj/upload', async (req, res) => {
 //   - messages[i].content 支持 string 或 多模态数组 [{type:'text',text} | {type:'image_url',image_url:{url}}]
 //   - stream=true → 透传上游 SSE(text/event-stream) 到前端
 //   - 完全对齐 gpt-image-2-web _doSendChat (index.html L8128~L8305)
-router.post('/llm', async (req, res) => {
+router.post('/llm', requireNodePermission('llm'), async (req, res) => {
   const settings = loadRawSettings();
   if (!settings) {
     return res.status(400).json({ success: false, error: '未配置 LLM 独立 API Key' });
@@ -1599,7 +1600,7 @@ async function saveRemoteVideo(url) {
 }
 
 // POST /api/proxy/video/fal/submit
-router.post('/video/fal/submit', async (req, res) => {
+router.post('/video/fal/submit', requireNodePermission('video'), async (req, res) => {
   const settings = loadRawSettings();
   const {
     apiModel, prompt, images,
@@ -1796,7 +1797,7 @@ router.post('/video/fal/submit', async (req, res) => {
 // POST /api/proxy/video/fal/query
 //   body: { responseUrl, endpoint, requestId }
 //   完成标志: data.video.url (区别于图像的 data.images[])
-router.post('/video/fal/query', async (req, res) => {
+router.post('/video/fal/query', requireNodePermission('video'), async (req, res) => {
   const settings = loadRawSettings();
   const { responseUrl: rawUrl, endpoint, requestId } = req.body || {};
   // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
@@ -1846,7 +1847,7 @@ router.post('/video/fal/query', async (req, res) => {
   }
 });
 
-router.post('/video/submit', async (req, res) => {
+router.post('/video/submit', requireNodePermission('video'), async (req, res) => {
   const settings = loadRawSettings();
   const {
     model, prompt,
@@ -1928,7 +1929,7 @@ router.post('/video/submit', async (req, res) => {
   }
 });
 
-router.get('/video/query', async (req, res) => {
+router.get('/video/query', requireNodePermission('video'), async (req, res) => {
   const settings = loadRawSettings();
   const taskId = String(req.query.taskId || '').trim();
   // 优先从 submit 阶段记录的 (taskId → key) 映射恢复，防止前端未传 model 导致 fallback 错 key。
@@ -2007,7 +2008,7 @@ router.get('/video/query', async (req, res) => {
 //   { type:'video_url', video_url:{url}, role:'reference_video' }   // 需先 /v1/files 上传换 URL
 //   { type:'audio_url', audio_url:{url}, role:'reference_audio' }   // 需先 /v1/files 上传换 URL
 // ========================================================================
-router.post('/seedance/submit', async (req, res) => {
+router.post('/seedance/submit', requireNodePermission('seedance'), async (req, res) => {
   const settings = loadRawSettings();
   // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
   if (!ensureKey(settings, res, 'seedance', 'Seedance')) return;
@@ -2121,7 +2122,7 @@ router.post('/seedance/submit', async (req, res) => {
   }
 });
 
-router.get('/seedance/query', async (req, res) => {
+router.get('/seedance/query', requireNodePermission('seedance'), async (req, res) => {
   const settings = loadRawSettings();
   // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
   if (!ensureKey(settings, res, 'seedance', 'Seedance')) return;
@@ -2226,7 +2227,7 @@ function resolveSunoMv(version) {
   return SUNO_MV_MAP[v] || 'chirp-fenix';
 }
 
-router.post('/audio/submit', async (req, res) => {
+router.post('/audio/submit', requireNodePermission('audio'), async (req, res) => {
   const settings = loadRawSettings();
   // v1.2.9.15: 一体化「专属优先 fallback 通用」校验 —— 先 applyClassifiedKey('suno') 再校验 effective key
   if (!ensureKey(settings, res, 'suno', 'Suno')) return;
@@ -2288,7 +2289,7 @@ router.post('/audio/submit', async (req, res) => {
   }
 });
 
-router.get('/audio/query', async (req, res) => {
+router.get('/audio/query', requireNodePermission('audio'), async (req, res) => {
   const settings = loadRawSettings();
   // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
   if (!ensureKey(settings, res, 'suno', 'Suno')) return;
@@ -2354,7 +2355,7 @@ router.get('/audio/query', async (req, res) => {
 // 4) GET /suno/uploads/audio/{id} 轮询 30 × 2s 直到 status='complete'
 // 5) POST /suno/uploads/audio/{id}/initialize-clip {} -> { clip_id }
 // ========================================================================
-router.post('/audio/upload', audioUpload.single('file'), async (req, res) => {
+router.post('/audio/upload', requireNodePermission('audio'), audioUpload.single('file'), async (req, res) => {
   const settings = loadRawSettings();
   // v1.2.9.15: 修复 BUG —— 之前完全缺失 applyClassifiedKey('suno')，
   // 导致 Suno cover/extend 上传步骤即使配置了 sunoApiKey 也始终用通用 zhenzhenApiKey，
@@ -2452,7 +2453,7 @@ function missingRhKeyError() {
   return '未配置 RunningHub API Key（请在设置中填写 RunningHub API Key）';
 }
 
-router.post('/runninghub/submit', async (req, res) => {
+router.post('/runninghub/submit', requireNodePermission(['runninghub', 'runninghub-wallet', 'rh-tools']), async (req, res) => {
   const settings = loadRawSettings();
   const { webappId, nodeInfoList, instanceType } = req.body || {};
   const apiKey = pickRhApiKey(settings);
@@ -2478,7 +2479,7 @@ router.post('/runninghub/submit', async (req, res) => {
   }
 });
 
-router.get('/runninghub/query', async (req, res) => {
+router.get('/runninghub/query', requireNodePermission(['runninghub', 'runninghub-wallet', 'rh-tools']), async (req, res) => {
   const settings = loadRawSettings();
   const apiKey = pickRhApiKey(settings);
   if (!apiKey) return res.status(400).json({ success: false, error: missingRhKeyError() });
@@ -2599,7 +2600,7 @@ router.get('/runninghub/query', async (req, res) => {
 //       提交工作流前先把 url 转成 RH 内部 fileName，再写入 nodeInfoList.fieldValue。
 // 协议: POST {RH}/task/openapi/upload  (multipart: apiKey, fileType=input, file)
 // ----------------------------------------------------------------
-router.post('/runninghub/upload-asset', express.json({ limit: '20mb' }), async (req, res) => {
+router.post('/runninghub/upload-asset', requireNodePermission(['runninghub', 'runninghub-wallet', 'rh-tools']), express.json({ limit: '20mb' }), async (req, res) => {
   const settings = loadRawSettings();
   const apiKey = pickRhApiKey(settings);
   if (!apiKey) return res.status(400).json({ success: false, error: missingRhKeyError() });
@@ -2668,7 +2669,7 @@ router.post('/runninghub/upload-asset', express.json({ limit: '20mb' }), async (
 });
 
 // 获取 AI 应用信息(nodeInfoList 等)
-router.get('/runninghub/app-info', async (req, res) => {
+router.get('/runninghub/app-info', requireNodePermission(['runninghub', 'runninghub-wallet', 'rh-tools']), async (req, res) => {
   const settings = loadRawSettings();
   const apiKey = pickRhApiKey(settings);
   if (!apiKey) return res.status(400).json({ success: false, error: missingRhKeyError() });

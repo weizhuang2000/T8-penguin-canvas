@@ -54,6 +54,7 @@ app.get('/api/status', (_req, res) => {
 
 // ========== 业务路由 ==========
 const authRouter = require('./routes/auth');
+const adminRouter = require('./routes/admin');
 const canvasRouter = require('./routes/canvas');
 const settingsRouter = require('./routes/settings');
 const proxyRouter = require('./routes/proxy');
@@ -76,6 +77,7 @@ app.use('/api', (req, res, next) => {
 });
 
 app.use('/api/canvas', canvasRouter);
+app.use('/api/admin', adminRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/proxy', proxyRouter);
 app.use('/api/proxy/external', externalProvidersRouter);

@@ -73,6 +73,34 @@ test('history items persist, update, and search image seed', () => withTempData(
   assert.equal(searched[0].url, '/files/output/a.png');
 }));
 
+test('admin can filter history by user and model while regular users cannot widen scope', () => withTempData(() => {
+  writeCanvases([
+    { id: 'c1', ownerUserId: 'u1' },
+    { id: 'c2', ownerUserId: 'u2' },
+  ]);
+  history.addHistoryItems(
+    [{ url: '/files/output/a.png', kind: 'image' }],
+    { canvasId: 'c1', provider: 'zhenzhen', model: 'gpt-image-2', sourceNodeType: 'image' },
+    { id: 'u1', username: 'alice', name: 'Alice', role: 'designer' },
+  );
+  history.addHistoryItems(
+    [{ url: '/files/output/b.mp4', kind: 'video' }],
+    { canvasId: 'c2', provider: 'seedance', model: 'seedance-2', sourceNodeType: 'seedance' },
+    { id: 'u2', username: 'bob', name: 'Bob', role: 'pm' },
+  );
+
+  const adminByUser = history.listVisibleItems({ id: 'admin', role: 'admin' }, { userId: 'u2' });
+  assert.deepEqual(adminByUser.map((item) => item.url), ['/files/output/b.mp4']);
+  assert.equal(adminByUser[0].createdByUserName, 'Bob');
+  assert.equal(adminByUser[0].createdByUserRole, 'pm');
+
+  const adminByModel = history.listVisibleItems({ id: 'admin', role: 'admin' }, { model: 'gpt-image' });
+  assert.deepEqual(adminByModel.map((item) => item.url), ['/files/output/a.png']);
+
+  const regular = history.listVisibleItems({ id: 'u1', role: 'designer' }, { userId: 'u2' });
+  assert.deepEqual(regular.map((item) => item.url), ['/files/output/a.png']);
+}));
+
 test('owner can hide without deleting output file', () => withTempData(() => {
   writeCanvases([{ id: 'c1', ownerUserId: 'u1' }]);
   const file = path.join(config.OUTPUT_DIR, 'a.png');

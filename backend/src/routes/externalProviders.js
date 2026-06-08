@@ -6,6 +6,7 @@ const config = require('../config');
 const settingsRouter = require('./settings');
 const { normalizeImageOutputFormat, writeImageOutput } = require('../utils/imageOutput');
 const { addHistoryItems, kindFromUrl } = require('../utils/generationHistory');
+const { requireNodePermission } = require('../auth/toolPermissions');
 const { maskAdvancedProviders, normalizeAdvancedProviders } = require('../providers/registry');
 const {
   generateChatWithProvider,
@@ -204,7 +205,7 @@ router.post('/test-provider', async (req, res) => {
   }
 });
 
-router.post('/llm', async (req, res) => {
+router.post('/llm', requireNodePermission('llm'), async (req, res) => {
   try {
     const settings = settingsRouter.loadSettings({ persistMigrations: false });
     const currentProviders = normalizeAdvancedProviders(settings.advancedProviders);
@@ -230,7 +231,7 @@ router.post('/llm', async (req, res) => {
   }
 });
 
-router.post('/image', async (req, res) => {
+router.post('/image', requireNodePermission('image'), async (req, res) => {
   try {
     const settings = settingsRouter.loadSettings({ persistMigrations: false });
     const currentProviders = normalizeAdvancedProviders(settings.advancedProviders);
@@ -267,7 +268,7 @@ router.post('/image', async (req, res) => {
   }
 });
 
-router.post('/video', async (req, res) => {
+router.post('/video', requireNodePermission('video'), async (req, res) => {
   try {
     const settings = settingsRouter.loadSettings({ persistMigrations: false });
     const currentProviders = normalizeAdvancedProviders(settings.advancedProviders);

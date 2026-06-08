@@ -13,16 +13,21 @@ const {
   setSessionCookie,
 } = require('../auth/session');
 const { requireAuth } = require('../auth/middleware');
+const { resolveToolPermissions } = require('../auth/toolPermissions');
 
 const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || '';
 
 async function issueSession(res, user) {
-  const token = createSession(user);
+  const userWithPermissions = {
+    ...user,
+    permissions: resolveToolPermissions(user),
+  };
+  const token = createSession(userWithPermissions);
   setSessionCookie(res, token);
   return {
-    user: publicUser(user),
+    user: publicUser(userWithPermissions),
     token,
   };
 }
@@ -77,7 +82,13 @@ router.post('/sso', async (req, res) => {
 });
 
 router.get('/me', requireAuth, (req, res) => {
-  res.json({ success: true, data: req.user });
+  res.json({
+    success: true,
+    data: publicUser({
+      ...req.user,
+      permissions: resolveToolPermissions(req.user),
+    }),
+  });
 });
 
 router.get('/users', requireAuth, async (req, res) => {

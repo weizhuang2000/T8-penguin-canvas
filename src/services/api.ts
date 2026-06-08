@@ -18,6 +18,30 @@ export interface AuthUser {
   role: string;
   status: string;
   position: string;
+  permissions?: ResolvedToolPermissions;
+}
+
+export interface ToolPermissionRule {
+  mode: 'inherit' | 'custom';
+  allowedNodeTypes: string[];
+  deniedNodeTypes: string[];
+}
+
+export interface ResolvedToolPermissions {
+  isAdmin: boolean;
+  visibleNodeTypes: string[];
+  allowedNodeTypes: string[];
+}
+
+export interface ToolPermissionsConfig {
+  schema: string;
+  version: number;
+  updatedAt: string;
+  defaultVisibleNodeTypes: string[];
+  roleRules: Record<string, ToolPermissionRule>;
+  userRules: Record<string, ToolPermissionRule>;
+  allNodeTypes?: string[];
+  users?: AuthUser[];
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -74,6 +98,23 @@ export async function searchUsers(q = ''): Promise<AuthUser[]> {
     `${BASE}/auth/users${sp.toString() ? `?${sp.toString()}` : ''}`
   );
   return res.data || [];
+}
+
+export async function getToolPermissions(q = ''): Promise<ToolPermissionsConfig> {
+  const sp = new URLSearchParams();
+  if (q.trim()) sp.set('q', q.trim());
+  const res = await request<{ success: boolean; data: ToolPermissionsConfig }>(
+    `${BASE}/admin/tool-permissions${sp.toString() ? `?${sp.toString()}` : ''}`
+  );
+  return res.data;
+}
+
+export async function updateToolPermissions(payload: Partial<ToolPermissionsConfig>): Promise<ToolPermissionsConfig> {
+  const res = await request<{ success: boolean; data: ToolPermissionsConfig }>(`${BASE}/admin/tool-permissions`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+  return res.data;
 }
 
 // ========== 状态 ==========
@@ -811,6 +852,9 @@ export interface GenerationHistoryItem {
   taskId?: string;
   seed?: number;
   createdAt: number;
+  createdByUserId?: string;
+  createdByUserName?: string;
+  createdByUserRole?: string;
   hidden: boolean;
   favorite: boolean;
   tags: string[];
@@ -819,6 +863,15 @@ export interface GenerationHistoryItem {
     canManage: boolean;
     canDeleteFile: boolean;
   };
+}
+
+export interface GenerationHistoryUserSummary {
+  userId: string;
+  username: string;
+  name: string;
+  role: string;
+  counts: Record<GenerationHistoryKind, number> & { total: number };
+  lastCreatedAt: number;
 }
 
 export function getGenerationHistoryProjects() {
@@ -831,6 +884,11 @@ export function getGenerationHistoryItems(params: {
   q?: string;
   favorite?: boolean;
   includeHidden?: boolean;
+  userId?: string;
+  role?: string;
+  provider?: string;
+  model?: string;
+  sourceNodeType?: string;
 } = {}) {
   const sp = new URLSearchParams();
   if (params.canvasId) sp.set('canvasId', params.canvasId);
@@ -838,8 +896,17 @@ export function getGenerationHistoryItems(params: {
   if (params.q) sp.set('q', params.q);
   if (params.favorite) sp.set('favorite', '1');
   if (params.includeHidden) sp.set('includeHidden', '1');
+  if (params.userId) sp.set('userId', params.userId);
+  if (params.role) sp.set('role', params.role);
+  if (params.provider) sp.set('provider', params.provider);
+  if (params.model) sp.set('model', params.model);
+  if (params.sourceNodeType) sp.set('sourceNodeType', params.sourceNodeType);
   const qs = sp.toString();
   return safeRequest<GenerationHistoryItem[]>(`${BASE}/generation-history/items${qs ? `?${qs}` : ''}`);
+}
+
+export function getGenerationHistoryUsers() {
+  return safeRequest<GenerationHistoryUserSummary[]>(`${BASE}/admin/generation-history/users`);
 }
 
 export function updateGenerationHistoryItem(

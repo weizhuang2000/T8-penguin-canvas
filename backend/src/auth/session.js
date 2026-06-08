@@ -20,7 +20,7 @@ function parseCookies(header) {
 
 function publicUser(user) {
   if (!user) return null;
-  return {
+  const out = {
     id: String(user.id),
     username: user.username,
     email: user.email,
@@ -31,6 +31,8 @@ function publicUser(user) {
     status: user.status || 'active',
     position: user.position || '',
   };
+  if (user.permissions && typeof user.permissions === 'object') out.permissions = user.permissions;
+  return out;
 }
 
 function createSession(user) {
