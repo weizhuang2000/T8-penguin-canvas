@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { BrainCircuit, ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, FileUp, Info, KeyRound, Loader2, Lock, Plus, Save, Settings2, TestTube2, Trash2, X, FolderOpen, ServerCog } from 'lucide-react';
 import { useApiKeysStore, FIXED_ZHENZHEN_BASE, RH_BASE } from '../stores/apiKeys';
 import { useThemeStore } from '../stores/theme';
-import type { AdvancedProviderConfig, AdvancedProviderProtocol, ApiSettings } from '../types/canvas';
+import type { AdvancedProviderConfig, AdvancedProviderProtocol, ApiSettings, LlmApiKeyConfig } from '../types/canvas';
 import { getRawSettings, testAdvancedProvider } from '../services/api';
 import {
   advancedProviderSummary as summarizeAdvancedProviderForm,
@@ -140,6 +140,34 @@ const emptyShow = (): Record<KeyField, boolean> => ({
   grokApiKey: false, seedanceApiKey: false, sunoApiKey: false,
 });
 
+type LlmKeyForm = LlmApiKeyConfig & {
+  apiKeyInput: string;
+  show: boolean;
+};
+
+const makeLlmKeyId = () => `llm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+
+const normalizeLlmKeyForms = (settings: ApiSettings): LlmKeyForm[] => {
+  const rawKeys = Array.isArray(settings.llmApiKeys) ? settings.llmApiKeys : [];
+  const keys = rawKeys.length > 0
+    ? rawKeys
+    : (settings.llmApiKey ? [{ id: 'default', label: '默认 LLM Key', apiKey: settings.llmApiKey, isDefault: true }] : []);
+  const forms = keys.map((item, index) => ({
+    id: String(item.id || `llm-${index + 1}`),
+    label: String(item.label || `LLM Key ${index + 1}`),
+    apiKey: item.apiKey || '',
+    apiKeyInput: '',
+    hasApiKey: item.hasApiKey || !!item.apiKey,
+    isDefault: item.isDefault === true,
+    show: false,
+  }));
+  if (forms.length === 0) {
+    forms.push({ id: 'default', label: '默认 LLM Key', apiKey: '', apiKeyInput: '', hasApiKey: false, isDefault: true, show: false });
+  }
+  if (!forms.some((item) => item.isDefault)) forms[0].isDefault = true;
+  return forms;
+};
+
 export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProps) {
   const { theme, style } = useThemeStore();
   const { settings, loading, error, load, save, loaded } = useApiKeysStore();
@@ -149,6 +177,8 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   const [inputs, setInputs] = useState<Record<KeyField, string>>(emptyMap());
   const [shows, setShows] = useState<Record<KeyField, boolean>>(emptyShow());
   const [enableZhenzhenFallback, setEnableZhenzhenFallback] = useState(true);
+  const [llmKeyForms, setLlmKeyForms] = useState<LlmKeyForm[]>([]);
+  const [llmKeysDirty, setLlmKeysDirty] = useState(false);
   const [llmBaseUrlInput, setLlmBaseUrlInput] = useState(FIXED_ZHENZHEN_BASE);
   const [llmModelInput, setLlmModelInput] = useState(DEFAULT_LLM_MODEL);
   const [saved, setSaved] = useState(false);
@@ -174,6 +204,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   const backupFileInputRef = useRef<HTMLInputElement | null>(null);
   // 眼睛预览拉取的明文（仅缓存，不提交）
   const revealedRef = useRef<Partial<Record<KeyField, string>>>({});
+  const revealedLlmKeysRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
     if (open && !loaded) load();
@@ -185,9 +216,12 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       setInputs(emptyMap());
       setShows(emptyShow());
       setEnableZhenzhenFallback((settings as any)?.enableZhenzhenFallback !== false);
+      setLlmKeyForms(normalizeLlmKeyForms(settings));
+      setLlmKeysDirty(false);
       setLlmBaseUrlInput((settings as any)?.llmBaseUrl || FIXED_ZHENZHEN_BASE);
       setLlmModelInput((settings as any)?.llmModel || DEFAULT_LLM_MODEL);
       revealedRef.current = {};
+      revealedLlmKeysRef.current = {};
       setSaved(false);
       setBackupMessage('');
       setClassifiedOpen(false);
@@ -219,7 +253,12 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     zhenzhenApiKey: inputs.zhenzhenApiKey.trim(),
     enableZhenzhenFallback,
     rhApiKey: inputs.rhApiKey.trim(),
-    llmApiKey: inputs.llmApiKey.trim(),
+    llmApiKeys: llmKeyForms.map(({ id, label, apiKeyInput, isDefault }) => ({
+      id,
+      label,
+      apiKey: apiKeyInput.trim(),
+      isDefault,
+    })),
     llmBaseUrl: llmBaseUrlInput.trim() || FIXED_ZHENZHEN_BASE,
     llmModel: llmModelInput.trim() || DEFAULT_LLM_MODEL,
     gptImageApiKey: inputs.gptImageApiKey.trim(),
@@ -278,6 +317,16 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     }
     if (Array.isArray((source as any).advancedProviders)) {
       next.advancedProviders = (source as any).advancedProviders;
+    }
+    if (Array.isArray((source as any).llmApiKeys)) {
+      next.llmApiKeys = (source as any).llmApiKeys
+        .filter((item: any) => item && typeof item === 'object')
+        .map((item: any, index: number) => ({
+          id: String(item.id || `llm-${index + 1}`),
+          label: String(item.label || `LLM Key ${index + 1}`),
+          apiKey: isMaskedKeyValue(item.apiKey) ? '' : String(item.apiKey || '').trim(),
+          isDefault: item.isDefault === true,
+        }));
     }
     return next;
   };
@@ -342,6 +391,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     });
     setShows(emptyShow());
     revealedRef.current = {};
+    revealedLlmKeysRef.current = {};
     if (typeof patch.fileSavePath === 'string') setFileSavePathInput(patch.fileSavePath);
     if (typeof patch.canvasAutoSavePath === 'string') setCanvasAutoSavePathInput(patch.canvasAutoSavePath);
     if (typeof patch.resourceLibraryPath === 'string') setResourceLibraryPathInput(patch.resourceLibraryPath);
@@ -351,6 +401,10 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     if (typeof patch.llmModel === 'string') setLlmModelInput(patch.llmModel);
     if (typeof patch.enableZhenzhenFallback === 'boolean') {
       setEnableZhenzhenFallback(patch.enableZhenzhenFallback);
+    }
+    if (Array.isArray(patch.llmApiKeys)) {
+      setLlmKeyForms(normalizeLlmKeyForms({ ...(settings as ApiSettings), llmApiKeys: patch.llmApiKeys }));
+      setLlmKeysDirty(true);
     }
     if (Array.isArray(patch.advancedProviders)) {
       setAdvancedProvidersInput(patch.advancedProviders);
@@ -397,6 +451,67 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       if (plain) setInputAt(f, String(plain));
     }
     setShows((prev) => ({ ...prev, [f]: newShow }));
+  };
+
+  const updateLlmKeyForm = (id: string, patch: Partial<LlmKeyForm>) => {
+    setLlmKeyForms((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+    setLlmKeysDirty(true);
+  };
+
+  const handleAddLlmKey = () => {
+    const id = makeLlmKeyId();
+    setLlmKeyForms((prev) => [
+      ...prev,
+      {
+        id,
+        label: `LLM Key ${prev.length + 1}`,
+        apiKeyInput: '',
+        hasApiKey: false,
+        isDefault: prev.length === 0,
+        show: false,
+      },
+    ]);
+    setLlmKeysDirty(true);
+  };
+
+  const handleRemoveLlmKey = (id: string) => {
+    setLlmKeyForms((prev) => {
+      const next = prev.filter((item) => item.id !== id);
+      if (next.length === 0) {
+        return [{ id: 'default', label: '默认 LLM Key', apiKeyInput: '', hasApiKey: false, isDefault: true, show: false }];
+      }
+      if (!next.some((item) => item.isDefault)) next[0] = { ...next[0], isDefault: true };
+      return next;
+    });
+    setLlmKeysDirty(true);
+  };
+
+  const handleSetDefaultLlmKey = (id: string) => {
+    setLlmKeyForms((prev) => prev.map((item) => ({ ...item, isDefault: item.id === id })));
+    setLlmKeysDirty(true);
+  };
+
+  const handleToggleLlmKeyShow = async (id: string) => {
+    const target = llmKeyForms.find((item) => item.id === id);
+    if (!target) return;
+    const nextShow = !target.show;
+    if (nextShow && !target.apiKeyInput.trim() && target.hasApiKey) {
+      try {
+        const raw = await getRawSettings();
+        const rawKeys = Array.isArray(raw.llmApiKeys) ? raw.llmApiKeys : [];
+        const plain = rawKeys.find((item) => item.id === id)?.apiKey || (id === 'default' ? raw.llmApiKey : '');
+        if (plain) {
+          revealedLlmKeysRef.current[id] = String(plain);
+          setLlmKeyForms((prev) => prev.map((item) => (
+            item.id === id ? { ...item, apiKeyInput: String(plain), show: nextShow } : item
+          )));
+          return;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    setLlmKeyForms((prev) => prev.map((item) => (item.id === id ? { ...item, show: nextShow } : item)));
   };
 
   const handleSave = async () => {
@@ -453,6 +568,18 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     }
     if (advancedDirty) {
       (patch as any).advancedProviders = advancedProvidersInput;
+    }
+    if (llmKeysDirty) {
+      (patch as any).llmApiKeys = llmKeyForms.map((item, index) => {
+        const input = item.apiKeyInput.trim();
+        const revealed = revealedLlmKeysRef.current[item.id];
+        return {
+          id: item.id || `llm-${index + 1}`,
+          label: item.label.trim() || `LLM Key ${index + 1}`,
+          apiKey: revealed && input === revealed ? '' : input,
+          isDefault: item.isDefault === true,
+        };
+      });
     }
     const oldFallback = (settings as any)?.enableZhenzhenFallback !== false;
     if (enableZhenzhenFallback !== oldFallback) {
@@ -1077,6 +1204,115 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     );
   };
 
+  const renderLlmKeys = () => (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className={`text-sm font-medium flex items-center gap-2 ${labelCls}`}>
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            LLM 独立 API Key
+            <span className={`text-[11px] font-normal ${hintCls}`}>· 可配置多个 · 节点里可选择</span>
+          </div>
+          <div className={`text-[11px] mt-1 ${hintCls}`}>
+            留空表示保持该项已保存 Key 不变；默认项用于旧画布和未指定 Key 的节点。
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={handleAddLlmKey}
+          className={
+            isPixel
+              ? 'px-btn px-btn--mint flex items-center gap-1 text-[11px]'
+              : `shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs border ${
+                  isDark
+                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20'
+                    : 'border-emerald-500/30 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                }`
+          }
+        >
+          <Plus size={13} /> 新增
+        </button>
+      </div>
+      <div className="space-y-2">
+        {llmKeyForms.map((item, index) => {
+          const hasSaved = !!item.hasApiKey || !!item.apiKey;
+          const maskedDisplay = toMaskedDisplay(item.apiKey);
+          return (
+            <div
+              key={item.id}
+              className={
+                isPixel
+                  ? 'border border-[var(--px-ink)] bg-white p-3 space-y-2'
+                  : `rounded-lg border p-3 space-y-2 ${
+                      isDark ? 'border-white/10 bg-white/[0.03]' : 'border-black/10 bg-black/[0.02]'
+                    }`
+              }
+            >
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={item.label}
+                  onChange={(e) => updateLlmKeyForm(item.id, { label: e.target.value })}
+                  className={`${inputCls} min-w-0`}
+                  placeholder={`LLM Key ${index + 1}`}
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleSetDefaultLlmKey(item.id)}
+                  className={
+                    isPixel
+                      ? `px-btn text-[11px] ${item.isDefault ? 'px-btn--mint' : ''}`
+                      : `shrink-0 px-2 py-1 rounded-md border text-[11px] ${
+                          item.isDefault
+                            ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300'
+                            : isDark
+                              ? 'border-white/10 text-white/50 hover:bg-white/5'
+                              : 'border-black/10 text-zinc-500 hover:bg-black/5'
+                        }`
+                  }
+                >
+                  {item.isDefault ? '默认' : '设默认'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveLlmKey(item.id)}
+                  className={eyeBtnCls}
+                  title="删除"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type={item.show ? 'text' : 'password'}
+                  value={item.apiKeyInput}
+                  onChange={(e) => updateLlmKeyForm(item.id, { apiKeyInput: e.target.value })}
+                  placeholder={hasSaved ? '留空保持不变 / 输入新值覆盖' : '请输入 sk-...'}
+                  className={inputCls}
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleToggleLlmKeyShow(item.id)}
+                  className={eyeBtnCls}
+                  title={item.show ? '隐藏' : '显示明文'}
+                >
+                  {item.show ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              {hasSaved && (
+                <div className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 inline-flex">
+                  已保存 {maskedDisplay}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   return (
     <div
       className={`fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm ${
@@ -1149,7 +1385,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
             </span>
           </label>
           {renderKey(COMMON_KEYS[1], { baseUrlNote: `Base URL: ${RH_BASE}` })}
-          {renderKey(COMMON_KEYS[2], {})}
+          {renderLlmKeys()}
           <label className="block space-y-2">
             <span className={`text-sm font-medium flex items-center gap-2 ${labelCls}`}>
               <ServerCog size={14} />

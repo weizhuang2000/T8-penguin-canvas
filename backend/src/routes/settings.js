@@ -98,6 +98,69 @@ function maskKey(k) {
   return k ? '****' + String(k).slice(-4) : '';
 }
 
+function cleanLlmKeyId(value, fallback = 'llm-key') {
+  const raw = String(value || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+  return raw || `${fallback}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+function normalizeLlmApiKeys(raw, current = [], legacyApiKey = '') {
+  const currentItems = Array.isArray(current) ? current : [];
+  const currentById = new Map(currentItems.map((item) => [String(item?.id || ''), item]));
+  const source = Array.isArray(raw) ? raw : [];
+  const used = new Set();
+  const items = [];
+  for (let index = 0; index < source.length; index += 1) {
+    const entry = source[index] || {};
+    let id = cleanLlmKeyId(entry.id, `llm-${index + 1}`);
+    while (used.has(id)) id = cleanLlmKeyId(`${id}-${items.length + 1}`);
+    used.add(id);
+    const label = String(entry.label || '').trim().slice(0, 60) || `LLM Key ${index + 1}`;
+    const previous = currentById.get(id);
+    const incomingKey = typeof entry.apiKey === 'string' ? entry.apiKey.trim() : '';
+    const previousKey = previous?.apiKey || (id === 'default' ? legacyApiKey : '');
+    const apiKey = !incomingKey || /^\*{2,}/.test(incomingKey) ? previousKey : incomingKey;
+    items.push({
+      id,
+      label,
+      apiKey,
+      isDefault: entry.isDefault === true,
+    });
+  }
+  if (items.length === 0 && legacyApiKey) {
+    items.push({ id: 'default', label: '默认 LLM Key', apiKey: legacyApiKey, isDefault: true });
+  }
+  if (items.length > 0 && !items.some((item) => item.isDefault)) {
+    items[0].isDefault = true;
+  }
+  if (items.filter((item) => item.isDefault).length > 1) {
+    let seenDefault = false;
+    items.forEach((item) => {
+      if (!item.isDefault) return;
+      if (seenDefault) item.isDefault = false;
+      seenDefault = true;
+    });
+  }
+  return items;
+}
+
+function maskLlmApiKeys(keys) {
+  return normalizeLlmApiKeys(keys).map((item) => ({
+    ...item,
+    apiKey: maskKey(item.apiKey),
+    hasApiKey: !!item.apiKey,
+  }));
+}
+
+function syncLegacyLlmApiKey(settings) {
+  const keys = normalizeLlmApiKeys(settings.llmApiKeys, settings.llmApiKeys, settings.llmApiKey);
+  const defaultItem = keys.find((item) => item.isDefault) || keys[0] || null;
+  return {
+    ...settings,
+    llmApiKeys: keys,
+    llmApiKey: defaultItem?.apiKey || settings.llmApiKey || '',
+  };
+}
+
 function loadSettings({ persistMigrations = true } = {}) {
   if (!fs.existsSync(config.SETTINGS_FILE)) return { ...DEFAULT_SETTINGS };
   try {
@@ -110,6 +173,7 @@ function loadSettings({ persistMigrations = true } = {}) {
       llmBaseUrl: normalizeLlmBaseUrl(data.llmBaseUrl, config.ZHENZHEN_BASE_URL) || config.ZHENZHEN_BASE_URL,
       llmModel: normalizeLlmModelName(data.llmModel, config.LLM_DEFAULT_MODEL) || config.LLM_DEFAULT_MODEL,
     };
+    Object.assign(merged, syncLegacyLlmApiKey(merged));
     merged.advancedProviders = normalizeAdvancedProviders(data.advancedProviders);
     const migrated = migrateLegacyDefaultPaths(merged);
     if (persistMigrations && migrated.changed) {
@@ -157,6 +221,7 @@ router.get('/', (_req, res) => {
     zhenzhenApiKey: maskKey(settings.zhenzhenApiKey),
     rhApiKey: maskKey(settings.rhApiKey),
     llmApiKey: maskKey(settings.llmApiKey),
+    llmApiKeys: maskLlmApiKeys(settings.llmApiKeys),
     advancedProviders: maskAdvancedProviders(settings.advancedProviders),
     advancedProviderSummary: summarizeAdvancedProviders(settings.advancedProviders),
   };
@@ -176,6 +241,7 @@ router.post('/', requireAdmin, (req, res) => {
   const current = loadSettings();
   const incoming = req.body || {};
   const hasAdvancedProviders = Object.prototype.hasOwnProperty.call(incoming, 'advancedProviders');
+  const hasLlmApiKeys = Object.prototype.hasOwnProperty.call(incoming, 'llmApiKeys');
   const hasLlmBaseUrl = Object.prototype.hasOwnProperty.call(incoming, 'llmBaseUrl');
   const llmBaseUrl = hasLlmBaseUrl
     ? normalizeLlmBaseUrl(incoming.llmBaseUrl, config.ZHENZHEN_BASE_URL)
@@ -198,6 +264,22 @@ router.post('/', requireAdmin, (req, res) => {
     llmBaseUrl,
     llmModel,
   };
+  if (hasLlmApiKeys) {
+    merged.llmApiKeys = normalizeLlmApiKeys(incoming.llmApiKeys, current.llmApiKeys, current.llmApiKey);
+  } else if (Object.prototype.hasOwnProperty.call(incoming, 'llmApiKey') && String(incoming.llmApiKey || '').trim()) {
+    merged.llmApiKeys = normalizeLlmApiKeys(
+      current.llmApiKeys?.length ? current.llmApiKeys : [{ id: 'default', label: '默认 LLM Key', isDefault: true }],
+      current.llmApiKeys,
+      String(incoming.llmApiKey || '').trim(),
+    ).map((item, index) => (
+      item.isDefault || index === 0
+        ? { ...item, apiKey: String(incoming.llmApiKey || '').trim(), isDefault: true }
+        : { ...item, isDefault: false }
+    ));
+  } else {
+    merged.llmApiKeys = normalizeLlmApiKeys(current.llmApiKeys, current.llmApiKeys, current.llmApiKey);
+  }
+  Object.assign(merged, syncLegacyLlmApiKey(merged));
   merged.advancedProviders = hasAdvancedProviders
     ? normalizeAdvancedProviders(incoming.advancedProviders, current.advancedProviders)
     : normalizeAdvancedProviders(current.advancedProviders);
@@ -554,3 +636,6 @@ router.post('/rh-tools/import', (req, res) => {
 module.exports = router;
 module.exports.loadSettings = loadSettings;
 module.exports.saveSettings = saveSettings;
+module.exports.normalizeLlmApiKeys = normalizeLlmApiKeys;
+module.exports.maskLlmApiKeys = maskLlmApiKeys;
+module.exports.syncLegacyLlmApiKey = syncLegacyLlmApiKey;

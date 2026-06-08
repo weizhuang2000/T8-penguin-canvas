@@ -430,6 +430,7 @@ export interface LlmMessage {
 export interface GenerateLlmRequest {
   model: string;
   messages: LlmMessage[];
+  llmKeyId?: string;
   temperature?: number;
   max_tokens?: number;
   /** 流式开关;默认 false(非流式) */

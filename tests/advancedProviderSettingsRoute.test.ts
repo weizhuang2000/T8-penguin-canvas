@@ -34,6 +34,10 @@ test('settings route persists advancedProviders with masking and secret preserva
   const settingsRouter = require('../backend/src/routes/settings.js');
   const app = express();
   app.use(express.json({ limit: '1mb' }));
+  app.use((req: any, _res: any, next: any) => {
+    req.user = { id: 'test-admin', role: 'admin' };
+    next();
+  });
   app.use('/api/settings', settingsRouter);
   const server = await new Promise<any>((resolve) => {
     const s = app.listen(0, '127.0.0.1', () => resolve(s));
@@ -89,6 +93,10 @@ test('settings route persists advancedProviders with masking and secret preserva
     body: JSON.stringify({
       llmBaseUrl: 'https://llm.example.com/openai/v1/',
       llmModel: 'custom-chat-model',
+      llmApiKeys: [
+        { id: 'default', label: '主 LLM Key', apiKey: 'sk-main-secret', isDefault: true },
+        { id: 'backup', label: '备用 LLM Key', apiKey: 'sk-backup-secret' },
+      ],
     }),
   }).then((res) => res.json());
   assert.equal(saveLlmBaseUrl.success, true);
@@ -97,6 +105,10 @@ test('settings route persists advancedProviders with masking and secret preserva
   assert.equal(masked.data.enableZhenzhenFallback, false);
   assert.equal(masked.data.llmBaseUrl, 'https://llm.example.com/openai/v1');
   assert.equal(masked.data.llmModel, 'custom-chat-model');
+  assert.equal(masked.data.llmApiKey, '****cret');
+  assert.equal(masked.data.llmApiKeys[0].apiKey, '****cret');
+  assert.equal(masked.data.llmApiKeys[0].hasApiKey, true);
+  assert.equal(masked.data.llmApiKeys[1].apiKey, '****cret');
   const modelscope = masked.data.advancedProviders.find((p: any) => p.id === 'modelscope');
   assert.equal(modelscope.apiKey, '****3456');
   assert.equal(modelscope.hasApiKey, true);
@@ -109,7 +121,24 @@ test('settings route persists advancedProviders with masking and secret preserva
   assert.equal(raw.data.enableZhenzhenFallback, false);
   assert.equal(raw.data.llmBaseUrl, 'https://llm.example.com/openai/v1');
   assert.equal(raw.data.llmModel, 'custom-chat-model');
+  assert.equal(raw.data.llmApiKey, 'sk-main-secret');
+  assert.equal(raw.data.llmApiKeys.find((item: any) => item.id === 'backup').apiKey, 'sk-backup-secret');
   assert.equal(raw.data.advancedProviders.find((p: any) => p.id === 'modelscope').apiKey, 'ms-secret-123456');
+
+  const preserveLlmKeys = await fetch(base, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      llmApiKeys: [
+        { id: 'default', label: '主 LLM Key 改名', apiKey: '****cret', isDefault: false },
+        { id: 'backup', label: '备用 LLM Key', apiKey: '', isDefault: true },
+      ],
+    }),
+  }).then((res) => res.json());
+  assert.equal(preserveLlmKeys.success, true);
+  const preservedLlmRaw = await fetch(`${base}/raw`).then((res) => res.json());
+  assert.equal(preservedLlmRaw.data.llmApiKeys.find((item: any) => item.id === 'default').apiKey, 'sk-main-secret');
+  assert.equal(preservedLlmRaw.data.llmApiKey, 'sk-backup-secret');
 
   const preserve = await fetch(base, {
     method: 'POST',

@@ -136,6 +136,14 @@ export interface AdvancedProviderSummary {
   jimengConfigured: boolean;
 }
 
+export interface LlmApiKeyConfig {
+  id: string;
+  label: string;
+  apiKey?: string;
+  hasApiKey?: boolean;
+  isDefault?: boolean;
+}
+
 export type CanvasProviderSource = 'zhenzhen' | AdvancedProviderProtocol;
 
 export interface CanvasNodeData {
@@ -148,6 +156,7 @@ export interface CanvasNodeData {
   providerSource?: CanvasProviderSource;
   providerId?: string;
   providerModel?: string;
+  llmKeyId?: string;
   providerParams?: Record<string, any>;
   status?: 'idle' | 'generating' | 'success' | 'error';
   error?: string;
@@ -212,6 +221,7 @@ export interface ApiSettings {
   rhApiKey: string;
   rhBaseUrl: string; // https://www.runninghub.cn
   llmApiKey: string;
+  llmApiKeys?: LlmApiKeyConfig[];
   llmBaseUrl: string;
   llmModel: string;
   // 分类 API Key（留空时 fallback 到 zhenzhenApiKey）

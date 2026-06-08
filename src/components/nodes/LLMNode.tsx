@@ -164,6 +164,15 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
 
   const d = data as any;
   const configuredLlmModel = useApiKeysStore((s) => s.settings.llmModel)?.trim() || DEFAULT_LLM_MODEL;
+  const llmApiKeys = useApiKeysStore((s) => s.settings.llmApiKeys) || [];
+  const llmKeyOptions = useMemo(() => {
+    const saved = llmApiKeys.filter((item) => item && (item.hasApiKey || item.apiKey));
+    return saved.length > 0 ? saved : [{ id: 'default', label: '默认 LLM Key' }];
+  }, [llmApiKeys]);
+  const selectedLlmKeyId = String(d?.llmKeyId || '').trim();
+  const activeLlmKey = llmKeyOptions.find((item) => item.id === selectedLlmKeyId)
+    || llmKeyOptions.find((item) => item.isDefault)
+    || llmKeyOptions[0];
   const model: string = d?.model || configuredLlmModel;
   const advancedProviders = useApiKeysStore((s) => s.settings.advancedProviders);
   const llmModelOptions = useMemo(() => {
@@ -368,7 +377,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
         const ctrl = new AbortController();
         abortRef.current = ctrl;
         const { content } = await generateLlmStream(
-          { model, messages, temperature, max_tokens: maxTokens },
+          { model, messages, llmKeyId: activeLlmKey?.id, temperature, max_tokens: maxTokens },
           {
             onDelta: (chunk) => setStreamingText((s) => s + chunk),
             signal: ctrl.signal,
@@ -402,7 +411,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
               max_tokens: maxTokens,
               providerParams: d?.providerParams || {},
             })
-          : await generateLlm({ model, messages, temperature, max_tokens: maxTokens });
+          : await generateLlm({ model, messages, llmKeyId: activeLlmKey?.id, temperature, max_tokens: maxTokens });
         const replyText = res.content || '';
         const imgs = res.imageUrls || [];
         const finalHistory: ChatTurn[] = [
@@ -647,11 +656,11 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
                 <div>
                   <label className="text-[10px] text-white/50 block mb-1">平台</label>
                   <select
-                    value={isExternalSelected ? providerSelection.providerId : 'zhenzhen'}
+                    value={isExternalSelected ? providerSelection.providerId : `llm-key:${activeLlmKey?.id || 'default'}`}
                     onChange={(e) => {
                       const nextId = e.target.value;
-                      if (nextId === 'zhenzhen') {
-                        update({ providerSource: 'zhenzhen', providerId: '', providerModel: '' });
+                      if (nextId.startsWith('llm-key:')) {
+                        update({ providerSource: 'zhenzhen', providerId: '', providerModel: '', llmKeyId: nextId.slice(8) });
                         return;
                       }
                       const provider = llmAdvancedProviders.find((item) => item.id === nextId);
@@ -667,7 +676,11 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
                     style={{ background: '#18181b', color: '#ffffff' }}
                     className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
                   >
-                    <option value="zhenzhen" style={{ background: '#18181b', color: '#ffffff' }}>LLM 独立 Key（默认）</option>
+                    {llmKeyOptions.map((item) => (
+                      <option key={item.id} value={`llm-key:${item.id}`} style={{ background: '#18181b', color: '#ffffff' }}>
+                        {item.label || item.id}
+                      </option>
+                    ))}
                     {llmAdvancedProviders.map((provider) => (
                       <option key={provider.id} value={provider.id} style={{ background: '#18181b', color: '#ffffff' }}>
                         {provider.label || provider.id}

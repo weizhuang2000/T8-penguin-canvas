@@ -197,6 +197,15 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
 
   const advancedProviders = useApiKeysStore((state) => state.settings.advancedProviders);
   const configuredLlmModel = useApiKeysStore((state) => state.settings.llmModel)?.trim() || DEFAULT_LLM_MODEL;
+  const llmApiKeys = useApiKeysStore((state) => state.settings.llmApiKeys) || [];
+  const llmKeyOptions = useMemo(() => {
+    const saved = llmApiKeys.filter((item) => item && (item.hasApiKey || item.apiKey));
+    return saved.length > 0 ? saved : [{ id: 'default', label: '默认 LLM Key' }];
+  }, [llmApiKeys]);
+  const selectedLlmKeyId = String(d.llmKeyId || '').trim();
+  const activeLlmKey = llmKeyOptions.find((item) => item.id === selectedLlmKeyId)
+    || llmKeyOptions.find((item) => item.isDefault)
+    || llmKeyOptions[0];
   const llmProviders = useMemo(() => advancedProvidersForNode(advancedProviders, 'llm'), [advancedProviders]);
   const providerSelection = useMemo(
     () => resolveAdvancedProviderSelection(advancedProviders, 'llm', {
@@ -356,6 +365,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
         : await generateLlm({
             model,
             messages: messages as any,
+            llmKeyId: activeLlmKey?.id,
             temperature: 0.2,
             max_tokens: maxTokens,
           });
@@ -647,11 +657,11 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
               <select
                 className={FIELD}
                 disabled={isReadonly || busy}
-                value={externalSelected ? providerSelection.providerId : 'zhenzhen'}
+                value={externalSelected ? providerSelection.providerId : `llm-key:${activeLlmKey?.id || 'default'}`}
                 onChange={(event) => {
                   const nextId = event.target.value;
-                  if (nextId === 'zhenzhen') {
-                    update({ providerSource: 'zhenzhen', providerId: '', providerModel: '' });
+                  if (nextId.startsWith('llm-key:')) {
+                    update({ providerSource: 'zhenzhen', providerId: '', providerModel: '', llmKeyId: nextId.slice(8) });
                     return;
                   }
                   const provider = llmProviders.find((item) => item.id === nextId);
@@ -660,7 +670,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
                   update({ providerSource: provider.protocol, providerId: provider.id, providerModel: models[0] || '' });
                 }}
               >
-                <option value="zhenzhen">默认 LLM Key</option>
+                {llmKeyOptions.map((item) => <option key={item.id} value={`llm-key:${item.id}`}>{item.label || item.id}</option>)}
                 {llmProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}
               </select>
               {externalSelected ? (

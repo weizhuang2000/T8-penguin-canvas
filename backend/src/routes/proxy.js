@@ -14,6 +14,7 @@ const { tryDecodeDuckPayload } = require('../utils/duckPayload');
 const { normalizeImageOutputFormat, writeImageOutput } = require('../utils/imageOutput');
 const { addHistoryItems, kindFromUrl } = require('../utils/generationHistory');
 const { resolveLlmChatCompletionsUrl } = require('../utils/llmBaseUrl');
+const settingsRouter = require('./settings');
 
 const router = express.Router();
 
@@ -143,12 +144,26 @@ function remoteOutputLooksLikeImage(url, contentType, ext) {
 
 // ========== 工具:加载 Settings 明文 ==========
 function loadRawSettings() {
-  if (!fs.existsSync(config.SETTINGS_FILE)) return null;
   try {
-    return JSON.parse(fs.readFileSync(config.SETTINGS_FILE, 'utf-8'));
+    return settingsRouter.loadSettings({ persistMigrations: false });
   } catch {
     return null;
   }
+}
+
+function resolveLlmApiKey(settings, keyId = '') {
+  if (!settings) return null;
+  const keys = settingsRouter.normalizeLlmApiKeys(settings.llmApiKeys, settings.llmApiKeys, settings.llmApiKey);
+  const requestedId = String(keyId || '').trim();
+  const selected = requestedId
+    ? keys.find((item) => item.id === requestedId)
+    : (keys.find((item) => item.isDefault) || keys[0]);
+  if (requestedId && !selected) {
+    return { error: '选择的 LLM API Key 不存在或已被删除' };
+  }
+  const apiKey = selected?.apiKey || settings.llmApiKey || '';
+  if (!apiKey) return { error: '未配置 LLM 独立 API Key' };
+  return { apiKey, keyId: selected?.id || 'default', label: selected?.label || '默认 LLM Key' };
 }
 
 // ========== 工具: 按提示词（模型名 / endpoint / 路由名）选择分类 API Key ==========
@@ -1322,10 +1337,14 @@ router.post('/mj/upload', async (req, res) => {
 //   - 完全对齐 gpt-image-2-web _doSendChat (index.html L8128~L8305)
 router.post('/llm', async (req, res) => {
   const settings = loadRawSettings();
-  if (!settings?.llmApiKey) {
+  if (!settings) {
     return res.status(400).json({ success: false, error: '未配置 LLM 独立 API Key' });
   }
-  const { model: requestedModel, messages, temperature, max_tokens, stream } = req.body || {};
+  const { model: requestedModel, messages, temperature, max_tokens, stream, llmKeyId } = req.body || {};
+  const selectedKey = resolveLlmApiKey(settings, llmKeyId);
+  if (!selectedKey || selectedKey.error) {
+    return res.status(400).json({ success: false, error: selectedKey?.error || '未配置 LLM 独立 API Key' });
+  }
   const model = String(requestedModel || settings.llmModel || config.LLM_DEFAULT_MODEL || '').trim();
   if (!model || !messages) {
     return res.status(400).json({ success: false, error: 'model 和 messages 必填' });
@@ -1355,7 +1374,7 @@ router.post('/llm', async (req, res) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${settings.llmApiKey}`,
+        Authorization: `Bearer ${selectedKey.apiKey}`,
       },
       body: JSON.stringify(payload),
     });
