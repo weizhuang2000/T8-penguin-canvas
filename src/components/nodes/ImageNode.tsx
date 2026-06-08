@@ -360,8 +360,11 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         const providerModel = externalProviderModel;
         if (!providerModel) throw new Error('扩展平台未配置可用图像模型');
         const size = externalImageSizeFor(aspectRatio, sizeLevel);
+        const externalSizeDesc = providerSelection.provider.protocol === 'gemini-compatible'
+          ? `aspect_ratio=${aspectRatio} · image_size=${sizeLevel}`
+          : `size=${size}`;
         logBus.info(
-          `扩展平台提交: ${providerSelection.provider.label || providerSelection.provider.id} · ${providerModel} · size=${size} · 参考图=${allRefs.length}`,
+          `扩展平台提交: ${providerSelection.provider.label || providerSelection.provider.id} · ${providerModel} · ${externalSizeDesc} · 参考图=${allRefs.length}`,
           src,
         );
         const res = await generateExternalImage({

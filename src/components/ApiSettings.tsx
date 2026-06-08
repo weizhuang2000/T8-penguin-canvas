@@ -96,13 +96,13 @@ const ADVANCED_PROVIDER_GUIDES: Record<AdvancedProviderProtocol, {
     keyLabel: 'API Key / Token',
   },
   'gemini-compatible': {
-    subtitle: '接入 Gemini 原生 generateContent 图像 / LLM 服务',
-    description: '适合接入 Google Gemini API 或严格兼容 Gemini generateContent 协议的中转站。图像节点会按 Gemini 原生 responseFormat.image 传 aspectRatio / imageSize，不再把比例转成 OpenAI size。',
+    subtitle: '接入 Gemini / 香蕉图像兼容服务',
+    description: '适合接入百达工坊同款香蕉2协议或兼容中转站。图像节点会按香蕉2格式传 aspect_ratio 和 image_size，不再把比例转成 OpenAI size。',
     nodeScopes: ['图像节点', 'LLM 节点'],
-    connectionHint: 'Base URL 填到 API 根路径即可，例如 https://generativelanguage.googleapis.com/v1；也可以填写兼容中转站的根路径。Key 留空会保留后端已保存的密钥。',
-    modelHint: '图像模型建议填写 gemini-3.1-flash-image 或 gemini-2.5-flash-image；聊天模型可填写 gemini-2.5-flash 等。每行一个模型名。',
-    baseUrlPlaceholder: 'https://generativelanguage.googleapis.com/v1',
-    keyLabel: 'Gemini API Key',
+    connectionHint: 'Base URL 填到 /v1 根路径即可，例如 https://ai.t8star.org/v1；也可以填写兼容中转站的根路径。Key 留空会保留后端已保存的密钥。',
+    modelHint: '图像模型建议填写 nano-banana-2。每行一个模型名。若旧配置仍填 gemini-*-image，400 时会自动重试 nano-banana-2。',
+    baseUrlPlaceholder: 'https://ai.t8star.org/v1',
+    keyLabel: 'API Key / Token',
   },
   modelscope: {
     subtitle: '接入 ModelScope 的异步图像任务与兼容聊天接口',
@@ -785,9 +785,9 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
         id: nextId,
         label: `Gemini 兼容 ${geminiCount + 1}`,
         protocol: 'gemini-compatible',
-        baseUrl: 'https://generativelanguage.googleapis.com/v1',
+        baseUrl: 'https://ai.t8star.org/v1',
         enabled: false,
-        imageModels: ['gemini-3.1-flash-image', 'gemini-2.5-flash-image'],
+        imageModels: ['nano-banana-2'],
         videoModels: [],
         chatModels: ['gemini-2.5-flash'],
         defaults: {},
@@ -1691,7 +1691,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                     <Plus size={12} />
                     新增 Gemini 兼容
                   </button>
-                  <span className={`text-[11px] ${hintCls}`}>OpenAI 兼容走 /images/generations；Gemini 兼容走 generateContent + responseFormat.image。</span>
+                  <span className={`text-[11px] ${hintCls}`}>OpenAI 兼容走 /images/generations；Gemini 兼容走香蕉2同款 aspect_ratio + image_size。</span>
                 </div>
                 {advancedProvidersInput.length === 0 ? (
                   <div className={`text-xs ${hintCls}`}>后端尚未返回扩展平台卡片，请先保存或刷新设置。</div>
