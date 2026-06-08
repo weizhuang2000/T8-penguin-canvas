@@ -15,14 +15,14 @@ function jsonResponse(body, status = 200) {
   };
 }
 
-test('Gemini compatible image generation uses generateContent imageConfig', async () => {
+test('Gemini compatible image generation uses generateContent responseFormat image options', async () => {
   const calls = [];
   const provider = {
     id: 'gemini-compatible',
     protocol: 'gemini-compatible',
-    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1',
     apiKey: 'gm-secret',
-    imageModels: ['gemini-2.5-flash-image-preview'],
+    imageModels: ['gemini-3.1-flash-image'],
   };
 
   const result = await geminiCompatible.generateImage(provider, {
@@ -51,23 +51,59 @@ test('Gemini compatible image generation uses generateContent imageConfig', asyn
 
   assert.equal(result.ok, true);
   assert.deepEqual(result.imageUrls, ['data:image/png;base64,UE5H']);
-  assert.equal(calls[0].url, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent');
+  assert.equal(calls[0].url, 'https://generativelanguage.googleapis.com/v1/models/gemini-3.1-flash-image:generateContent');
   assert.equal(calls[0].init.headers['x-goog-api-key'], 'gm-secret');
   assert.equal(calls[0].init.headers.Authorization, undefined);
   assert.equal(calls[0].body.size, undefined);
   assert.deepEqual(calls[0].body.generationConfig.responseModalities, ['TEXT', 'IMAGE']);
-  assert.deepEqual(calls[0].body.generationConfig.imageConfig, {
-    aspectRatio: '16:9',
-    imageSize: '2K',
+  assert.deepEqual(calls[0].body.generationConfig.responseFormat, {
+    type: 'IMAGE',
+    image: {
+      aspectRatio: '16:9',
+      imageSize: '2K',
+    },
   });
   assert.equal(calls[0].body.generationConfig.seed, 123);
+});
+
+test('Gemini 2.5 flash image omits unsupported imageSize while keeping aspectRatio', async () => {
+  const calls = [];
+  const provider = {
+    id: 'gemini-compatible',
+    protocol: 'gemini-compatible',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1',
+    apiKey: 'gm-secret',
+    imageModels: ['gemini-2.5-flash-image'],
+  };
+
+  const result = await geminiCompatible.generateImage(provider, {
+    prompt: 'a tall scene',
+    aspect_ratio: '9:16',
+    image_size: '4K',
+  }, {
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init, body: JSON.parse(init.body) });
+      return jsonResponse({
+        candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: 'AAA=' } }] } }],
+      });
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(calls[0].url, 'https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash-image:generateContent');
+  assert.deepEqual(calls[0].body.generationConfig.responseFormat, {
+    type: 'IMAGE',
+    image: {
+      aspectRatio: '9:16',
+    },
+  });
 });
 
 test('Gemini compatible chat normalizes generateContent text', async () => {
   const provider = {
     id: 'gemini-compatible',
     protocol: 'gemini-compatible',
-    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1',
     apiKey: 'gm-secret',
     chatModels: ['gemini-2.5-flash'],
   };

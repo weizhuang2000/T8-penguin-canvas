@@ -100,9 +100,9 @@ test('normalizeAdvancedProviders supports Gemini compatible providers', () => {
       label: 'Gemini Images',
       protocol: 'gemini-compatible',
       enabled: true,
-      baseUrl: 'https://generativelanguage.googleapis.com/v1beta/',
+      baseUrl: 'https://generativelanguage.googleapis.com/v1/',
       apiKey: 'gm-secret',
-      imageModels: ['gemini-2.5-flash-image-preview'],
+      imageModels: ['gemini-3.1-flash-image'],
       chatModels: ['gemini-2.5-flash'],
     },
   ]);
@@ -110,8 +110,8 @@ test('normalizeAdvancedProviders supports Gemini compatible providers', () => {
   const gemini = providers.find((item: any) => item.id === 'gemini-compatible-2');
   assert.ok(gemini);
   assert.equal(gemini.protocol, 'gemini-compatible');
-  assert.equal(gemini.baseUrl, 'https://generativelanguage.googleapis.com/v1beta');
-  assert.deepEqual(gemini.imageModels, ['gemini-2.5-flash-image-preview']);
+  assert.equal(gemini.baseUrl, 'https://generativelanguage.googleapis.com/v1');
+  assert.deepEqual(gemini.imageModels, ['gemini-3.1-flash-image']);
 
   const masked = maskAdvancedProviders(providers).find((item: any) => item.id === 'gemini-compatible-2');
   assert.equal(masked?.apiKey, '****cret');

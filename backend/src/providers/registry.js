@@ -1,6 +1,6 @@
 const DEFAULT_MODELSCOPE_BASE_URL = 'https://api-inference.modelscope.cn/v1';
 const DEFAULT_VOLCENGINE_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3';
-const DEFAULT_GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
+const DEFAULT_GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1';
 
 const SUPPORTED_PROTOCOLS = new Set([
   'openai-compatible',
@@ -32,7 +32,7 @@ const DEFAULT_ADVANCED_PROVIDERS = [
     protocol: 'gemini-compatible',
     baseUrl: DEFAULT_GEMINI_BASE_URL,
     enabled: false,
-    imageModels: ['gemini-2.5-flash-image-preview'],
+    imageModels: ['gemini-3.1-flash-image', 'gemini-2.5-flash-image'],
     videoModels: [],
     chatModels: ['gemini-2.5-flash'],
     defaults: {},

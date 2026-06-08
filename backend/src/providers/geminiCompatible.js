@@ -2,7 +2,7 @@ const { resolveMediaRef } = require('./mediaResolver');
 
 const DEFAULT_TIMEOUT_MS = 8000;
 const DEFAULT_IMAGE_TIMEOUT_MS = 10 * 60 * 1000;
-const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
+const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1';
 
 function cleanBaseUrl(value) {
   return String(value || DEFAULT_BASE_URL).trim().replace(/\/+$/, '') || DEFAULT_BASE_URL;
@@ -34,9 +34,10 @@ function validateProvider(provider, { apiKeyRequired = true } = {}) {
 
 function selectedModel(requested, providerModels, fallback) {
   const fromList = Array.isArray(providerModels) ? providerModels.find((item) => String(item || '').trim()) : '';
-  const model = String(requested || fromList || fallback || '').trim();
+  let model = String(requested || fromList || fallback || '').trim();
   if (!model) throw new Error('模型名称不能为空。');
   if (model.length > 240 || /[\x00-\x1f\x7f]/.test(model)) throw new Error('模型名称不合法。');
+  if (model === 'gemini-2.5-flash-image-preview') model = 'gemini-2.5-flash-image';
   return model;
 }
 
@@ -144,16 +145,21 @@ function normalizeImageSize(value) {
   return '1K';
 }
 
-function configFromInput(input = {}) {
+function supportsImageSize(model) {
+  const text = String(model || '').toLowerCase();
+  return text.includes('3.') || text.includes('pro');
+}
+
+function imageResponseFormatFromInput(input = {}, model = '') {
   const params = input.providerParams && typeof input.providerParams === 'object' ? input.providerParams : {};
   const aspectRatio = params.aspectRatio || params.aspect_ratio || input.aspect_ratio || input.aspectRatio;
   const imageSize = params.imageSize || params.image_size || input.image_size || input.imageSize;
-  const imageConfig = {
+  const image = {
     aspectRatio: normalizeAspectRatio(aspectRatio),
   };
   const normalizedSize = normalizeImageSize(imageSize);
-  if (normalizedSize) imageConfig.imageSize = normalizedSize;
-  return imageConfig;
+  if (normalizedSize && supportsImageSize(model)) image.imageSize = normalizedSize;
+  return { type: 'IMAGE', image };
 }
 
 async function resolveInlineImageParts(refs, options = {}) {
@@ -178,11 +184,11 @@ async function resolveInlineImageParts(refs, options = {}) {
   return out;
 }
 
-function generationConfig(input = {}, imageConfig) {
+function generationConfig(input = {}, responseFormat) {
   const params = input.providerParams && typeof input.providerParams === 'object' ? input.providerParams : {};
   const config = {
     responseModalities: ['TEXT', 'IMAGE'],
-    imageConfig,
+    responseFormat,
   };
   if (params.temperature != null) config.temperature = Number(params.temperature);
   if (params.topP != null) config.topP = Number(params.topP);
@@ -215,7 +221,7 @@ async function generateImage(provider, input = {}, options = {}) {
     return { ok: false, code: 'invalid_reference', providerId: provider.id, protocol: 'gemini-compatible', error: e?.message || '参考图解析失败。' };
   }
 
-  const imageConfig = configFromInput(input);
+  const responseFormat = imageResponseFormatFromInput(input, model);
   const body = {
     contents: [
       {
@@ -226,7 +232,7 @@ async function generateImage(provider, input = {}, options = {}) {
         ],
       },
     ],
-    generationConfig: generationConfig(input, imageConfig),
+    generationConfig: generationConfig(input, responseFormat),
   };
 
   try {

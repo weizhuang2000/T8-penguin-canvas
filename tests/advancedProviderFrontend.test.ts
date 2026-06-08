@@ -41,7 +41,7 @@ test('advancedProviderSummary mirrors settings folded header counts', () => {
 test('advancedProvidersForNode only exposes enabled providers supported by each node kind', () => {
   const providers = [
     { id: 'openai-compatible', label: 'OpenAI', protocol: 'openai-compatible', enabled: true, imageModels: ['gpt-image-1'], chatModels: ['gpt-4o-mini'] },
-    { id: 'gemini-compatible', label: 'Gemini', protocol: 'gemini-compatible', enabled: true, imageModels: ['gemini-2.5-flash-image-preview'], chatModels: ['gemini-2.5-flash'] },
+    { id: 'gemini-compatible', label: 'Gemini', protocol: 'gemini-compatible', enabled: true, imageModels: ['gemini-3.1-flash-image'], chatModels: ['gemini-2.5-flash'] },
     { id: 'modelscope', label: 'ModelScope', protocol: 'modelscope', enabled: true, imageModels: ['MusePublic/489_ckpt_FLUX_1'], chatModels: ['Qwen/Qwen3-Coder'] },
     { id: 'volcengine', label: 'Volc', protocol: 'volcengine', enabled: false, imageModels: ['seedream'], videoModels: ['seedance'], chatModels: ['doubao'] },
     { id: 'comfyui', label: 'ComfyUI', protocol: 'comfyui', enabled: true, comfyuiConfig: { workflows: [] } },

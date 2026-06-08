@@ -63,7 +63,7 @@ const LLM_PROTOCOLS = new Set(['openai-compatible', 'gemini-compatible', 'models
 const FALLBACK_MODELS: Record<AdvancedProviderNodeKind, Partial<Record<string, string[]>>> = {
   image: {
     'openai-compatible': ['gpt-image-1'],
-    'gemini-compatible': ['gemini-2.5-flash-image-preview'],
+    'gemini-compatible': ['gemini-3.1-flash-image', 'gemini-2.5-flash-image'],
     modelscope: ['MusePublic/489_ckpt_FLUX_1'],
     volcengine: ['doubao-seedream-4-0-250828'],
     'jimeng-cli': ['jimeng-image-2k'],
