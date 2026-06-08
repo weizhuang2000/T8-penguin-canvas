@@ -25,6 +25,7 @@ const DEFAULT: ApiSettings = {
   rhBaseUrl: RH_BASE,
   llmApiKey: '',
   llmApiKeys: [],
+  llmConfigs: [],
   llmBaseUrl: FIXED_ZHENZHEN_BASE,
   llmModel: DEFAULT_LLM_MODEL,
   // 分类独立 Key（留空时 fallback 到 zhenzhenApiKey）

@@ -136,11 +136,13 @@ export interface AdvancedProviderSummary {
   jimengConfigured: boolean;
 }
 
-export interface LlmApiKeyConfig {
+export interface LlmConfig {
   id: string;
   label: string;
   apiKey?: string;
   hasApiKey?: boolean;
+  baseUrl?: string;
+  model?: string;
   isDefault?: boolean;
 }
 
@@ -221,7 +223,8 @@ export interface ApiSettings {
   rhApiKey: string;
   rhBaseUrl: string; // https://www.runninghub.cn
   llmApiKey: string;
-  llmApiKeys?: LlmApiKeyConfig[];
+  llmApiKeys?: LlmConfig[];
+  llmConfigs?: LlmConfig[];
   llmBaseUrl: string;
   llmModel: string;
   // 分类 API Key（留空时 fallback 到 zhenzhenApiKey）

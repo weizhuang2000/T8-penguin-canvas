@@ -25,7 +25,7 @@ import {
   type ExtractedDocument,
 } from '../../services/api';
 import { generateExternalLlm, generateLlm } from '../../services/generation';
-import { DEFAULT_LLM_MODEL, LLM_MODELS } from '../../providers/models';
+import { DEFAULT_LLM_MODEL } from '../../providers/models';
 import {
   buildElevationAnalysisMessages,
   buildElevationOutputs,
@@ -197,15 +197,15 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
 
   const advancedProviders = useApiKeysStore((state) => state.settings.advancedProviders);
   const configuredLlmModel = useApiKeysStore((state) => state.settings.llmModel)?.trim() || DEFAULT_LLM_MODEL;
-  const llmApiKeys = useApiKeysStore((state) => state.settings.llmApiKeys) || [];
-  const llmKeyOptions = useMemo(() => {
-    const saved = llmApiKeys.filter((item) => item && (item.hasApiKey || item.apiKey));
-    return saved.length > 0 ? saved : [{ id: 'default', label: '默认 LLM Key' }];
-  }, [llmApiKeys]);
+  const llmConfigs = useApiKeysStore((state) => state.settings.llmConfigs || state.settings.llmApiKeys) || [];
+  const llmConfigOptions = useMemo(() => {
+    const saved = llmConfigs.filter((item) => item && (item.hasApiKey || item.apiKey || item.baseUrl || item.model));
+    return saved.length > 0 ? saved : [{ id: 'default', label: '默认 LLM', model: configuredLlmModel }];
+  }, [configuredLlmModel, llmConfigs]);
   const selectedLlmKeyId = String(d.llmKeyId || '').trim();
-  const activeLlmKey = llmKeyOptions.find((item) => item.id === selectedLlmKeyId)
-    || llmKeyOptions.find((item) => item.isDefault)
-    || llmKeyOptions[0];
+  const activeLlmConfig = llmConfigOptions.find((item) => item.id === selectedLlmKeyId)
+    || llmConfigOptions.find((item) => item.isDefault)
+    || llmConfigOptions[0];
   const llmProviders = useMemo(() => advancedProvidersForNode(advancedProviders, 'llm'), [advancedProviders]);
   const providerSelection = useMemo(
     () => resolveAdvancedProviderSelection(advancedProviders, 'llm', {
@@ -222,25 +222,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
   const externalModel = providerSelection.providerModel || externalModels[0] || '';
   const savedModel = String(d.model || '').trim();
   const shouldUseConfiguredDefault = savedModel === DEFAULT_LLM_MODEL && configuredLlmModel !== DEFAULT_LLM_MODEL && !d.modelMigratedFromDefault;
-  const model = shouldUseConfiguredDefault ? configuredLlmModel : (savedModel || configuredLlmModel);
-  const llmModelOptions = useMemo(() => {
-    const options = LLM_MODELS.filter((item) => {
-      if (item.imageOutput) return false;
-      return configuredLlmModel === DEFAULT_LLM_MODEL || item.id !== DEFAULT_LLM_MODEL;
-    });
-    if (!options.some((item) => item.id === model)) {
-      return [
-        {
-          id: model,
-          label: `${model}（设置默认）`,
-          provider: 'llm-direct' as const,
-          vision: true,
-        },
-        ...options,
-      ];
-    }
-    return options;
-  }, [model]);
+  const model = activeLlmConfig?.model || (shouldUseConfiguredDefault ? configuredLlmModel : (savedModel || configuredLlmModel));
 
   const outputs = useMemo(
     () => buildElevationOutputs({
@@ -365,7 +347,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
         : await generateLlm({
             model,
             messages: messages as any,
-            llmKeyId: activeLlmKey?.id,
+            llmKeyId: activeLlmConfig?.id,
             temperature: 0.2,
             max_tokens: maxTokens,
           });
@@ -657,7 +639,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
               <select
                 className={FIELD}
                 disabled={isReadonly || busy}
-                value={externalSelected ? providerSelection.providerId : `llm-key:${activeLlmKey?.id || 'default'}`}
+                value={externalSelected ? providerSelection.providerId : `llm-key:${activeLlmConfig?.id || 'default'}`}
                 onChange={(event) => {
                   const nextId = event.target.value;
                   if (nextId.startsWith('llm-key:')) {
@@ -670,7 +652,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
                   update({ providerSource: provider.protocol, providerId: provider.id, providerModel: models[0] || '' });
                 }}
               >
-                {llmKeyOptions.map((item) => <option key={item.id} value={`llm-key:${item.id}`}>{item.label || item.id}</option>)}
+                {llmConfigOptions.map((item) => <option key={item.id} value={`llm-key:${item.id}`}>{item.label || item.id}{item.model ? ` · ${item.model}` : ''}</option>)}
                 {llmProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}
               </select>
               {externalSelected ? (
@@ -683,16 +665,12 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
                   {externalModels.map((item) => <option key={item} value={item}>{item}</option>)}
                 </select>
               ) : (
-                <select
+                <input
                   className={FIELD}
-                  disabled={isReadonly || busy}
+                  disabled
                   value={model}
-                  onChange={(event) => update({ model: event.target.value })}
-                >
-                  {llmModelOptions.map((item) => (
-                    <option key={item.id} value={item.id}>{item.label}</option>
-                  ))}
-                </select>
+                  title="模型由所选 LLM 配置决定"
+                />
               )}
           </div>
           <input

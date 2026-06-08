@@ -14,7 +14,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { LLM_MODELS, DEFAULT_LLM_MODEL, isImageOutputLlm } from '../../providers/models';
+import { DEFAULT_LLM_MODEL, isImageOutputLlm } from '../../providers/models';
 import {
   fileToDataUrl,
   generateExternalLlm,
@@ -164,31 +164,17 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
 
   const d = data as any;
   const configuredLlmModel = useApiKeysStore((s) => s.settings.llmModel)?.trim() || DEFAULT_LLM_MODEL;
-  const llmApiKeys = useApiKeysStore((s) => s.settings.llmApiKeys) || [];
-  const llmKeyOptions = useMemo(() => {
-    const saved = llmApiKeys.filter((item) => item && (item.hasApiKey || item.apiKey));
-    return saved.length > 0 ? saved : [{ id: 'default', label: '默认 LLM Key' }];
-  }, [llmApiKeys]);
+  const llmConfigs = useApiKeysStore((s) => s.settings.llmConfigs || s.settings.llmApiKeys) || [];
+  const llmConfigOptions = useMemo(() => {
+    const saved = llmConfigs.filter((item) => item && (item.hasApiKey || item.apiKey || item.baseUrl || item.model));
+    return saved.length > 0 ? saved : [{ id: 'default', label: '默认 LLM', model: configuredLlmModel }];
+  }, [configuredLlmModel, llmConfigs]);
   const selectedLlmKeyId = String(d?.llmKeyId || '').trim();
-  const activeLlmKey = llmKeyOptions.find((item) => item.id === selectedLlmKeyId)
-    || llmKeyOptions.find((item) => item.isDefault)
-    || llmKeyOptions[0];
-  const model: string = d?.model || configuredLlmModel;
+  const activeLlmConfig = llmConfigOptions.find((item) => item.id === selectedLlmKeyId)
+    || llmConfigOptions.find((item) => item.isDefault)
+    || llmConfigOptions[0];
+  const model: string = activeLlmConfig?.model || configuredLlmModel;
   const advancedProviders = useApiKeysStore((s) => s.settings.advancedProviders);
-  const llmModelOptions = useMemo(() => {
-    const options = LLM_MODELS.filter((item) => (
-      configuredLlmModel === DEFAULT_LLM_MODEL || item.id !== DEFAULT_LLM_MODEL
-    ));
-    if (!options.some((item) => item.id === model)) {
-      options.unshift({
-        id: model,
-        label: `${model}（设置默认）`,
-        provider: 'llm-direct',
-        vision: true,
-      });
-    }
-    return options;
-  }, [configuredLlmModel, model]);
   const llmAdvancedProviders = useMemo(
     () => advancedProvidersForNode(advancedProviders, 'llm'),
     [advancedProviders],
@@ -377,7 +363,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
         const ctrl = new AbortController();
         abortRef.current = ctrl;
         const { content } = await generateLlmStream(
-          { model, messages, llmKeyId: activeLlmKey?.id, temperature, max_tokens: maxTokens },
+          { model, messages, llmKeyId: activeLlmConfig?.id, temperature, max_tokens: maxTokens },
           {
             onDelta: (chunk) => setStreamingText((s) => s + chunk),
             signal: ctrl.signal,
@@ -411,7 +397,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
               max_tokens: maxTokens,
               providerParams: d?.providerParams || {},
             })
-          : await generateLlm({ model, messages, llmKeyId: activeLlmKey?.id, temperature, max_tokens: maxTokens });
+          : await generateLlm({ model, messages, llmKeyId: activeLlmConfig?.id, temperature, max_tokens: maxTokens });
         const replyText = res.content || '';
         const imgs = res.imageUrls || [];
         const finalHistory: ChatTurn[] = [
@@ -656,7 +642,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
                 <div>
                   <label className="text-[10px] text-white/50 block mb-1">平台</label>
                   <select
-                    value={isExternalSelected ? providerSelection.providerId : `llm-key:${activeLlmKey?.id || 'default'}`}
+                    value={isExternalSelected ? providerSelection.providerId : `llm-key:${activeLlmConfig?.id || 'default'}`}
                     onChange={(e) => {
                       const nextId = e.target.value;
                       if (nextId.startsWith('llm-key:')) {
@@ -676,9 +662,9 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
                     style={{ background: '#18181b', color: '#ffffff' }}
                     className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
                   >
-                    {llmKeyOptions.map((item) => (
+                    {llmConfigOptions.map((item) => (
                       <option key={item.id} value={`llm-key:${item.id}`} style={{ background: '#18181b', color: '#ffffff' }}>
-                        {item.label || item.id}
+                        {item.label || item.id}{item.model ? ` · ${item.model}` : ''}
                       </option>
                     ))}
                     {llmAdvancedProviders.map((provider) => (
@@ -690,7 +676,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
                 </div>
                 {isExternalSelected && providerSelection.provider && (
                   <div>
-                    <label className="text-[10px] text-white/50 block mb-1">外部模型</label>
+                    <label className="text-[10px] text-white/50 block mb-1">????</label>
                     <select
                       value={externalProviderModel}
                       onChange={(e) => update({ providerModel: e.target.value })}
@@ -705,29 +691,13 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
                 )}
                 {savedExternalMissing && (
                   <div className="text-[10px] text-amber-200 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1">
-                    当前画布记录的扩展平台未启用或不存在，已临时回到默认来源。
+                    ?????????????????????????????
                   </div>
                 )}
               </div>
             )}
           </div>
         )}
-
-        {/* 模型 */}
-        {!isExternalSelected && <div>
-          <label className="text-[10px] text-white/50 block mb-1">模型</label>
-          <select
-            value={model}
-            onChange={(e) => update({ model: e.target.value })}
-            className="w-full rounded bg-white/5 border border-white/10 px-2 py-1 text-xs text-white outline-none focus:border-white/30"
-          >
-            {llmModelOptions.map((m) => (
-              <option key={m.id} value={m.id} className="bg-zinc-900">
-                {m.label}
-              </option>
-            ))}
-          </select>
-        </div>}
 
         {/* 温度 / max_tokens / 流式 */}
         <div className="grid grid-cols-3 gap-1.5">

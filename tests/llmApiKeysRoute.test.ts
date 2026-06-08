@@ -14,19 +14,27 @@ async function listen(app: any) {
   });
 }
 
-test('proxy llm uses selected saved LLM API key', async (t) => {
+test('proxy llm uses selected saved LLM config', async (t) => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 't8-llm-keys-'));
   t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
 
-  const upstreamApp = express();
-  upstreamApp.use(express.json({ limit: '1mb' }));
+  const backupUpstreamApp = express();
+  backupUpstreamApp.use(express.json({ limit: '1mb' }));
   const upstreamCalls: any[] = [];
-  upstreamApp.post('/v1/chat/completions', (req, res) => {
+  backupUpstreamApp.post('/v1/chat/completions', (req, res) => {
     upstreamCalls.push({ auth: req.header('authorization'), body: req.body });
     res.json({ choices: [{ message: { content: 'hello backup' } }] });
   });
-  const upstreamServer = await listen(upstreamApp);
-  t.after(() => upstreamServer.close());
+  const backupUpstreamServer = await listen(backupUpstreamApp);
+  t.after(() => backupUpstreamServer.close());
+
+  const mainUpstreamApp = express();
+  mainUpstreamApp.use(express.json({ limit: '1mb' }));
+  mainUpstreamApp.post('/v1/chat/completions', (_req, res) => {
+    res.status(500).json({ error: { message: 'wrong upstream' } });
+  });
+  const mainUpstreamServer = await listen(mainUpstreamApp);
+  t.after(() => mainUpstreamServer.close());
 
   const config = require('../backend/src/config.js');
   const oldConfig = {
@@ -61,11 +69,22 @@ test('proxy llm uses selected saved LLM API key', async (t) => {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      llmBaseUrl: `http://127.0.0.1:${upstreamServer.address().port}/v1`,
-      llmModel: 'gpt-test',
-      llmApiKeys: [
-        { id: 'main', label: 'Main', apiKey: 'sk-main-secret', isDefault: true },
-        { id: 'backup', label: 'Backup', apiKey: 'sk-backup-secret' },
+      llmConfigs: [
+        {
+          id: 'main',
+          label: 'Main',
+          apiKey: 'sk-main-secret',
+          baseUrl: `http://127.0.0.1:${mainUpstreamServer.address().port}/v1`,
+          model: 'gpt-main',
+          isDefault: true,
+        },
+        {
+          id: 'backup',
+          label: 'Backup',
+          apiKey: 'sk-backup-secret',
+          baseUrl: `http://127.0.0.1:${backupUpstreamServer.address().port}/v1`,
+          model: 'gpt-backup',
+        },
       ],
     }),
   }).then((res) => res.json());
@@ -76,7 +95,6 @@ test('proxy llm uses selected saved LLM API key', async (t) => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       llmKeyId: 'backup',
-      model: 'gpt-test',
       messages: [{ role: 'user', content: 'hello' }],
     }),
   }).then((res) => res.json());
@@ -84,5 +102,6 @@ test('proxy llm uses selected saved LLM API key', async (t) => {
   assert.equal(llm.success, true);
   assert.equal(llm.data.content, 'hello backup');
   assert.equal(upstreamCalls[0].auth, 'Bearer sk-backup-secret');
+  assert.equal(upstreamCalls[0].body.model, 'gpt-backup');
   assert.equal(JSON.stringify(llm).includes('sk-backup-secret'), false);
 });

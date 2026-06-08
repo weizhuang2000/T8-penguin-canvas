@@ -151,19 +151,29 @@ function loadRawSettings() {
   }
 }
 
-function resolveLlmApiKey(settings, keyId = '') {
+function resolveLlmConfig(settings, keyId = '') {
   if (!settings) return null;
-  const keys = settingsRouter.normalizeLlmApiKeys(settings.llmApiKeys, settings.llmApiKeys, settings.llmApiKey);
+  const configs = settingsRouter.normalizeLlmConfigs(
+    settings.llmConfigs || settings.llmApiKeys,
+    settings.llmConfigs || settings.llmApiKeys,
+    { apiKey: settings.llmApiKey, baseUrl: settings.llmBaseUrl, model: settings.llmModel },
+  );
   const requestedId = String(keyId || '').trim();
   const selected = requestedId
-    ? keys.find((item) => item.id === requestedId)
-    : (keys.find((item) => item.isDefault) || keys[0]);
+    ? configs.find((item) => item.id === requestedId)
+    : (configs.find((item) => item.isDefault) || configs[0]);
   if (requestedId && !selected) {
-    return { error: '选择的 LLM API Key 不存在或已被删除' };
+    return { error: '选择的 LLM 配置不存在或已被删除' };
   }
   const apiKey = selected?.apiKey || settings.llmApiKey || '';
   if (!apiKey) return { error: '未配置 LLM 独立 API Key' };
-  return { apiKey, keyId: selected?.id || 'default', label: selected?.label || '默认 LLM Key' };
+  return {
+    apiKey,
+    baseUrl: selected?.baseUrl || settings.llmBaseUrl,
+    model: selected?.model || settings.llmModel,
+    keyId: selected?.id || 'default',
+    label: selected?.label || '默认 LLM',
+  };
 }
 
 // ========== 工具: 按提示词（模型名 / endpoint / 路由名）选择分类 API Key ==========
@@ -1341,11 +1351,11 @@ router.post('/llm', async (req, res) => {
     return res.status(400).json({ success: false, error: '未配置 LLM 独立 API Key' });
   }
   const { model: requestedModel, messages, temperature, max_tokens, stream, llmKeyId } = req.body || {};
-  const selectedKey = resolveLlmApiKey(settings, llmKeyId);
-  if (!selectedKey || selectedKey.error) {
-    return res.status(400).json({ success: false, error: selectedKey?.error || '未配置 LLM 独立 API Key' });
+  const selectedConfig = resolveLlmConfig(settings, llmKeyId);
+  if (!selectedConfig || selectedConfig.error) {
+    return res.status(400).json({ success: false, error: selectedConfig?.error || '未配置 LLM 独立 API Key' });
   }
-  const model = String(requestedModel || settings.llmModel || config.LLM_DEFAULT_MODEL || '').trim();
+  const model = String(requestedModel || selectedConfig.model || settings.llmModel || config.LLM_DEFAULT_MODEL || '').trim();
   if (!model || !messages) {
     return res.status(400).json({ success: false, error: 'model 和 messages 必填' });
   }
@@ -1360,7 +1370,7 @@ router.post('/llm', async (req, res) => {
     return res.status(400).json({ success: false, error: e.message || '参考图预处理失败' });
   }
 
-  const upstream = resolveLlmChatCompletionsUrl(settings.llmBaseUrl, config.ZHENZHEN_BASE_URL);
+  const upstream = resolveLlmChatCompletionsUrl(selectedConfig.baseUrl, config.ZHENZHEN_BASE_URL);
   const payload = {
     model,
     messages: normalizedMessages,
@@ -1374,7 +1384,7 @@ router.post('/llm', async (req, res) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${selectedKey.apiKey}`,
+        Authorization: `Bearer ${selectedConfig.apiKey}`,
       },
       body: JSON.stringify(payload),
     });
