@@ -214,6 +214,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   // 本地 Eagle API 地址
   const [eagleApiBaseInput, setEagleApiBaseInput] = useState<string>('');
   // 分类独立 Key 区块折叠状态（新手友好：默认折叠，点击展开）
+  const [llmSectionOpen, setLlmSectionOpen] = useState(false);
   const [classifiedOpen, setClassifiedOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [advancedProvidersInput, setAdvancedProvidersInput] = useState<AdvancedProviderConfig[]>([]);
@@ -483,6 +484,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
 
   const handleAddLlmConfig = () => {
     const id = makeLlmKeyId();
+    setLlmSectionOpen(true);
     setLlmConfigForms((prev) => [
       ...prev,
       {
@@ -505,7 +507,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       if (next.length === 0) {
         return [{
           id: 'default',
-          label: '?? LLM',
+          label: '默认 LLM',
           apiKey: '',
           apiKeyInput: '',
           hasApiKey: false,
@@ -1235,36 +1237,82 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     );
   };
 
-  const renderLlmConfigs = () => (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className={`text-sm font-medium flex items-center gap-2 ${labelCls}`}>
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            LLM 独立 API Key
-            <span className={`text-[11px] font-normal ${hintCls}`}>· 可配置多个 · 节点里可选择</span>
-          </div>
-          <div className={`text-[11px] mt-1 ${hintCls}`}>
-            留空表示保持该项已保存 Key 不变；默认项用于旧画布和未指定 Key 的节点。
-          </div>
+  const renderLlmConfigs = () => {
+    const totalCount = llmConfigForms.length;
+    const configuredCount = llmConfigForms.filter((item) => item.hasApiKey || item.apiKey || item.apiKeyInput.trim()).length;
+    const defaultConfig = llmConfigForms.find((item) => item.isDefault) || llmConfigForms[0];
+
+    return (
+      <div className={`pt-3 border-t ${isPixel ? 'border-[var(--px-ink)]/30' : isDark ? 'border-white/10' : 'border-black/10'}`}>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setLlmSectionOpen((v) => !v)}
+            aria-expanded={llmSectionOpen}
+            className={
+              isPixel
+                ? `flex-1 min-w-0 flex items-center gap-2 px-3 py-2 px-btn ${llmSectionOpen ? 'px-btn--mint' : ''}`
+                : `flex-1 min-w-0 flex items-center gap-2 px-3 py-2 rounded-lg border transition ${
+                    isDark
+                      ? 'border-white/10 hover:bg-white/5 text-white/85'
+                      : 'border-black/10 hover:bg-black/5 text-zinc-800'
+                  }`
+            }
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+            <span className={`text-xs font-bold shrink-0 ${isPixel ? 'text-[var(--px-ink)]' : ''}`}>LLM 独立配置</span>
+            <span
+              className={
+                isPixel
+                  ? 'px-1.5 py-0.5 text-[10px] border border-[var(--px-ink)] bg-white text-[var(--px-ink)]'
+                  : `px-1.5 py-0.5 text-[10px] rounded border ${
+                      configuredCount > 0
+                        ? isDark
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                          : 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                        : isDark
+                          ? 'bg-white/10 text-white/60 border-white/10'
+                          : 'bg-black/5 text-zinc-500 border-black/10'
+                    }`
+              }
+            >
+              已配置 {configuredCount}/{totalCount}
+            </span>
+            <span className={`hidden sm:inline truncate text-[11px] ${hintCls}`}>
+              默认：{defaultConfig?.label || '默认 LLM'} · {defaultConfig?.model || DEFAULT_LLM_MODEL}
+            </span>
+            <span className={`ml-auto flex items-center gap-1 text-[11px] ${hintCls}`}>
+              {llmSectionOpen ? '收起' : '展开'}
+              {llmSectionOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={handleAddLlmConfig}
+            className={
+              isPixel
+                ? 'px-btn px-btn--mint flex items-center gap-1 text-[11px] shrink-0'
+                : `shrink-0 inline-flex items-center gap-1 px-2.5 py-2 rounded-md text-xs border ${
+                    isDark
+                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20'
+                      : 'border-emerald-500/30 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                  }`
+            }
+          >
+            <Plus size={13} /> 新增
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={handleAddLlmConfig}
-          className={
-            isPixel
-              ? 'px-btn px-btn--mint flex items-center gap-1 text-[11px]'
-              : `shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs border ${
-                  isDark
-                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20'
-                    : 'border-emerald-500/30 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                }`
-          }
-        >
-          <Plus size={13} /> 新增
-        </button>
-      </div>
-      <div className="space-y-2">
+        {!llmSectionOpen && (
+          <div className={`text-[11px] mt-2 ${hintCls}`}>
+            每套 LLM 配置包含 API Key、Base URL 和模型名称；节点里可按配置名称选择使用。
+          </div>
+        )}
+        {llmSectionOpen && (
+          <div className="mt-3 space-y-3">
+            <div className={`text-[11px] leading-relaxed ${hintCls}`}>
+              留空表示保持该项已保存 Key 不变；默认项用于旧画布和未指定配置的节点。
+            </div>
+            <div className="space-y-2">
         {llmConfigForms.map((item, index) => {
           const hasSaved = !!item.hasApiKey || !!item.apiKey;
           const maskedDisplay = toMaskedDisplay(item.apiKey);
@@ -1362,9 +1410,12 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
             </div>
           );
         })}
+            </div>
+          </div>
+        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div

@@ -612,7 +612,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
           <div className="text-[10px] text-white/40 truncate">
             {isExternalSelected && providerSelection.provider
               ? `${providerSelection.provider.label || providerSelection.provider.id} · ${externalProviderModel || '未选模型'}`
-              : '独立 Key · 5 模型 · 多模态 · 流式'}
+              : `${activeLlmConfig?.label || '默认 LLM'} · ${model || '未选模型'}`}
           </div>
         </div>
         {history.length > 0 && (
@@ -627,20 +627,20 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
       </div>
 
       <div className="p-2.5 space-y-2" onMouseDown={(e) => e.stopPropagation()}>
-        {llmAdvancedProviders.length > 0 && (
+        {llmConfigOptions.length > 0 && (
           <div className="rounded border border-white/10 bg-white/[0.03] p-2 space-y-2">
             <button
               type="button"
               onClick={() => update({ advancedProviderOpen: !d?.advancedProviderOpen })}
               className="w-full flex items-center justify-between text-[10px] font-semibold text-white/70 hover:text-white"
             >
-              <span>高级来源</span>
-              <span>{isExternalSelected && providerSelection.provider ? providerSelection.provider.label : '默认 LLM Key'}</span>
+              <span>LLM 配置</span>
+              <span>{isExternalSelected && providerSelection.provider ? providerSelection.provider.label : (activeLlmConfig?.label || '默认 LLM')}</span>
             </button>
             {d?.advancedProviderOpen && (
               <div className="space-y-2">
                 <div>
-                  <label className="text-[10px] text-white/50 block mb-1">平台</label>
+                  <label className="text-[10px] text-white/50 block mb-1">来源</label>
                   <select
                     value={isExternalSelected ? providerSelection.providerId : `llm-key:${activeLlmConfig?.id || 'default'}`}
                     onChange={(e) => {
@@ -676,7 +676,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
                 </div>
                 {isExternalSelected && providerSelection.provider && (
                   <div>
-                    <label className="text-[10px] text-white/50 block mb-1">????</label>
+                    <label className="text-[10px] text-white/50 block mb-1">外部模型</label>
                     <select
                       value={externalProviderModel}
                       onChange={(e) => update({ providerModel: e.target.value })}
@@ -691,7 +691,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
                 )}
                 {savedExternalMissing && (
                   <div className="text-[10px] text-amber-200 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1">
-                    ?????????????????????????????
+                    当前画布记录的扩展平台未启用或不存在，已临时回到默认来源。
                   </div>
                 )}
               </div>
