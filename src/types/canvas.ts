@@ -220,7 +220,7 @@ export interface ApiSettings {
   // 三套通用 Key
   zhenzhenApiKey: string;
   enableZhenzhenFallback?: boolean;
-  zhenzhenBaseUrl: string; // 锁定 https://ai.t8star.org
+  zhenzhenBaseUrl: string; // 默认 https://ai.t8star.org，可在设置中调整
   rhApiKey: string;
   rhBaseUrl: string; // https://www.runninghub.cn
   llmApiKey: string;

@@ -152,6 +152,13 @@ function loadRawSettings() {
   }
 }
 
+function zhenzhenBaseUrl(settings) {
+  const normalized = typeof settingsRouter.normalizeZhenzhenBaseUrl === 'function'
+    ? settingsRouter.normalizeZhenzhenBaseUrl(settings?.zhenzhenBaseUrl)
+    : '';
+  return normalized || config.ZHENZHEN_BASE_URL;
+}
+
 function resolveLlmConfig(settings, keyId = '') {
   if (!settings) return null;
   const configs = settingsRouter.normalizeLlmConfigs(
@@ -257,6 +264,7 @@ function ensureKey(settings, res, hint, label) {
 // 防止前端未透传 model 时轮询错误 fallback 到通用 key 导致“令牌不合法”。
 // 30 分钟过期自清。
 const taskKeyMap = new Map();
+const taskBaseUrlMap = new Map();
 const taskImageFormatMap = new Map();
 function rememberTaskKey(taskId, apiKey) {
   if (!taskId || !apiKey) return;
@@ -265,6 +273,14 @@ function rememberTaskKey(taskId, apiKey) {
 }
 function recallTaskKey(taskId) {
   return taskId ? taskKeyMap.get(String(taskId)) : null;
+}
+function rememberTaskBaseUrl(taskId, baseUrl) {
+  if (!taskId || !baseUrl) return;
+  taskBaseUrlMap.set(String(taskId), String(baseUrl));
+  setTimeout(() => taskBaseUrlMap.delete(String(taskId)), 30 * 60 * 1000);
+}
+function recallTaskBaseUrl(taskId) {
+  return taskId ? taskBaseUrlMap.get(String(taskId)) : null;
 }
 function rememberTaskImageFormat(taskId, format) {
   if (!taskId) return;
@@ -615,8 +631,8 @@ async function normalizeLlmMessageImages(messages) {
 //   - nano-banana 图生图: multipart /edits?async=true 添加 image 多个
 //   - Grok Image: JSON /generations?async=true { model, prompt, aspect_ratio, image:[base64...]? }
 // ========================================================================
-async function callImageUpstreamAsync({ apiKey, finalApiModel, paramKind, prompt, n, aspect_ratio, image_size, refs, size, quality, seed }) {
-  const upstreamBase = `${config.ZHENZHEN_BASE_URL}/v1/images`;
+async function callImageUpstreamAsync({ apiKey, baseUrl, finalApiModel, paramKind, prompt, n, aspect_ratio, image_size, refs, size, quality, seed }) {
+  const upstreamBase = `${baseUrl || config.ZHENZHEN_BASE_URL}/v1/images`;
   const auth = `Bearer ${apiKey}`;
   const ar = String(aspect_ratio || '').trim();
   const isAuto = !ar || ar === 'Auto' || ar === 'AUTO' || ar === 'empty';
@@ -744,7 +760,7 @@ router.post('/image', requireNodePermission('image'), async (req, res) => {
 
   try {
     const r = await callImageUpstreamAsync({
-      apiKey: settings.zhenzhenApiKey, finalApiModel, paramKind,
+      apiKey: settings.zhenzhenApiKey, baseUrl: zhenzhenBaseUrl(settings), finalApiModel, paramKind,
       prompt, n, aspect_ratio, image_size, refs, size, quality, seed,
     });
     const text = await r.text();
@@ -767,7 +783,7 @@ router.post('/image', requireNodePermission('image'), async (req, res) => {
     }
     if (norm.kind === 'async') {
       // 同步接口需要同步返回结果 → 内部轮询
-      const url = await pollImageTask(norm.taskId, settings.zhenzhenApiKey, imageOutputFormat);
+      const url = await pollImageTask(norm.taskId, settings.zhenzhenApiKey, imageOutputFormat, zhenzhenBaseUrl(settings));
       if (!url) return res.status(500).json({ success: false, error: '异步任务轮询超时/失败', taskId: norm.taskId });
       rememberGeneratedUrls(req, [url], { kind: 'image', prompt, provider: 'zhenzhen', model: finalApiModel, taskId: norm.taskId });
       return res.json({ success: true, data: { urls: [url], raw: data, taskId: norm.taskId, model: finalApiModel, prompt } });
@@ -803,7 +819,7 @@ router.post('/image/submit', requireNodePermission('image'), async (req, res) =>
 
     // 完全对齐主项目 gpt-image-2-web:走 ?async=true,GPT2 强制 multipart edits + 白图占位
     const r = await callImageUpstreamAsync({
-      apiKey: settings.zhenzhenApiKey, finalApiModel, paramKind,
+      apiKey: settings.zhenzhenApiKey, baseUrl: zhenzhenBaseUrl(settings), finalApiModel, paramKind,
       prompt, n, aspect_ratio, image_size, refs, size, quality, seed,
     });
     const text = await r.text();
@@ -822,6 +838,7 @@ router.post('/image/submit', requireNodePermission('image'), async (req, res) =>
     }
     if (norm.kind === 'async') {
       rememberTaskKey(norm.taskId, settings.zhenzhenApiKey);
+      rememberTaskBaseUrl(norm.taskId, zhenzhenBaseUrl(settings));
       rememberTaskImageFormat(norm.taskId, imageOutputFormat);
       return res.json({ success: true, data: { sync: false, taskId: norm.taskId, status: 'pending', progress: '0%', raw: data } });
     }
@@ -847,7 +864,7 @@ router.get('/image/status/:tid', requireNodePermission('image'), async (req, res
   const tid = req.params.tid;
   const imageOutputFormat = normalizeImageOutputFormat(req.query.outputFormat || recallTaskImageFormat(tid));
   try {
-    const url = `${config.ZHENZHEN_BASE_URL}/v1/images/tasks/${encodeURIComponent(tid)}`;
+    const url = `${recallTaskBaseUrl(tid) || zhenzhenBaseUrl(settings)}/v1/images/tasks/${encodeURIComponent(tid)}`;
     const r = await fetch(url, { headers: { Authorization: `Bearer ${settings.zhenzhenApiKey}` } });
     const text = await r.text();
     let data; try { data = JSON.parse(text); } catch { data = { _raw: text }; }
@@ -881,8 +898,8 @@ router.get('/image/status/:tid', requireNodePermission('image'), async (req, res
 // ========== 图像异步任务轮询(同步代理内部使用,路径对齐主项目 /v1/images/tasks/) ==========
 // 轮询上限:1800 × 2s = 3600s = 60 分钟,与前端 ImageNode 标准路径保持一致,
 // 避免 GPT2 复杂 prompt / 多参考图任务被 120s 提前中断。
-async function pollImageTask(taskId, apiKey, outputFormat = 'jpg', maxRetries = 1800, interval = 2000) {
-  const url = `${config.ZHENZHEN_BASE_URL}/v1/images/tasks/${encodeURIComponent(taskId)}`;
+async function pollImageTask(taskId, apiKey, outputFormat = 'jpg', baseUrl = config.ZHENZHEN_BASE_URL, maxRetries = 1800, interval = 2000) {
+  const url = `${baseUrl || config.ZHENZHEN_BASE_URL}/v1/images/tasks/${encodeURIComponent(taskId)}`;
   for (let i = 0; i < maxRetries; i++) {
     await new Promise(r => setTimeout(r, interval));
     try {
@@ -988,7 +1005,7 @@ router.post('/image/fal/submit', requireNodePermission('image'), async (req, res
   // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
   if (!ensureKey(settings, res, apiModel || '', '图像 FAL')) return;
   const apiKey = settings.zhenzhenApiKey;
-  const baseUrl = config.ZHENZHEN_BASE_URL;
+  const baseUrl = zhenzhenBaseUrl(settings);
 
   if (!apiModel) return res.status(400).json({ success: false, error: 'apiModel 必填' });
   if (!prompt) return res.status(400).json({ success: false, error: 'prompt 不得为空' });
@@ -1028,7 +1045,7 @@ router.post('/image/fal/submit', requireNodePermission('image'), async (req, res
       if (useEdit && trimmedRefs.length) {
         const urls = [];
         for (let i = 0; i < trimmedRefs.length; i++) {
-          const u = await uploadRefToZhenzhen(trimmedRefs[i], apiKey);
+          const u = await uploadRefToZhenzhen(trimmedRefs[i], apiKey, baseUrl);
           if (u) urls.push(u);
           else throw new Error(`FAL 参考图 #${i + 1} 上传失败`);
         }
@@ -1060,7 +1077,7 @@ router.post('/image/fal/submit', requireNodePermission('image'), async (req, res
             const conv = await refToBananaImage(r);
             if (conv) imgs.push(conv);
           } else {
-            const u = await uploadRefToZhenzhen(r, apiKey);
+            const u = await uploadRefToZhenzhen(r, apiKey, baseUrl);
             if (u) imgs.push(u);
             else throw new Error(`FAL 参考图 #${i + 1} 上传失败`);
           }
@@ -1135,7 +1152,7 @@ router.post('/image/fal/query', requireNodePermission('image'), async (req, res)
   // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
   if (!ensureKey(settings, res, endpoint || rawUrl || '', '图像 FAL')) return;
   const apiKey = settings.zhenzhenApiKey;
-  const baseUrl = config.ZHENZHEN_BASE_URL;
+  const baseUrl = zhenzhenBaseUrl(settings);
   const responseUrl = fixFalResponseUrl(rawUrl, baseUrl, endpoint, requestId);
   if (!responseUrl) return res.status(400).json({ success: false, error: 'responseUrl 或 (endpoint+requestId) 必填' });
 
@@ -1205,7 +1222,7 @@ router.post('/mj/imagine', requireNodePermission('image'), async (req, res) => {
   if (!ensureKey(settings, res, 'mj', 'MJ')) return;
   const body = req.body || {};
   const speedSeg = mjSpeedSeg(body.speed);
-  const url = `${config.ZHENZHEN_BASE_URL}/${speedSeg}/mj/submit/imagine`;
+  const url = `${zhenzhenBaseUrl(settings)}/${speedSeg}/mj/submit/imagine`;
   // 严格对齐主项目 runMJ payload（index.html L4547~L4587）
   const payload = {
     base64Array: Array.isArray(body.base64Array) ? body.base64Array : [],
@@ -1258,7 +1275,7 @@ router.get('/mj/task/:id', requireNodePermission('image'), async (req, res) => {
   const taskId = req.params.id;
   const speedSeg = mjSpeedSeg(req.query.speed);
   if (!taskId) return res.status(400).json({ success: false, error: 'taskId 必填' });
-  const url = `${config.ZHENZHEN_BASE_URL}/${speedSeg}/mj/task/${encodeURIComponent(taskId)}/fetch`;
+  const url = `${zhenzhenBaseUrl(settings)}/${speedSeg}/mj/task/${encodeURIComponent(taskId)}/fetch`;
   try {
     const r = await fetch(url, {
       method: 'GET',
@@ -1314,7 +1331,7 @@ router.post('/mj/upload', requireNodePermission('image'), async (req, res) => {
   const { base64Data, speed } = req.body || {};
   if (!base64Data) return res.status(400).json({ success: false, error: 'base64Data 不得为空' });
   const speedSeg = mjSpeedSeg(speed);
-  const url = `${config.ZHENZHEN_BASE_URL}/${speedSeg}/mj/submit/upload-discord-images`;
+  const url = `${zhenzhenBaseUrl(settings)}/${speedSeg}/mj/submit/upload-discord-images`;
   const payload = { base64Array: [base64Data], instanceId: '', notifyHook: '' };
   try {
     const r = await fetch(url, {
@@ -1371,7 +1388,7 @@ router.post('/llm', requireNodePermission('llm'), async (req, res) => {
     return res.status(400).json({ success: false, error: e.message || '参考图预处理失败' });
   }
 
-  const upstream = resolveLlmChatCompletionsUrl(selectedConfig.baseUrl, config.ZHENZHEN_BASE_URL);
+  const upstream = resolveLlmChatCompletionsUrl(selectedConfig.baseUrl, zhenzhenBaseUrl(settings));
   const payload = {
     model,
     messages: normalizedMessages,
@@ -1477,7 +1494,7 @@ router.post('/llm', requireNodePermission('llm'), async (req, res) => {
 
 // 上传本地/远端参考素材到上游 /v1/files 取 URL
 // 对齐 gpt-image-2-web 的 uploadFileToAPI: Seedance 的图像、视频、音频都不能直接传 /files/* 本地 URL。
-async function uploadRefToZhenzhen(ref, apiKey) {
+async function uploadRefToZhenzhen(ref, apiKey, baseUrl = config.ZHENZHEN_BASE_URL) {
   if (typeof ref !== 'string' || !ref) return null;
   const trimmed = ref.trim();
   if (/^asset-[a-z0-9_-]+$/i.test(trimmed)) return trimmed;
@@ -1508,7 +1525,7 @@ async function uploadRefToZhenzhen(ref, apiKey) {
   const fd = new FormData();
   const blob = new Blob([buf], { type: mime });
   fd.append('file', blob, `ref_${Date.now()}.${ext}`);
-  const upR = await fetch(`${config.ZHENZHEN_BASE_URL}/v1/files`, {
+  const upR = await fetch(`${baseUrl || config.ZHENZHEN_BASE_URL}/v1/files`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}` },
     body: fd,
@@ -1617,7 +1634,7 @@ router.post('/video/fal/submit', requireNodePermission('video'), async (req, res
   // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
   if (!ensureKey(settings, res, effectiveApiModel || '', '视频 FAL')) return;
   const apiKey = settings.zhenzhenApiKey;
-  const baseUrl = config.ZHENZHEN_BASE_URL;
+  const baseUrl = zhenzhenBaseUrl(settings);
 
   if (!rawApiModel) return res.status(400).json({ success: false, error: 'apiModel 必填' });
   if (!prompt) return res.status(400).json({ success: false, error: 'prompt 不得为空' });
@@ -1652,7 +1669,7 @@ router.post('/video/fal/submit', requireNodePermission('video'), async (req, res
             const conv = await refToBananaImage(trimmedRefs[i]);
             if (conv) imgArr.push(conv);
           } else {
-            const u = await uploadRefToZhenzhen(trimmedRefs[i], apiKey);
+            const u = await uploadRefToZhenzhen(trimmedRefs[i], apiKey, baseUrl);
             if (u) imgArr.push(u);
             else throw new Error(`FAL 参考图 #${i + 1} 上传失败`);
           }
@@ -1682,7 +1699,7 @@ router.post('/video/fal/submit', requireNodePermission('video'), async (req, res
         if (!hasImg) throw new Error('Grok Video 1.5 requires one uploaded image');
         const imgData = useBase64
           ? await refToBananaImage(trimmedRefs[0])
-          : await uploadRefToZhenzhen(trimmedRefs[0], apiKey);
+          : await uploadRefToZhenzhen(trimmedRefs[0], apiKey, baseUrl);
         if (imgData) payload.image_url = imgData;
         else throw new Error('Grok Video 1.5 参考图处理失败');
       } else if (mode === 'reference_to_video') {
@@ -1692,7 +1709,7 @@ router.post('/video/fal/submit', requireNodePermission('video'), async (req, res
         for (let i = 0; i < uploadRefs.length && referenceImageUrls.length < 7; i++) {
           const imgData = useBase64
             ? await refToBananaImage(uploadRefs[i])
-            : await uploadRefToZhenzhen(uploadRefs[i], apiKey);
+            : await uploadRefToZhenzhen(uploadRefs[i], apiKey, baseUrl);
           if (imgData) referenceImageUrls.push(imgData);
           else throw new Error(`Grok FAL 参考图 #${i + 1} 处理失败`);
         }
@@ -1708,7 +1725,7 @@ router.post('/video/fal/submit', requireNodePermission('video'), async (req, res
         if (hasImg) {
           const imgData = useBase64
             ? await refToBananaImage(trimmedRefs[0])
-            : await uploadRefToZhenzhen(trimmedRefs[0], apiKey);
+            : await uploadRefToZhenzhen(trimmedRefs[0], apiKey, baseUrl);
           if (imgData) payload.image_url = imgData;
           else throw new Error('Grok FAL 参考图处理失败');
         }
@@ -1739,7 +1756,7 @@ router.post('/video/fal/submit', requireNodePermission('video'), async (req, res
         const useBase64 = String(image_mode || 'base64') === 'base64';
         const imgData = useBase64
           ? await refToBananaImage(trimmedRefs[0])
-          : await uploadRefToZhenzhen(trimmedRefs[0], apiKey);
+          : await uploadRefToZhenzhen(trimmedRefs[0], apiKey, baseUrl);
         if (imgData) payload.image_url = imgData;
         else throw new Error('Sora2 FAL 参考图处理失败');
       }
@@ -1803,7 +1820,7 @@ router.post('/video/fal/query', requireNodePermission('video'), async (req, res)
   // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
   if (!ensureKey(settings, res, endpoint || rawUrl || '', '视频 FAL')) return;
   const apiKey = settings.zhenzhenApiKey;
-  const baseUrl = config.ZHENZHEN_BASE_URL;
+  const baseUrl = zhenzhenBaseUrl(settings);
   const responseUrl = fixFalResponseUrl(rawUrl, baseUrl, endpoint, requestId);
   if (!responseUrl) return res.status(400).json({ success: false, error: 'responseUrl 或 (endpoint+requestId) 必填' });
 
@@ -1863,7 +1880,8 @@ router.post('/video/submit', requireNodePermission('video'), async (req, res) =>
   if (!model || !prompt) {
     return res.status(400).json({ success: false, error: 'model 和 prompt 必填' });
   }
-  const upstream = `${config.ZHENZHEN_BASE_URL}/v2/videos/generations`;
+  const baseUrl = zhenzhenBaseUrl(settings);
+  const upstream = `${baseUrl}/v2/videos/generations`;
   const apiKey = settings.zhenzhenApiKey;
   const lowerModel = String(model).toLowerCase();
   const isGrok = lowerModel.includes('grok');
@@ -1885,7 +1903,7 @@ router.post('/video/submit', requireNodePermission('video'), async (req, res) =>
         const refs = images.slice(0, 7); // Grok 最多 7 张
         const urls = [];
         for (let i = 0; i < refs.length; i++) {
-          const u = await uploadRefToZhenzhen(refs[i], apiKey);
+          const u = await uploadRefToZhenzhen(refs[i], apiKey, baseUrl);
           if (u) urls.push(u);
           else throw new Error(`参考图 #${i + 1} 上传失败`);
         }
@@ -1922,6 +1940,7 @@ router.post('/video/submit', requireNodePermission('video'), async (req, res) =>
     const taskId = data?.task_id || data?.id;
     if (!taskId) return res.status(500).json({ success: false, error: '未获取到 task_id: ' + text.slice(0, 200) });
     rememberTaskKey(taskId, apiKey);
+    rememberTaskBaseUrl(taskId, baseUrl);
     res.json({ success: true, data: { taskId, raw: data } });
   } catch (e) {
     console.error('proxy/video/submit 错误:', e);
@@ -1942,7 +1961,7 @@ router.get('/video/query', requireNodePermission('video'), async (req, res) => {
     if (!ensureKey(settings, res, String(req.query.model || ''), '视频')) return;
   }
   if (!taskId) return res.status(400).json({ success: false, error: 'taskId 必填' });
-  const upstream = `${config.ZHENZHEN_BASE_URL}/v2/videos/generations/${encodeURIComponent(taskId)}`;
+  const upstream = `${recallTaskBaseUrl(taskId) || zhenzhenBaseUrl(settings)}/v2/videos/generations/${encodeURIComponent(taskId)}`;
   try {
     const r = await fetch(upstream, {
       headers: { Authorization: `Bearer ${settings.zhenzhenApiKey}` },
@@ -2013,7 +2032,7 @@ router.post('/seedance/submit', requireNodePermission('seedance'), async (req, r
   // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
   if (!ensureKey(settings, res, 'seedance', 'Seedance')) return;
   const apiKey = settings.zhenzhenApiKey;
-  const baseUrl = config.ZHENZHEN_BASE_URL;
+  const baseUrl = zhenzhenBaseUrl(settings);
   const {
     model, prompt,
     duration, ratio, resolution,
@@ -2037,7 +2056,7 @@ router.post('/seedance/submit', requireNodePermission('seedance'), async (req, r
     //   - 单独 first_frame(无 last_frame): 不带 role
     //   - 与 last_frame 同时存在: role='first_frame'
     if (hasF) {
-      const u = await uploadRefToZhenzhen(firstFrame, apiKey);
+      const u = await uploadRefToZhenzhen(firstFrame, apiKey, baseUrl);
       if (!u) throw new Error('first_frame 上传失败');
       const e = { type: 'image_url', image_url: { url: u } };
       if (hasL) e.role = 'first_frame';
@@ -2046,7 +2065,7 @@ router.post('/seedance/submit', requireNodePermission('seedance'), async (req, r
 
     // last_frame: 必须与 first_frame 同时
     if (hasL && hasF) {
-      const u = await uploadRefToZhenzhen(lastFrame, apiKey);
+      const u = await uploadRefToZhenzhen(lastFrame, apiKey, baseUrl);
       if (!u) throw new Error('last_frame 上传失败');
       content.push({ type: 'image_url', image_url: { url: u }, role: 'last_frame' });
     }
@@ -2054,7 +2073,7 @@ router.post('/seedance/submit', requireNodePermission('seedance'), async (req, r
     // reference_image
     if (Array.isArray(refImages)) {
       for (let i = 0; i < refImages.length; i++) {
-        const u = await uploadRefToZhenzhen(refImages[i], apiKey);
+        const u = await uploadRefToZhenzhen(refImages[i], apiKey, baseUrl);
         if (u) content.push({ type: 'image_url', image_url: { url: u }, role: 'reference_image' });
       }
     }
@@ -2066,7 +2085,7 @@ router.post('/seedance/submit', requireNodePermission('seedance'), async (req, r
       for (let i = 0; i < videos.length; i++) {
         const v = videos[i];
         if (typeof v === 'string' && v) {
-          const u = await uploadRefToZhenzhen(v, apiKey);
+          const u = await uploadRefToZhenzhen(v, apiKey, baseUrl);
           if (!u) throw new Error(`reference_video ${i + 1} 上传失败`);
           content.push({ type: 'video_url', video_url: { url: u }, role: 'reference_video' });
         }
@@ -2076,7 +2095,7 @@ router.post('/seedance/submit', requireNodePermission('seedance'), async (req, r
       for (let i = 0; i < audios.length; i++) {
         const a = audios[i];
         if (typeof a === 'string' && a) {
-          const u = await uploadRefToZhenzhen(a, apiKey);
+          const u = await uploadRefToZhenzhen(a, apiKey, baseUrl);
           if (!u) throw new Error(`reference_audio ${i + 1} 上传失败`);
           content.push({ type: 'audio_url', audio_url: { url: u }, role: 'reference_audio' });
         }
@@ -2130,7 +2149,7 @@ router.get('/seedance/query', requireNodePermission('seedance'), async (req, res
   if (!taskId) return res.status(400).json({ success: false, error: 'taskId 必填' });
 
   const apiKey = settings.zhenzhenApiKey;
-  const baseUrl = config.ZHENZHEN_BASE_URL;
+  const baseUrl = zhenzhenBaseUrl(settings);
   const upstream = `${baseUrl}/seedance/v3/contents/generations/tasks/${encodeURIComponent(taskId)}`;
 
   try {
@@ -2238,11 +2257,12 @@ router.post('/audio/submit', requireNodePermission('audio'), async (req, res) =>
   }
   const mv = resolveSunoMv(version);
   const auth = { Authorization: `Bearer ${settings.zhenzhenApiKey}`, 'Content-Type': 'application/json' };
+  const baseUrl = zhenzhenBaseUrl(settings);
   try {
     if (m === 'generate') {
       const body = { prompt: prompt || '', tags: tags || '', mv, title: title || '' };
       if (seed && seed > 0) body.seed = seed;
-      const r = await fetch(`${config.ZHENZHEN_BASE_URL}/suno/generate`, { method: 'POST', headers: auth, body: JSON.stringify(body) });
+      const r = await fetch(`${baseUrl}/suno/generate`, { method: 'POST', headers: auth, body: JSON.stringify(body) });
       const text = await r.text();
       let data; try { data = JSON.parse(text); } catch { return res.status(500).json({ success: false, error: '上游响应非 JSON: ' + text.slice(0, 200) }); }
       if (!r.ok) return res.status(r.status).json({ success: false, error: data?.error?.message || `上游 HTTP ${r.status}` });
@@ -2255,7 +2275,7 @@ router.post('/audio/submit', requireNodePermission('audio'), async (req, res) =>
       if (!continue_clip_id) return res.status(400).json({ success: false, error: 'extend 模式需 continue_clip_id' });
       const body = { prompt: prompt || '', tags: tags || '', mv, title: title || '', task: 'upload_extend', continue_clip_id, continue_at: continue_at ?? 28 };
       if (seed && seed > 0) body.seed = seed;
-      const r = await fetch(`${config.ZHENZHEN_BASE_URL}/suno/generate`, { method: 'POST', headers: auth, body: JSON.stringify(body) });
+      const r = await fetch(`${baseUrl}/suno/generate`, { method: 'POST', headers: auth, body: JSON.stringify(body) });
       const text = await r.text();
       let data; try { data = JSON.parse(text); } catch { return res.status(500).json({ success: false, error: '上游响应非 JSON: ' + text.slice(0, 200) }); }
       if (!r.ok) return res.status(r.status).json({ success: false, error: data?.error?.message || `上游 HTTP ${r.status}` });
@@ -2273,7 +2293,7 @@ router.post('/audio/submit', requireNodePermission('audio'), async (req, res) =>
         infill_start_s: null, infill_end_s: null,
       };
       if (seed && seed > 0) body.seed = seed;
-      const r = await fetch(`${config.ZHENZHEN_BASE_URL}/suno/submit/music`, { method: 'POST', headers: auth, body: JSON.stringify(body) });
+      const r = await fetch(`${baseUrl}/suno/submit/music`, { method: 'POST', headers: auth, body: JSON.stringify(body) });
       const text = await r.text();
       let data; try { data = JSON.parse(text); } catch { return res.status(500).json({ success: false, error: '上游响应非 JSON: ' + text.slice(0, 200) }); }
       if (!r.ok) return res.status(r.status).json({ success: false, error: data?.error?.message || `上游 HTTP ${r.status}` });
@@ -2297,8 +2317,9 @@ router.get('/audio/query', requireNodePermission('audio'), async (req, res) => {
   if (!ids) return res.status(400).json({ success: false, error: 'clipIds 或 taskId 必填' });
   // 是否将完成的音频转存到本地 output 目录(默认 true)
   const saveLocal = String(req.query.saveLocal ?? 'true').toLowerCase() !== 'false';
+  const baseUrl = zhenzhenBaseUrl(settings);
   try {
-    const r = await fetch(`${config.ZHENZHEN_BASE_URL}/suno/feed/${encodeURIComponent(ids)}`, {
+    const r = await fetch(`${baseUrl}/suno/feed/${encodeURIComponent(ids)}`, {
       headers: { Authorization: `Bearer ${settings.zhenzhenApiKey}` },
     });
     const text = await r.text();
@@ -2363,7 +2384,7 @@ router.post('/audio/upload', requireNodePermission('audio'), audioUpload.single(
   if (!ensureKey(settings, res, 'suno', 'Suno')) return;
   if (!req.file) return res.status(400).json({ success: false, error: '未接收到音频文件 (field=file)' });
   const apiKey = settings.zhenzhenApiKey;
-  const baseUrl = config.ZHENZHEN_BASE_URL;
+  const baseUrl = zhenzhenBaseUrl(settings);
   const audioBuf = req.file.buffer;
   const filename = req.file.originalname || 'audio.mp3';
   const ext = (filename.split('.').pop() || 'mp3').toLowerCase();

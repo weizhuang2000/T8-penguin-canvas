@@ -103,6 +103,10 @@ function cleanLlmKeyId(value, fallback = 'llm-key') {
   return raw || `${fallback}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
+function normalizeZhenzhenBaseUrl(value) {
+  return normalizeLlmBaseUrl(value, config.ZHENZHEN_BASE_URL);
+}
+
 function normalizeLlmConfigs(raw, current = [], legacy = {}) {
   const currentItems = Array.isArray(current) ? current : [];
   const currentById = new Map(currentItems.map((item) => [String(item?.id || ''), item]));
@@ -190,7 +194,7 @@ function loadSettings({ persistMigrations = true } = {}) {
     const merged = {
       ...DEFAULT_SETTINGS,
       ...data,
-      zhenzhenBaseUrl: config.ZHENZHEN_BASE_URL,
+      zhenzhenBaseUrl: normalizeZhenzhenBaseUrl(data.zhenzhenBaseUrl) || config.ZHENZHEN_BASE_URL,
       llmBaseUrl: normalizeLlmBaseUrl(data.llmBaseUrl, config.ZHENZHEN_BASE_URL) || config.ZHENZHEN_BASE_URL,
       llmModel: normalizeLlmModelName(data.llmModel, config.LLM_DEFAULT_MODEL) || config.LLM_DEFAULT_MODEL,
     };
@@ -265,6 +269,13 @@ router.post('/', requireAdmin, (req, res) => {
   const hasAdvancedProviders = Object.prototype.hasOwnProperty.call(incoming, 'advancedProviders');
   const hasLlmConfigs = Object.prototype.hasOwnProperty.call(incoming, 'llmConfigs');
   const hasLlmApiKeys = Object.prototype.hasOwnProperty.call(incoming, 'llmApiKeys');
+  const hasZhenzhenBaseUrl = Object.prototype.hasOwnProperty.call(incoming, 'zhenzhenBaseUrl');
+  const zhenzhenBaseUrl = hasZhenzhenBaseUrl
+    ? normalizeZhenzhenBaseUrl(incoming.zhenzhenBaseUrl)
+    : normalizeZhenzhenBaseUrl(current.zhenzhenBaseUrl);
+  if (!zhenzhenBaseUrl) {
+    return res.status(400).json({ success: false, error: '百达工坊 Base URL 必须是有效的 http/https 地址' });
+  }
   const hasLlmBaseUrl = Object.prototype.hasOwnProperty.call(incoming, 'llmBaseUrl');
   const llmBaseUrl = hasLlmBaseUrl
     ? normalizeLlmBaseUrl(incoming.llmBaseUrl, config.ZHENZHEN_BASE_URL)
@@ -282,8 +293,8 @@ router.post('/', requireAdmin, (req, res) => {
   const merged = {
     ...current,
     ...incoming,
-    // 百达工坊地址保持锁定；LLM 地址允许单独配置。
-    zhenzhenBaseUrl: config.ZHENZHEN_BASE_URL,
+    // 百达工坊地址可配置；LLM 地址仍允许单独配置。
+    zhenzhenBaseUrl,
     llmBaseUrl,
     llmModel,
   };
@@ -673,3 +684,4 @@ module.exports.maskLlmConfigs = maskLlmConfigs;
 module.exports.maskLlmApiKeys = maskLlmConfigs;
 module.exports.syncLegacyLlmConfig = syncLegacyLlmConfig;
 module.exports.syncLegacyLlmApiKey = syncLegacyLlmConfig;
+module.exports.normalizeZhenzhenBaseUrl = normalizeZhenzhenBaseUrl;

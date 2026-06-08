@@ -4,7 +4,8 @@ import * as api from '../services/api';
 import { DEFAULT_LLM_MODEL } from '../providers/models';
 
 // 百达工坊固定地址，也是 LLM 独立 Key 的默认地址
-export const FIXED_ZHENZHEN_BASE = 'https://ai.t8star.org';
+export const DEFAULT_ZHENZHEN_BASE = 'https://ai.t8star.org';
+export const FIXED_ZHENZHEN_BASE = DEFAULT_ZHENZHEN_BASE;
 export const RH_BASE = 'https://www.runninghub.cn';
 
 interface ApiKeysState {
@@ -63,7 +64,7 @@ export const useApiKeysStore = create<ApiKeysState>((set) => ({
     try {
       const data = await api.getSettings();
       set({
-        settings: { ...DEFAULT, ...data, zhenzhenBaseUrl: FIXED_ZHENZHEN_BASE },
+        settings: { ...DEFAULT, ...data },
         loading: false,
         loaded: true,
       });
@@ -79,7 +80,7 @@ export const useApiKeysStore = create<ApiKeysState>((set) => ({
       // 重新拉取(后端会返回脱敏后的 Key)
       const data = await api.getSettings();
       set({
-        settings: { ...DEFAULT, ...data, zhenzhenBaseUrl: FIXED_ZHENZHEN_BASE },
+        settings: { ...DEFAULT, ...data },
         loading: false,
       });
     } catch (e: any) {

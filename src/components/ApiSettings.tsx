@@ -210,6 +210,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   const [inputs, setInputs] = useState<Record<KeyField, string>>(emptyMap());
   const [shows, setShows] = useState<Record<KeyField, boolean>>(emptyShow());
   const [enableZhenzhenFallback, setEnableZhenzhenFallback] = useState(true);
+  const [zhenzhenBaseUrlInput, setZhenzhenBaseUrlInput] = useState<string>(FIXED_ZHENZHEN_BASE);
   const [llmConfigForms, setLlmConfigForms] = useState<LlmConfigForm[]>([]);
   const [llmConfigsDirty, setLlmConfigsDirty] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -248,6 +249,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       setInputs(emptyMap());
       setShows(emptyShow());
       setEnableZhenzhenFallback((settings as any)?.enableZhenzhenFallback !== false);
+      setZhenzhenBaseUrlInput((settings as any)?.zhenzhenBaseUrl || FIXED_ZHENZHEN_BASE);
       setLlmConfigForms(normalizeLlmConfigForms(settings));
       setLlmConfigsDirty(false);
       revealedRef.current = {};
@@ -282,6 +284,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   const getCurrentEditableSettings = (): Partial<ApiSettings> => ({
     zhenzhenApiKey: inputs.zhenzhenApiKey.trim(),
     enableZhenzhenFallback,
+    zhenzhenBaseUrl: zhenzhenBaseUrlInput.trim() || FIXED_ZHENZHEN_BASE,
     rhApiKey: inputs.rhApiKey.trim(),
     llmConfigs: llmConfigForms.map(({ id, label, apiKeyInput, baseUrl, model, isDefault }) => ({
       id,
@@ -339,6 +342,9 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     if (typeof (source as any).enableZhenzhenFallback === 'boolean') {
       next.enableZhenzhenFallback = (source as any).enableZhenzhenFallback;
     }
+    if (typeof (source as any).zhenzhenBaseUrl === 'string' && (source as any).zhenzhenBaseUrl.trim()) {
+      next.zhenzhenBaseUrl = (source as any).zhenzhenBaseUrl.trim();
+    }
     if (typeof (source as any).llmBaseUrl === 'string' && (source as any).llmBaseUrl.trim()) {
       next.llmBaseUrl = (source as any).llmBaseUrl.trim();
     }
@@ -358,7 +364,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
           id: String(item.id || `llm-${index + 1}`),
           label: String(item.label || `LLM ${index + 1}`),
           apiKey: isMaskedKeyValue(item.apiKey) ? '' : String(item.apiKey || '').trim(),
-          baseUrl: String(item.baseUrl || (source as any).llmBaseUrl || FIXED_ZHENZHEN_BASE).trim(),
+          baseUrl: String(item.baseUrl || (source as any).llmBaseUrl || (source as any).zhenzhenBaseUrl || FIXED_ZHENZHEN_BASE).trim(),
           model: String(item.model || (source as any).llmModel || DEFAULT_LLM_MODEL).trim(),
           isDefault: item.isDefault === true,
         }));
@@ -394,7 +400,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
             (typeof value === 'string' && value.trim()) || typeof value === 'boolean'
           ))
         ),
-        zhenzhenBaseUrl: FIXED_ZHENZHEN_BASE,
+        zhenzhenBaseUrl: editable.zhenzhenBaseUrl || raw?.zhenzhenBaseUrl || FIXED_ZHENZHEN_BASE,
         llmConfigs: editable.llmConfigs || raw?.llmConfigs || raw?.llmApiKeys || [],
         llmBaseUrl: raw?.llmBaseUrl || FIXED_ZHENZHEN_BASE,
         llmModel: raw?.llmModel || DEFAULT_LLM_MODEL,
@@ -435,6 +441,9 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     if (typeof patch.eagleApiBase === 'string') setEagleApiBaseInput(patch.eagleApiBase);
     if (typeof patch.enableZhenzhenFallback === 'boolean') {
       setEnableZhenzhenFallback(patch.enableZhenzhenFallback);
+    }
+    if (typeof patch.zhenzhenBaseUrl === 'string') {
+      setZhenzhenBaseUrlInput(patch.zhenzhenBaseUrl);
     }
     if (Array.isArray(patch.llmConfigs) || Array.isArray(patch.llmApiKeys)) {
       setLlmConfigForms(normalizeLlmConfigForms({ ...(settings as ApiSettings), llmConfigs: patch.llmConfigs, llmApiKeys: patch.llmApiKeys }));
@@ -562,6 +571,16 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   };
 
   const handleSave = async () => {
+    const zhenzhenBaseUrl = zhenzhenBaseUrlInput.trim() || FIXED_ZHENZHEN_BASE;
+    try {
+      const parsed = new URL(zhenzhenBaseUrl);
+      if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
+        throw new Error();
+      }
+    } catch {
+      setBackupMessage('百达工坊 Base URL 必须是有效的 http/https 地址，不能包含账号、查询参数或锚点。');
+      return;
+    }
     for (const item of llmConfigForms) {
       const baseUrl = item.baseUrl.trim() || FIXED_ZHENZHEN_BASE;
       const modelName = item.model.trim() || DEFAULT_LLM_MODEL;
@@ -581,6 +600,11 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     }
 
     const patch: Partial<ApiSettings> = {};
+    const oldZhenzhenBaseUrl = ((settings as any)?.zhenzhenBaseUrl || FIXED_ZHENZHEN_BASE).replace(/\/+$/, '');
+    const nextZhenzhenBaseUrl = zhenzhenBaseUrl.replace(/\/+$/, '');
+    if (nextZhenzhenBaseUrl !== oldZhenzhenBaseUrl) {
+      (patch as any).zhenzhenBaseUrl = nextZhenzhenBaseUrl;
+    }
     for (const f of ALL_FIELDS) {
       const v = inputs[f].trim();
       if (!v) continue;
@@ -1511,7 +1535,18 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
         {/* 表单 */}
         <div className="p-5 space-y-5 overflow-y-auto">
           {/* 三套通用 Key */}
-          {renderKey(COMMON_KEYS[0], { baseUrlNote: `Base URL 锁定: ${FIXED_ZHENZHEN_BASE}` })}
+          {renderKey(COMMON_KEYS[0], {})}
+          <label className="block space-y-1">
+            <span className={`text-[11px] ${hintCls}`}>百达工坊 Base URL</span>
+            <input
+              type="url"
+              value={zhenzhenBaseUrlInput}
+              onChange={(e) => setZhenzhenBaseUrlInput(e.target.value)}
+              placeholder={FIXED_ZHENZHEN_BASE}
+              className={`${inputCls} w-full`}
+              autoComplete="off"
+            />
+          </label>
           <label className={`flex items-start gap-3 cursor-pointer ${toggleBoxCls}`}>
             <input
               type="checkbox"
