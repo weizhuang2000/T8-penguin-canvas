@@ -87,6 +87,7 @@ export interface NodeMeta {
 // 画布节点数据(xyflow Node.data)
 export type AdvancedProviderProtocol =
   | 'openai-compatible'
+  | 'gemini-compatible'
   | 'modelscope'
   | 'volcengine'
   | 'comfyui'

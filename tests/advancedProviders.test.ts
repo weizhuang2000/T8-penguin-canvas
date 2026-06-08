@@ -93,6 +93,30 @@ test('normalizeAdvancedProviders keeps multiple OpenAI compatible providers by i
   assert.equal(masked[1].apiKey, '****ckup');
 });
 
+test('normalizeAdvancedProviders supports Gemini compatible providers', () => {
+  const providers = normalizeAdvancedProviders([
+    {
+      id: 'gemini-compatible-2',
+      label: 'Gemini Images',
+      protocol: 'gemini-compatible',
+      enabled: true,
+      baseUrl: 'https://generativelanguage.googleapis.com/v1beta/',
+      apiKey: 'gm-secret',
+      imageModels: ['gemini-2.5-flash-image-preview'],
+      chatModels: ['gemini-2.5-flash'],
+    },
+  ]);
+
+  const gemini = providers.find((item: any) => item.id === 'gemini-compatible-2');
+  assert.ok(gemini);
+  assert.equal(gemini.protocol, 'gemini-compatible');
+  assert.equal(gemini.baseUrl, 'https://generativelanguage.googleapis.com/v1beta');
+  assert.deepEqual(gemini.imageModels, ['gemini-2.5-flash-image-preview']);
+
+  const masked = maskAdvancedProviders(providers).find((item: any) => item.id === 'gemini-compatible-2');
+  assert.equal(masked?.apiKey, '****cret');
+});
+
 test('normalizeAdvancedProviders preserves stored secrets when incoming values are blank or masked', () => {
   const current = normalizeAdvancedProviders([
     {

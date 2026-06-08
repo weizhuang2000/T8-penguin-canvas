@@ -70,6 +70,7 @@ const SETTINGS_BACKUP_VERSION = 1;
 
 const ADVANCED_PROVIDER_LABELS: Record<AdvancedProviderProtocol, string> = {
   'openai-compatible': 'OpenAI 兼容',
+  'gemini-compatible': 'Gemini 兼容',
   modelscope: 'ModelScope',
   volcengine: '火山引擎',
   comfyui: '本地 ComfyUI',
@@ -93,6 +94,15 @@ const ADVANCED_PROVIDER_GUIDES: Record<AdvancedProviderProtocol, {
     modelHint: '每行一个模型名。只填你确实要在节点里选择的模型，空白时会使用内置兜底示例。',
     baseUrlPlaceholder: 'https://api.example.com/v1',
     keyLabel: 'API Key / Token',
+  },
+  'gemini-compatible': {
+    subtitle: '接入 Gemini 原生 generateContent 图像 / LLM 服务',
+    description: '适合接入 Google Gemini API 或严格兼容 Gemini generateContent 协议的中转站。图像节点会按 Gemini 原生 imageConfig 传 aspectRatio 和 imageSize，不再把比例转成 OpenAI size。',
+    nodeScopes: ['图像节点', 'LLM 节点'],
+    connectionHint: 'Base URL 填到 API 根路径即可，例如 https://generativelanguage.googleapis.com/v1beta；也可以填写兼容中转站的根路径。Key 留空会保留后端已保存的密钥。',
+    modelHint: '图像模型建议填写 gemini-2.5-flash-image-preview；聊天模型可填写 gemini-2.5-flash 等。每行一个模型名。',
+    baseUrlPlaceholder: 'https://generativelanguage.googleapis.com/v1beta',
+    keyLabel: 'Gemini API Key',
   },
   modelscope: {
     subtitle: '接入 ModelScope 的异步图像任务与兼容聊天接口',
@@ -736,18 +746,19 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     || advancedProvidersInput[0]
     || null;
 
-  const makeOpenAiProviderId = (providers: AdvancedProviderConfig[]) => {
+  const makeAdvancedProviderId = (providers: AdvancedProviderConfig[], protocol: AdvancedProviderProtocol) => {
     const used = new Set(providers.map((provider) => provider.id));
+    const prefix = protocol;
     for (let i = 2; i < 1000; i += 1) {
-      const id = `openai-compatible-${i}`;
+      const id = `${prefix}-${i}`;
       if (!used.has(id)) return id;
     }
-    return `openai-compatible-${Date.now().toString(36).slice(-6)}`;
+    return `${prefix}-${Date.now().toString(36).slice(-6)}`;
   };
 
   const handleAddOpenAiProvider = () => {
     setAdvancedProvidersInput((prev) => {
-      const nextId = makeOpenAiProviderId(prev);
+      const nextId = makeAdvancedProviderId(prev, 'openai-compatible');
       const openAiCount = prev.filter((provider) => provider.protocol === 'openai-compatible').length;
       const nextProvider: AdvancedProviderConfig = {
         id: nextId,
@@ -766,10 +777,32 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     setAdvancedDirty(true);
   };
 
+  const handleAddGeminiProvider = () => {
+    setAdvancedProvidersInput((prev) => {
+      const nextId = makeAdvancedProviderId(prev, 'gemini-compatible');
+      const geminiCount = prev.filter((provider) => provider.protocol === 'gemini-compatible').length;
+      const nextProvider: AdvancedProviderConfig = {
+        id: nextId,
+        label: `Gemini 兼容 ${geminiCount + 1}`,
+        protocol: 'gemini-compatible',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        enabled: false,
+        imageModels: ['gemini-2.5-flash-image-preview'],
+        videoModels: [],
+        chatModels: ['gemini-2.5-flash'],
+        defaults: {},
+      };
+      setActiveAdvancedProviderId(nextId);
+      return [...prev, nextProvider];
+    });
+    setAdvancedDirty(true);
+  };
+
   const handleRemoveAdvancedProvider = (id: string) => {
     setAdvancedProvidersInput((prev) => {
       const target = prev.find((provider) => provider.id === id);
-      if (!target || target.protocol !== 'openai-compatible' || target.id === 'openai-compatible') return prev;
+      if (!target || target.id === 'openai-compatible' || target.id === 'gemini-compatible') return prev;
+      if (!['openai-compatible', 'gemini-compatible'].includes(target.protocol)) return prev;
       const next = prev.filter((provider) => provider.id !== id);
       if (activeAdvancedProviderId === id) {
         setActiveAdvancedProviderId(next[0]?.id || '');
@@ -824,7 +857,10 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     const isComfy = provider.protocol === 'comfyui';
     const isJimeng = provider.protocol === 'jimeng-cli';
     const isVolc = provider.protocol === 'volcengine';
-    const canRemoveProvider = provider.protocol === 'openai-compatible' && provider.id !== 'openai-compatible';
+    const isGemini = provider.protocol === 'gemini-compatible';
+    const canRemoveProvider = ['openai-compatible', 'gemini-compatible'].includes(provider.protocol)
+      && provider.id !== 'openai-compatible'
+      && provider.id !== 'gemini-compatible';
     const sectionCls = isPixel
       ? 'border border-[var(--px-ink)] bg-white p-3 space-y-4 min-w-0'
       : `border rounded-xl p-3 sm:p-4 space-y-4 min-w-0 ${isDark ? 'border-white/10 bg-white/[0.03]' : 'border-black/10 bg-black/[0.02]'}`;
@@ -1148,7 +1184,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
 
         {!isComfy && (
           <FormBlock title="3. 节点里可选的模型" note={guide?.modelHint}>
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
+            <div className={`grid grid-cols-1 ${isGemini ? 'xl:grid-cols-2' : 'xl:grid-cols-3'} gap-3`}>
               <label className="space-y-1 min-w-0">
                 <span className={`text-[11px] ${labelCls}`}>图像模型（一行一个）</span>
                 <textarea
@@ -1158,15 +1194,17 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                   placeholder="例如 gpt-image-1"
                 />
               </label>
-              <label className="space-y-1 min-w-0">
-                <span className={`text-[11px] ${labelCls}`}>视频模型（一行一个）</span>
-                <textarea
-                  value={stringifyAdvancedProviderModels(provider.videoModels)}
-                  onChange={(e) => updateAdvancedProvider(provider.id, { videoModels: parseAdvancedProviderModelText(e.target.value) })}
-                  className={textareaCls}
-                  placeholder={isJimeng ? '例如 seedance2.0fast_vip' : '例如 video-model-name'}
-                />
-              </label>
+              {!isGemini && (
+                <label className="space-y-1 min-w-0">
+                  <span className={`text-[11px] ${labelCls}`}>视频模型（一行一个）</span>
+                  <textarea
+                    value={stringifyAdvancedProviderModels(provider.videoModels)}
+                    onChange={(e) => updateAdvancedProvider(provider.id, { videoModels: parseAdvancedProviderModelText(e.target.value) })}
+                    className={textareaCls}
+                    placeholder={isJimeng ? '例如 seedance2.0fast_vip' : '例如 video-model-name'}
+                  />
+                </label>
+              )}
               <label className="space-y-1 min-w-0">
                 <span className={`text-[11px] ${labelCls}`}>聊天模型（一行一个）</span>
                 <textarea
@@ -1617,7 +1655,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
             {advancedOpen && (
               <div className="mt-3 space-y-3">
                 <div className={`text-[11px] leading-relaxed ${hintCls}`}>
-                  这里不是必填项。它只用于 ModelScope、火山引擎、本地 ComfyUI、即梦 CLI 和 OpenAI 兼容接口；平台开启后，还需要在具体节点的“高级来源”里选择它才会生效。
+                  这里不是必填项。它只用于 ModelScope、火山引擎、本地 ComfyUI、即梦 CLI、OpenAI 兼容接口和 Gemini 兼容接口；平台开启后，还需要在具体节点的“高级来源”里选择它才会生效。
                   当前状态：已启用 {advancedSummary.enabledCount} 个，已配置密钥 {advancedSummary.configuredKeyCount} 个，ComfyUI {advancedSummary.comfyuiConfigured ? '已填写地址' : '未填写地址'}，即梦 CLI {advancedSummary.jimengConfigured ? '已填写路径' : '未填写路径'}。
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
@@ -1637,7 +1675,23 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                     <Plus size={12} />
                     新增 OpenAI 兼容
                   </button>
-                  <span className={`text-[11px] ${hintCls}`}>可添加多个中转站 / One API / New API，节点里按显示名称选择。</span>
+                  <button
+                    type="button"
+                    onClick={handleAddGeminiProvider}
+                    className={
+                      isPixel
+                        ? 'px-btn px-btn--mint text-[11px] px-2 py-1 inline-flex items-center gap-1'
+                        : `inline-flex items-center gap-1 px-2 py-1 text-[11px] rounded border ${
+                            isDark
+                              ? 'border-sky-500/30 bg-sky-500/10 hover:bg-sky-500/20 text-sky-200'
+                              : 'border-sky-500/40 bg-sky-50 hover:bg-sky-100 text-sky-700'
+                          }`
+                    }
+                  >
+                    <Plus size={12} />
+                    新增 Gemini 兼容
+                  </button>
+                  <span className={`text-[11px] ${hintCls}`}>OpenAI 兼容走 /images/generations；Gemini 兼容走 generateContent + imageConfig。</span>
                 </div>
                 {advancedProvidersInput.length === 0 ? (
                   <div className={`text-xs ${hintCls}`}>后端尚未返回扩展平台卡片，请先保存或刷新设置。</div>

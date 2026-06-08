@@ -370,6 +370,8 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           model: providerModel,
           prompt: finalPrompt,
           size,
+          aspect_ratio: aspectRatio,
+          image_size: sizeLevel,
           images: allRefs,
           outputFormat,
           seed: runSeed,

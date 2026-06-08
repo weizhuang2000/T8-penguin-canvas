@@ -56,13 +56,14 @@ export interface AdvancedProviderSelection {
   available: boolean;
 }
 
-const IMAGE_PROTOCOLS = new Set(['openai-compatible', 'modelscope', 'volcengine', 'comfyui', 'jimeng-cli']);
+const IMAGE_PROTOCOLS = new Set(['openai-compatible', 'gemini-compatible', 'modelscope', 'volcengine', 'comfyui', 'jimeng-cli']);
 const VIDEO_PROTOCOLS = new Set(['openai-compatible', 'volcengine', 'jimeng-cli']);
-const LLM_PROTOCOLS = new Set(['openai-compatible', 'modelscope', 'volcengine']);
+const LLM_PROTOCOLS = new Set(['openai-compatible', 'gemini-compatible', 'modelscope', 'volcengine']);
 
 const FALLBACK_MODELS: Record<AdvancedProviderNodeKind, Partial<Record<string, string[]>>> = {
   image: {
     'openai-compatible': ['gpt-image-1'],
+    'gemini-compatible': ['gemini-2.5-flash-image-preview'],
     modelscope: ['MusePublic/489_ckpt_FLUX_1'],
     volcengine: ['doubao-seedream-4-0-250828'],
     'jimeng-cli': ['jimeng-image-2k'],
@@ -74,6 +75,7 @@ const FALLBACK_MODELS: Record<AdvancedProviderNodeKind, Partial<Record<string, s
   },
   llm: {
     'openai-compatible': ['gpt-4o-mini'],
+    'gemini-compatible': ['gemini-2.5-flash'],
     modelscope: ['Qwen/Qwen3-Coder-480B-A35B-Instruct'],
     volcengine: ['doubao-seed-1-6-250615'],
   },

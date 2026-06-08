@@ -66,6 +66,8 @@ export interface GenerateExternalImageRequest {
   model?: string;
   prompt: string;
   size?: string;
+  aspect_ratio?: string;
+  image_size?: string;
   width?: number;
   height?: number;
   n?: number;
