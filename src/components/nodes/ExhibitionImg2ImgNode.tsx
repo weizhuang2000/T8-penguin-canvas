@@ -356,7 +356,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       wallMode,
       wallCount,
       outputMode: d.outputMode === 'overview' ? 'overview' : 'segments',
-      downstreamContent: 'combined',
+      downstreamContent: 'schedule',
       selectedCrafts,
       customCraft: d.customCraft,
       aspectRatio: d.aspectRatio,

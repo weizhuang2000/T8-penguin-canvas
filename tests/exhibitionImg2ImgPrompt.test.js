@@ -58,6 +58,23 @@ test('exhibition img2img prompt can include wall content planning', () => {
   assert.match(prompt, /不得改变空间结构/);
 });
 
+test('exhibition img2img wall content planning should use schedule instead of concept prompt', () => {
+  const prompt = buildExhibitionImg2ImgPrompt({
+    wallContentPrompt: [
+      '项目：品牌馆',
+      '核心信息：品牌发展脉络',
+      '',
+      '立面 1｜序厅',
+      '内容摘要：品牌起源',
+      '准确文案：初心 / 创新',
+      '工艺配置：展板、立体字',
+    ].join('\n'),
+  });
+  assert.match(prompt, /准确文案：初心 \/ 创新/);
+  assert.doesNotMatch(prompt, /生成一张专业展陈彩立面平面设计概念图/);
+  assert.doesNotMatch(prompt, /整套展陈彩立面设计/);
+});
+
 test('exhibition img2img prompt explains reference image roles after priority changes', () => {
   const prompt = buildExhibitionImg2ImgPrompt({
     priorityOrder: ['styleImageForm', 'craftLayout', 'structureAnnotations'],
