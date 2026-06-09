@@ -559,6 +559,9 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
 
         <section className="rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1.5 text-[11px] font-semibold text-cyan-100">优先级顺序</div>
+          <div className="mb-1.5 text-[10px] leading-snug text-white/45">
+            仅调整表现形式取舍；空间结构始终完全按结构示意图。
+          </div>
           <PrioritySorter
             value={priorityOrder}
             disabled={isReadonly}

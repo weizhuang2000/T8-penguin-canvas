@@ -37,6 +37,16 @@ test('exhibition img2img prompt treats structure image as layout source', () => 
   assert.match(prompt, /平面关系、动线、分区、展墙\/隔断、入口出口和主要体块转译为真实透视空间/);
 });
 
+test('exhibition img2img priority only affects presentation, not spatial structure', () => {
+  const prompt = buildExhibitionImg2ImgPrompt({
+    priorityOrder: ['styleImageForm', 'craftLayout', 'structureAnnotations'],
+  });
+  assert.match(prompt, /优先级顺序只针对表现形式、工艺版式、视觉风格和渲染语言的取舍/);
+  assert.match(prompt, /空间结构不参与该优先级排序/);
+  assert.match(prompt, /即使“输入效果图形式”在优先级中排在前面，也只能优先采用它的表现形式/);
+  assert.match(prompt, /最终空间结构必须完全遵循空间结构示意图/);
+});
+
 test('exhibition img2img prompt explains reference image roles after priority changes', () => {
   const prompt = buildExhibitionImg2ImgPrompt({
     priorityOrder: ['styleImageForm', 'craftLayout', 'structureAnnotations'],
