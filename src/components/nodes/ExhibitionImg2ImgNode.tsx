@@ -811,6 +811,76 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         </section>
 
         <section className="rounded border border-white/10 bg-white/[0.035] p-2">
+          <div className="mb-1.5 text-[11px] font-semibold text-cyan-100">优先级顺序</div>
+          <div className="mb-1.5 text-[10px] leading-snug text-white/45">
+            仅调整表现形式取舍；空间结构始终完全按结构示意图。
+          </div>
+          <PrioritySorter
+            value={priorityOrder}
+            disabled={isReadonly}
+            onChange={(next) => update({ priorityOrder: next })}
+          />
+        </section>
+
+        <section className="rounded border border-white/10 bg-white/[0.035] p-2">
+          <div className="mb-1.5 flex items-center gap-2">
+            <span className="text-[11px] font-semibold text-cyan-100">工艺与版式</span>
+            {canManageTeam && (
+              <button type="button" className={`${BUTTON} ml-auto`} disabled={craftSaving} onClick={() => setCraftEditorOpen((value) => !value)}>
+                <Settings size={11} />设置工艺
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-4 gap-1">
+            {craftPresetOptions.map((craft) => {
+              const active = selectedCrafts.includes(craft.id);
+              return (
+                <button
+                  key={craft.id}
+                  type="button"
+                  disabled={isReadonly}
+                  className={`min-w-0 rounded border px-1.5 py-1 text-[10px] ${
+                    active ? 'border-cyan-300/55 bg-cyan-300/15 text-cyan-100' : 'border-white/10 bg-black/15 text-white/55 hover:bg-white/[0.08]'
+                  } disabled:opacity-50`}
+                  onClick={() => toggleCraft(craft.id)}
+                  title={craft.prompt}
+                >
+                  <span className="block truncate">{craft.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          {canManageTeam && craftEditorOpen && (
+            <div className="mt-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
+              <div className="mb-1 text-[10px] text-white/45">每行一个工艺预设：名称｜提示词。</div>
+              <textarea className={`${FIELD} min-h-[96px] resize-y font-mono`} value={craftEditorValue} disabled={craftSaving} onChange={(event) => setCraftEditorValue(event.target.value)} />
+              {craftError && <div className="mt-1 text-[10px] text-red-300">{craftError}</div>}
+              <div className="mt-1.5 flex justify-end gap-1">
+                <button type="button" className={BUTTON} disabled={craftSaving} onClick={() => setCraftEditorOpen(false)}>取消</button>
+                <button type="button" className={BUTTON} disabled={craftSaving} onClick={saveCraftPresets}>{craftSaving ? '保存中' : '保存工艺'}</button>
+              </div>
+            </div>
+          )}
+          <input className={`${FIELD} mt-1.5`} value={d.customCraft || ''} disabled={isReadonly} placeholder="自定义工艺" onChange={(event) => update({ customCraft: event.target.value })} />
+          <div className="mt-1 grid grid-cols-2 gap-1">
+            <select className={FIELD} value={d.density || '适中，图文层级均衡'} disabled={isReadonly} onChange={(event) => update({ density: event.target.value })}>
+              <option value="疏朗，强调大图与留白">疏朗</option>
+              <option value="适中，图文层级均衡">适中</option>
+              <option value="信息丰富，采用严谨网格">丰富</option>
+            </select>
+            <input className={FIELD} value={d.dimensions || ''} disabled={isReadonly} placeholder="空间/画面尺寸" onChange={(event) => update({ dimensions: event.target.value })} />
+            <input className={FIELD} value={d.colorMaterial || ''} disabled={isReadonly} placeholder="色彩与材质" onChange={(event) => update({ colorMaterial: event.target.value })} />
+            <input className={FIELD} value={d.visualStyle || ''} disabled={isReadonly} placeholder="视觉风格" onChange={(event) => update({ visualStyle: event.target.value })} />
+            <select className={FIELD} value={toneReferenceMode} disabled={isReadonly} onChange={(event) => update({ toneReferenceMode: event.target.value })}>
+              <option value="solidModelFirst">纯色素模优先</option>
+              <option value="renderFirst">高级渲染参考图优先</option>
+              <option value="balanced">二者结合</option>
+            </select>
+          </div>
+          <textarea className={`${FIELD} mt-1 min-h-[48px] resize-y`} value={d.supplement || ''} disabled={isReadonly} placeholder="补充要求" onChange={(event) => update({ supplement: event.target.value })} />
+        </section>
+
+        <section className="rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1.5 flex items-center gap-2">
             <FileText size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">展墙内容设计</span>
@@ -1036,76 +1106,6 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               </div>
             </div>
           )}
-        </section>
-
-        <section className="rounded border border-white/10 bg-white/[0.035] p-2">
-          <div className="mb-1.5 text-[11px] font-semibold text-cyan-100">优先级顺序</div>
-          <div className="mb-1.5 text-[10px] leading-snug text-white/45">
-            仅调整表现形式取舍；空间结构始终完全按结构示意图。
-          </div>
-          <PrioritySorter
-            value={priorityOrder}
-            disabled={isReadonly}
-            onChange={(next) => update({ priorityOrder: next })}
-          />
-        </section>
-
-        <section className="rounded border border-white/10 bg-white/[0.035] p-2">
-          <div className="mb-1.5 flex items-center gap-2">
-            <span className="text-[11px] font-semibold text-cyan-100">工艺与版式</span>
-            {canManageTeam && (
-              <button type="button" className={`${BUTTON} ml-auto`} disabled={craftSaving} onClick={() => setCraftEditorOpen((value) => !value)}>
-                <Settings size={11} />设置工艺
-              </button>
-            )}
-          </div>
-          <div className="grid grid-cols-4 gap-1">
-            {craftPresetOptions.map((craft) => {
-              const active = selectedCrafts.includes(craft.id);
-              return (
-                <button
-                  key={craft.id}
-                  type="button"
-                  disabled={isReadonly}
-                  className={`min-w-0 rounded border px-1.5 py-1 text-[10px] ${
-                    active ? 'border-cyan-300/55 bg-cyan-300/15 text-cyan-100' : 'border-white/10 bg-black/15 text-white/55 hover:bg-white/[0.08]'
-                  } disabled:opacity-50`}
-                  onClick={() => toggleCraft(craft.id)}
-                  title={craft.prompt}
-                >
-                  <span className="block truncate">{craft.label}</span>
-                </button>
-              );
-            })}
-          </div>
-          {canManageTeam && craftEditorOpen && (
-            <div className="mt-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
-              <div className="mb-1 text-[10px] text-white/45">每行一个工艺预设：名称｜提示词。</div>
-              <textarea className={`${FIELD} min-h-[96px] resize-y font-mono`} value={craftEditorValue} disabled={craftSaving} onChange={(event) => setCraftEditorValue(event.target.value)} />
-              {craftError && <div className="mt-1 text-[10px] text-red-300">{craftError}</div>}
-              <div className="mt-1.5 flex justify-end gap-1">
-                <button type="button" className={BUTTON} disabled={craftSaving} onClick={() => setCraftEditorOpen(false)}>取消</button>
-                <button type="button" className={BUTTON} disabled={craftSaving} onClick={saveCraftPresets}>{craftSaving ? '保存中' : '保存工艺'}</button>
-              </div>
-            </div>
-          )}
-          <input className={`${FIELD} mt-1.5`} value={d.customCraft || ''} disabled={isReadonly} placeholder="自定义工艺" onChange={(event) => update({ customCraft: event.target.value })} />
-          <div className="mt-1 grid grid-cols-2 gap-1">
-            <select className={FIELD} value={d.density || '适中，图文层级均衡'} disabled={isReadonly} onChange={(event) => update({ density: event.target.value })}>
-              <option value="疏朗，强调大图与留白">疏朗</option>
-              <option value="适中，图文层级均衡">适中</option>
-              <option value="信息丰富，采用严谨网格">丰富</option>
-            </select>
-            <input className={FIELD} value={d.dimensions || ''} disabled={isReadonly} placeholder="空间/画面尺寸" onChange={(event) => update({ dimensions: event.target.value })} />
-            <input className={FIELD} value={d.colorMaterial || ''} disabled={isReadonly} placeholder="色彩与材质" onChange={(event) => update({ colorMaterial: event.target.value })} />
-            <input className={FIELD} value={d.visualStyle || ''} disabled={isReadonly} placeholder="视觉风格" onChange={(event) => update({ visualStyle: event.target.value })} />
-            <select className={FIELD} value={toneReferenceMode} disabled={isReadonly} onChange={(event) => update({ toneReferenceMode: event.target.value })}>
-              <option value="solidModelFirst">纯色素模优先</option>
-              <option value="renderFirst">高级渲染参考图优先</option>
-              <option value="balanced">二者结合</option>
-            </select>
-          </div>
-          <textarea className={`${FIELD} mt-1 min-h-[48px] resize-y`} value={d.supplement || ''} disabled={isReadonly} placeholder="补充要求" onChange={(event) => update({ supplement: event.target.value })} />
         </section>
 
         <section className="rounded border border-white/10 bg-white/[0.035] p-2 space-y-2">

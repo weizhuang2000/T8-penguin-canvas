@@ -69,10 +69,11 @@ function craftText(selectedIds, customCraft, craftPresets) {
   return values.join('；');
 }
 
-function referenceRoleText(priorityOrderText, priorityOrder) {
+function referenceRoleText(priorityOrderText, priorityOrder, toneReferenceMode) {
   return [
     '参考图角色说明：纯色素模的参考图是空间结构示意图，是空间几何、布局和动线的主约束；高级渲染的参考图是空间表现效果图，只用于提取表现形式、氛围、材质和渲染完成度。',
     '生成时必须先从空间结构示意图提取干净的空间骨架，再把效果图的表现语言套用到该骨架上；不要直接沿用效果图原本的平面布局、墙体位置或动线来替代结构图。',
+    toneReferenceText(toneReferenceMode),
     `展陈工艺选用的优先级顺序：${priorityOrderText}，该优先级顺序只针对表现形式、工艺版式、视觉风格和渲染语言的取舍；空间结构不参与该优先级排序，空间几何、布局、墙体、展陈体块、分区和动线必须完全按照空间结构示意图执行。`,
   ].join('\n');
 }
@@ -88,7 +89,6 @@ function sectionText(id, values) {
   if (id === 'styleImageForm') {
     return [
       '参考输入效果图的空间表现形式：借鉴整体视觉气质、透视角度、光影氛围、材质表达、画面完成度和展陈空间摄影感。',
-      toneReferenceText(values.toneReferenceMode),
       '效果图只提供表现语言，不覆盖结构示意图中的空间关系和动线约束；如果效果图的墙体、展台、入口、分区与结构图冲突，以结构图为准。',
       '即使“输入效果图形式”在优先级中排在前面，也只能优先采用它的表现形式，不能优先采用它的空间结构、布局比例、墙体位置、通道组织或分区关系。',
     ].join('\n');
@@ -118,7 +118,7 @@ export function buildExhibitionImg2ImgPrompt(values = {}) {
   }).join(' > ');
   const lines = [
     '生成一张专业展陈空间效果图，真实室内建筑摄影级渲染，空间尺度可信，材质细节清晰，灯光层次准确。',
-    referenceRoleText(priorityOrderText, priorityOrder),
+    referenceRoleText(priorityOrderText, priorityOrder, values.toneReferenceMode),
     '',
   ];
 

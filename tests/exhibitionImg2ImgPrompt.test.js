@@ -108,6 +108,8 @@ test('exhibition img2img prompt forbids rendering design instruction fields as w
 test('exhibition img2img prompt includes tone reference mode', () => {
   const defaultPrompt = buildExhibitionImg2ImgPrompt();
   assert.match(defaultPrompt, /色调选择：高级渲染参考图优先/);
+  assert.ok(defaultPrompt.indexOf('色调选择：高级渲染参考图优先') < defaultPrompt.indexOf('【空间结构示意图标注】'));
+  assert.ok(defaultPrompt.indexOf('色调选择：高级渲染参考图优先') < defaultPrompt.indexOf('【输入效果图形式】'));
 
   const solidPrompt = buildExhibitionImg2ImgPrompt({ toneReferenceMode: 'solidModelFirst' });
   assert.match(solidPrompt, /色调选择：纯色素模优先/);
