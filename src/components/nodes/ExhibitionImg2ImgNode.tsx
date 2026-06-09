@@ -776,7 +776,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
 
   return (
     <div
-      className={`relative w-[430px] rounded-xl border-2 transition-all ${
+      className={`relative w-[860px] rounded-xl border-2 transition-all ${
         selected ? 'border-cyan-300 shadow-2xl shadow-cyan-500/15' : 'border-white/15 hover:border-white/30'
       }`}
       style={{ background: 'rgba(17,24,39,.96)', backdropFilter: 'blur(8px)' }}
@@ -793,14 +793,14 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         {busy && <Loader2 size={15} className="animate-spin text-cyan-200" />}
       </div>
 
-      <div className="nodrag nopan max-h-[780px] space-y-2 overflow-y-auto p-2.5" onMouseDown={(event) => event.stopPropagation()}>
+      <div className="nodrag nopan grid max-h-[780px] grid-cols-2 items-start gap-2 overflow-y-auto p-2.5" onMouseDown={(event) => event.stopPropagation()}>
         {isReadonly && (
-          <div className="rounded border border-amber-300/30 bg-amber-300/10 px-2 py-1.5 text-[10px] text-amber-100">
+          <div className="col-span-2 rounded border border-amber-300/30 bg-amber-300/10 px-2 py-1.5 text-[10px] text-amber-100">
             当前画布为只读，仅可查看结果。
           </div>
         )}
         {d.error && (
-          <div className="rounded border border-red-300/25 bg-red-400/10 px-2 py-1.5 text-[10px] text-red-200">
+          <div className="col-span-2 rounded border border-red-300/25 bg-red-400/10 px-2 py-1.5 text-[10px] text-red-200">
             {d.error}
           </div>
         )}
@@ -1310,7 +1310,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
 
         <button
           type="button"
-          className="flex h-8 w-full items-center justify-center gap-1.5 rounded border border-cyan-300/30 bg-cyan-300/15 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-45"
+          className="col-span-2 flex h-8 w-full items-center justify-center gap-1.5 rounded border border-cyan-300/30 bg-cyan-300/15 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-45"
           disabled={isReadonly || busy || !structureImage || !styleImage}
           onClick={() => void runGenerate()}
         >
@@ -1318,7 +1318,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           {isGenerating ? `生成中 ${d.progress || ''}` : contentBusy ? '内容提炼中' : '生成展陈效果图'}
         </button>
         {!structureImage || !styleImage ? (
-          <div className="text-[10px] text-white/35">
+          <div className="col-span-2 text-[10px] text-white/35">
             需要同时连接空间结构示意图和空间表现效果图。
           </div>
         ) : null}
