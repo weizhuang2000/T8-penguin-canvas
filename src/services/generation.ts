@@ -461,7 +461,8 @@ export async function uploadMjImage(file: File, speed: MjSpeed = 'fast'): Promis
 // (对齐 gpt-image-2-web _doSendChat 多模态格式, index.html L8106~L8123)
 export type LlmContentPart =
   | { type: 'text'; text: string }
-  | { type: 'image_url'; image_url: { url: string } };
+  | { type: 'image_url'; image_url: { url: string } }
+  | { type: 'image'; image_url: { url: string } };
 
 export interface LlmMessage {
   role: 'system' | 'user' | 'assistant';

@@ -658,7 +658,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               role: 'user',
               content: [
                 { type: 'text', text: '识别图片中的展品主体，用极简短中文描述。示例：红色陶器、圆形铜镜、青铜鼎。' },
-                { type: 'image_url', image_url: { url: item.url } },
+                { type: 'image', image_url: { url: item.url } },
               ],
             },
           ] as any,

@@ -19,6 +19,14 @@ const settingsRouter = require('./settings');
 
 const router = express.Router();
 
+function llmImageMessageError(errorText) {
+  const text = String(errorText || '');
+  if (/unknown variant [`']?(image_url|image)[`']?/i.test(text) || /expected [`']?text[`']?/i.test(text)) {
+    return '当前 LLM 接口不支持图片输入消息，请在展品识别中选择支持视觉的 LLM 模型，或改用支持多模态的 LLM Base URL。';
+  }
+  return '';
+}
+
 // 音频文件上传中间件(内存存储, 50MB)
 const audioUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
@@ -601,7 +609,7 @@ async function normalizeLlmMessageImages(messages) {
   for (const msg of messages) {
     if (!msg || !Array.isArray(msg.content)) continue;
     for (const part of msg.content) {
-      if (!part || part.type !== 'image_url' || !part.image_url) continue;
+      if (!part || !['image_url', 'image'].includes(part.type) || !part.image_url) continue;
       const url = part.image_url.url;
       if (typeof url !== 'string' || !url) continue;
       // 已是 base64 或外网 URL→不动
@@ -1446,9 +1454,10 @@ router.post('/llm', requireNodePermission('llm'), async (req, res) => {
       return res.status(500).json({ success: false, error: '上游响应非 JSON: ' + text.slice(0, 200) });
     }
     if (!r.ok) {
+      const upstreamError = data?.error?.message || data?.message || JSON.stringify(data).slice(0, 300);
       return res.status(r.status).json({
         success: false,
-        error: data?.error?.message || `上游 HTTP ${r.status}`,
+        error: llmImageMessageError(upstreamError) || data?.error?.message || `上游 HTTP ${r.status}`,
       });
     }
     // 处理 content 可能是字符串或多模态数组(gpt-image-2-all 出图)
