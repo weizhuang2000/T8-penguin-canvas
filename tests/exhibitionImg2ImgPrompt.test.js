@@ -29,6 +29,22 @@ test('exhibition img2img prompt forbids rendering structure labels', () => {
   assert.match(prompt, /不要出现结构示意图中的标注文字、箭头编号、尺寸线、图例、说明标签或乱码文本/);
 });
 
+test('exhibition img2img prompt treats structure image as layout source', () => {
+  const prompt = buildExhibitionImg2ImgPrompt();
+  assert.match(prompt, /空间结构示意图，是空间几何、布局和动线的主约束/);
+  assert.match(prompt, /空间骨架和布局蓝本/);
+  assert.match(prompt, /不能只借鉴风格而改成另一套空间/);
+  assert.match(prompt, /平面关系、动线、分区、展墙\/隔断、入口出口和主要体块转译为真实透视空间/);
+});
+
+test('exhibition img2img prompt explains reference image roles after priority changes', () => {
+  const prompt = buildExhibitionImg2ImgPrompt({
+    priorityOrder: ['styleImageForm', 'craftLayout', 'structureAnnotations'],
+  });
+  assert.match(prompt, /第 2 张参考图是空间结构示意图/);
+  assert.match(prompt, /第 1 张参考图是空间表现效果图/);
+});
+
 test('exhibition img2img prompt includes craft and layout values when present', () => {
   const prompt = buildExhibitionImg2ImgPrompt({
     selectedCrafts: ['custom-craft'],
