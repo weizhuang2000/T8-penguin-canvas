@@ -683,6 +683,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           n: Math.max(1, Math.min(4, Number(providerParams.n || 1))),
           providerParams,
           historyContext,
+          async: true,
         });
         if ((!res.imageUrls?.length) && res.taskId && (res.code === 'running' || res.status === 'running')) {
           let pollingTaskId = res.taskId;

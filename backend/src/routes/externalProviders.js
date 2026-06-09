@@ -17,6 +17,10 @@ const {
 } = require('../providers/adapters');
 
 const router = express.Router();
+const externalImageJobs = new Map();
+const EXTERNAL_IMAGE_JOB_TTL_MS = 6 * 60 * 60 * 1000;
+const EXTERNAL_IMAGE_JOB_MAX = 300;
+const EXTERNAL_IMAGE_BACKGROUND_TIMEOUT_MS = 30 * 60 * 1000;
 
 function safeProviderForResponse(provider) {
   return maskAdvancedProviders([provider])[0] || null;
@@ -77,6 +81,75 @@ function writeOutputBuffer(buffer, ext) {
   const filename = `external_${Date.now()}_${suffix}${ext || '.png'}`;
   fs.writeFileSync(path.join(config.OUTPUT_DIR, filename), buffer);
   return `/files/output/${filename}`;
+}
+
+function pruneExternalImageJobs() {
+  const now = Date.now();
+  for (const [id, job] of externalImageJobs.entries()) {
+    const done = job.status === 'completed' || job.status === 'failed';
+    if (done && now - Number(job.updatedAt || job.createdAt || 0) > EXTERNAL_IMAGE_JOB_TTL_MS) {
+      externalImageJobs.delete(id);
+    }
+  }
+  while (externalImageJobs.size > EXTERNAL_IMAGE_JOB_MAX) {
+    const first = externalImageJobs.keys().next().value;
+    if (!first) break;
+    externalImageJobs.delete(first);
+  }
+}
+
+function createExternalImageJob(provider, body, user) {
+  pruneExternalImageJobs();
+  const id = `external-image-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+  const now = Date.now();
+  const job = {
+    id,
+    provider,
+    body: JSON.parse(JSON.stringify(body || {})),
+    user,
+    status: 'running',
+    code: 'running',
+    progress: '0%',
+    imageUrls: [],
+    remoteImageUrls: [],
+    providerTaskId: '',
+    raw: null,
+    error: '',
+    createdAt: now,
+    updatedAt: now,
+  };
+  externalImageJobs.set(id, job);
+  return job;
+}
+
+function localJobResult(job) {
+  return {
+    ok: job.status !== 'failed',
+    kind: 'image',
+    code: job.status === 'completed' ? 'completed' : 'running',
+    status: job.status,
+    progress: job.progress || (job.status === 'completed' ? '100%' : '0%'),
+    taskId: job.id,
+    providerTaskId: job.providerTaskId || undefined,
+    imageUrls: Array.isArray(job.imageUrls) ? job.imageUrls : [],
+    remoteImageUrls: Array.isArray(job.remoteImageUrls) ? job.remoteImageUrls : [],
+    raw: job.raw,
+    error: job.error || undefined,
+  };
+}
+
+function sendLocalImageJobResponse(res, job) {
+  const result = localJobResult(job);
+  const payload = {
+    ...result,
+    provider: safeProviderForResponse(job.provider),
+  };
+  return res.json({
+    success: result.ok,
+    code: result.code,
+    error: result.ok ? undefined : result.error,
+    data: payload,
+  });
 }
 
 function runningImageResponse(res, result, provider) {
@@ -193,6 +266,69 @@ function parseHistoryContextQuery(value) {
   }
 }
 
+async function runExternalImageGeneration(provider, body, user, options = {}) {
+  const requestBody = body || {};
+  const result = await generateImageWithProvider(provider, requestBody, {
+    timeoutMs: options.timeoutMs || Number(requestBody?.timeoutMs) || undefined,
+    baseUrl: `http://127.0.0.1:${config.PORT}`,
+    outputFormat: requestBody?.outputFormat,
+  });
+  if (!result.ok) return result;
+  const remoteImageUrls = Array.isArray(result.imageUrls) ? result.imageUrls : [];
+  const imageUrls = await saveImageOutputs(remoteImageUrls, {
+    outputFormat: requestBody?.outputFormat,
+  });
+  rememberExternalOutputs(
+    { body: requestBody, user },
+    imageUrls,
+    provider,
+    { kind: 'image', taskId: result.taskId },
+  );
+  return {
+    ...result,
+    remoteImageUrls,
+    imageUrls,
+  };
+}
+
+function startExternalImageJob(job) {
+  setImmediate(async () => {
+    try {
+      const result = await runExternalImageGeneration(job.provider, job.body, job.user, {
+        timeoutMs: EXTERNAL_IMAGE_BACKGROUND_TIMEOUT_MS,
+      });
+      job.updatedAt = Date.now();
+      job.raw = result.raw || result;
+      job.providerTaskId = result.taskId || job.providerTaskId || '';
+      if (!result.ok) {
+        if (result.taskId && (result.code === 'timeout' || result.code === 'empty_image')) {
+          job.status = 'running';
+          job.code = 'running';
+          job.progress = '生成中';
+          job.error = '';
+          return;
+        }
+        job.status = 'failed';
+        job.code = result.code || 'failed';
+        job.error = result.error || '扩展平台生图失败。';
+        return;
+      }
+      job.status = 'completed';
+      job.code = 'completed';
+      job.progress = '100%';
+      job.imageUrls = Array.isArray(result.imageUrls) ? result.imageUrls : [];
+      job.remoteImageUrls = Array.isArray(result.remoteImageUrls) ? result.remoteImageUrls : [];
+      job.error = '';
+    } catch (e) {
+      job.updatedAt = Date.now();
+      job.status = 'failed';
+      job.code = 'external_image_failed';
+      job.error = e?.message || String(e);
+      job.raw = { error: job.error };
+    }
+  });
+}
+
 router.post('/test-provider', async (req, res) => {
   try {
     const settings = settingsRouter.loadSettings({ persistMigrations: false });
@@ -268,25 +404,21 @@ router.post('/image', requireNodePermission(['image', 'exhibition-img2img']), as
         data: resolved.provider ? { provider: safeProviderForResponse(resolved.provider) } : undefined,
       });
     }
-    const result = await generateImageWithProvider(resolved.provider, req.body || {}, {
-      timeoutMs: Number(req.body?.timeoutMs) || undefined,
-      baseUrl: `http://127.0.0.1:${config.PORT}`,
-      outputFormat: req.body?.outputFormat,
-    });
+    if (req.body?.async === true || req.body?.background === true) {
+      const job = createExternalImageJob(resolved.provider, req.body || {}, req.user);
+      startExternalImageJob(job);
+      return sendLocalImageJobResponse(res, job);
+    }
+    const result = await runExternalImageGeneration(resolved.provider, req.body || {}, req.user);
     if (!result.ok) {
       if (result.taskId && (result.code === 'timeout' || result.code === 'empty_image')) {
         return runningImageResponse(res, result, resolved.provider);
       }
       return resultResponse(res, result, resolved.provider);
     }
-    const remoteImageUrls = Array.isArray(result.imageUrls) ? result.imageUrls : [];
-    const imageUrls = await saveImageOutputs(remoteImageUrls, {
-      outputFormat: req.body?.outputFormat,
-    });
-    rememberExternalOutputs(req, imageUrls, resolved.provider, { kind: 'image', taskId: result.taskId });
     return resultResponse(res, result, resolved.provider, {
-      remoteImageUrls,
-      imageUrls,
+      remoteImageUrls: result.remoteImageUrls || [],
+      imageUrls: result.imageUrls || [],
     });
   } catch (e) {
     return res.status(500).json({
@@ -299,6 +431,52 @@ router.post('/image', requireNodePermission(['image', 'exhibition-img2img']), as
 
 router.get('/image/status/:taskId', requireNodePermission(['image', 'exhibition-img2img']), async (req, res) => {
   try {
+    pruneExternalImageJobs();
+    const taskId = String(req.params.taskId || '').trim();
+    const localJob = externalImageJobs.get(taskId);
+    if (localJob) {
+      if (localJob.status !== 'running' || !localJob.providerTaskId) {
+        return sendLocalImageJobResponse(res, localJob);
+      }
+      const providerResult = await queryImageTaskWithProvider(localJob.provider, localJob.providerTaskId, {
+        timeoutMs: Number(req.query?.timeoutMs) || undefined,
+        baseUrl: `http://127.0.0.1:${config.PORT}`,
+        outputFormat: localJob.body?.outputFormat,
+      });
+      localJob.updatedAt = Date.now();
+      localJob.raw = providerResult.raw || providerResult;
+      if (!providerResult.ok) {
+        if (providerResult.code === 'timeout' || providerResult.code === 'network_error') {
+          return sendLocalImageJobResponse(res, localJob);
+        }
+        localJob.status = 'failed';
+        localJob.code = providerResult.code || 'failed';
+        localJob.error = providerResult.error || '扩展平台生图失败。';
+        return sendLocalImageJobResponse(res, localJob);
+      }
+      if (providerResult.code !== 'completed') {
+        localJob.progress = providerResult.progress || localJob.progress || '生成中';
+        return sendLocalImageJobResponse(res, localJob);
+      }
+      const remoteImageUrls = Array.isArray(providerResult.imageUrls) ? providerResult.imageUrls : [];
+      const imageUrls = await saveImageOutputs(remoteImageUrls, {
+        outputFormat: localJob.body?.outputFormat,
+      });
+      rememberExternalOutputs(
+        { body: localJob.body, user: localJob.user },
+        imageUrls,
+        localJob.provider,
+        { kind: 'image', taskId: providerResult.taskId || localJob.providerTaskId },
+      );
+      localJob.status = 'completed';
+      localJob.code = 'completed';
+      localJob.progress = '100%';
+      localJob.imageUrls = imageUrls;
+      localJob.remoteImageUrls = remoteImageUrls;
+      localJob.error = '';
+      return sendLocalImageJobResponse(res, localJob);
+    }
+
     const settings = settingsRouter.loadSettings({ persistMigrations: false });
     const currentProviders = normalizeAdvancedProviders(settings.advancedProviders);
     const resolved = resolveRunnableProvider(req.query || {}, currentProviders);
@@ -310,7 +488,6 @@ router.get('/image/status/:taskId', requireNodePermission(['image', 'exhibition-
         data: resolved.provider ? { provider: safeProviderForResponse(resolved.provider) } : undefined,
       });
     }
-    const taskId = String(req.params.taskId || '').trim();
     const result = await queryImageTaskWithProvider(resolved.provider, taskId, {
       timeoutMs: Number(req.query?.timeoutMs) || undefined,
       baseUrl: `http://127.0.0.1:${config.PORT}`,

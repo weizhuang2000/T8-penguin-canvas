@@ -41,11 +41,13 @@ test('generateExternalImage posts to external image route and returns normalized
       model: 'flux-dev',
       size: '1024x1024',
       images: ['/files/input/a.png'],
+      async: true,
     });
 
     assert.equal(calls[0].url, '/api/proxy/external/image');
     assert.equal(calls[0].body.providerId, 'modelscope');
     assert.equal(calls[0].body.model, 'flux-dev');
+    assert.equal(calls[0].body.async, true);
     assert.deepEqual(result.imageUrls, ['/files/output/external_1.png']);
     assert.deepEqual(result.remoteImageUrls, ['https://cdn.example.com/raw.png']);
   } finally {

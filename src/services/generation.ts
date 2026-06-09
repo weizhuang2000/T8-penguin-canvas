@@ -76,6 +76,7 @@ export interface GenerateExternalImageRequest {
   seed?: number;
   providerParams?: Record<string, any>;
   historyContext?: GenerationHistoryContext;
+  async?: boolean;
 }
 
 export interface GenerateExternalImageResult {
