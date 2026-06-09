@@ -27,6 +27,38 @@ function cleanWallContentPrompt(value) {
     .trim();
 }
 
+function normalizeExhibitGroups(value) {
+  const list = Array.isArray(value) ? value : [];
+  return list
+    .map((group, index) => {
+      const groupIndex = Math.max(1, Number(group?.groupIndex) || index + 1);
+      const items = Array.isArray(group?.items)
+        ? group.items
+            .map((item) => cleanText(item?.description || item?.label || item, 80))
+            .filter(Boolean)
+        : [];
+      if (!items.length) return null;
+      return { groupIndex, items };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.groupIndex - b.groupIndex);
+}
+
+function exhibitPlacementText(value) {
+  const groups = normalizeExhibitGroups(value);
+  if (!groups.length) return '';
+  const lines = [
+    '【展柜展品布置】',
+    '根据已识别的展品主体描述，把展品自然放入展柜中。展柜按画面从左到右编号，第一组放入左边第一个展柜，第二组放入左边第二个展柜，依次向右排列；展品需要符合真实博物馆陈列尺度，带独立托座、低反射玻璃和重点照明，不要生成可读展品标签文字。',
+  ];
+  for (const group of groups) {
+    const names = group.items.join('、');
+    lines.push(`将${names}放入左边第 ${group.groupIndex} 个展柜内。`);
+  }
+  lines.push('展品图像只作为展品主体、轮廓、材质与色彩参考；空间结构、展柜位置和整体风格仍以空间结构示意图、工艺版式与空间表现效果图为准。');
+  return lines.join('\n');
+}
+
 export function normalizeExhibitionImg2ImgPriority(value) {
   const out = [];
   const list = Array.isArray(value) ? value : [];
@@ -133,6 +165,12 @@ export function buildExhibitionImg2ImgPrompt(values = {}) {
   if (supplement) {
     lines.push('【补充要求】');
     lines.push(supplement);
+    lines.push('');
+  }
+
+  const exhibitPlacement = exhibitPlacementText(values.exhibitGroups);
+  if (exhibitPlacement) {
+    lines.push(exhibitPlacement);
     lines.push('');
   }
 

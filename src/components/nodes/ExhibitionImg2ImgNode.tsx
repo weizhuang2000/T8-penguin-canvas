@@ -77,6 +77,18 @@ const EXTERNAL_SIZE_LEVELS = ['1K', '2K', '4K'];
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
 
+interface ExhibitInputImage {
+  id: string;
+  url: string;
+  label: string;
+}
+
+interface ExhibitItem extends ExhibitInputImage {
+  description: string;
+  groupIndex: number;
+  recognizedAt?: number;
+}
+
 function same(valueA: unknown, valueB: unknown) {
   return JSON.stringify(valueA) === JSON.stringify(valueB);
 }
@@ -96,17 +108,36 @@ function randomImageSeed(): number {
   return Math.floor(Math.random() * MAX_IMAGE_SEED) + 1;
 }
 
-function firstImageFromData(data: any): string {
-  const direct = typeof data?.imageUrl === 'string' ? data.imageUrl.trim() : '';
-  if (direct) return direct;
+function imagesFromData(data: any): string[] {
+  const out: string[] = [];
+  const push = (value: any) => {
+    const url = typeof value === 'string' ? value.trim() : '';
+    if (url && !out.includes(url)) out.push(url);
+  };
+  push(data?.imageUrl);
   for (const key of ['imageUrls', 'urls', 'generatedImages']) {
     const list = data?.[key];
     if (!Array.isArray(list)) continue;
-    const found = list.find((item) => typeof item === 'string' && item.trim());
-    if (found) return String(found).trim();
+    for (const item of list) push(item);
   }
-  if (data?.firstFrameUrl) return String(data.firstFrameUrl).trim();
-  return '';
+  push(data?.firstFrameUrl);
+  return out;
+}
+
+function firstImageFromData(data: any): string {
+  return imagesFromData(data)[0] || '';
+}
+
+function shortFileLabel(url: string, fallback = '展品') {
+  return (url.split('/').pop() || fallback).split('?')[0].slice(0, 28) || fallback;
+}
+
+function cleanExhibitDescription(value: string, fallback: string) {
+  const text = String(value || '')
+    .replace(/^[\s"'“”‘’`]+|[\s"'“”‘’`]+$/g, '')
+    .replace(/[。；;，,、\n\r]+$/g, '')
+    .trim();
+  return (text || fallback).slice(0, 24);
 }
 
 function useHandleImage(nodeId: string, targetHandle: string): string {
@@ -127,6 +158,71 @@ function useHandleImage(nodeId: string, targetHandle: string): string {
     }
     return '';
   }, [nodesData]);
+}
+
+function useHandleImages(nodeId: string, targetHandle: string): ExhibitInputImage[] {
+  const conns = useNodeConnections({ id: nodeId, handleType: 'target' });
+  const filteredConns = useMemo(
+    () => conns.filter((conn: any) => (conn.targetHandle || '') === targetHandle),
+    [conns, targetHandle],
+  );
+  const sourceIds = useMemo(
+    () => Array.from(new Set(filteredConns.map((conn: any) => conn.source).filter(Boolean))),
+    [filteredConns],
+  );
+  const nodesData = useNodesData(sourceIds);
+  return useMemo(() => {
+    const out: ExhibitInputImage[] = [];
+    const seen = new Set<string>();
+    const list = Array.isArray(nodesData) ? nodesData : [nodesData];
+    for (const node of list) {
+      const nodeIdValue = String((node as any)?.id || 'node');
+      const urls = imagesFromData((node as any)?.data || {});
+      urls.forEach((url, index) => {
+        if (!url || seen.has(url)) return;
+        seen.add(url);
+        out.push({
+          id: `${nodeIdValue}:exhibit:${index}:${url}`,
+          url,
+          label: shortFileLabel(url, `展品 ${out.length + 1}`),
+        });
+      });
+    }
+    return out;
+  }, [nodesData]);
+}
+
+function normalizeExhibitItems(value: unknown): ExhibitItem[] {
+  const list = Array.isArray(value) ? value : [];
+  return list
+    .map((item, index) => {
+      const url = typeof item?.url === 'string' ? item.url.trim() : '';
+      if (!url) return null;
+      return {
+        id: String(item?.id || `exhibit:${index}:${url}`),
+        url,
+        label: String(item?.label || shortFileLabel(url, `展品 ${index + 1}`)),
+        description: String(item?.description || '').trim(),
+        groupIndex: Math.max(1, Math.min(24, Number(item?.groupIndex) || index + 1)),
+        recognizedAt: Number(item?.recognizedAt) || undefined,
+      };
+    })
+    .filter(Boolean) as ExhibitItem[];
+}
+
+function groupedExhibitsForPrompt(items: ExhibitItem[]) {
+  const groups = new Map<number, string[]>();
+  for (const item of items) {
+    const description = cleanExhibitDescription(item.description, '');
+    if (!description) continue;
+    const groupIndex = Math.max(1, Math.min(24, Number(item.groupIndex) || 1));
+    const list = groups.get(groupIndex) || [];
+    list.push(description);
+    groups.set(groupIndex, list);
+  }
+  return Array.from(groups.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([groupIndex, items]) => ({ groupIndex, items }));
 }
 
 function craftPresetEditorText(presets: ElevationCraftPresetItem[]): string {
@@ -216,7 +312,7 @@ function ImageSlot({
   url,
   top,
 }: {
-  handleId: 'structure' | 'style';
+  handleId: 'structure' | 'style' | 'exhibits';
   title: string;
   subtitle: string;
   url: string;
@@ -311,6 +407,22 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
 
   const structureImage = useHandleImage(id, 'structure');
   const styleImage = useHandleImage(id, 'style');
+  const exhibitInputImages = useHandleImages(id, 'exhibits');
+  const exhibitInputUrls = useMemo(() => exhibitInputImages.map((item) => item.url), [exhibitInputImages]);
+  const exhibitItems = useMemo(() => {
+    const saved = normalizeExhibitItems(d.exhibitItems);
+    return exhibitInputImages.map((image, index) => {
+      const existing = saved.find((item) => item.url === image.url);
+      return existing
+        ? { ...existing, id: image.id, label: image.label }
+        : {
+            ...image,
+            description: '',
+            groupIndex: index + 1,
+          };
+    });
+  }, [d.exhibitItems, exhibitInputImages]);
+  const exhibitGroups = useMemo(() => groupedExhibitsForPrompt(exhibitItems), [exhibitItems]);
   const priorityOrder = normalizeExhibitionImg2ImgPriority(d.priorityOrder);
   const selectedCrafts: string[] = Array.isArray(d.selectedCrafts) ? d.selectedCrafts : DEFAULT_CRAFTS;
   const contentEnabled = d.contentPlanningEnabled === true;
@@ -331,6 +443,8 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const [craftEditorValue, setCraftEditorValue] = useState('');
   const [craftSaving, setCraftSaving] = useState(false);
   const [craftError, setCraftError] = useState('');
+  const [recognizingExhibits, setRecognizingExhibits] = useState(false);
+  const [recognizeProgress, setRecognizeProgress] = useState('');
   const status = String(d.status || 'idle');
   const isGenerating = status === 'generating';
   const busy = isGenerating || status === 'extracting' || status === 'refining';
@@ -395,12 +509,13 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       toneReferenceMode,
       supplement: d.supplement,
       wallContentPrompt,
+      exhibitGroups,
     }),
-    [craftPresets, d.colorMaterial, d.customCraft, d.density, d.dimensions, d.supplement, d.visualStyle, priorityOrder, selectedCrafts, toneReferenceMode, wallContentPrompt],
+    [craftPresets, d.colorMaterial, d.customCraft, d.density, d.dimensions, d.supplement, d.visualStyle, exhibitGroups, priorityOrder, selectedCrafts, toneReferenceMode, wallContentPrompt],
   );
 
   useEffect(() => {
-    const refs = [structureImage, styleImage].filter(Boolean);
+    const refs = [structureImage, styleImage, ...exhibitInputUrls].filter(Boolean);
     const patch = {
       prompt,
       outputText: prompt,
@@ -415,7 +530,12 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     ) {
       update(patch);
     }
-  }, [d.imageUrl, d.outputText, d.prompt, d.referenceImages, d.text, prompt, structureImage, styleImage, update]);
+  }, [d.imageUrl, d.outputText, d.prompt, d.referenceImages, d.text, exhibitInputUrls, prompt, structureImage, styleImage, update]);
+
+  useEffect(() => {
+    if (same(d.exhibitItems || [], exhibitItems)) return;
+    update({ exhibitItems });
+  }, [d.exhibitItems, exhibitItems, update]);
 
   useEffect(() => {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
@@ -473,8 +593,11 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         if (url && !out.includes(url)) out.push(url);
       }
     }
+    for (const url of exhibitInputUrls) {
+      if (url && !out.includes(url)) out.push(url);
+    }
     return out;
-  }, [priorityOrder, structureImage, styleImage]);
+  }, [exhibitInputUrls, priorityOrder, structureImage, styleImage]);
 
   const saveCraftPresets = async () => {
     if (!canManageTeam) return;
@@ -503,6 +626,66 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       : [...selectedCrafts, craftId];
     update({ selectedCrafts: next });
   };
+
+  const patchExhibitItem = (url: string, patch: Partial<ExhibitItem>) => {
+    if (isReadonly) return;
+    const next = exhibitItems.map((item) => (
+      item.url === url ? { ...item, ...patch } : item
+    ));
+    update({ exhibitItems: next });
+  };
+
+  const recognizeExhibits = useCallback(async () => {
+    if (isReadonly || recognizingExhibits || exhibitItems.length === 0) return;
+    setRecognizingExhibits(true);
+    setRecognizeProgress('0%');
+    try {
+      const nextItems = exhibitItems.slice();
+      for (let index = 0; index < nextItems.length; index += 1) {
+        const item = nextItems[index];
+        setRecognizeProgress(`${index + 1}/${nextItems.length}`);
+        const response = await generateLlm({
+          model: contentModel,
+          llmKeyId: activeContentLlmConfig?.id,
+          temperature: 0.1,
+          max_tokens: 40,
+          messages: [
+            {
+              role: 'system',
+              content: '你是展陈展品图像识别助手。只输出展品主体的极简中文名词短语，2到8个汉字，不要解释，不要标点。',
+            },
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: '识别图片中的展品主体，用极简短中文描述。示例：红色陶器、圆形铜镜、青铜鼎。' },
+                { type: 'image_url', image_url: { url: item.url } },
+              ],
+            },
+          ] as any,
+        });
+        nextItems[index] = {
+          ...item,
+          description: cleanExhibitDescription(response.content, item.label),
+          groupIndex: Math.max(1, Number(item.groupIndex) || index + 1),
+          recognizedAt: Date.now(),
+        };
+        update({ exhibitItems: nextItems });
+      }
+      setRecognizeProgress('完成');
+    } catch (error: any) {
+      update({ status: 'error', error: error?.message || '展品识别失败' });
+      setRecognizeProgress('失败');
+    } finally {
+      setRecognizingExhibits(false);
+    }
+  }, [
+    activeContentLlmConfig?.id,
+    contentModel,
+    exhibitItems,
+    isReadonly,
+    recognizingExhibits,
+    update,
+  ]);
 
   const refineText = useCallback(async (textOverride?: string, rethrow = false) => {
     if (isReadonly || !contentEnabled) return;
@@ -829,6 +1012,13 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <ImageSlot handleId="structure" title="空间结构示意图" subtitle="保留结构、动线、分区；标注只作理解参考" url={structureImage} top="24%" />
           <ImageSlot handleId="style" title="空间表现效果图" subtitle="借鉴风格、材质、光影和完成度" url={styleImage} top="39%" />
+          <ImageSlot
+            handleId="exhibits"
+            title="展品入口（可多张）"
+            subtitle={exhibitItems.length ? `已接入 ${exhibitItems.length} 件展品，识别后可按展柜分组` : '连接多张展品图，作为展柜内展品主体参考'}
+            url={exhibitItems[0]?.url || ''}
+            top="54%"
+          />
         </section>
 
         <section className="rounded border border-white/10 bg-white/[0.035] p-2">
@@ -899,6 +1089,62 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
             </select>
           </div>
           <textarea className={`${FIELD} mt-1 min-h-[48px] resize-y`} value={d.supplement || ''} disabled={isReadonly} placeholder="补充要求" onChange={(event) => update({ supplement: event.target.value })} />
+        </section>
+
+        <section className="rounded border border-white/10 bg-white/[0.035] p-2">
+          <div className="mb-1.5 flex items-center gap-2">
+            <ImageIcon size={13} className="text-cyan-200" />
+            <span className="text-[11px] font-semibold text-cyan-100">展品识别与分组</span>
+            <button
+              type="button"
+              className={`${BUTTON} ml-auto`}
+              disabled={isReadonly || recognizingExhibits || !exhibitItems.length}
+              onClick={() => void recognizeExhibits()}
+            >
+              {recognizingExhibits ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+              {recognizingExhibits ? `识别中 ${recognizeProgress}` : '识别展品'}
+            </button>
+          </div>
+          <div className="text-[10px] leading-snug text-white/45">
+            将多张展品图接入左侧展品入口；识别结果可手动改写，展柜编号相同的展品会放入同一个展柜，并按编号从左到右布置。
+          </div>
+          {exhibitItems.length === 0 ? (
+            <div className="mt-2 rounded border border-dashed border-white/15 px-2 py-3 text-[10px] text-white/35">
+              暂无展品图。可从上传节点、素材集或输出节点连接多张图片到展品入口。
+            </div>
+          ) : (
+            <div className="mt-2 max-h-64 space-y-1.5 overflow-y-auto">
+              {exhibitItems.map((item, index) => (
+                <div key={item.url} className="grid grid-cols-[54px_minmax(0,1fr)_64px] items-center gap-1.5 rounded border border-white/10 bg-black/15 p-1.5">
+                  <img src={item.url} alt="" className="h-12 w-12 rounded border border-white/10 object-cover" draggable={false} />
+                  <div className="min-w-0">
+                    <input
+                      className={FIELD}
+                      value={item.description}
+                      disabled={isReadonly || recognizingExhibits}
+                      placeholder={`展品 ${index + 1} 主体描述`}
+                      onChange={(event) => patchExhibitItem(item.url, { description: cleanExhibitDescription(event.target.value, '') })}
+                    />
+                    <div className="mt-0.5 truncate text-[9px] text-white/35" title={item.url}>{item.label}</div>
+                  </div>
+                  <label className="text-[9px] text-white/45">
+                    展柜
+                    <input
+                      className={`${FIELD} mt-0.5 text-center`}
+                      type="number"
+                      min={1}
+                      max={24}
+                      value={item.groupIndex}
+                      disabled={isReadonly || recognizingExhibits}
+                      onChange={(event) => patchExhibitItem(item.url, {
+                        groupIndex: Math.max(1, Math.min(24, Number(event.target.value) || 1)),
+                      })}
+                    />
+                  </label>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="rounded border border-white/10 bg-white/[0.035] p-2">

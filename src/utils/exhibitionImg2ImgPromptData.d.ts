@@ -22,6 +22,10 @@ export interface ExhibitionImg2ImgPromptValues {
   toneReferenceMode?: 'solidModelFirst' | 'renderFirst' | 'balanced';
   supplement?: string;
   wallContentPrompt?: string;
+  exhibitGroups?: Array<{
+    groupIndex?: number;
+    items?: Array<string | { description?: string; label?: string }>;
+  }>;
 }
 
 export const EXHIBITION_IMG2IMG_PRIORITY: ExhibitionImg2ImgPriorityMeta[];

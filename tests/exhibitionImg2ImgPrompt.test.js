@@ -147,3 +147,17 @@ test('exhibition img2img prompt includes craft and layout values when present', 
   assert.match(prompt, /未来科技/);
   assert.match(prompt, /入口处保持开阔/);
 });
+
+test('exhibition img2img prompt places recognized exhibits by showcase groups', () => {
+  const prompt = buildExhibitionImg2ImgPrompt({
+    exhibitGroups: [
+      { groupIndex: 2, items: ['青铜鼎'] },
+      { groupIndex: 1, items: ['红色陶器', '圆形铜镜'] },
+    ],
+  });
+  assert.match(prompt, /展柜展品布置/);
+  const first = prompt.indexOf('将红色陶器、圆形铜镜放入左边第 1 个展柜内。');
+  const second = prompt.indexOf('将青铜鼎放入左边第 2 个展柜内。');
+  assert.ok(first >= 0 && second > first);
+  assert.match(prompt, /展品图像只作为展品主体、轮廓、材质与色彩参考/);
+});
