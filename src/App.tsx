@@ -518,10 +518,9 @@ function App() {
               <h1 className="px-title text-[14px] font-bold tracking-wide leading-none">
                 百达的无限画布
               </h1>
-              <span className="px-chip px-chip--pink text-[10px]">企鹅共创版</span>
             </>
           ) : (
-            <h1 className="text-sm font-semibold">百达的无限画布（企鹅共创版）</h1>
+            <h1 className="text-sm font-semibold">百达的无限画布</h1>
           )}
           <span
             className={
