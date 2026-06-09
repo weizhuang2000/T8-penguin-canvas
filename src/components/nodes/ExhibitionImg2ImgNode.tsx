@@ -47,6 +47,7 @@ import { useCanvasStore } from '../../stores/canvas';
 import { logBus } from '../../stores/logs';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
+import { useThemeStore } from '../../stores/theme';
 import { useUpdateNodeData } from './useUpdateNodeData';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
@@ -225,6 +226,8 @@ function ImageSlot({
 const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
+  const { style } = useThemeStore();
+  const isPixel = style === 'pixel';
   const activeCanvas = useCanvasStore((state) => state.canvases.find((canvas) => canvas.id === state.activeId) || null);
   const activeCanvasId = useCanvasStore((state) => state.activeId);
   const isReadonly = activeCanvas?.access?.canEdit === false;
@@ -240,10 +243,15 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     [advancedProviders, d.providerSource, d.providerId, d.providerModel],
   );
   const isExternalSelected = providerSelection.available && providerSelection.providerSource !== 'zhenzhen';
+  const savedExternalMissing = !!d.providerSource && d.providerSource !== 'zhenzhen' && !providerSelection.available;
   const externalModelOptions = providerSelection.provider
     ? advancedProviderModelOptions(providerSelection.provider, 'image')
     : [];
   const externalProviderModel = providerSelection.providerModel || externalModelOptions[0] || '';
+  const firstImageAdvancedProvider = imageAdvancedProviders[0] || null;
+  const providerSelectValue = isExternalSelected
+    ? providerSelection.providerId
+    : (allowZhenzhenFallback ? 'zhenzhen' : (firstImageAdvancedProvider?.id || ''));
 
   const model = d.model || 'gpt-image-2';
   const modelDef = useMemo(() => IMAGE_MODELS.find((item) => item.id === model) || IMAGE_MODELS[0], [model]);
@@ -310,6 +318,16 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       .then((presets) => setCraftPresets(presets.crafts || []))
       .catch(() => setCraftPresets([]));
   }, []);
+
+  useEffect(() => {
+    if (allowZhenzhenFallback || isExternalSelected || !firstImageAdvancedProvider) return;
+    const nextModels = advancedProviderModelOptions(firstImageAdvancedProvider, 'image');
+    update({
+      providerSource: firstImageAdvancedProvider.protocol,
+      providerId: firstImageAdvancedProvider.id,
+      providerModel: nextModels[0] || '',
+    });
+  }, [allowZhenzhenFallback, firstImageAdvancedProvider, isExternalSelected, update]);
 
   useEffect(() => {
     if (!craftEditorOpen) return;
@@ -501,10 +519,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
 
   useRunTrigger(id, runGenerate, 'image');
 
-  const firstImageAdvancedProvider = imageAdvancedProviders[0] || null;
-  const providerSelectValue = isExternalSelected
-    ? providerSelection.providerId
-    : (allowZhenzhenFallback ? 'zhenzhen' : (firstImageAdvancedProvider?.id || ''));
+  const availableModelDefs = IMAGE_MODELS.filter((item) => item.paramKind !== 'mj');
 
   return (
     <div
@@ -604,69 +619,186 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           <textarea className={`${FIELD} mt-1 min-h-[48px] resize-y`} value={d.supplement || ''} disabled={isReadonly} placeholder="补充要求" onChange={(event) => update({ supplement: event.target.value })} />
         </section>
 
-        <section className="rounded border border-white/10 bg-white/[0.035] p-2">
-          <div className="mb-1.5 text-[11px] font-semibold text-cyan-100">模型与输出</div>
-          <div className="mb-1 grid grid-cols-2 gap-1">
-            {imageAdvancedProviders.length > 0 ? (
-              <select
-                className={FIELD}
-                value={providerSelectValue}
-                disabled={isReadonly || busy}
-                onChange={(event) => {
-                  const nextId = event.target.value;
-                  if (nextId === 'zhenzhen') {
-                    update({ providerSource: 'zhenzhen', providerId: '', providerModel: '' });
-                    return;
-                  }
-                  const provider = imageAdvancedProviders.find((item) => item.id === nextId);
-                  if (!provider) return;
-                  const models = advancedProviderModelOptions(provider, 'image');
-                  update({ providerSource: provider.protocol, providerId: provider.id, providerModel: models[0] || '' });
-                }}
+        <section className="rounded border border-white/10 bg-white/[0.035] p-2 space-y-2">
+          <div className="text-[11px] font-semibold text-cyan-100">模型与输出</div>
+          {imageAdvancedProviders.length > 0 && (
+            <div className="rounded border border-white/10 bg-white/[0.03] p-2 space-y-2">
+              <button
+                type="button"
+                onClick={() => update({ advancedProviderOpen: !d.advancedProviderOpen })}
+                className="w-full flex items-center justify-between text-[10px] font-semibold text-white/70 hover:text-white"
               >
-                {allowZhenzhenFallback && <option value="zhenzhen">默认百达工坊</option>}
-                {imageAdvancedProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label || provider.id}</option>)}
-              </select>
-            ) : (
-              <input className={FIELD} disabled value="默认百达工坊" />
-            )}
-              {isExternalSelected ? (
-                <select className={FIELD} value={externalProviderModel} disabled={isReadonly || busy} onChange={(event) => update({ providerModel: event.target.value })}>
-                  {externalModelOptions.map((item) => <option key={item} value={item}>{item}</option>)}
-                </select>
-              ) : (
-                <select
-                  className={FIELD}
-                  value={model}
-                  disabled={isReadonly || busy}
-                  onChange={(event) => {
-                    const next = IMAGE_MODELS.find((item) => item.id === event.target.value) || IMAGE_MODELS[0];
-                    update({ model: next.id, apiModel: next.apiModel, aspectRatio: next.defaultAspectRatio, sizeLevel: next.defaultSize || '2K' });
-                  }}
-                >
-                  {IMAGE_MODELS.filter((item) => item.paramKind !== 'mj').map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-                </select>
+                <span>高级来源</span>
+                <span>{isExternalSelected && providerSelection.provider ? providerSelection.provider.label : (allowZhenzhenFallback ? '默认百达工坊' : '请选择扩展平台')}</span>
+              </button>
+              {d.advancedProviderOpen && (
+                <div className="space-y-2">
+                  <div>
+                    <label className="text-[10px] text-white/50 block mb-1">平台</label>
+                    <select
+                      value={providerSelectValue}
+                      disabled={isReadonly || busy}
+                      onChange={(event) => {
+                        const nextId = event.target.value;
+                        if (nextId === 'zhenzhen') {
+                          update({ providerSource: 'zhenzhen', providerId: '', providerModel: '' });
+                          return;
+                        }
+                        const provider = imageAdvancedProviders.find((item) => item.id === nextId);
+                        if (!provider) return;
+                        const models = advancedProviderModelOptions(provider, 'image');
+                        update({ providerSource: provider.protocol, providerId: provider.id, providerModel: models[0] || '' });
+                      }}
+                      style={{ background: '#18181b', color: '#ffffff' }}
+                      className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
+                    >
+                      {allowZhenzhenFallback && <option value="zhenzhen" style={{ background: '#18181b', color: '#ffffff' }}>百达工坊（默认）</option>}
+                      {imageAdvancedProviders.map((provider) => (
+                        <option key={provider.id} value={provider.id} style={{ background: '#18181b', color: '#ffffff' }}>
+                          {provider.label || provider.id}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {isExternalSelected && providerSelection.provider && (
+                    <div>
+                      <label className="text-[10px] text-white/50 block mb-1">外部模型</label>
+                      <select
+                        value={externalProviderModel}
+                        disabled={isReadonly || busy}
+                        onChange={(event) => update({ providerModel: event.target.value })}
+                        style={{ background: '#18181b', color: '#ffffff' }}
+                        className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
+                      >
+                        {externalModelOptions.map((item) => <option key={item} value={item} style={{ background: '#18181b', color: '#ffffff' }}>{item}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {savedExternalMissing && (
+                    <div className="text-[10px] text-amber-200 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1">
+                      当前画布记录的扩展平台未启用或不存在，已临时回到默认来源。
+                    </div>
+                  )}
+                </div>
               )}
-          </div>
-          {!isExternalSelected && (
-            <select className={`${FIELD} mb-1`} value={apiModel} disabled={isReadonly || busy} onChange={(event) => update({ apiModel: event.target.value })}>
-              {modelDef.apiModelOptions
-                .filter((item) => !item.value.includes('-fal'))
-                .map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-            </select>
+            </div>
           )}
-          <div className="grid grid-cols-4 gap-1">
-            <select className={FIELD} value={aspectRatio} disabled={isReadonly || busy} onChange={(event) => update({ aspectRatio: event.target.value })}>
-              {(modelDef.aspectRatios.length ? modelDef.aspectRatios : ['1:1', '16:9', '9:16']).map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-            <select className={FIELD} value={sizeLevel} disabled={isReadonly || busy} onChange={(event) => update({ sizeLevel: event.target.value })}>
-              {(isExternalSelected ? EXTERNAL_SIZE_LEVELS : (modelDef.sizes.length ? modelDef.sizes : EXTERNAL_SIZE_LEVELS)).map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-            <select className={FIELD} value={outputFormat} disabled={isReadonly || busy} onChange={(event) => update({ outputFormat: event.target.value })}>
-              <option value="jpg">JPG</option>
-              <option value="png">PNG</option>
-            </select>
-            <input className={FIELD} type="number" min={0} value={seed} disabled={isReadonly || busy} title="Seed，0 表示随机" onChange={(event) => update({ seed: Math.max(0, Math.floor(Number(event.target.value) || 0)) })} />
+
+          {!isExternalSelected && (
+            <div>
+              <label className="text-[10px] text-white/50 block mb-1">模型</label>
+              <div
+                className={`flex gap-0.5 p-0.5 rounded ${isPixel ? '' : 'bg-white/5'}`}
+                style={isPixel ? { background: 'var(--px-muted)', border: '1.5px solid var(--px-ink)' } : undefined}
+              >
+                {availableModelDefs.map((item) => {
+                  const active = item.id === model;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => update({ model: item.id, apiModel: item.apiModel, aspectRatio: item.defaultAspectRatio, sizeLevel: item.defaultSize || '2K' })}
+                      title={item.description}
+                      className={`flex-1 py-1 text-[10px] font-semibold rounded transition-all ${active ? 'bg-amber-500/30 text-amber-200' : 'text-zinc-400 hover:text-zinc-200'}`}
+                      style={
+                        isPixel && active
+                          ? { background: 'var(--px-yellow)', color: 'var(--px-ink)', border: '1.5px solid var(--px-ink)', boxShadow: '1px 1px 0 var(--px-ink)' }
+                          : isPixel ? { color: 'var(--px-ink-soft)' } : undefined
+                      }
+                    >
+                      {item.tabLabel}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {!isExternalSelected && (
+            <div>
+              <label className="text-[10px] text-white/50 block mb-1">具体模型</label>
+              <select
+                value={apiModel}
+                disabled={isReadonly || busy}
+                onChange={(event) => update({ apiModel: event.target.value })}
+                style={{ background: '#18181b', color: '#ffffff' }}
+                className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
+              >
+                {modelDef.apiModelOptions
+                  .filter((item) => !item.value.includes('-fal'))
+                  .map((item) => <option key={item.value} value={item.value} style={{ background: '#18181b', color: '#ffffff' }}>{item.label}</option>)}
+              </select>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-white/50 block mb-1">比例</label>
+              <select
+                className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
+                style={{ background: '#18181b', color: '#ffffff' }}
+                value={aspectRatio}
+                disabled={isReadonly || busy}
+                onChange={(event) => update({ aspectRatio: event.target.value })}
+              >
+                {(modelDef.aspectRatios.length ? modelDef.aspectRatios : ['1:1', '16:9', '9:16']).map((item) => <option key={item} value={item} style={{ background: '#18181b', color: '#ffffff' }}>{item}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] text-white/50 block mb-1">尺寸</label>
+              <select
+                className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
+                style={{ background: '#18181b', color: '#ffffff' }}
+                value={sizeLevel}
+                disabled={isReadonly || busy}
+                onChange={(event) => update({ sizeLevel: event.target.value })}
+              >
+                {(isExternalSelected ? EXTERNAL_SIZE_LEVELS : (modelDef.sizes.length ? modelDef.sizes : EXTERNAL_SIZE_LEVELS)).map((item) => <option key={item} value={item} style={{ background: '#18181b', color: '#ffffff' }}>{item}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] text-white/50 block mb-1">输出格式</label>
+            <div
+              className={`grid grid-cols-2 gap-0.5 p-0.5 rounded ${isPixel ? '' : 'bg-white/5'}`}
+              style={isPixel ? { background: 'var(--px-muted)', border: '1.5px solid var(--px-ink)' } : undefined}
+            >
+              {(['jpg', 'png'] as const).map((fmt) => {
+                const active = outputFormat === fmt;
+                return (
+                  <button
+                    key={fmt}
+                    type="button"
+                    disabled={isReadonly || busy}
+                    onClick={() => update({ outputFormat: fmt })}
+                    title={fmt === 'png' ? '保留透明区域，文件更大' : '高质量 JPG，文件更小'}
+                    className={`py-1 text-[10px] font-semibold rounded transition-all ${active ? 'bg-amber-500/30 text-amber-200' : 'text-zinc-400 hover:text-zinc-200'}`}
+                    style={
+                      isPixel && active
+                        ? { background: 'var(--px-yellow)', color: 'var(--px-ink)', border: '1.5px solid var(--px-ink)', boxShadow: '1px 1px 0 var(--px-ink)' }
+                        : isPixel ? { color: 'var(--px-ink-soft)' } : undefined
+                    }
+                  >
+                    {fmt.toUpperCase()}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] text-white/50 block mb-1" title="0 = 自动生成并记录随机 seed">Seed (0=random)</label>
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={seed}
+              disabled={isReadonly || busy}
+              onChange={(event) => update({ seed: Math.max(0, Math.floor(Number(event.target.value) || 0)) })}
+              style={{ background: '#18181b', color: '#ffffff' }}
+              className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
+            />
           </div>
         </section>
 
