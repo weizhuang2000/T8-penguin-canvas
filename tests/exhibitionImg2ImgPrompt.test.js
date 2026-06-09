@@ -92,6 +92,19 @@ test('exhibition img2img wall content planning strips size ratio lines', () => {
   assert.doesNotMatch(prompt, /尺寸\s*\/\s*比例\s*[:：]/);
 });
 
+test('exhibition img2img prompt forbids rendering design instruction fields as wall text', () => {
+  const prompt = buildExhibitionImg2ImgPrompt({
+    selectedCrafts: ['custom-craft'],
+    craftPresets: [{ id: 'custom-craft', label: '定制工艺', prompt: '金属立体字与软膜灯箱' }],
+    density: '信息丰富，采用严谨网格',
+    wallContentPrompt: '工艺配置：展板、立体字\n版式备注：适中，沿用整体视觉体系',
+  });
+  assert.match(prompt, /只作为设计执行说明/);
+  assert.match(prompt, /不得作为可读上墙文字、标题、标签或说明直接出现在效果图中/);
+  assert.match(prompt, /不要出现“展陈工艺”“版式密度”“工艺配置”“版式备注”等字样/);
+  assert.match(prompt, /不要把这些字段后的具体工艺、密度、配置、备注要求当作文案排到墙面上/);
+});
+
 test('exhibition img2img prompt explains reference image roles after priority changes', () => {
   const prompt = buildExhibitionImg2ImgPrompt({
     priorityOrder: ['styleImageForm', 'craftLayout', 'structureAnnotations'],

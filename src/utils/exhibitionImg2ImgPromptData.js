@@ -82,6 +82,7 @@ function sectionText(id, values) {
   const lines = ['根据工艺与版式要求深化展陈设计。'];
   if (crafts) lines.push(`展陈工艺：${crafts}`);
   lines.push(`版式密度：${cleanText(values.density || '适中，图文层级均衡，主次分明')}`);
+  lines.push('“展陈工艺”“版式密度”“工艺配置”“版式备注”等字段及其具体要求只作为设计执行说明，用于指导材料、工法、图文层级和版式组织，不得作为可读上墙文字、标题、标签或说明直接出现在效果图中。');
   const wallContentPrompt = cleanWallContentPrompt(values.wallContentPrompt);
   if (wallContentPrompt) {
     lines.push('展墙具体内容设计提示：');
@@ -122,6 +123,7 @@ export function buildExhibitionImg2ImgPrompt(values = {}) {
 
   lines.push('【统一输出约束】');
   lines.push('最终画面不要出现结构示意图中的标注文字、箭头编号、尺寸线、图例、说明标签或乱码文本；如需图文信息，仅以不可读的抽象占位块和清晰版式层级表达。');
+  lines.push('不要把提示词中的字段名或设计说明渲染为上墙文字，尤其不要出现“展陈工艺”“版式密度”“工艺配置”“版式备注”等字样，也不要把这些字段后的具体工艺、密度、配置、备注要求当作文案排到墙面上。');
   lines.push('再次强调：优先级顺序只决定表现形式上的偏向，不决定空间结构；无论优先级如何调整，最终空间结构必须完全遵循空间结构示意图。');
   lines.push('保持空间结构逻辑清楚，并把结构示意图的平面关系、动线、分区、展墙/隔断、入口出口和主要体块转译为真实透视空间；融合效果图的表现气质与工艺版式，输出干净完整的高品质展陈空间效果图。');
 
