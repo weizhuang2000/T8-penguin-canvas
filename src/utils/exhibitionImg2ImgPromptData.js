@@ -13,6 +13,7 @@ export const DEFAULT_EXHIBITION_IMG2IMG_PRIORITY = [
 ];
 
 const PRIORITY_IDS = new Set(EXHIBITION_IMG2IMG_PRIORITY.map((item) => item.id));
+const TONE_REFERENCE_MODES = new Set(['solidModelFirst', 'renderFirst', 'balanced']);
 
 function cleanText(value, max = 12000) {
   return String(value || '').replace(/\r\n?/g, '\n').trim().slice(0, max);
@@ -38,6 +39,22 @@ export function normalizeExhibitionImg2ImgPriority(value) {
     if (!out.includes(id)) out.push(id);
   }
   return out;
+}
+
+function normalizeToneReferenceMode(value) {
+  const id = String(value || '').trim();
+  return TONE_REFERENCE_MODES.has(id) ? id : 'renderFirst';
+}
+
+function toneReferenceText(value) {
+  const mode = normalizeToneReferenceMode(value);
+  if (mode === 'solidModelFirst') {
+    return '色调选择：纯色素模优先。最终画面的基础色调、明暗大关系和空间体块层次优先参考纯色素模，避免高级渲染参考图的色彩氛围覆盖结构图的空间判断；高级渲染参考图只辅助材质真实度、灯光精细度和完成度。';
+  }
+  if (mode === 'balanced') {
+    return '色调选择：二者结合。最终画面的基础色调和体块明暗关系参考纯色素模，高级渲染参考图用于补充材质、光影氛围、色彩丰富度和摄影级完成度，两者融合但不得改变空间结构。';
+  }
+  return '色调选择：高级渲染参考图优先。最终画面的色彩氛围、材质色泽、光影层次和渲染完成度优先参考高级渲染效果图，同时空间结构、布局、动线和体块关系仍完全按照纯色素模空间结构示意图执行。';
 }
 
 function craftText(selectedIds, customCraft, craftPresets) {
@@ -71,6 +88,7 @@ function sectionText(id, values) {
   if (id === 'styleImageForm') {
     return [
       '参考输入效果图的空间表现形式：借鉴整体视觉气质、透视角度、光影氛围、材质表达、画面完成度和展陈空间摄影感。',
+      toneReferenceText(values.toneReferenceMode),
       '效果图只提供表现语言，不覆盖结构示意图中的空间关系和动线约束；如果效果图的墙体、展台、入口、分区与结构图冲突，以结构图为准。',
       '即使“输入效果图形式”在优先级中排在前面，也只能优先采用它的表现形式，不能优先采用它的空间结构、布局比例、墙体位置、通道组织或分区关系。',
     ].join('\n');

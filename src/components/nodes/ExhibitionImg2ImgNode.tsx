@@ -302,6 +302,9 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const sizeLevel = d.sizeLevel || modelDef.defaultSize || '2K';
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
+  const toneReferenceMode = ['solidModelFirst', 'renderFirst', 'balanced'].includes(d.toneReferenceMode)
+    ? d.toneReferenceMode
+    : 'renderFirst';
 
   const structureImage = useHandleImage(id, 'structure');
   const styleImage = useHandleImage(id, 'style');
@@ -386,10 +389,11 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       dimensions: d.dimensions,
       colorMaterial: d.colorMaterial,
       visualStyle: d.visualStyle,
+      toneReferenceMode,
       supplement: d.supplement,
       wallContentPrompt,
     }),
-    [craftPresets, d.colorMaterial, d.customCraft, d.density, d.dimensions, d.supplement, d.visualStyle, priorityOrder, selectedCrafts, wallContentPrompt],
+    [craftPresets, d.colorMaterial, d.customCraft, d.density, d.dimensions, d.supplement, d.visualStyle, priorityOrder, selectedCrafts, toneReferenceMode, wallContentPrompt],
   );
 
   useEffect(() => {
@@ -1095,6 +1099,11 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
             <input className={FIELD} value={d.dimensions || ''} disabled={isReadonly} placeholder="空间/画面尺寸" onChange={(event) => update({ dimensions: event.target.value })} />
             <input className={FIELD} value={d.colorMaterial || ''} disabled={isReadonly} placeholder="色彩与材质" onChange={(event) => update({ colorMaterial: event.target.value })} />
             <input className={FIELD} value={d.visualStyle || ''} disabled={isReadonly} placeholder="视觉风格" onChange={(event) => update({ visualStyle: event.target.value })} />
+            <select className={FIELD} value={toneReferenceMode} disabled={isReadonly} onChange={(event) => update({ toneReferenceMode: event.target.value })}>
+              <option value="solidModelFirst">纯色素模优先</option>
+              <option value="renderFirst">高级渲染参考图优先</option>
+              <option value="balanced">二者结合</option>
+            </select>
           </div>
           <textarea className={`${FIELD} mt-1 min-h-[48px] resize-y`} value={d.supplement || ''} disabled={isReadonly} placeholder="补充要求" onChange={(event) => update({ supplement: event.target.value })} />
         </section>

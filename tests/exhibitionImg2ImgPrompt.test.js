@@ -105,6 +105,19 @@ test('exhibition img2img prompt forbids rendering design instruction fields as w
   assert.match(prompt, /不要把这些字段后的具体工艺、密度、配置、备注要求当作文案排到墙面上/);
 });
 
+test('exhibition img2img prompt includes tone reference mode', () => {
+  const defaultPrompt = buildExhibitionImg2ImgPrompt();
+  assert.match(defaultPrompt, /色调选择：高级渲染参考图优先/);
+
+  const solidPrompt = buildExhibitionImg2ImgPrompt({ toneReferenceMode: 'solidModelFirst' });
+  assert.match(solidPrompt, /色调选择：纯色素模优先/);
+  assert.match(solidPrompt, /基础色调、明暗大关系和空间体块层次优先参考纯色素模/);
+
+  const balancedPrompt = buildExhibitionImg2ImgPrompt({ toneReferenceMode: 'balanced' });
+  assert.match(balancedPrompt, /色调选择：二者结合/);
+  assert.match(balancedPrompt, /基础色调和体块明暗关系参考纯色素模，高级渲染参考图用于补充材质/);
+});
+
 test('exhibition img2img prompt explains reference image roles after priority changes', () => {
   const prompt = buildExhibitionImg2ImgPrompt({
     priorityOrder: ['styleImageForm', 'craftLayout', 'structureAnnotations'],

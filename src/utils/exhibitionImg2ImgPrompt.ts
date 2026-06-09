@@ -24,6 +24,7 @@ export interface ExhibitionImg2ImgPromptValues {
   dimensions?: string;
   colorMaterial?: string;
   visualStyle?: string;
+  toneReferenceMode?: 'solidModelFirst' | 'renderFirst' | 'balanced';
   supplement?: string;
   wallContentPrompt?: string;
 }
