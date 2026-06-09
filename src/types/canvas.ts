@@ -49,6 +49,7 @@ export type NodeType =
   | 'video-motion'
   | 'exhibition-prompt'
   | 'elevation-prompt'
+  | 'exhibition-img2img'
   | 'multi-angle-visual'
   | 'portrait-master'
   | 'pose-master'

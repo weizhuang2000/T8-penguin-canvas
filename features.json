@@ -2021,7 +2021,7 @@
     },
     "exhibition": {
       "label": "展陈工具",
-      "count": 3,
+      "count": 4,
       "nodes": [
         {
           "type": "import-cam-project",
@@ -2037,6 +2037,11 @@
           "type": "elevation-prompt",
           "label": "立面提示词",
           "description": "上传 DOCX、文本型 PDF 或 TXT 后自动调用 LLM 提炼主题、章节和准确原文；支持单/多立面、逐面集合/整套总览、13 类展陈工艺、自定义工艺、概念生图 Prompt 与准确图文工艺排版清单"
+        },
+        {
+          "type": "exhibition-img2img",
+          "label": "展陈图生图",
+          "description": "双参考图展陈图生图：空间结构示意图 + 空间表现效果图，支持工艺版式与优先级控制，并约束不渲染结构图标注文字"
         }
       ]
     },

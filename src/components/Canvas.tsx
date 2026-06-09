@@ -109,6 +109,7 @@ import ImageCompareNode from './nodes/ImageCompareNode';
 import ToolboxParamNode from './nodes/ToolboxParamNode';
 import ExhibitionPromptNode from './nodes/ExhibitionPromptNode';
 import ElevationPromptNode from './nodes/ElevationPromptNode';
+import ExhibitionImg2ImgNode from './nodes/ExhibitionImg2ImgNode';
 import PortraitMasterNode from './nodes/PortraitMasterNode';
 import PoseMasterNode from './nodes/PoseMasterNode';
 import IdeaNode from './nodes/IdeaNode';
@@ -194,6 +195,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'video-motion': ToolboxParamNode,
   'exhibition-prompt': ExhibitionPromptNode,
   'elevation-prompt': ElevationPromptNode,
+  'exhibition-img2img': ExhibitionImg2ImgNode,
   'multi-angle-visual': ToolboxParamNode,
   'portrait-master': PortraitMasterNode,
   'pose-master': PoseMasterNode,
@@ -334,6 +336,23 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
   cinematic: { kind: 'cinematic', cinematicLanguage: 'en', cinematicStrength: 'balanced' },
   'video-motion': { kind: 'video-motion', motionLanguage: 'en' },
   'exhibition-prompt': { prompt: '', outputText: '', text: '', imageUrls: [], referenceImages: [], materialOrder: [] },
+  'exhibition-img2img': {
+    model: 'gpt-image-2',
+    apiModel: 'gpt-image-2-all',
+    aspectRatio: '1:1',
+    sizeLevel: '2K',
+    outputFormat: 'jpg',
+    priorityOrder: ['structureAnnotations', 'craftLayout', 'styleImageForm'],
+    selectedCrafts: ['panel', 'dimensional-letters', 'soft-film-lightbox'],
+    density: '适中，图文层级均衡',
+    prompt: '',
+    outputText: '',
+    text: '',
+    imageUrls: [],
+    referenceImages: [],
+    status: 'idle',
+    error: '',
+  },
   'elevation-prompt': {
     model: '',
     sourceText: '',
