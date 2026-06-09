@@ -17,7 +17,6 @@ import {
 import { DEFAULT_LLM_MODEL, isImageOutputLlm } from '../../providers/models';
 import {
   fileToDataUrl,
-  generateExternalLlm,
   generateLlm,
   generateLlmStream,
   type LlmContentPart,
@@ -39,11 +38,6 @@ import { splitText } from '../../utils/textSplit';
 import { defaultSizeOf, placeBatchNodes, type Rect as PlacementRect } from '../../utils/nodePlacement';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useApiKeysStore } from '../../stores/apiKeys';
-import {
-  advancedProviderModelOptions,
-  advancedProvidersForNode,
-  resolveAdvancedProviderSelection,
-} from '../../utils/advancedProviders';
 import {
   countExcludedMaterials,
   excludeMaterialId,
@@ -174,25 +168,6 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
     || llmConfigOptions.find((item) => item.isDefault)
     || llmConfigOptions[0];
   const model: string = activeLlmConfig?.model || configuredLlmModel;
-  const advancedProviders = useApiKeysStore((s) => s.settings.advancedProviders);
-  const llmAdvancedProviders = useMemo(
-    () => advancedProvidersForNode(advancedProviders, 'llm'),
-    [advancedProviders],
-  );
-  const providerSelection = useMemo(
-    () => resolveAdvancedProviderSelection(advancedProviders, 'llm', {
-      providerSource: d?.providerSource,
-      providerId: d?.providerId,
-      providerModel: d?.providerModel,
-    }),
-    [advancedProviders, d?.providerSource, d?.providerId, d?.providerModel],
-  );
-  const isExternalSelected = providerSelection.available && providerSelection.providerSource !== 'zhenzhen';
-  const savedExternalMissing = !!d?.providerSource && d.providerSource !== 'zhenzhen' && !providerSelection.available;
-  const externalModelOptions = providerSelection.provider
-    ? advancedProviderModelOptions(providerSelection.provider, 'llm')
-    : [];
-  const externalProviderModel = providerSelection.providerModel || externalModelOptions[0] || '';
   const status: 'idle' | 'generating' | 'success' | 'error' = d?.status || 'idle';
     // 用户输入框值: 改用 d.userPrompt 私有字段（避免与对下游开放的 d.prompt=助手回复 冲突，
     // 否则下游 useUpstreamMaterials 会同时 pushText(d.prompt) + pushText(d.reply) 出现两条文本）
@@ -206,9 +181,8 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
   const history: ChatTurn[] = Array.isArray(d?.history) ? d.history : [];
   const generatedImages: string[] = Array.isArray(d?.generatedImages) ? d.generatedImages : [];
 
-  const activeModel = isExternalSelected ? externalProviderModel : model;
-  const src = `LLM·${activeModel || model}·#${id.slice(-4)}`;
-  const isImgOut = !isExternalSelected && isImageOutputLlm(model);
+  const src = `LLM·${model}·#${id.slice(-4)}`;
+  const isImgOut = isImageOutputLlm(model);
 
   // 上游素材实时订阅(跟随上游 data 变化重渲染) —— 用于节点内预览。
   // 跟 ImageNode / SeedanceNode 同一套机制(useNodeConnections + useNodesData),
@@ -346,8 +320,8 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
     taskCompletionSound.primeAudio();
     update({ status: 'generating', error: null });
     logBus.info(
-      `发送到 ${isExternalSelected && providerSelection.provider ? providerSelection.provider.label : model} · ${
-        !isExternalSelected && useStream && !isImgOut ? 'SSE' : '非流式'
+      `发送到 ${model} · ${
+        useStream && !isImgOut ? 'SSE' : '非流式'
       } · imgs=${userImages.length}`,
       src,
     );
@@ -358,7 +332,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
     const nextHistory: ChatTurn[] = [...history, userTurn];
 
     try {
-      if (!isExternalSelected && useStream && !isImgOut) {
+      if (useStream && !isImgOut) {
         // ====== 流式 ======
         const ctrl = new AbortController();
         abortRef.current = ctrl;
@@ -387,17 +361,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
         taskCompletionSound.notifyComplete(id, 'llm');
       } else {
         // ====== 非流式(出图模型 或 关流式) ======
-        const res = isExternalSelected && providerSelection.provider
-          ? await generateExternalLlm({
-              providerId: providerSelection.provider.id,
-              providerModel: externalProviderModel,
-              model: externalProviderModel,
-              messages,
-              temperature,
-              max_tokens: maxTokens,
-              providerParams: d?.providerParams || {},
-            })
-          : await generateLlm({ model, messages, llmKeyId: activeLlmConfig?.id, temperature, max_tokens: maxTokens });
+        const res = await generateLlm({ model, messages, llmKeyId: activeLlmConfig?.id, temperature, max_tokens: maxTokens });
         const replyText = res.content || '';
         const imgs = res.imageUrls || [];
         const finalHistory: ChatTurn[] = [
@@ -610,9 +574,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold text-white truncate">LLM / Vision</div>
           <div className="text-[10px] text-white/40 truncate">
-            {isExternalSelected && providerSelection.provider
-              ? `${providerSelection.provider.label || providerSelection.provider.id} · ${externalProviderModel || '未选模型'}`
-              : `${activeLlmConfig?.label || '默认 LLM'} · ${model || '未选模型'}`}
+            {`${activeLlmConfig?.label || '默认 LLM'} · ${model || '未选模型'}`}
           </div>
         </div>
         {history.length > 0 && (
@@ -635,29 +597,19 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
               className="w-full flex items-center justify-between text-[10px] font-semibold text-white/70 hover:text-white"
             >
               <span>LLM 配置</span>
-              <span>{isExternalSelected && providerSelection.provider ? providerSelection.provider.label : (activeLlmConfig?.label || '默认 LLM')}</span>
+              <span>{activeLlmConfig?.label || '默认 LLM'}</span>
             </button>
             {d?.advancedProviderOpen && (
               <div className="space-y-2">
                 <div>
                   <label className="text-[10px] text-white/50 block mb-1">来源</label>
                   <select
-                    value={isExternalSelected ? providerSelection.providerId : `llm-key:${activeLlmConfig?.id || 'default'}`}
+                    value={`llm-key:${activeLlmConfig?.id || 'default'}`}
                     onChange={(e) => {
                       const nextId = e.target.value;
                       if (nextId.startsWith('llm-key:')) {
                         update({ providerSource: 'zhenzhen', providerId: '', providerModel: '', llmKeyId: nextId.slice(8) });
-                        return;
                       }
-                      const provider = llmAdvancedProviders.find((item) => item.id === nextId);
-                      if (!provider) return;
-                      const nextModels = advancedProviderModelOptions(provider, 'llm');
-                      update({
-                        providerSource: provider.protocol,
-                        providerId: provider.id,
-                        providerModel: nextModels[0] || '',
-                        stream: false,
-                      });
                     }}
                     style={{ background: '#18181b', color: '#ffffff' }}
                     className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
@@ -667,33 +619,8 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
                         {item.label || item.id}{item.model ? ` · ${item.model}` : ''}
                       </option>
                     ))}
-                    {llmAdvancedProviders.map((provider) => (
-                      <option key={provider.id} value={provider.id} style={{ background: '#18181b', color: '#ffffff' }}>
-                        {provider.label || provider.id}
-                      </option>
-                    ))}
                   </select>
                 </div>
-                {isExternalSelected && providerSelection.provider && (
-                  <div>
-                    <label className="text-[10px] text-white/50 block mb-1">外部模型</label>
-                    <select
-                      value={externalProviderModel}
-                      onChange={(e) => update({ providerModel: e.target.value })}
-                      style={{ background: '#18181b', color: '#ffffff' }}
-                      className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
-                    >
-                      {externalModelOptions.map((m) => (
-                        <option key={m} value={m} style={{ background: '#18181b', color: '#ffffff' }}>{m}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                {savedExternalMissing && (
-                  <div className="text-[10px] text-amber-200 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1">
-                    当前画布记录的扩展平台未启用或不存在，已临时回到默认来源。
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -729,19 +656,19 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
             <label className="text-[9px] text-white/40 block mb-0.5">流式</label>
             <label
               className={`flex items-center justify-center gap-1 rounded px-1.5 py-1 text-[10px] cursor-pointer ${
-                useStream && !isImgOut && !isExternalSelected
+                useStream && !isImgOut
                   ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                   : 'bg-white/5 text-white/40 border border-white/10'
-              } ${isImgOut || isExternalSelected ? 'opacity-50 cursor-not-allowed' : ''}`}
+              } ${isImgOut ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <input
                 type="checkbox"
-                disabled={isImgOut || isExternalSelected}
-                checked={useStream && !isImgOut && !isExternalSelected}
+                disabled={isImgOut}
+                checked={useStream && !isImgOut}
                 onChange={(e) => update({ stream: e.target.checked })}
                 className="hidden"
               />
-              {isExternalSelected ? '关(扩展)' : isImgOut ? '关(出图)' : useStream ? 'SSE' : '关'}
+              {isImgOut ? '关(出图)' : useStream ? 'SSE' : '关'}
             </label>
           </div>
         </div>
@@ -863,7 +790,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
               </>
             )}
           </button>
-          {status === 'generating' && useStream && !isImgOut && !isExternalSelected && (
+          {status === 'generating' && useStream && !isImgOut && (
             <button
               onClick={handleStop}
               className="px-2 py-1.5 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs"

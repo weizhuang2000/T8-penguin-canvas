@@ -22,7 +22,6 @@ import {
   IMAGE_MODELS,
 } from '../../providers/models';
 import {
-  generateExternalLlm,
   generateExternalImage,
   generateLlm,
   queryImageStatus,
@@ -271,7 +270,6 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     const saved = llmConfigs.filter((item) => item && (item.hasApiKey || item.apiKey || item.baseUrl || item.model));
     return saved.length > 0 ? saved : [{ id: 'default', label: '默认 LLM', model: configuredLlmModel }];
   }, [configuredLlmModel, llmConfigs]);
-  const llmProviders = useMemo(() => advancedProvidersForNode(advancedProviders, 'llm'), [advancedProviders]);
   const providerSelection = useMemo(
     () => resolveAdvancedProviderSelection(advancedProviders, 'image', {
       providerSource: d.providerSource,
@@ -290,19 +288,6 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const providerSelectValue = isExternalSelected
     ? providerSelection.providerId
     : (allowZhenzhenFallback ? 'zhenzhen' : (firstImageAdvancedProvider?.id || ''));
-  const contentProviderSelection = useMemo(
-    () => resolveAdvancedProviderSelection(advancedProviders, 'llm', {
-      providerSource: d.contentProviderSource,
-      providerId: d.contentProviderId,
-      providerModel: d.contentProviderModel,
-    }),
-    [advancedProviders, d.contentProviderId, d.contentProviderModel, d.contentProviderSource],
-  );
-  const contentExternalSelected = contentProviderSelection.available && contentProviderSelection.providerSource !== 'zhenzhen';
-  const contentExternalModels = contentProviderSelection.provider
-    ? advancedProviderModelOptions(contentProviderSelection.provider, 'llm')
-    : [];
-  const contentExternalModel = contentProviderSelection.providerModel || contentExternalModels[0] || '';
   const selectedContentLlmKeyId = String(d.contentLlmKeyId || '').trim();
   const activeContentLlmConfig = llmConfigOptions.find((item) => item.id === selectedContentLlmKeyId)
     || llmConfigOptions.find((item) => item.isDefault)
@@ -523,23 +508,13 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     try {
       const messages = buildElevationAnalysisMessages(text, wallMode, wallCount, refineWordCount);
       const maxTokens = Math.max(1200, Math.min(8192, Math.ceil(refineWordCount * 3.2)));
-      const response = contentExternalSelected && contentProviderSelection.provider
-        ? await generateExternalLlm({
-            providerId: contentProviderSelection.provider.id,
-            providerModel: contentExternalModel,
-            model: contentExternalModel,
-            messages: messages as any,
-            temperature: 0.2,
-            max_tokens: maxTokens,
-            providerParams: d.contentProviderParams || {},
-          })
-        : await generateLlm({
-            model: contentModel,
-            messages: messages as any,
-            llmKeyId: activeContentLlmConfig?.id,
-            temperature: 0.2,
-            max_tokens: maxTokens,
-          });
+      const response = await generateLlm({
+        model: contentModel,
+        messages: messages as any,
+        llmKeyId: activeContentLlmConfig?.id,
+        temperature: 0.2,
+        max_tokens: maxTokens,
+      });
       const nextAnalysis = parseElevationAnalysisResponse(response.content) as ElevationAnalysis;
       const nextWalls = wallsFromAnalysis(nextAnalysis, wallMode, wallCount) as ElevationWall[];
       update({
@@ -556,11 +531,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   }, [
     activeContentLlmConfig?.id,
     contentEnabled,
-    contentExternalModel,
-    contentExternalSelected,
     contentModel,
-    contentProviderSelection.provider,
-    d.contentProviderParams,
     isReadonly,
     refineWordCount,
     sourceText,
@@ -920,34 +891,17 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                   <select
                     className={FIELD}
                     disabled={isReadonly || contentBusy}
-                    value={contentExternalSelected ? contentProviderSelection.providerId : `llm-key:${activeContentLlmConfig?.id || 'default'}`}
+                    value={`llm-key:${activeContentLlmConfig?.id || 'default'}`}
                     onChange={(event) => {
                       const nextId = event.target.value;
                       if (nextId.startsWith('llm-key:')) {
                         update({ contentProviderSource: 'zhenzhen', contentProviderId: '', contentProviderModel: '', contentLlmKeyId: nextId.slice(8) });
-                        return;
                       }
-                      const provider = llmProviders.find((item) => item.id === nextId);
-                      if (!provider) return;
-                      const models = advancedProviderModelOptions(provider, 'llm');
-                      update({ contentProviderSource: provider.protocol, contentProviderId: provider.id, contentProviderModel: models[0] || '' });
                     }}
                   >
                     {llmConfigOptions.map((item) => <option key={item.id} value={`llm-key:${item.id}`}>{item.label || item.id}{item.model ? ` · ${item.model}` : ''}</option>)}
-                    {llmProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}
                   </select>
-                  {contentExternalSelected ? (
-                    <select
-                      className={FIELD}
-                      disabled={isReadonly || contentBusy}
-                      value={contentExternalModel}
-                      onChange={(event) => update({ contentProviderModel: event.target.value })}
-                    >
-                      {contentExternalModels.map((item) => <option key={item} value={item}>{item}</option>)}
-                    </select>
-                  ) : (
-                    <input className={FIELD} disabled value={contentModel} title="模型由所选 LLM 配置决定" />
-                  )}
+                  <input className={FIELD} disabled value={contentModel} title="模型由所选 LLM 配置决定" />
                 </div>
                 <input
                   className={FIELD}

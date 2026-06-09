@@ -24,7 +24,7 @@ import {
   type ElevationCraftPresetItem,
   type ExtractedDocument,
 } from '../../services/api';
-import { generateExternalLlm, generateLlm } from '../../services/generation';
+import { generateLlm } from '../../services/generation';
 import { DEFAULT_LLM_MODEL } from '../../providers/models';
 import {
   buildElevationAnalysisMessages,
@@ -37,11 +37,6 @@ import {
   type ElevationCraft,
   type ElevationWall,
 } from '../../utils/elevationPrompt';
-import {
-  advancedProviderModelOptions,
-  advancedProvidersForNode,
-  resolveAdvancedProviderSelection,
-} from '../../utils/advancedProviders';
 import { useApiKeysStore } from '../../stores/apiKeys';
 import { useCanvasStore } from '../../stores/canvas';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
@@ -195,7 +190,6 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
   const status = String(d.status || 'idle');
   const busy = status === 'extracting' || status === 'refining';
 
-  const advancedProviders = useApiKeysStore((state) => state.settings.advancedProviders);
   const configuredLlmModel = useApiKeysStore((state) => state.settings.llmModel)?.trim() || DEFAULT_LLM_MODEL;
   const llmConfigs = useApiKeysStore((state) => state.settings.llmConfigs || state.settings.llmApiKeys) || [];
   const llmConfigOptions = useMemo(() => {
@@ -206,20 +200,6 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
   const activeLlmConfig = llmConfigOptions.find((item) => item.id === selectedLlmKeyId)
     || llmConfigOptions.find((item) => item.isDefault)
     || llmConfigOptions[0];
-  const llmProviders = useMemo(() => advancedProvidersForNode(advancedProviders, 'llm'), [advancedProviders]);
-  const providerSelection = useMemo(
-    () => resolveAdvancedProviderSelection(advancedProviders, 'llm', {
-      providerSource: d.providerSource,
-      providerId: d.providerId,
-      providerModel: d.providerModel,
-    }),
-    [advancedProviders, d.providerSource, d.providerId, d.providerModel],
-  );
-  const externalSelected = providerSelection.available && providerSelection.providerSource !== 'zhenzhen';
-  const externalModels = providerSelection.provider
-    ? advancedProviderModelOptions(providerSelection.provider, 'llm')
-    : [];
-  const externalModel = providerSelection.providerModel || externalModels[0] || '';
   const savedModel = String(d.model || '').trim();
   const shouldUseConfiguredDefault = savedModel === DEFAULT_LLM_MODEL && configuredLlmModel !== DEFAULT_LLM_MODEL && !d.modelMigratedFromDefault;
   const model = activeLlmConfig?.model || (shouldUseConfiguredDefault ? configuredLlmModel : (savedModel || configuredLlmModel));
@@ -334,23 +314,13 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
     try {
       const messages = buildElevationAnalysisMessages(text, wallMode, wallCount, refineWordCount);
       const maxTokens = Math.max(1200, Math.min(8192, Math.ceil(refineWordCount * 3.2)));
-      const response = externalSelected && providerSelection.provider
-        ? await generateExternalLlm({
-            providerId: providerSelection.provider.id,
-            providerModel: externalModel,
-            model: externalModel,
-            messages: messages as any,
-            temperature: 0.2,
-            max_tokens: maxTokens,
-            providerParams: d.providerParams || {},
-          })
-        : await generateLlm({
-            model,
-            messages: messages as any,
-            llmKeyId: activeLlmConfig?.id,
-            temperature: 0.2,
-            max_tokens: maxTokens,
-          });
+      const response = await generateLlm({
+        model,
+        messages: messages as any,
+        llmKeyId: activeLlmConfig?.id,
+        temperature: 0.2,
+        max_tokens: maxTokens,
+      });
       const nextAnalysis = parseElevationAnalysisResponse(response.content) as ElevationAnalysis;
       const nextWalls = wallsFromAnalysis(nextAnalysis, wallMode, wallCount) as ElevationWall[];
       update({
@@ -368,12 +338,9 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
       if (rethrow) throw error;
     }
   }, [
-    d.providerParams,
-    externalModel,
-    externalSelected,
+    activeLlmConfig?.id,
     isReadonly,
     model,
-    providerSelection.provider,
     refineWordCount,
     sourceText,
     update,
@@ -639,39 +606,22 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
               <select
                 className={FIELD}
                 disabled={isReadonly || busy}
-                value={externalSelected ? providerSelection.providerId : `llm-key:${activeLlmConfig?.id || 'default'}`}
+                value={`llm-key:${activeLlmConfig?.id || 'default'}`}
                 onChange={(event) => {
                   const nextId = event.target.value;
                   if (nextId.startsWith('llm-key:')) {
                     update({ providerSource: 'zhenzhen', providerId: '', providerModel: '', llmKeyId: nextId.slice(8) });
-                    return;
                   }
-                  const provider = llmProviders.find((item) => item.id === nextId);
-                  if (!provider) return;
-                  const models = advancedProviderModelOptions(provider, 'llm');
-                  update({ providerSource: provider.protocol, providerId: provider.id, providerModel: models[0] || '' });
                 }}
               >
                 {llmConfigOptions.map((item) => <option key={item.id} value={`llm-key:${item.id}`}>{item.label || item.id}{item.model ? ` · ${item.model}` : ''}</option>)}
-                {llmProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}
               </select>
-              {externalSelected ? (
-                <select
-                  className={FIELD}
-                  disabled={isReadonly || busy}
-                  value={externalModel}
-                  onChange={(event) => update({ providerModel: event.target.value })}
-                >
-                  {externalModels.map((item) => <option key={item} value={item}>{item}</option>)}
-                </select>
-              ) : (
-                <input
-                  className={FIELD}
-                  disabled
-                  value={model}
-                  title="模型由所选 LLM 配置决定"
-                />
-              )}
+              <input
+                className={FIELD}
+                disabled
+                value={model}
+                title="模型由所选 LLM 配置决定"
+              />
           </div>
           <input
             className={FIELD}
