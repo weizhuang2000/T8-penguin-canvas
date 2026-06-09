@@ -231,7 +231,7 @@ router.post('/llm', requireNodePermission('llm'), async (req, res) => {
   }
 });
 
-router.post('/image', requireNodePermission('image'), async (req, res) => {
+router.post('/image', requireNodePermission(['image', 'exhibition-img2img']), async (req, res) => {
   try {
     const settings = settingsRouter.loadSettings({ persistMigrations: false });
     const currentProviders = normalizeAdvancedProviders(settings.advancedProviders);

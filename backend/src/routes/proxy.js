@@ -738,7 +738,7 @@ async function normalizeImageResponse(data, outputFormat = 'jpg') {
   return { kind: 'unknown' };
 }
 
-router.post('/image', requireNodePermission('image'), async (req, res) => {
+router.post('/image', requireNodePermission(['image', 'exhibition-img2img']), async (req, res) => {
   const settings = loadRawSettings();
   const {
     model, apiModel, paramKind: paramKindIn,
@@ -800,7 +800,7 @@ router.post('/image', requireNodePermission('image'), async (req, res) => {
 // POST /api/proxy/image/submit -> { taskId }(同 submit 逻辑,但不同步轮询)
 // GET  /api/proxy/image/status/:tid -> { status, progress, urls? }
 // ========================================================================
-router.post('/image/submit', requireNodePermission('image'), async (req, res) => {
+router.post('/image/submit', requireNodePermission(['image', 'exhibition-img2img']), async (req, res) => {
   const settings = loadRawSettings();
   try {
     const { model, apiModel, paramKind: paramKindIn, prompt, n,
@@ -850,7 +850,7 @@ router.post('/image/submit', requireNodePermission('image'), async (req, res) =>
 });
 
 // 查询异步图像任务状态
-router.get('/image/status/:tid', requireNodePermission('image'), async (req, res) => {
+router.get('/image/status/:tid', requireNodePermission(['image', 'exhibition-img2img']), async (req, res) => {
   const settings = loadRawSettings();
   // 优先从 submit 阶段记录的 (taskId → key) 映射恢复，防止前端未传 model 导致 fallback 错 key。
   const remembered = recallTaskKey(req.params.tid);
@@ -990,7 +990,7 @@ function fixFalResponseUrl(responseUrl, baseUrl, endpoint, requestId) {
 //   body 公用: { apiModel, prompt, images?, n?, format?, sync?, ... }
 //   gpt-fal 专属: { mode?: 'edit'|'gen', size?: '1024x1024'|'square'|...|'custom', customW?, customH?, quality?: low|medium|high|auto }
 //   nbpro-fal 专属: { aspect_ratio, resolution, safety_tolerance, seed?, system_prompt?, enable_web_search?, image_mode?: 'image_url'|'base64' }
-router.post('/image/fal/submit', requireNodePermission('image'), async (req, res) => {
+router.post('/image/fal/submit', requireNodePermission(['image', 'exhibition-img2img']), async (req, res) => {
   const settings = loadRawSettings();
   const {
     apiModel, prompt, images, n, format, sync,
@@ -1145,7 +1145,7 @@ router.post('/image/fal/submit', requireNodePermission('image'), async (req, res
 // POST /api/proxy/image/fal/query
 //   body: { responseUrl, endpoint, requestId }
 //   返回: { status: 'pending'|'completed'|'failed', urls?, error? }
-router.post('/image/fal/query', requireNodePermission('image'), async (req, res) => {
+router.post('/image/fal/query', requireNodePermission(['image', 'exhibition-img2img']), async (req, res) => {
   const settings = loadRawSettings();
   const { responseUrl: rawUrl, endpoint, requestId, outputFormat } = req.body || {};
   const imageOutputFormat = normalizeImageOutputFormat(outputFormat || recallTaskImageFormat(requestId));

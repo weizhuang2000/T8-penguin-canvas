@@ -53,6 +53,7 @@ const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 tex
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
 const DEFAULT_CRAFTS = ['panel', 'dimensional-letters', 'soft-film-lightbox'];
 const MAX_IMAGE_SEED = 2147483647;
+const EXTERNAL_SIZE_LEVELS = ['1K', '2K', '4K'];
 
 function randomImageSeed(): number {
   if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
@@ -176,11 +177,23 @@ function PrioritySorter({
   );
 }
 
-function ImageSlot({ title, subtitle, url, top }: { title: string; subtitle: string; url: string; top: string }) {
+function ImageSlot({
+  handleId,
+  title,
+  subtitle,
+  url,
+  top,
+}: {
+  handleId: 'structure' | 'style';
+  title: string;
+  subtitle: string;
+  url: string;
+  top: string;
+}) {
   return (
     <>
       <Handle
-        id={title.includes('结构') ? 'structure' : 'style'}
+        id={handleId}
         type="target"
         position={Position.Left}
         className="!h-3 !w-3 !border-0 !bg-cyan-300"
@@ -374,6 +387,13 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       if (isExternalSelected && providerSelection.provider) {
         if (!externalProviderModel) throw new Error('扩展平台未配置可用图像模型');
         const size = externalImageSizeFor(aspectRatio, sizeLevel);
+        const providerParams = {
+          ...(d.providerParams || {}),
+          aspect_ratio: aspectRatio,
+          aspectRatio,
+          image_size: sizeLevel,
+          imageSize: sizeLevel,
+        };
         logBus.info(`展陈图生图提交: ${providerSelection.provider.label || providerSelection.provider.id} · ${externalProviderModel} · refs=${orderedReferenceImages.length}`, src);
         const res = await generateExternalImage({
           providerId: providerSelection.provider.id,
@@ -386,8 +406,8 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           images: orderedReferenceImages,
           outputFormat,
           seed: runSeed,
-          n: Math.max(1, Math.min(4, Number(d.providerParams?.n || 1))),
-          providerParams: d.providerParams || {},
+          n: Math.max(1, Math.min(4, Number(providerParams.n || 1))),
+          providerParams,
           historyContext,
         });
         const urls = res.imageUrls || [];
@@ -518,8 +538,8 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         )}
 
         <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
-          <ImageSlot title="空间结构示意图" subtitle="保留结构、动线、分区；标注只作理解参考" url={structureImage} top="24%" />
-          <ImageSlot title="空间表现效果图" subtitle="借鉴风格、材质、光影和完成度" url={styleImage} top="39%" />
+          <ImageSlot handleId="structure" title="空间结构示意图" subtitle="保留结构、动线、分区；标注只作理解参考" url={structureImage} top="24%" />
+          <ImageSlot handleId="style" title="空间表现效果图" subtitle="借鉴风格、材质、光影和完成度" url={styleImage} top="39%" />
         </section>
 
         <section className="rounded border border-white/10 bg-white/[0.035] p-2">
@@ -640,7 +660,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               {(modelDef.aspectRatios.length ? modelDef.aspectRatios : ['1:1', '16:9', '9:16']).map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
             <select className={FIELD} value={sizeLevel} disabled={isReadonly || busy} onChange={(event) => update({ sizeLevel: event.target.value })}>
-              {(modelDef.sizes.length ? modelDef.sizes : ['1K', '2K', '4K']).map((item) => <option key={item} value={item}>{item}</option>)}
+              {(isExternalSelected ? EXTERNAL_SIZE_LEVELS : (modelDef.sizes.length ? modelDef.sizes : EXTERNAL_SIZE_LEVELS)).map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
             <select className={FIELD} value={outputFormat} disabled={isReadonly || busy} onChange={(event) => update({ outputFormat: event.target.value })}>
               <option value="jpg">JPG</option>
