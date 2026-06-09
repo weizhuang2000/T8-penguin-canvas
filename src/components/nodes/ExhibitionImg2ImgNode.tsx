@@ -140,6 +140,17 @@ function cleanExhibitDescription(value: string, fallback: string) {
   return (text || fallback).slice(0, 24);
 }
 
+function exhibitRecognitionErrorMessage(error: any) {
+  const message = String(error?.message || error || '').trim();
+  if (/no available accounts/i.test(message)) {
+    return '当前 LLM 上游没有可用账号，请在展品识别区切换支持视觉且账号可用的 LLM 配置，或稍后重试。';
+  }
+  if (/unknown variant [`']?(image_url|image)[`']?/i.test(message) || /expected [`']?text[`']?/i.test(message)) {
+    return '当前 LLM 配置不支持图片识别，请在展品识别区切换支持视觉输入的 LLM 配置。';
+  }
+  return message || '展品识别失败';
+}
+
 function useHandleImage(nodeId: string, targetHandle: string): string {
   const conns = useNodeConnections({ id: nodeId, handleType: 'target' });
   const sourceIds = useMemo(
@@ -393,6 +404,12 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     || llmConfigOptions[0];
   const savedContentModel = String(d.contentModel || '').trim();
   const contentModel = activeContentLlmConfig?.model || savedContentModel || configuredLlmModel;
+  const selectedExhibitLlmKeyId = String(d.exhibitLlmKeyId || d.contentLlmKeyId || '').trim();
+  const activeExhibitLlmConfig = llmConfigOptions.find((item) => item.id === selectedExhibitLlmKeyId)
+    || llmConfigOptions.find((item) => item.isDefault)
+    || llmConfigOptions[0];
+  const savedExhibitModel = String(d.exhibitModel || '').trim();
+  const exhibitModel = activeExhibitLlmConfig?.model || savedExhibitModel || contentModel;
 
   const model = d.model || 'gpt-image-2';
   const modelDef = useMemo(() => IMAGE_MODELS.find((item) => item.id === model) || IMAGE_MODELS[0], [model]);
@@ -645,8 +662,8 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         const item = nextItems[index];
         setRecognizeProgress(`${index + 1}/${nextItems.length}`);
         const response = await generateLlm({
-          model: contentModel,
-          llmKeyId: activeContentLlmConfig?.id,
+          model: exhibitModel,
+          llmKeyId: activeExhibitLlmConfig?.id,
           temperature: 0.1,
           max_tokens: 40,
           messages: [
@@ -673,14 +690,14 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       }
       setRecognizeProgress('完成');
     } catch (error: any) {
-      update({ status: 'error', error: error?.message || '展品识别失败' });
+      update({ status: 'error', error: exhibitRecognitionErrorMessage(error) });
       setRecognizeProgress('失败');
     } finally {
       setRecognizingExhibits(false);
     }
   }, [
-    activeContentLlmConfig?.id,
-    contentModel,
+    activeExhibitLlmConfig?.id,
+    exhibitModel,
     exhibitItems,
     isReadonly,
     recognizingExhibits,
@@ -1107,6 +1124,22 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           </div>
           <div className="text-[10px] leading-snug text-white/45">
             将多张展品图接入左侧展品入口；识别结果可手动改写，展柜编号相同的展品会放入同一个展柜，并按编号从左到右布置。
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-1">
+            <select
+              className={FIELD}
+              disabled={isReadonly || recognizingExhibits}
+              value={`llm-key:${activeExhibitLlmConfig?.id || 'default'}`}
+              onChange={(event) => {
+                const nextId = event.target.value;
+                if (nextId.startsWith('llm-key:')) {
+                  update({ exhibitLlmKeyId: nextId.slice(8), exhibitModel: '' });
+                }
+              }}
+            >
+              {llmConfigOptions.map((item) => <option key={item.id} value={`llm-key:${item.id}`}>{item.label || item.id}{item.model ? ` · ${item.model}` : ''}</option>)}
+            </select>
+            <input className={FIELD} disabled value={exhibitModel} title="展品识别模型由所选 LLM 配置决定" />
           </div>
           {exhibitItems.length === 0 ? (
             <div className="mt-2 rounded border border-dashed border-white/15 px-2 py-3 text-[10px] text-white/35">

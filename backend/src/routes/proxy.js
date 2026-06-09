@@ -21,6 +21,9 @@ const router = express.Router();
 
 function llmImageMessageError(errorText) {
   const text = String(errorText || '');
+  if (/no available accounts/i.test(text)) {
+    return '当前 LLM 上游没有可用账号，请切换支持视觉且账号可用的 LLM 配置，或稍后重试。';
+  }
   if (/unknown variant [`']?(image_url|image)[`']?/i.test(text) || /expected [`']?text[`']?/i.test(text)) {
     return '当前 LLM 接口不支持图片输入消息，请在展品识别中选择支持视觉的 LLM 模型，或改用支持多模态的 LLM Base URL。';
   }
