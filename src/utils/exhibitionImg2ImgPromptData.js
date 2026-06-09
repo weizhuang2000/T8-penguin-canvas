@@ -52,14 +52,14 @@ function craftText(selectedIds, customCraft, craftPresets) {
   return values.join('；');
 }
 
-function referenceRoleText(priorityOrder) {
+function referenceRoleText(priorityOrderText, priorityOrder) {
   const imageRoles = priorityOrder.filter((id) => id === 'structureAnnotations' || id === 'styleImageForm');
   const structureIndex = imageRoles.indexOf('structureAnnotations') + 1;
   const styleIndex = imageRoles.indexOf('styleImageForm') + 1;
   return [
     `参考图角色说明：第 ${structureIndex || 1} 张参考图是空间结构示意图，是空间几何、布局和动线的主约束；第 ${styleIndex || 2} 张参考图是空间表现效果图，只用于提取表现形式、氛围、材质和渲染完成度。`,
     '生成时必须先从空间结构示意图提取干净的空间骨架，再把效果图的表现语言套用到该骨架上；不要直接沿用效果图原本的平面布局、墙体位置或动线来替代结构图。',
-    '优先级顺序只针对表现形式、工艺版式、视觉风格和渲染语言的取舍；空间结构不参与该优先级排序，空间几何、布局、墙体、展陈体块、分区和动线必须完全按照空间结构示意图执行。',
+    `展陈工艺选用的优先级顺序：${priorityOrderText}，该优先级顺序只针对表现形式、工艺版式、视觉风格和渲染语言的取舍；空间结构不参与该优先级排序，空间几何、布局、墙体、展陈体块、分区和动线必须完全按照空间结构示意图执行。`,
   ].join('\n');
 }
 
@@ -96,13 +96,13 @@ function sectionText(id, values) {
 
 export function buildExhibitionImg2ImgPrompt(values = {}) {
   const priorityOrder = normalizeExhibitionImg2ImgPriority(values.priorityOrder);
+  const priorityOrderText = priorityOrder.map((id, index) => {
+    const meta = EXHIBITION_IMG2IMG_PRIORITY.find((item) => item.id === id);
+    return `${index + 1}. ${meta?.label || id}`;
+  }).join(' > ');
   const lines = [
-    '生成一张专业展陈空间图生图效果图，面向深化设计汇报，真实室内建筑摄影级渲染，空间尺度可信，材质细节清晰，灯光层次准确。',
-    `优先级顺序：${priorityOrder.map((id, index) => {
-      const meta = EXHIBITION_IMG2IMG_PRIORITY.find((item) => item.id === id);
-      return `${index + 1}. ${meta?.label || id}`;
-    }).join(' > ')}`,
-    referenceRoleText(priorityOrder),
+    '生成一张专业展陈空间效果图，真实室内建筑摄影级渲染，空间尺度可信，材质细节清晰，灯光层次准确。',
+    referenceRoleText(priorityOrderText, priorityOrder),
     '',
   ];
 

@@ -9,8 +9,10 @@ test('exhibition img2img prompt defaults to structure priority', () => {
   const order = normalizeExhibitionImg2ImgPriority();
   assert.deepEqual(order, ['structureAnnotations', 'craftLayout', 'styleImageForm']);
   const prompt = buildExhibitionImg2ImgPrompt();
-  assert.match(prompt, /优先级顺序：1\. 空间结构示意图标注 > 2\. 工艺与版式 > 3\. 输入效果图形式/);
-  assert.match(prompt, /生成一张专业展陈空间图生图效果图/);
+  assert.match(prompt, /展陈工艺选用的优先级顺序：1\. 空间结构示意图标注 > 2\. 工艺与版式 > 3\. 输入效果图形式/);
+  assert.match(prompt, /生成一张专业展陈空间效果图，真实室内建筑摄影级渲染/);
+  assert.doesNotMatch(prompt, /^优先级顺序：/m);
+  assert.doesNotMatch(prompt, /面向深化设计汇报/);
 });
 
 test('exhibition img2img prompt follows custom priority order', () => {
