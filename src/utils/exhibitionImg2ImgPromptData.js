@@ -18,6 +18,14 @@ function cleanText(value, max = 12000) {
   return String(value || '').replace(/\r\n?/g, '\n').trim().slice(0, max);
 }
 
+function cleanWallContentPrompt(value) {
+  return cleanText(value, 50000)
+    .split('\n')
+    .filter((line) => !/^\s*尺寸\s*\/\s*比例\s*[:：]/u.test(line))
+    .join('\n')
+    .trim();
+}
+
 export function normalizeExhibitionImg2ImgPriority(value) {
   const out = [];
   const list = Array.isArray(value) ? value : [];
@@ -74,9 +82,10 @@ function sectionText(id, values) {
   const lines = ['根据工艺与版式要求深化展陈设计。'];
   if (crafts) lines.push(`展陈工艺：${crafts}`);
   lines.push(`版式密度：${cleanText(values.density || '适中，图文层级均衡，主次分明')}`);
-  if (cleanText(values.wallContentPrompt)) {
+  const wallContentPrompt = cleanWallContentPrompt(values.wallContentPrompt);
+  if (wallContentPrompt) {
     lines.push('展墙具体内容设计提示：');
-    lines.push(cleanText(values.wallContentPrompt, 50000));
+    lines.push(wallContentPrompt);
     lines.push('以上立面组织结果仅用于设计效果图中各展墙的主题、图文层级、内容分区、重点文案占位和工艺落位；必须贴合结构示意图中的展墙/隔断位置，不得改变空间结构。');
   }
   if (cleanText(values.dimensions)) lines.push(`空间/画面尺寸：${cleanText(values.dimensions)}`);

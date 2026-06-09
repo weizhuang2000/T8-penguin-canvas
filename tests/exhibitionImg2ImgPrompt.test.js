@@ -75,6 +75,21 @@ test('exhibition img2img wall content planning should use schedule instead of co
   assert.doesNotMatch(prompt, /整套展陈彩立面设计/);
 });
 
+test('exhibition img2img wall content planning strips size ratio lines', () => {
+  const prompt = buildExhibitionImg2ImgPrompt({
+    wallContentPrompt: [
+      '立面 1｜序厅',
+      '内容摘要：品牌起源',
+      '尺寸/比例：16:9',
+      '尺寸 / 比例：3:1',
+      '准确文案：初心 / 创新',
+    ].join('\n'),
+  });
+  assert.match(prompt, /内容摘要：品牌起源/);
+  assert.match(prompt, /准确文案：初心 \/ 创新/);
+  assert.doesNotMatch(prompt, /尺寸\s*\/\s*比例\s*[:：]/);
+});
+
 test('exhibition img2img prompt explains reference image roles after priority changes', () => {
   const prompt = buildExhibitionImg2ImgPrompt({
     priorityOrder: ['styleImageForm', 'craftLayout', 'structureAnnotations'],
