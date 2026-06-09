@@ -397,8 +397,6 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
               providerModel,
               taskId: pollingTaskId,
               outputFormat,
-              prompt: finalPrompt,
-              historyContext,
             });
             pollingTaskId = res.taskId || pollingTaskId;
             update({ progress: `${Math.min(99, Math.round(((i + 1) / EXTERNAL_IMAGE_MAX_POLLS) * 100))}%`, taskId: pollingTaskId });

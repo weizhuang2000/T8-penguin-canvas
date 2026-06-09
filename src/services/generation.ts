@@ -114,21 +114,20 @@ export async function generateExternalImage(req: GenerateExternalImageRequest): 
 }
 
 export interface QueryExternalImageStatusRequest {
-  providerId: string;
+  providerId?: string;
   taskId: string;
   providerModel?: string;
   outputFormat?: 'jpg' | 'png';
-  prompt?: string;
-  historyContext?: GenerationHistoryContext;
 }
 
 export async function queryExternalImageStatus(req: QueryExternalImageStatusRequest): Promise<GenerateExternalImageResult> {
-  const qs = new URLSearchParams({ providerId: req.providerId });
-  if (req.providerModel) qs.set('providerModel', req.providerModel);
+  const qs = new URLSearchParams();
+  const isLocalJob = req.taskId.startsWith('external-image-');
+  if (!isLocalJob && req.providerId) qs.set('providerId', req.providerId);
+  if (!isLocalJob && req.providerModel) qs.set('providerModel', req.providerModel);
   if (req.outputFormat) qs.set('outputFormat', req.outputFormat);
-  if (req.prompt) qs.set('prompt', req.prompt);
-  if (req.historyContext) qs.set('historyContext', JSON.stringify(req.historyContext));
-  const r = await fetch(`/api/proxy/external/image/status/${encodeURIComponent(req.taskId)}?${qs.toString()}`);
+  const query = qs.toString();
+  const r = await fetch(`/api/proxy/external/image/status/${encodeURIComponent(req.taskId)}${query ? `?${query}` : ''}`);
   const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) {
     throw new Error(data?.error || `HTTP ${r.status}`);
