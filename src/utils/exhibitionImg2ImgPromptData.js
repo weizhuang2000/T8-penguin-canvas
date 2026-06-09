@@ -74,6 +74,11 @@ function sectionText(id, values) {
   const lines = ['根据工艺与版式要求深化展陈设计。'];
   if (crafts) lines.push(`展陈工艺：${crafts}`);
   lines.push(`版式密度：${cleanText(values.density || '适中，图文层级均衡，主次分明')}`);
+  if (cleanText(values.wallContentPrompt)) {
+    lines.push('展墙具体内容设计提示：');
+    lines.push(cleanText(values.wallContentPrompt, 50000));
+    lines.push('以上立面组织结果仅用于设计效果图中各展墙的主题、图文层级、内容分区、重点文案占位和工艺落位；必须贴合结构示意图中的展墙/隔断位置，不得改变空间结构。');
+  }
   if (cleanText(values.dimensions)) lines.push(`空间/画面尺寸：${cleanText(values.dimensions)}`);
   if (cleanText(values.colorMaterial)) lines.push(`色彩与材质：${cleanText(values.colorMaterial)}`);
   if (cleanText(values.visualStyle)) lines.push(`视觉风格：${cleanText(values.visualStyle)}`);

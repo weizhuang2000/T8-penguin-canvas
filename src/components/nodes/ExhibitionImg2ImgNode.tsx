@@ -1,21 +1,30 @@
-import { memo, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
 import {
   ArrowDown,
   ArrowUp,
   Boxes,
+  Check,
   Clipboard,
+  Download,
+  FileText,
   Image as ImageIcon,
   Loader2,
   MoveVertical,
   Play,
+  RefreshCw,
   Settings,
+  Sparkles,
+  Upload,
 } from 'lucide-react';
 import {
+  DEFAULT_LLM_MODEL,
   IMAGE_MODELS,
 } from '../../providers/models';
 import {
+  generateExternalLlm,
   generateExternalImage,
+  generateLlm,
   queryImageStatus,
   submitImageAsync,
 } from '../../services/generation';
@@ -33,14 +42,23 @@ import {
 } from '../../utils/exhibitionImg2ImgPrompt';
 import {
   ELEVATION_CRAFTS,
+  buildElevationAnalysisMessages,
+  buildElevationOutputs,
+  normalizeElevationAnalysis,
+  parseElevationAnalysisResponse,
   type ElevationCraft,
+  type ElevationAnalysis,
+  type ElevationWall,
+  wallsFromAnalysis,
 } from '../../utils/elevationPrompt';
 import {
+  extractDocument,
   getCurrentUser,
   getElevationPromptPresets,
   updateElevationCraftPresets,
   type AuthUser,
   type ElevationCraftPresetItem,
+  type ExtractedDocument,
 } from '../../services/api';
 import { useApiKeysStore } from '../../stores/apiKeys';
 import { useCanvasStore } from '../../stores/canvas';
@@ -53,8 +71,19 @@ import { useUpdateNodeData } from './useUpdateNodeData';
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
 const DEFAULT_CRAFTS = ['panel', 'dimensional-letters', 'soft-film-lightbox'];
+const DEFAULT_REFINE_WORD_COUNT = 1200;
 const MAX_IMAGE_SEED = 2147483647;
 const EXTERNAL_SIZE_LEVELS = ['1K', '2K', '4K'];
+
+function same(valueA: unknown, valueB: unknown) {
+  return JSON.stringify(valueA) === JSON.stringify(valueB);
+}
+
+function documentLabel(meta?: Omit<ExtractedDocument, 'text'> | null) {
+  if (!meta) return '未选择文档';
+  const pages = meta.pageCount ? ` · ${meta.pageCount} 页` : '';
+  return `${meta.name} · ${meta.charCount} 字${pages}`;
+}
 
 function randomImageSeed(): number {
   if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
@@ -226,14 +255,23 @@ function ImageSlot({
 const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const jsonFileRef = useRef<HTMLInputElement>(null);
   const { style } = useThemeStore();
   const isPixel = style === 'pixel';
   const activeCanvas = useCanvasStore((state) => state.canvases.find((canvas) => canvas.id === state.activeId) || null);
   const activeCanvasId = useCanvasStore((state) => state.activeId);
   const isReadonly = activeCanvas?.access?.canEdit === false;
   const advancedProviders = useApiKeysStore((state) => state.settings.advancedProviders);
+  const configuredLlmModel = useApiKeysStore((state) => state.settings.llmModel)?.trim() || DEFAULT_LLM_MODEL;
+  const llmConfigs = useApiKeysStore((state) => state.settings.llmConfigs || state.settings.llmApiKeys) || [];
   const allowZhenzhenFallback = useApiKeysStore((state) => state.settings.enableZhenzhenFallback !== false);
   const imageAdvancedProviders = useMemo(() => advancedProvidersForNode(advancedProviders, 'image'), [advancedProviders]);
+  const llmConfigOptions = useMemo(() => {
+    const saved = llmConfigs.filter((item) => item && (item.hasApiKey || item.apiKey || item.baseUrl || item.model));
+    return saved.length > 0 ? saved : [{ id: 'default', label: '默认 LLM', model: configuredLlmModel }];
+  }, [configuredLlmModel, llmConfigs]);
+  const llmProviders = useMemo(() => advancedProvidersForNode(advancedProviders, 'llm'), [advancedProviders]);
   const providerSelection = useMemo(
     () => resolveAdvancedProviderSelection(advancedProviders, 'image', {
       providerSource: d.providerSource,
@@ -252,6 +290,25 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const providerSelectValue = isExternalSelected
     ? providerSelection.providerId
     : (allowZhenzhenFallback ? 'zhenzhen' : (firstImageAdvancedProvider?.id || ''));
+  const contentProviderSelection = useMemo(
+    () => resolveAdvancedProviderSelection(advancedProviders, 'llm', {
+      providerSource: d.contentProviderSource,
+      providerId: d.contentProviderId,
+      providerModel: d.contentProviderModel,
+    }),
+    [advancedProviders, d.contentProviderId, d.contentProviderModel, d.contentProviderSource],
+  );
+  const contentExternalSelected = contentProviderSelection.available && contentProviderSelection.providerSource !== 'zhenzhen';
+  const contentExternalModels = contentProviderSelection.provider
+    ? advancedProviderModelOptions(contentProviderSelection.provider, 'llm')
+    : [];
+  const contentExternalModel = contentProviderSelection.providerModel || contentExternalModels[0] || '';
+  const selectedContentLlmKeyId = String(d.contentLlmKeyId || '').trim();
+  const activeContentLlmConfig = llmConfigOptions.find((item) => item.id === selectedContentLlmKeyId)
+    || llmConfigOptions.find((item) => item.isDefault)
+    || llmConfigOptions[0];
+  const savedContentModel = String(d.contentModel || '').trim();
+  const contentModel = activeContentLlmConfig?.model || savedContentModel || configuredLlmModel;
 
   const model = d.model || 'gpt-image-2';
   const modelDef = useMemo(() => IMAGE_MODELS.find((item) => item.id === model) || IMAGE_MODELS[0], [model]);
@@ -265,6 +322,17 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const styleImage = useHandleImage(id, 'style');
   const priorityOrder = normalizeExhibitionImg2ImgPriority(d.priorityOrder);
   const selectedCrafts: string[] = Array.isArray(d.selectedCrafts) ? d.selectedCrafts : DEFAULT_CRAFTS;
+  const contentEnabled = d.contentPlanningEnabled === true;
+  const sourceText = String(d.sourceText || '');
+  const wallMode: 'single' | 'multi' = d.wallMode === 'single' ? 'single' : 'multi';
+  const wallCount = Math.max(1, Math.min(12, Number(d.wallCount) || 3));
+  const refineWordCount = Math.max(200, Math.min(3000, Number(d.refineWordCount) || DEFAULT_REFINE_WORD_COUNT));
+  const analysis = useMemo(
+    () => normalizeElevationAnalysis(d.analysis) as ElevationAnalysis,
+    [d.analysis],
+  );
+  const [analysisDraft, setAnalysisDraft] = useState('');
+  const [draftMessage, setDraftMessage] = useState('');
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const canManageTeam = currentUser?.role === 'admin' || currentUser?.role === 'manager';
   const [craftPresets, setCraftPresets] = useState<ElevationCraftPresetItem[]>([]);
@@ -272,12 +340,56 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const [craftEditorValue, setCraftEditorValue] = useState('');
   const [craftSaving, setCraftSaving] = useState(false);
   const [craftError, setCraftError] = useState('');
-  const busy = d.status === 'generating';
+  const status = String(d.status || 'idle');
+  const isGenerating = status === 'generating';
+  const busy = isGenerating || status === 'extracting' || status === 'refining';
+  const contentBusy = status === 'extracting' || status === 'refining';
   const pollAbortRef = useRef(false);
   const craftPresetOptions = useMemo<ElevationCraft[]>(
     () => (craftPresets.length > 0 ? craftPresets : ELEVATION_CRAFTS),
     [craftPresets],
   );
+  const contentOutputs = useMemo(
+    () => buildElevationOutputs({
+      analysis,
+      walls: Array.isArray(d.walls) ? d.walls : [],
+      wallMode,
+      wallCount,
+      outputMode: d.outputMode === 'overview' ? 'overview' : 'segments',
+      downstreamContent: 'combined',
+      selectedCrafts,
+      customCraft: d.customCraft,
+      aspectRatio: d.aspectRatio,
+      dimensions: d.dimensions,
+      density: d.density,
+      colorMaterial: d.colorMaterial,
+      visualStyle: d.visualStyle,
+      supplement: d.contentSupplement,
+      craftPresets,
+    }),
+    [
+      analysis,
+      craftPresets,
+      d.colorMaterial,
+      d.contentSupplement,
+      d.customCraft,
+      d.density,
+      d.dimensions,
+      d.outputMode,
+      d.visualStyle,
+      d.walls,
+      selectedCrafts,
+      wallCount,
+      wallMode,
+    ],
+  );
+  const hasContentPlanning = contentEnabled && (
+    Array.isArray(d.walls) && d.walls.length > 0 ||
+    !!analysis.projectTheme ||
+    !!analysis.coreMessage ||
+    analysis.sections.length > 0
+  );
+  const wallContentPrompt = hasContentPlanning ? contentOutputs.mainOutput : '';
 
   const prompt = useMemo(
     () => buildExhibitionImg2ImgPrompt({
@@ -290,8 +402,9 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       colorMaterial: d.colorMaterial,
       visualStyle: d.visualStyle,
       supplement: d.supplement,
+      wallContentPrompt,
     }),
-    [craftPresets, d.colorMaterial, d.customCraft, d.density, d.dimensions, d.supplement, d.visualStyle, priorityOrder, selectedCrafts],
+    [craftPresets, d.colorMaterial, d.customCraft, d.density, d.dimensions, d.supplement, d.visualStyle, priorityOrder, selectedCrafts, wallContentPrompt],
   );
 
   useEffect(() => {
@@ -335,6 +448,27 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     setCraftError('');
   }, [craftEditorOpen, craftPresets]);
 
+  useEffect(() => {
+    setAnalysisDraft(JSON.stringify(analysis, null, 2));
+  }, [analysis]);
+
+  useEffect(() => {
+    const patch = {
+      contentPlanningPrompt: wallContentPrompt,
+      contentWalls: contentOutputs.walls,
+      contentLayoutSchedule: contentOutputs.layoutSchedule,
+      contentConceptPrompts: contentOutputs.conceptPrompts,
+    };
+    if (
+      d.contentPlanningPrompt !== patch.contentPlanningPrompt ||
+      !same(d.contentWalls || [], patch.contentWalls) ||
+      d.contentLayoutSchedule !== patch.contentLayoutSchedule ||
+      !same(d.contentConceptPrompts || [], patch.contentConceptPrompts)
+    ) {
+      update(patch);
+    }
+  }, [contentOutputs.conceptPrompts, contentOutputs.layoutSchedule, contentOutputs.walls, d.contentConceptPrompts, d.contentLayoutSchedule, d.contentPlanningPrompt, d.contentWalls, update, wallContentPrompt]);
+
   const orderedReferenceImages = useMemo(() => {
     const imageForPriority: Record<string, string[]> = {
       structureAnnotations: structureImage ? [structureImage] : [],
@@ -376,6 +510,150 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       ? selectedCrafts.filter((item) => item !== craftId)
       : [...selectedCrafts, craftId];
     update({ selectedCrafts: next });
+  };
+
+  const refineText = useCallback(async (textOverride?: string, rethrow = false) => {
+    if (isReadonly || !contentEnabled) return;
+    const text = String(textOverride ?? sourceText).trim();
+    if (!text) {
+      update({ status: 'error', error: '请先上传文档或填写原文' });
+      return;
+    }
+    update({ status: 'refining', error: '' });
+    try {
+      const messages = buildElevationAnalysisMessages(text, wallMode, wallCount, refineWordCount);
+      const maxTokens = Math.max(1200, Math.min(8192, Math.ceil(refineWordCount * 3.2)));
+      const response = contentExternalSelected && contentProviderSelection.provider
+        ? await generateExternalLlm({
+            providerId: contentProviderSelection.provider.id,
+            providerModel: contentExternalModel,
+            model: contentExternalModel,
+            messages: messages as any,
+            temperature: 0.2,
+            max_tokens: maxTokens,
+            providerParams: d.contentProviderParams || {},
+          })
+        : await generateLlm({
+            model: contentModel,
+            messages: messages as any,
+            llmKeyId: activeContentLlmConfig?.id,
+            temperature: 0.2,
+            max_tokens: maxTokens,
+          });
+      const nextAnalysis = parseElevationAnalysisResponse(response.content) as ElevationAnalysis;
+      const nextWalls = wallsFromAnalysis(nextAnalysis, wallMode, wallCount) as ElevationWall[];
+      update({
+        analysis: nextAnalysis,
+        walls: nextWalls,
+        status: 'success',
+        error: '',
+        analyzedAt: Date.now(),
+      });
+    } catch (error: any) {
+      update({ status: 'error', error: error?.message || 'AI 提炼失败' });
+      if (rethrow) throw error;
+    }
+  }, [
+    activeContentLlmConfig?.id,
+    contentEnabled,
+    contentExternalModel,
+    contentExternalSelected,
+    contentModel,
+    contentProviderSelection.provider,
+    d.contentProviderParams,
+    isReadonly,
+    refineWordCount,
+    sourceText,
+    update,
+    wallCount,
+    wallMode,
+  ]);
+
+  const pickDocument = async (file?: File) => {
+    if (!file || isReadonly || !contentEnabled) return;
+    if (file.size > 10 * 1024 * 1024) {
+      update({ status: 'error', error: '文档不能超过 10MB' });
+      return;
+    }
+    update({ status: 'extracting', error: '' });
+    try {
+      const extracted = await extractDocument(file);
+      const { text, ...documentMeta } = extracted;
+      update({
+        documentMeta,
+        sourceText: text,
+        analysis: null,
+        walls: [],
+        status: 'refining',
+        error: '',
+      });
+      await refineText(text);
+    } catch (error: any) {
+      update({ status: 'error', error: error?.message || '文档解析失败' });
+    } finally {
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const rebuildWalls = () => {
+    if (isReadonly || !contentEnabled) return;
+    update({ walls: wallsFromAnalysis(analysis, wallMode, wallCount) });
+  };
+
+  const patchWall = (index: number, patch: Partial<ElevationWall>) => {
+    if (isReadonly || !contentEnabled) return;
+    const next = contentOutputs.walls.map((wall: ElevationWall, wallIndex: number) => (
+      wallIndex === index ? { ...wall, ...patch } : wall
+    ));
+    update({ walls: next });
+  };
+
+  const applyAnalysisDraft = () => {
+    if (isReadonly || !contentEnabled) return;
+    try {
+      const next = parseElevationAnalysisResponse(analysisDraft) as ElevationAnalysis;
+      update({ analysis: next, walls: wallsFromAnalysis(next, wallMode, wallCount), error: '' });
+      setDraftMessage('已应用');
+    } catch (error: any) {
+      setDraftMessage(error?.message || 'JSON 无法解析');
+    }
+  };
+
+  const importAnalysisJson = async (file?: File) => {
+    if (!file || isReadonly || !contentEnabled) return;
+    try {
+      const text = await file.text();
+      const next = parseElevationAnalysisResponse(text) as ElevationAnalysis;
+      setAnalysisDraft(JSON.stringify(next, null, 2));
+      setDraftMessage('已导入');
+    } catch (error: any) {
+      setDraftMessage(error?.message || 'JSON 无法解析');
+    } finally {
+      if (jsonFileRef.current) jsonFileRef.current.value = '';
+    }
+  };
+
+  const exportAnalysisJson = () => {
+    try {
+      const next = parseElevationAnalysisResponse(analysisDraft) as ElevationAnalysis;
+      const content = JSON.stringify(next, null, 2);
+      const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const theme = String(next.projectTheme || 'exhibition-content-analysis')
+        .trim()
+        .replace(/[\\/:*?"<>|]+/g, '-')
+        .slice(0, 48) || 'exhibition-content-analysis';
+      link.href = url;
+      link.download = `${theme}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setDraftMessage('已导出');
+    } catch (error: any) {
+      setDraftMessage(error?.message || 'JSON 无法解析');
+    }
   };
 
   const runGenerate = async () => {
@@ -555,6 +833,251 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <ImageSlot handleId="structure" title="空间结构示意图" subtitle="保留结构、动线、分区；标注只作理解参考" url={structureImage} top="24%" />
           <ImageSlot handleId="style" title="空间表现效果图" subtitle="借鉴风格、材质、光影和完成度" url={styleImage} top="39%" />
+        </section>
+
+        <section className="rounded border border-white/10 bg-white/[0.035] p-2">
+          <div className="mb-1.5 flex items-center gap-2">
+            <FileText size={13} className="text-cyan-200" />
+            <span className="text-[11px] font-semibold text-cyan-100">展墙内容设计</span>
+            <label className="ml-auto inline-flex items-center gap-1.5 text-[10px] text-white/60">
+              <input
+                type="checkbox"
+                className="h-3 w-3 accent-cyan-300"
+                checked={contentEnabled}
+                disabled={isReadonly || isGenerating}
+                onChange={(event) => update({ contentPlanningEnabled: event.target.checked })}
+              />
+              启用
+            </label>
+          </div>
+          <div className="text-[10px] leading-snug text-white/45">
+            开启后导入文档、AI 提炼和立面组织会作为效果图中展墙具体内容的设计提示词；关闭时完全不参与生成。
+          </div>
+          {contentEnabled && (
+            <div className="mt-2 space-y-2">
+              <div className="rounded border border-white/10 bg-black/15 p-2">
+                <div className="mb-1.5 flex items-center gap-2">
+                  <span className="text-[11px] font-semibold text-cyan-100">1. 导入文档</span>
+                  <button
+                    type="button"
+                    className={`${BUTTON} ml-auto`}
+                    disabled={contentBusy || isReadonly}
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    <Upload size={12} />
+                    选择文件
+                  </button>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    className="hidden"
+                    accept=".docx,.pdf,.txt,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    onChange={(event) => void pickDocument(event.target.files?.[0])}
+                  />
+                </div>
+                <div className="truncate text-[10px] text-white/55" title={documentLabel(d.documentMeta)}>
+                  {documentLabel(d.documentMeta)}
+                </div>
+                {Array.isArray(d.documentMeta?.warnings) && d.documentMeta.warnings.length > 0 && (
+                  <div className="mt-1 text-[10px] text-amber-200/80">{d.documentMeta.warnings.join('；')}</div>
+                )}
+                <textarea
+                  className={`${FIELD} mt-2 min-h-[72px] resize-y`}
+                  value={sourceText}
+                  disabled={isReadonly || contentBusy}
+                  placeholder="上传 DOCX、文本型 PDF、TXT，或直接粘贴项目文案"
+                  onChange={(event) => update({ sourceText: event.target.value })}
+                />
+              </div>
+
+              <div className="rounded border border-white/10 bg-black/15 p-2">
+                <div className="mb-1.5 flex items-center gap-2">
+                  <span className="text-[11px] font-semibold text-cyan-100">2. AI 提炼</span>
+                  <label className="ml-auto flex min-w-[138px] items-center gap-1.5 text-[10px] text-white/55" title="控制 AI 结构化提炼的目标字数">
+                    <span className="whitespace-nowrap">字数 {refineWordCount}</span>
+                    <input
+                      type="range"
+                      min={200}
+                      max={3000}
+                      step={100}
+                      value={refineWordCount}
+                      disabled={contentBusy || isReadonly}
+                      className="h-1 w-16 accent-cyan-300"
+                      onChange={(event) => update({ refineWordCount: Number(event.target.value) })}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className={BUTTON}
+                    disabled={contentBusy || isReadonly || !sourceText.trim()}
+                    onClick={() => void refineText()}
+                  >
+                    {status === 'refining' ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                    重新提炼
+                  </button>
+                </div>
+                <div className="mb-1.5 grid grid-cols-2 gap-1">
+                  <select
+                    className={FIELD}
+                    disabled={isReadonly || contentBusy}
+                    value={contentExternalSelected ? contentProviderSelection.providerId : `llm-key:${activeContentLlmConfig?.id || 'default'}`}
+                    onChange={(event) => {
+                      const nextId = event.target.value;
+                      if (nextId.startsWith('llm-key:')) {
+                        update({ contentProviderSource: 'zhenzhen', contentProviderId: '', contentProviderModel: '', contentLlmKeyId: nextId.slice(8) });
+                        return;
+                      }
+                      const provider = llmProviders.find((item) => item.id === nextId);
+                      if (!provider) return;
+                      const models = advancedProviderModelOptions(provider, 'llm');
+                      update({ contentProviderSource: provider.protocol, contentProviderId: provider.id, contentProviderModel: models[0] || '' });
+                    }}
+                  >
+                    {llmConfigOptions.map((item) => <option key={item.id} value={`llm-key:${item.id}`}>{item.label || item.id}{item.model ? ` · ${item.model}` : ''}</option>)}
+                    {llmProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}
+                  </select>
+                  {contentExternalSelected ? (
+                    <select
+                      className={FIELD}
+                      disabled={isReadonly || contentBusy}
+                      value={contentExternalModel}
+                      onChange={(event) => update({ contentProviderModel: event.target.value })}
+                    >
+                      {contentExternalModels.map((item) => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                  ) : (
+                    <input className={FIELD} disabled value={contentModel} title="模型由所选 LLM 配置决定" />
+                  )}
+                </div>
+                <input
+                  className={FIELD}
+                  value={analysis.projectTheme}
+                  disabled={isReadonly}
+                  placeholder="项目主题"
+                  onChange={(event) => update({ analysis: { ...analysis, projectTheme: event.target.value } })}
+                />
+                <textarea
+                  className={`${FIELD} mt-1 min-h-[48px] resize-y`}
+                  value={analysis.coreMessage}
+                  disabled={isReadonly}
+                  placeholder="核心信息"
+                  onChange={(event) => update({ analysis: { ...analysis, coreMessage: event.target.value } })}
+                />
+                <details className="mt-1.5 text-[10px] text-white/55">
+                  <summary className="cursor-pointer select-none">编辑结构化分析 JSON</summary>
+                  <input
+                    ref={jsonFileRef}
+                    type="file"
+                    accept="application/json,.json"
+                    className="hidden"
+                    onChange={(event) => importAnalysisJson(event.target.files?.[0])}
+                  />
+                  <textarea
+                    className={`${FIELD} mt-1 min-h-[130px] resize-y font-mono`}
+                    value={analysisDraft}
+                    disabled={isReadonly}
+                    onChange={(event) => {
+                      setAnalysisDraft(event.target.value);
+                      setDraftMessage('');
+                    }}
+                  />
+                  <div className="mt-1 flex items-center justify-end gap-2">
+                    {draftMessage && (
+                      <span className={['已应用', '已导入', '已导出'].includes(draftMessage) ? 'text-emerald-300' : 'text-red-300'}>
+                        {draftMessage}
+                      </span>
+                    )}
+                    <button type="button" className={BUTTON} disabled={isReadonly} onClick={() => jsonFileRef.current?.click()}>
+                      <Upload size={11} />导入 JSON
+                    </button>
+                    <button type="button" className={BUTTON} onClick={exportAnalysisJson}>
+                      <Download size={11} />导出 JSON
+                    </button>
+                    <button type="button" className={BUTTON} disabled={isReadonly} onClick={applyAnalysisDraft}>
+                      <Check size={11} />应用 JSON
+                    </button>
+                  </div>
+                </details>
+              </div>
+
+              <div className="rounded border border-white/10 bg-black/15 p-2">
+                <div className="mb-1.5 flex items-center gap-2">
+                  <span className="text-[11px] font-semibold text-cyan-100">3. 立面组织</span>
+                  <button type="button" className={`${BUTTON} ml-auto`} disabled={isReadonly} onClick={rebuildWalls}>
+                    <RefreshCw size={11} />按分析重建
+                  </button>
+                </div>
+                <div className="grid grid-cols-3 gap-1">
+                  <select
+                    className={FIELD}
+                    disabled={isReadonly}
+                    value={wallMode}
+                    onChange={(event) => {
+                      const nextMode = event.target.value === 'single' ? 'single' : 'multi';
+                      update({
+                        wallMode: nextMode,
+                        walls: wallsFromAnalysis(analysis, nextMode, nextMode === 'single' ? 1 : wallCount),
+                      });
+                    }}
+                  >
+                    <option value="single">单立面</option>
+                    <option value="multi">多立面</option>
+                  </select>
+                  <input
+                    className={FIELD}
+                    type="number"
+                    min={1}
+                    max={12}
+                    disabled={isReadonly || wallMode === 'single'}
+                    value={wallMode === 'single' ? 1 : wallCount}
+                    onChange={(event) => {
+                      const nextCount = Math.max(1, Math.min(12, Number(event.target.value) || 1));
+                      update({ wallCount: nextCount, walls: wallsFromAnalysis(analysis, 'multi', nextCount) });
+                    }}
+                    title="立面数量"
+                  />
+                  <select
+                    className={FIELD}
+                    disabled={isReadonly || wallMode === 'single'}
+                    value={d.outputMode === 'overview' ? 'overview' : 'segments'}
+                    onChange={(event) => update({ outputMode: event.target.value })}
+                  >
+                    <option value="segments">逐面集合</option>
+                    <option value="overview">整套总览</option>
+                  </select>
+                </div>
+                <div className="mt-2 max-h-56 space-y-1.5 overflow-y-auto">
+                  {contentOutputs.walls.map((wall: ElevationWall, index: number) => (
+                    <div key={wall.id || index} className="rounded border border-white/10 bg-white/[0.035] p-1.5">
+                      <input
+                        className={FIELD}
+                        value={wall.title || ''}
+                        disabled={isReadonly}
+                        placeholder={`立面 ${index + 1} 标题`}
+                        onChange={(event) => patchWall(index, { title: event.target.value })}
+                      />
+                      <textarea
+                        className={`${FIELD} mt-1 min-h-[46px] resize-y`}
+                        value={wall.content || ''}
+                        disabled={isReadonly}
+                        placeholder="展示重点与内容摘要"
+                        onChange={(event) => patchWall(index, { content: event.target.value })}
+                      />
+                      <textarea
+                        className={`${FIELD} mt-1 min-h-[40px] resize-y`}
+                        value={(wall.exactText || []).join('\n')}
+                        disabled={isReadonly}
+                        placeholder="准确上墙文案，每行一条"
+                        onChange={(event) => patchWall(index, {
+                          exactText: event.target.value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
+                        })}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="rounded border border-white/10 bg-white/[0.035] p-2">
@@ -829,7 +1352,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           onClick={() => void runGenerate()}
         >
           {busy ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
-          {busy ? `生成中 ${d.progress || ''}` : '生成展陈效果图'}
+          {isGenerating ? `生成中 ${d.progress || ''}` : contentBusy ? '内容提炼中' : '生成展陈效果图'}
         </button>
         {!structureImage || !styleImage ? (
           <div className="text-[10px] text-white/35">

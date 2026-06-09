@@ -25,6 +25,7 @@ export interface ExhibitionImg2ImgPromptValues {
   colorMaterial?: string;
   visualStyle?: string;
   supplement?: string;
+  wallContentPrompt?: string;
 }
 
 export {

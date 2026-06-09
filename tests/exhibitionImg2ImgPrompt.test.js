@@ -47,6 +47,17 @@ test('exhibition img2img priority only affects presentation, not spatial structu
   assert.match(prompt, /最终空间结构必须完全遵循空间结构示意图/);
 });
 
+test('exhibition img2img prompt can include wall content planning', () => {
+  const prompt = buildExhibitionImg2ImgPrompt({
+    wallContentPrompt: '立面 1｜序厅\n内容摘要：品牌发展脉络\n准确文案：初心 / 创新',
+  });
+  assert.match(prompt, /展墙具体内容设计提示/);
+  assert.match(prompt, /立面 1｜序厅/);
+  assert.match(prompt, /品牌发展脉络/);
+  assert.match(prompt, /仅用于设计效果图中各展墙的主题、图文层级、内容分区、重点文案占位和工艺落位/);
+  assert.match(prompt, /不得改变空间结构/);
+});
+
 test('exhibition img2img prompt explains reference image roles after priority changes', () => {
   const prompt = buildExhibitionImg2ImgPrompt({
     priorityOrder: ['styleImageForm', 'craftLayout', 'structureAnnotations'],

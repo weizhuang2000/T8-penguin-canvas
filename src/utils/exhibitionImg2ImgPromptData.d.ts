@@ -20,6 +20,7 @@ export interface ExhibitionImg2ImgPromptValues {
   colorMaterial?: string;
   visualStyle?: string;
   supplement?: string;
+  wallContentPrompt?: string;
 }
 
 export const EXHIBITION_IMG2IMG_PRIORITY: ExhibitionImg2ImgPriorityMeta[];
