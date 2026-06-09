@@ -109,8 +109,10 @@ test('exhibition img2img prompt explains reference image roles after priority ch
   const prompt = buildExhibitionImg2ImgPrompt({
     priorityOrder: ['styleImageForm', 'craftLayout', 'structureAnnotations'],
   });
-  assert.match(prompt, /第 2 张参考图是空间结构示意图/);
-  assert.match(prompt, /第 1 张参考图是空间表现效果图/);
+  assert.match(prompt, /纯色素模的参考图是空间结构示意图/);
+  assert.match(prompt, /高级渲染的参考图是空间表现效果图/);
+  assert.doesNotMatch(prompt, /第 \d+ 张参考图是空间结构示意图/);
+  assert.doesNotMatch(prompt, /第 \d+ 张参考图是空间表现效果图/);
 });
 
 test('exhibition img2img prompt includes craft and layout values when present', () => {
