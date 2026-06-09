@@ -21,6 +21,8 @@ const externalImageJobs = new Map();
 const EXTERNAL_IMAGE_JOB_TTL_MS = 6 * 60 * 60 * 1000;
 const EXTERNAL_IMAGE_JOB_MAX = 300;
 const EXTERNAL_IMAGE_BACKGROUND_TIMEOUT_MS = 30 * 60 * 1000;
+const EXTERNAL_IMAGE_OUTPUT_FALLBACK_MS = 20 * 60 * 1000;
+const IMAGE_OUTPUT_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp']);
 
 function safeProviderForResponse(provider) {
   return maskAdvancedProviders([provider])[0] || null;
@@ -83,6 +85,57 @@ function writeOutputBuffer(buffer, ext) {
   return `/files/output/${filename}`;
 }
 
+function outputFileSnapshot() {
+  try {
+    if (!fs.existsSync(config.OUTPUT_DIR)) return [];
+    return fs.readdirSync(config.OUTPUT_DIR)
+      .filter((name) => IMAGE_OUTPUT_EXTS.has(path.extname(name).toLowerCase()));
+  } catch {
+    return [];
+  }
+}
+
+function findNewOutputImages(job) {
+  const known = new Set(Array.isArray(job.knownOutputFiles) ? job.knownOutputFiles : []);
+  const minMtime = Math.max(0, Number(job.createdAt || 0) - 2000);
+  const out = [];
+  try {
+    if (!fs.existsSync(config.OUTPUT_DIR)) return out;
+    for (const name of fs.readdirSync(config.OUTPUT_DIR)) {
+      if (known.has(name)) continue;
+      if (!IMAGE_OUTPUT_EXTS.has(path.extname(name).toLowerCase())) continue;
+      const full = path.join(config.OUTPUT_DIR, name);
+      const stat = fs.statSync(full);
+      if (!stat.isFile() || stat.mtimeMs < minMtime) continue;
+      out.push({ name, mtimeMs: stat.mtimeMs });
+    }
+  } catch {
+    return [];
+  }
+  return out
+    .sort((a, b) => a.mtimeMs - b.mtimeMs)
+    .map((item) => `/files/output/${encodeURIComponent(item.name).replace(/%2F/gi, '/')}`);
+}
+
+function completeJobFromServerOutputs(job) {
+  const imageUrls = findNewOutputImages(job);
+  if (!imageUrls.length) return false;
+  job.status = 'completed';
+  job.code = 'completed';
+  job.progress = '100%';
+  job.imageUrls = imageUrls;
+  job.remoteImageUrls = job.remoteImageUrls || [];
+  job.error = '';
+  job.updatedAt = Date.now();
+  rememberExternalOutputs(
+    { body: job.body, user: job.user },
+    imageUrls,
+    job.provider,
+    { kind: 'image', taskId: job.providerTaskId || job.id },
+  );
+  return true;
+}
+
 function pruneExternalImageJobs() {
   const now = Date.now();
   for (const [id, job] of externalImageJobs.entries()) {
@@ -112,9 +165,12 @@ function createExternalImageJob(provider, body, user) {
     progress: '0%',
     imageUrls: [],
     remoteImageUrls: [],
+    knownOutputFiles: outputFileSnapshot(),
     providerTaskId: '',
     raw: null,
     error: '',
+    lastError: '',
+    fallbackUntil: now + EXTERNAL_IMAGE_OUTPUT_FALLBACK_MS,
     createdAt: now,
     updatedAt: now,
   };
@@ -134,7 +190,7 @@ function localJobResult(job) {
     imageUrls: Array.isArray(job.imageUrls) ? job.imageUrls : [],
     remoteImageUrls: Array.isArray(job.remoteImageUrls) ? job.remoteImageUrls : [],
     raw: job.raw,
-    error: job.error || undefined,
+    error: job.status === 'failed' ? (job.error || undefined) : undefined,
   };
 }
 
@@ -301,10 +357,19 @@ function startExternalImageJob(job) {
       job.raw = result.raw || result;
       job.providerTaskId = result.taskId || job.providerTaskId || '';
       if (!result.ok) {
+        if (completeJobFromServerOutputs(job)) return;
         if (result.taskId && (result.code === 'timeout' || result.code === 'empty_image')) {
           job.status = 'running';
           job.code = 'running';
           job.progress = '生成中';
+          job.error = '';
+          return;
+        }
+        if (['timeout', 'network_error', 'external_image_failed'].includes(result.code) || /fetch failed/i.test(String(result.error || ''))) {
+          job.status = 'running';
+          job.code = 'running';
+          job.progress = '等待平台输出';
+          job.lastError = result.error || result.code || 'fetch failed';
           job.error = '';
           return;
         }
@@ -321,10 +386,13 @@ function startExternalImageJob(job) {
       job.error = '';
     } catch (e) {
       job.updatedAt = Date.now();
-      job.status = 'failed';
-      job.code = 'external_image_failed';
-      job.error = e?.message || String(e);
-      job.raw = { error: job.error };
+      if (completeJobFromServerOutputs(job)) return;
+      job.status = 'running';
+      job.code = 'running';
+      job.progress = '等待平台输出';
+      job.lastError = e?.message || String(e);
+      job.error = '';
+      job.raw = { error: job.lastError };
     }
   });
 }
@@ -435,6 +503,20 @@ router.get('/image/status/:taskId', requireNodePermission(['image', 'exhibition-
     const taskId = String(req.params.taskId || '').trim();
     const localJob = externalImageJobs.get(taskId);
     if (localJob) {
+      if (localJob.status === 'running' && completeJobFromServerOutputs(localJob)) {
+        return sendLocalImageJobResponse(res, localJob);
+      }
+      if (
+        localJob.status === 'running' &&
+        localJob.lastError &&
+        Date.now() > Number(localJob.fallbackUntil || 0)
+      ) {
+        localJob.status = 'failed';
+        localJob.code = 'external_image_failed';
+        localJob.error = `扩展平台请求失败，且等待输出目录后仍未发现新图片：${localJob.lastError}`;
+        localJob.updatedAt = Date.now();
+        return sendLocalImageJobResponse(res, localJob);
+      }
       if (localJob.status !== 'running' || !localJob.providerTaskId) {
         return sendLocalImageJobResponse(res, localJob);
       }
@@ -446,7 +528,11 @@ router.get('/image/status/:taskId', requireNodePermission(['image', 'exhibition-
       localJob.updatedAt = Date.now();
       localJob.raw = providerResult.raw || providerResult;
       if (!providerResult.ok) {
+        if (completeJobFromServerOutputs(localJob)) {
+          return sendLocalImageJobResponse(res, localJob);
+        }
         if (providerResult.code === 'timeout' || providerResult.code === 'network_error') {
+          localJob.lastError = providerResult.error || providerResult.code || localJob.lastError;
           return sendLocalImageJobResponse(res, localJob);
         }
         localJob.status = 'failed';
