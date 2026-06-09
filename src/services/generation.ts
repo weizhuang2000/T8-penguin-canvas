@@ -82,6 +82,9 @@ export interface GenerateExternalImageResult {
   imageUrls: string[];
   remoteImageUrls?: string[];
   taskId?: string;
+  status?: string;
+  code?: string;
+  error?: string;
   raw?: any;
   provider?: any;
 }
@@ -101,6 +104,42 @@ export async function generateExternalImage(req: GenerateExternalImageRequest): 
     imageUrls: Array.isArray(payload.imageUrls) ? payload.imageUrls : [],
     remoteImageUrls: Array.isArray(payload.remoteImageUrls) ? payload.remoteImageUrls : undefined,
     taskId: payload.taskId,
+    status: payload.status || data.code,
+    code: data.code || payload.code,
+    error: data.error || payload.error,
+    raw: payload.raw,
+    provider: payload.provider,
+  };
+}
+
+export interface QueryExternalImageStatusRequest {
+  providerId: string;
+  taskId: string;
+  providerModel?: string;
+  outputFormat?: 'jpg' | 'png';
+  prompt?: string;
+  historyContext?: GenerationHistoryContext;
+}
+
+export async function queryExternalImageStatus(req: QueryExternalImageStatusRequest): Promise<GenerateExternalImageResult> {
+  const qs = new URLSearchParams({ providerId: req.providerId });
+  if (req.providerModel) qs.set('providerModel', req.providerModel);
+  if (req.outputFormat) qs.set('outputFormat', req.outputFormat);
+  if (req.prompt) qs.set('prompt', req.prompt);
+  if (req.historyContext) qs.set('historyContext', JSON.stringify(req.historyContext));
+  const r = await fetch(`/api/proxy/external/image/status/${encodeURIComponent(req.taskId)}?${qs.toString()}`);
+  const data = await parseJsonResponse(r);
+  if (!r.ok || !data.success) {
+    throw new Error(data?.error || `HTTP ${r.status}`);
+  }
+  const payload = data.data || {};
+  return {
+    imageUrls: Array.isArray(payload.imageUrls) ? payload.imageUrls : [],
+    remoteImageUrls: Array.isArray(payload.remoteImageUrls) ? payload.remoteImageUrls : undefined,
+    taskId: payload.taskId || req.taskId,
+    status: payload.status || data.code,
+    code: data.code || payload.code,
+    error: data.error || payload.error,
     raw: payload.raw,
     provider: payload.provider,
   };

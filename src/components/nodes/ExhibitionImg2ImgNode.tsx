@@ -24,6 +24,7 @@ import {
 import {
   generateExternalImage,
   generateLlm,
+  queryExternalImageStatus,
   queryImageStatus,
   submitImageAsync,
 } from '../../services/generation';
@@ -73,6 +74,8 @@ const DEFAULT_CRAFTS = ['panel', 'dimensional-letters', 'soft-film-lightbox'];
 const DEFAULT_REFINE_WORD_COUNT = 1200;
 const MAX_IMAGE_SEED = 2147483647;
 const EXTERNAL_SIZE_LEVELS = ['1K', '2K', '4K'];
+const EXTERNAL_IMAGE_MAX_POLLS = 300;
+const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
 
 function same(valueA: unknown, valueB: unknown) {
   return JSON.stringify(valueA) === JSON.stringify(valueB);
@@ -666,7 +669,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           imageSize: sizeLevel,
         };
         logBus.info(`展陈图生图提交: ${providerSelection.provider.label || providerSelection.provider.id} · ${externalProviderModel} · refs=${orderedReferenceImages.length}`, src);
-        const res = await generateExternalImage({
+        let res = await generateExternalImage({
           providerId: providerSelection.provider.id,
           providerModel: externalProviderModel,
           model: externalProviderModel,
@@ -681,6 +684,25 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           providerParams,
           historyContext,
         });
+        if ((!res.imageUrls?.length) && res.taskId && (res.code === 'running' || res.status === 'running')) {
+          let pollingTaskId = res.taskId;
+          update({ progress: '生成中', taskId: pollingTaskId });
+          logBus.info(`展陈图扩展平台任务继续轮询: ${pollingTaskId}`, src);
+          for (let i = 0; i < EXTERNAL_IMAGE_MAX_POLLS; i += 1) {
+            await new Promise((resolve) => setTimeout(resolve, EXTERNAL_IMAGE_POLL_INTERVAL_MS));
+            res = await queryExternalImageStatus({
+              providerId: providerSelection.provider.id,
+              providerModel: externalProviderModel,
+              taskId: pollingTaskId,
+              outputFormat,
+              prompt,
+              historyContext,
+            });
+            pollingTaskId = res.taskId || pollingTaskId;
+            update({ progress: `${Math.min(99, Math.round(((i + 1) / EXTERNAL_IMAGE_MAX_POLLS) * 100))}%`, taskId: pollingTaskId });
+            if (res.imageUrls?.length || (res.code && res.code !== 'running')) break;
+          }
+        }
         const urls = res.imageUrls || [];
         if (!urls.length) throw new Error('扩展平台完成但未返回图片');
         update({

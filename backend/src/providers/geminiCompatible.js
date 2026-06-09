@@ -374,8 +374,61 @@ async function generateImage(provider, input = {}, options = {}) {
       providerId: provider.id,
       protocol: 'gemini-compatible',
       model: finalModel,
+      taskId: extractTaskId(raw),
       error: e?.name === 'AbortError' ? 'Gemini/香蕉兼容图像调用超时。' : (e?.message || 'Gemini/香蕉兼容图像调用失败。'),
       raw,
+    };
+  }
+}
+
+async function queryImageTask(provider, taskId, options = {}) {
+  const validation = validateProvider(provider, { apiKeyRequired: true });
+  if (!validation.ok) return { ...validation, providerId: provider?.id, protocol: 'gemini-compatible' };
+
+  const id = String(taskId || '').trim();
+  if (!id || id.length > 240 || /[\x00-\x1f\x7f]/.test(id)) {
+    return { ok: false, code: 'missing_task_id', providerId: provider.id, protocol: 'gemini-compatible', error: '缺少可查询的图像任务 ID。' };
+  }
+
+  try {
+    const taskUrl = `${imageBaseUrl(provider)}/tasks/${encodeURIComponent(id)}`;
+    const res = await fetchWithTimeout(taskUrl, {
+      method: 'GET',
+      headers: bearerHeaders(provider, false),
+      timeoutMs: options.timeoutMs || DEFAULT_IMAGE_TIMEOUT_MS,
+      fetchImpl: options.fetchImpl,
+    });
+    const raw = await responseJson(res);
+    if (!res.ok) {
+      return {
+        ok: false,
+        code: 'http_error',
+        providerId: provider.id,
+        protocol: 'gemini-compatible',
+        taskId: id,
+        error: `图像任务查询失败：HTTP ${res.status}${trimBodyForError(raw) ? ` ${trimBodyForError(raw)}` : ''}`,
+        raw,
+      };
+    }
+    if (isFailure(raw)) {
+      return { ok: false, code: 'task_failed', providerId: provider.id, protocol: 'gemini-compatible', taskId: id, error: imageError(raw) || '图像任务失败。', raw };
+    }
+    const imageUrls = extractImageUrls(raw);
+    if (isSuccess(raw) || imageUrls.length) {
+      if (!imageUrls.length) {
+        return { ok: false, code: 'empty_image', providerId: provider.id, protocol: 'gemini-compatible', taskId: id, error: '图像任务完成但没有返回图片。', raw };
+      }
+      return { ok: true, kind: 'image', code: 'completed', providerId: provider.id, protocol: 'gemini-compatible', taskId: id, imageUrls, raw };
+    }
+    return { ok: true, kind: 'image', code: 'running', providerId: provider.id, protocol: 'gemini-compatible', taskId: id, status: imageStatus(raw) || 'running', raw };
+  } catch (e) {
+    return {
+      ok: false,
+      code: e?.name === 'AbortError' ? 'timeout' : 'network_error',
+      providerId: provider.id,
+      protocol: 'gemini-compatible',
+      taskId: id,
+      error: e?.name === 'AbortError' ? '图像任务查询超时。' : (e?.message || '图像任务查询失败。'),
     };
   }
 }
@@ -477,5 +530,6 @@ async function testProvider(provider, options = {}) {
 module.exports = {
   generateChat,
   generateImage,
+  queryImageTask,
   testProvider,
 };

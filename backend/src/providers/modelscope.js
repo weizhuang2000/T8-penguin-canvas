@@ -117,6 +117,7 @@ async function generateImage(provider, input = {}, options = {}) {
   const timeoutMs = Number(options.timeoutMs) || 120000;
   const pollIntervalMs = Math.max(1, Number(options.pollIntervalMs) || DEFAULT_POLL_INTERVAL_MS);
   const deadline = Date.now() + timeoutMs;
+  let activeTaskId = '';
 
   try {
     const submit = await openaiCompatible.fetchWithTimeout(`${apiRoot}/images/generations`, {
@@ -139,6 +140,7 @@ async function generateImage(provider, input = {}, options = {}) {
     }
 
     const taskId = extractTaskId(raw);
+    activeTaskId = taskId;
     if (!taskId) {
       const imageUrls = openaiCompatible.extractImageUrls(raw);
       if (imageUrls.length) {
@@ -188,7 +190,67 @@ async function generateImage(provider, input = {}, options = {}) {
       code: e?.name === 'AbortError' ? 'timeout' : 'network_error',
       providerId: provider.id,
       protocol: 'modelscope',
+      taskId: activeTaskId,
       error: e?.name === 'AbortError' ? 'ModelScope 调用超时。' : (e?.message || 'ModelScope 调用失败。'),
+    };
+  }
+}
+
+async function queryImageTask(provider, taskId, options = {}) {
+  const validation = openaiCompatible.validateProvider(provider, { apiKeyRequired: true });
+  if (!validation.ok) return { ...validation, providerId: provider?.id, protocol: 'modelscope' };
+
+  const id = String(taskId || '').trim();
+  if (!id || id.length > 240 || /[\x00-\x1f\x7f]/.test(id)) {
+    return { ok: false, code: 'missing_task_id', providerId: provider.id, protocol: 'modelscope', error: '缺少可查询的 ModelScope task_id。' };
+  }
+
+  const headers = {
+    Authorization: `Bearer ${provider.apiKey}`,
+    'Content-Type': 'application/json',
+    'X-ModelScope-Async-Mode': 'true',
+    'X-ModelScope-Task-Type': 'image_generation',
+  };
+
+  try {
+    const poll = await openaiCompatible.fetchWithTimeout(`${validation.baseUrl}/tasks/${encodeURIComponent(id)}`, {
+      method: 'GET',
+      headers,
+      timeoutMs: options.pollTimeoutMs || options.timeoutMs || 120000,
+      fetchImpl: options.fetchImpl,
+    });
+    const data = await responseJson(poll);
+    if (!poll.ok) {
+      return {
+        ok: false,
+        code: 'http_error',
+        providerId: provider.id,
+        protocol: 'modelscope',
+        taskId: id,
+        error: `ModelScope 轮询失败：HTTP ${poll.status}`,
+        raw: data,
+      };
+    }
+    const status = taskStatus(data);
+    if (['SUCCEED', 'SUCCESS', 'COMPLETED', 'DONE'].includes(status)) {
+      const imageUrls = openaiCompatible.extractImageUrls(data);
+      if (!imageUrls.length) {
+        return { ok: false, code: 'empty_image', providerId: provider.id, protocol: 'modelscope', taskId: id, error: 'ModelScope 成功但没有返回图片。', raw: data };
+      }
+      return { ok: true, kind: 'image', code: 'completed', providerId: provider.id, protocol: 'modelscope', taskId: id, imageUrls, raw: data };
+    }
+    if (['FAILED', 'FAIL', 'ERROR', 'CANCELED', 'CANCELLED', 'TIMEOUT', 'REVOKED'].includes(status)) {
+      return { ok: false, code: 'task_failed', providerId: provider.id, protocol: 'modelscope', taskId: id, error: `ModelScope 任务失败：${taskFailureDetail(data)}`, raw: data };
+    }
+    return { ok: true, kind: 'image', code: 'running', providerId: provider.id, protocol: 'modelscope', taskId: id, status: status || 'RUNNING', raw: data };
+  } catch (e) {
+    return {
+      ok: false,
+      code: e?.name === 'AbortError' ? 'timeout' : 'network_error',
+      providerId: provider.id,
+      protocol: 'modelscope',
+      taskId: id,
+      error: e?.name === 'AbortError' ? 'ModelScope 轮询超时。' : (e?.message || 'ModelScope 轮询失败。'),
     };
   }
 }
@@ -196,5 +258,6 @@ async function generateImage(provider, input = {}, options = {}) {
 module.exports = {
   generateChat,
   generateImage,
+  queryImageTask,
   testProvider,
 };

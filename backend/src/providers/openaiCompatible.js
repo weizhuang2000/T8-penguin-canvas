@@ -184,6 +184,35 @@ function extractTaskId(raw) {
   ).trim();
 }
 
+function extractStatus(raw) {
+  const data = unwrapOpenAIResponse(raw);
+  return String(
+    data?.status ||
+    data?.state ||
+    data?.task_status ||
+    data?.taskStatus ||
+    raw?.status ||
+    raw?.state ||
+    raw?.task_status ||
+    '',
+  ).trim().toUpperCase();
+}
+
+function extractErrorMessage(raw) {
+  const data = unwrapOpenAIResponse(raw);
+  const value =
+    data?.error?.message ||
+    data?.error ||
+    data?.message ||
+    data?.fail_reason ||
+    data?.failReason ||
+    raw?.error?.message ||
+    raw?.error ||
+    raw?.message ||
+    '';
+  return trimBodyForError(value);
+}
+
 function isAuthStatus(status) {
   return Number(status) === 401 || Number(status) === 403;
 }
@@ -430,7 +459,7 @@ async function generateImage(provider, input = {}, options = {}) {
         }
         const imageUrls = extractImageUrls(raw);
         if (!imageUrls.length) {
-          return { ok: false, code: 'empty_image', providerId: provider.id, protocol: provider.protocol, error: '扩展图像编辑接口没有返回图片。', raw };
+          return { ok: false, code: 'empty_image', providerId: provider.id, protocol: provider.protocol, taskId: extractTaskId(raw), error: '扩展图像编辑接口没有返回图片。', raw };
         }
         return { ok: true, kind: 'image', code: 'completed', providerId: provider.id, protocol: provider.protocol, model, imageUrls, raw };
       }
@@ -461,7 +490,7 @@ async function generateImage(provider, input = {}, options = {}) {
     }
     const imageUrls = extractImageUrls(raw);
     if (!imageUrls.length) {
-      return { ok: false, code: 'empty_image', providerId: provider.id, protocol: provider.protocol, error: '扩展图像接口没有返回图片。', raw };
+      return { ok: false, code: 'empty_image', providerId: provider.id, protocol: provider.protocol, taskId: extractTaskId(raw), error: '扩展图像接口没有返回图片。', raw };
     }
     return { ok: true, kind: 'image', code: 'completed', providerId: provider.id, protocol: provider.protocol, model, imageUrls, raw };
   } catch (e) {
@@ -471,6 +500,64 @@ async function generateImage(provider, input = {}, options = {}) {
       providerId: provider.id,
       protocol: provider.protocol,
       error: e?.name === 'AbortError' ? '扩展图像调用超时。' : (e?.message || '扩展图像调用失败。'),
+    };
+  }
+}
+
+async function queryImageTask(provider, taskId, options = {}) {
+  const validation = validateProvider(provider, { apiKeyRequired: true });
+  if (!validation.ok) return validation;
+
+  const id = String(taskId || '').trim();
+  if (!id || id.length > 240 || /[\x00-\x1f\x7f]/.test(id)) {
+    return { ok: false, code: 'missing_task_id', providerId: provider.id, protocol: provider.protocol, error: '缺少可查询的扩展平台任务 ID。' };
+  }
+
+  const defaults = provider?.defaults || {};
+  const taskEndpoint = defaults.imageTaskEndpoint || defaults.image_task_endpoint || defaults.taskEndpoint || defaults.task_endpoint;
+  const url = taskEndpoint
+    ? providerEndpointUrl(provider, String(taskEndpoint).replace(/\{taskId\}/g, encodeURIComponent(id)))
+    : providerEndpointUrl(provider, `/tasks/${encodeURIComponent(id)}`, ['imageTaskEndpoint', 'image_task_endpoint']);
+
+  try {
+    const res = await fetchWithTimeout(url, {
+      method: 'GET',
+      headers: bearerHeaders(provider, { json: false }),
+      timeoutMs: options.timeoutMs || DEFAULT_IMAGE_TIMEOUT_MS,
+      fetchImpl: options.fetchImpl,
+    });
+    const raw = await responseJson(res);
+    if (!res.ok) {
+      return {
+        ok: false,
+        code: 'http_error',
+        providerId: provider.id,
+        protocol: provider.protocol,
+        taskId: id,
+        error: `扩展图像任务查询失败：HTTP ${res.status}${extractErrorMessage(raw) ? ` ${extractErrorMessage(raw)}` : ''}`,
+        raw,
+      };
+    }
+    const imageUrls = extractImageUrls(raw);
+    const status = extractStatus(raw);
+    if (imageUrls.length || ['SUCCEEDED', 'SUCCESS', 'COMPLETED', 'COMPLETE', 'DONE', 'FINISHED', 'OK'].includes(status)) {
+      if (!imageUrls.length) {
+        return { ok: false, code: 'empty_image', providerId: provider.id, protocol: provider.protocol, taskId: id, error: '扩展图像任务完成但没有返回图片。', raw };
+      }
+      return { ok: true, kind: 'image', code: 'completed', providerId: provider.id, protocol: provider.protocol, taskId: id, imageUrls, raw };
+    }
+    if (['FAILED', 'FAILURE', 'FAIL', 'ERROR', 'CANCELED', 'CANCELLED', 'TIMEOUT', 'REJECTED', 'EXPIRED'].includes(status)) {
+      return { ok: false, code: 'task_failed', providerId: provider.id, protocol: provider.protocol, taskId: id, error: extractErrorMessage(raw) || '扩展图像任务失败。', raw };
+    }
+    return { ok: true, kind: 'image', code: 'running', providerId: provider.id, protocol: provider.protocol, taskId: id, status: status || 'RUNNING', raw };
+  } catch (e) {
+    return {
+      ok: false,
+      code: e?.name === 'AbortError' ? 'timeout' : 'network_error',
+      providerId: provider.id,
+      protocol: provider.protocol,
+      taskId: id,
+      error: e?.name === 'AbortError' ? '扩展图像任务查询超时。' : (e?.message || '扩展图像任务查询失败。'),
     };
   }
 }
@@ -627,6 +714,7 @@ module.exports = {
   generateImage,
   generateVideo,
   providerEndpointUrl,
+  queryImageTask,
   testProvider,
   validateProvider,
 };

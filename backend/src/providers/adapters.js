@@ -46,6 +46,20 @@ async function generateImageWithProvider(provider, input = {}, options = {}) {
   return adapter.generateImage(provider, input, options);
 }
 
+async function queryImageTaskWithProvider(provider, taskId, options = {}) {
+  const adapter = getAdapterForProtocol(provider?.protocol);
+  if (!adapter?.queryImageTask) {
+    return {
+      ok: false,
+      code: 'unsupported_image_status',
+      providerId: provider?.id || '',
+      protocol: provider?.protocol || '',
+      error: '该扩展平台暂不支持继续查询图像任务。',
+    };
+  }
+  return adapter.queryImageTask(provider, taskId, options);
+}
+
 async function generateChatWithProvider(provider, input = {}, options = {}) {
   const adapter = getAdapterForProtocol(provider?.protocol);
   if (!adapter?.generateChat) {
@@ -79,5 +93,6 @@ module.exports = {
   generateImageWithProvider,
   generateVideoWithProvider,
   getAdapterForProtocol,
+  queryImageTaskWithProvider,
   testProviderConnection,
 };

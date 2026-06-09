@@ -12,6 +12,7 @@ const {
   generateChatWithProvider,
   generateImageWithProvider,
   generateVideoWithProvider,
+  queryImageTaskWithProvider,
   testProviderConnection,
 } = require('../providers/adapters');
 
@@ -76,6 +77,18 @@ function writeOutputBuffer(buffer, ext) {
   const filename = `external_${Date.now()}_${suffix}${ext || '.png'}`;
   fs.writeFileSync(path.join(config.OUTPUT_DIR, filename), buffer);
   return `/files/output/${filename}`;
+}
+
+function runningImageResponse(res, result, provider) {
+  return resultResponse(res, {
+    ...result,
+    ok: true,
+    code: 'running',
+    status: 'running',
+    imageUrls: [],
+  }, provider, {
+    imageUrls: [],
+  });
 }
 
 async function writeImageOutputBuffer(buffer, format = 'jpg') {
@@ -169,6 +182,17 @@ function rememberExternalOutputs(req, urls, provider, extra = {}) {
   }
 }
 
+function parseHistoryContextQuery(value) {
+  if (!value) return undefined;
+  if (typeof value === 'object' && !Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(String(value));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 router.post('/test-provider', async (req, res) => {
   try {
     const settings = settingsRouter.loadSettings({ persistMigrations: false });
@@ -249,7 +273,12 @@ router.post('/image', requireNodePermission(['image', 'exhibition-img2img']), as
       baseUrl: `http://127.0.0.1:${config.PORT}`,
       outputFormat: req.body?.outputFormat,
     });
-    if (!result.ok) return resultResponse(res, result, resolved.provider);
+    if (!result.ok) {
+      if (result.taskId && (result.code === 'timeout' || result.code === 'empty_image')) {
+        return runningImageResponse(res, result, resolved.provider);
+      }
+      return resultResponse(res, result, resolved.provider);
+    }
     const remoteImageUrls = Array.isArray(result.imageUrls) ? result.imageUrls : [];
     const imageUrls = await saveImageOutputs(remoteImageUrls, {
       outputFormat: req.body?.outputFormat,
@@ -263,6 +292,55 @@ router.post('/image', requireNodePermission(['image', 'exhibition-img2img']), as
     return res.status(500).json({
       success: false,
       code: 'external_image_failed',
+      error: e?.message || String(e),
+    });
+  }
+});
+
+router.get('/image/status/:taskId', requireNodePermission(['image', 'exhibition-img2img']), async (req, res) => {
+  try {
+    const settings = settingsRouter.loadSettings({ persistMigrations: false });
+    const currentProviders = normalizeAdvancedProviders(settings.advancedProviders);
+    const resolved = resolveRunnableProvider(req.query || {}, currentProviders);
+    if (!resolved.ok) {
+      return res.json({
+        success: false,
+        code: resolved.code,
+        error: resolved.error,
+        data: resolved.provider ? { provider: safeProviderForResponse(resolved.provider) } : undefined,
+      });
+    }
+    const taskId = String(req.params.taskId || '').trim();
+    const result = await queryImageTaskWithProvider(resolved.provider, taskId, {
+      timeoutMs: Number(req.query?.timeoutMs) || undefined,
+      baseUrl: `http://127.0.0.1:${config.PORT}`,
+      outputFormat: req.query?.outputFormat,
+    });
+    if (!result.ok) return resultResponse(res, result, resolved.provider);
+    if (result.code !== 'completed') {
+      return resultResponse(res, result, resolved.provider, {
+        imageUrls: [],
+        remoteImageUrls: [],
+      });
+    }
+    const remoteImageUrls = Array.isArray(result.imageUrls) ? result.imageUrls : [];
+    const imageUrls = await saveImageOutputs(remoteImageUrls, {
+      outputFormat: req.query?.outputFormat,
+    });
+    rememberExternalOutputs(
+      { ...req, body: { historyContext: parseHistoryContextQuery(req.query?.historyContext), prompt: req.query?.prompt, providerModel: req.query?.providerModel } },
+      imageUrls,
+      resolved.provider,
+      { kind: 'image', taskId: result.taskId || taskId },
+    );
+    return resultResponse(res, result, resolved.provider, {
+      remoteImageUrls,
+      imageUrls,
+    });
+  } catch (e) {
+    return res.status(500).json({
+      success: false,
+      code: 'external_image_status_failed',
       error: e?.message || String(e),
     });
   }
