@@ -15,6 +15,12 @@ export interface ExhibitionCreativeInsertItem {
   order?: number;
 }
 
+export interface ExhibitionCreativeExcludeItem {
+  id: string;
+  label: string;
+  order?: number;
+}
+
 export interface ExhibitionCreativeBriefPromptValues {
   spaceType?: ExhibitionCreativeSpaceType;
   projectTheme?: string;
@@ -22,6 +28,8 @@ export interface ExhibitionCreativeBriefPromptValues {
   documentSummary?: string;
   insertItems?: string[];
   insertItemOptions?: ExhibitionCreativeInsertItem[];
+  excludeItems?: string[];
+  excludeItemOptions?: ExhibitionCreativeExcludeItem[];
   roundIndex?: number;
   total?: number;
   generationCount?: number;
@@ -34,16 +42,21 @@ export interface ExhibitionCreativeImagePromptValues extends ExhibitionCreativeB
   brief?: string;
   insertItems?: string[];
   insertItemOptions?: ExhibitionCreativeInsertItem[];
+  excludeItems?: string[];
+  excludeItemOptions?: ExhibitionCreativeExcludeItem[];
 }
 
 export const EXHIBITION_CREATIVE_SPACE_TYPES: ExhibitionCreativeSpaceTypeMeta[];
 export const EXHIBITION_CREATIVE_INSERT_ITEMS: ExhibitionCreativeInsertItem[];
+export const EXHIBITION_CREATIVE_EXCLUDE_ITEMS: ExhibitionCreativeExcludeItem[];
 export function cleanExhibitionCreativeText(value: unknown, max?: number): string;
 export function normalizeExhibitionCreativeSpaceType(value: unknown): ExhibitionCreativeSpaceType;
 export function normalizeExhibitionCreativeCount(value: unknown): number;
 export function exhibitionCreativeSpaceTypeMeta(value: unknown): ExhibitionCreativeSpaceTypeMeta;
 export function normalizeExhibitionCreativeInsertItems(value: unknown, options?: ExhibitionCreativeInsertItem[]): ExhibitionCreativeInsertItem[];
 export function exhibitionCreativeInsertItemsText(value: unknown, options?: ExhibitionCreativeInsertItem[]): string;
+export function normalizeExhibitionCreativeExcludeItems(value: unknown, options?: ExhibitionCreativeExcludeItem[]): ExhibitionCreativeExcludeItem[];
+export function exhibitionCreativeExcludeItemsText(value: unknown, options?: ExhibitionCreativeExcludeItem[]): string;
 export function normalizeExhibitionCreativeBrief(value: unknown): string;
 export function buildExhibitionCreativeBriefPrompt(values?: ExhibitionCreativeBriefPromptValues): string;
 export function buildExhibitionCreativeImagePrompt(values?: ExhibitionCreativeImagePromptValues): string;

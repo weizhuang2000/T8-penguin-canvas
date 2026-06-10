@@ -288,8 +288,15 @@ export interface ExhibitionCreativeInsertPresetItem {
   order: number;
 }
 
+export interface ExhibitionCreativeExcludePresetItem {
+  id: string;
+  label: string;
+  order: number;
+}
+
 export interface ExhibitionCreativePromptPresetMap {
   inserts: ExhibitionCreativeInsertPresetItem[];
+  exclusions: ExhibitionCreativeExcludePresetItem[];
 }
 
 export async function listExhibitionPromptLibrary(options?: {
@@ -384,7 +391,7 @@ export async function getExhibitionCreativePromptPresets(): Promise<ExhibitionCr
   const res = await request<{ success: boolean; data: ExhibitionCreativePromptPresetMap }>(
     `${BASE}/prompt-library/exhibition-creative/presets`,
   );
-  return res.data || { inserts: [] };
+  return res.data || { inserts: [], exclusions: [] };
 }
 
 export async function updateExhibitionCreativeInsertPresets(
@@ -392,6 +399,19 @@ export async function updateExhibitionCreativeInsertPresets(
 ): Promise<ExhibitionCreativeInsertPresetItem[]> {
   const res = await request<{ success: boolean; data: ExhibitionCreativeInsertPresetItem[] }>(
     `${BASE}/prompt-library/exhibition-creative/presets/inserts`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ presets }),
+    },
+  );
+  return res.data || [];
+}
+
+export async function updateExhibitionCreativeExcludePresets(
+  presets: Array<Pick<ExhibitionCreativeExcludePresetItem, 'label'> & Partial<Pick<ExhibitionCreativeExcludePresetItem, 'id' | 'order'>>>,
+): Promise<ExhibitionCreativeExcludePresetItem[]> {
+  const res = await request<{ success: boolean; data: ExhibitionCreativeExcludePresetItem[] }>(
+    `${BASE}/prompt-library/exhibition-creative/presets/exclusions`,
     {
       method: 'PUT',
       body: JSON.stringify({ presets }),

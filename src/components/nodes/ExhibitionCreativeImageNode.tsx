@@ -32,22 +32,28 @@ import {
 import {
   buildExhibitionCreativeBriefPrompt,
   buildExhibitionCreativeImagePrompt,
+  EXHIBITION_CREATIVE_EXCLUDE_ITEMS,
   EXHIBITION_CREATIVE_INSERT_ITEMS,
   EXHIBITION_CREATIVE_SPACE_TYPES,
+  exhibitionCreativeExcludeItemsText,
   exhibitionCreativeInsertItemsText,
   exhibitionCreativeSpaceTypeMeta,
-  normalizeExhibitionCreativeInsertItems,
   normalizeExhibitionCreativeBrief,
   normalizeExhibitionCreativeCount,
+  normalizeExhibitionCreativeExcludeItems,
+  normalizeExhibitionCreativeInsertItems,
   normalizeExhibitionCreativeSpaceType,
+  type ExhibitionCreativeExcludeItem,
   type ExhibitionCreativeInsertItem,
 } from '../../utils/exhibitionCreativeImagePrompt';
 import {
   extractDocument,
   getCurrentUser,
   getExhibitionCreativePromptPresets,
+  updateExhibitionCreativeExcludePresets,
   updateExhibitionCreativeInsertPresets,
   type AuthUser,
+  type ExhibitionCreativeExcludePresetItem,
   type ExhibitionCreativeInsertPresetItem,
   type ExtractedDocument,
 } from '../../services/api';
@@ -164,6 +170,7 @@ function fallbackCreativeBrief(values: {
   inspiration: string;
   documentSummary: string;
   insertItemsText: string;
+  excludeItemsText: string;
   roundIndex: number;
   total: number;
 }) {
@@ -175,9 +182,10 @@ function fallbackCreativeBrief(values: {
   const inspiration = values.inspiration
     ? `吸收个人灵感中关于${values.inspiration.slice(0, 120)}的方向，`
     : '';
+  const exclusion = values.excludeItemsText ? `同时避开${values.excludeItemsText}。` : '';
   return [
     `围绕${theme}创作第 ${values.roundIndex}/${values.total} 个${meta.label}展陈空间方案。`,
-    `${material}${inspiration}在不改变原始室内建筑空间几何、透视、尺度和主要开口关系的前提下，植入${values.insertItemsText}。`,
+    `${material}${inspiration}在不改变原始室内建筑空间几何、透视、尺度和主要开口关系的前提下，植入${values.insertItemsText}。${exclusion}`,
     `整体气质应符合${meta.prompt}，画面具有专业展陈效果图的完成度、真实材料细节和可落地的施工表达，并与同批次其他方案形成可比较的差异化。`,
   ].join('');
 }
@@ -186,14 +194,18 @@ function insertPresetEditorText(presets: ExhibitionCreativeInsertPresetItem[]) {
   return presets.map((preset) => preset.label).join('\n');
 }
 
-function parseInsertPresetEditorText(text: string) {
+function excludePresetEditorText(presets: ExhibitionCreativeExcludePresetItem[]) {
+  return presets.map((preset) => preset.label).join('\n');
+}
+
+function parseLabelPresetEditorText(text: string, fallbackId: string) {
   return text
     .split(/\r?\n/)
     .map((line, index) => {
       const label = line.trim();
       if (!label) return null;
       return {
-        id: `${label.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'insert'}-${index + 1}`,
+        id: `${label.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || fallbackId}-${index + 1}`,
         label,
         order: index,
       };
@@ -207,10 +219,15 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const fileRef = useRef<HTMLInputElement>(null);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [insertPresets, setInsertPresets] = useState<ExhibitionCreativeInsertPresetItem[]>([]);
+  const [excludePresets, setExcludePresets] = useState<ExhibitionCreativeExcludePresetItem[]>([]);
   const [insertEditorOpen, setInsertEditorOpen] = useState(false);
+  const [excludeEditorOpen, setExcludeEditorOpen] = useState(false);
   const [insertEditorValue, setInsertEditorValue] = useState('');
+  const [excludeEditorValue, setExcludeEditorValue] = useState('');
   const [insertSaving, setInsertSaving] = useState(false);
+  const [excludeSaving, setExcludeSaving] = useState(false);
   const [insertError, setInsertError] = useState('');
+  const [excludeError, setExcludeError] = useState('');
   const { style } = useThemeStore();
   const isPixel = style === 'pixel';
   const activeCanvas = useCanvasStore((state) => state.canvases.find((canvas) => canvas.id === state.activeId) || null);
@@ -269,11 +286,20 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     () => (insertPresets.length > 0 ? insertPresets : EXHIBITION_CREATIVE_INSERT_ITEMS),
     [insertPresets],
   );
+  const excludeOptions = useMemo<ExhibitionCreativeExcludeItem[]>(
+    () => (excludePresets.length > 0 ? excludePresets : EXHIBITION_CREATIVE_EXCLUDE_ITEMS),
+    [excludePresets],
+  );
   const selectedInsertItems = useMemo(
     () => normalizeExhibitionCreativeInsertItems(d.insertItems, insertOptions),
     [d.insertItems, insertOptions],
   );
   const selectedInsertIds = useMemo(() => selectedInsertItems.map((item) => item.id), [selectedInsertItems]);
+  const selectedExcludeItems = useMemo(
+    () => normalizeExhibitionCreativeExcludeItems(d.excludeItems, excludeOptions),
+    [d.excludeItems, excludeOptions],
+  );
+  const selectedExcludeIds = useMemo(() => selectedExcludeItems.map((item) => item.id), [selectedExcludeItems]);
   const regenerateEachTime = d.regenerateEachTime !== false;
   const projectTheme = String(d.projectTheme || '').trim();
   const inspiration = String(d.inspiration || '').trim();
@@ -297,10 +323,12 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       creativeBrief,
       insertItems: selectedInsertIds,
       insertItemOptions: insertOptions,
+      excludeItems: selectedExcludeIds,
+      excludeItemOptions: excludeOptions,
       roundIndex: 1,
       total: generationCount,
     }),
-    [creativeBrief, documentSummary, generationCount, inspiration, insertOptions, projectTheme, selectedInsertIds, spaceType],
+    [creativeBrief, documentSummary, excludeOptions, generationCount, inspiration, insertOptions, projectTheme, selectedExcludeIds, selectedInsertIds, spaceType],
   );
 
   useEffect(() => {
@@ -334,8 +362,14 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   useEffect(() => {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
     getExhibitionCreativePromptPresets()
-      .then((presets) => setInsertPresets(presets.inserts || []))
-      .catch(() => setInsertPresets([]));
+      .then((presets) => {
+        setInsertPresets(presets.inserts || []);
+        setExcludePresets(presets.exclusions || []);
+      })
+      .catch(() => {
+        setInsertPresets([]);
+        setExcludePresets([]);
+      });
   }, []);
 
   useEffect(() => {
@@ -344,9 +378,15 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     setInsertError('');
   }, [insertEditorOpen, insertPresets]);
 
+  useEffect(() => {
+    if (!excludeEditorOpen) return;
+    setExcludeEditorValue(excludePresetEditorText(excludePresets));
+    setExcludeError('');
+  }, [excludeEditorOpen, excludePresets]);
+
   const saveInsertPresets = async () => {
     if (!canManageTeam) return;
-    const presets = parseInsertPresetEditorText(insertEditorValue);
+    const presets = parseLabelPresetEditorText(insertEditorValue, 'insert');
     if (presets.length === 0) {
       setInsertError('请至少保留一项植入内容。');
       return;
@@ -365,12 +405,41 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     }
   };
 
+  const saveExcludePresets = async () => {
+    if (!canManageTeam) return;
+    const presets = parseLabelPresetEditorText(excludeEditorValue, 'exclude');
+    if (presets.length === 0) {
+      setExcludeError('请至少保留一项排除内容。');
+      return;
+    }
+    setExcludeSaving(true);
+    setExcludeError('');
+    try {
+      const saved = await updateExhibitionCreativeExcludePresets(presets);
+      setExcludePresets(saved);
+      update({ excludeItems: normalizeExhibitionCreativeExcludeItems(selectedExcludeIds, saved).map((item) => item.id) });
+      setExcludeEditorOpen(false);
+    } catch (error: any) {
+      setExcludeError(error?.message || '保存排除项失败');
+    } finally {
+      setExcludeSaving(false);
+    }
+  };
+
   const toggleInsertItem = (itemId: string) => {
     if (isReadonly || busy) return;
     const next = selectedInsertIds.includes(itemId)
       ? selectedInsertIds.filter((item) => item !== itemId)
       : [...selectedInsertIds, itemId];
     update({ insertItems: next });
+  };
+
+  const toggleExcludeItem = (itemId: string) => {
+    if (isReadonly || busy) return;
+    const next = selectedExcludeIds.includes(itemId)
+      ? selectedExcludeIds.filter((item) => item !== itemId)
+      : [...selectedExcludeIds, itemId];
+    update({ excludeItems: next });
   };
 
   const buildCreativeBrief = useCallback(async (roundIndex: number, previousBriefs: string[] = []) => {
@@ -381,6 +450,8 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       documentSummary,
       insertItems: selectedInsertIds,
       insertItemOptions: insertOptions,
+      excludeItems: selectedExcludeIds,
+      excludeItemOptions: excludeOptions,
       roundIndex,
       total: generationCount,
       previousBriefs,
@@ -408,12 +479,14 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   }, [
     activeLlmConfig?.id,
     documentSummary,
+    excludeOptions,
     generationCount,
     inspiration,
     llmModel,
     projectTheme,
     regenerateEachTime,
     insertOptions,
+    selectedExcludeIds,
     selectedInsertIds,
     spaceType,
   ]);
@@ -673,6 +746,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               inspiration,
               documentSummary,
               insertItemsText: exhibitionCreativeInsertItemsText(selectedInsertIds, insertOptions),
+              excludeItemsText: exhibitionCreativeExcludeItemsText(selectedExcludeIds, excludeOptions),
               roundIndex: 1,
               total: generationCount,
             });
@@ -699,6 +773,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               inspiration,
               documentSummary,
               insertItemsText: exhibitionCreativeInsertItemsText(selectedInsertIds, insertOptions),
+              excludeItemsText: exhibitionCreativeExcludeItemsText(selectedExcludeIds, excludeOptions),
               roundIndex: index,
               total: generationCount,
             });
@@ -718,6 +793,8 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           creativeBrief: brief,
           insertItems: selectedInsertIds,
           insertItemOptions: insertOptions,
+          excludeItems: selectedExcludeIds,
+          excludeItemOptions: excludeOptions,
           roundIndex: index,
           total: generationCount,
         });
@@ -772,6 +849,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     buildCreativeBrief,
     creativeBrief,
     documentSummary,
+    excludeOptions,
     generateOneImage,
     generationCount,
     id,
@@ -780,6 +858,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     isReadonly,
     projectTheme,
     regenerateEachTime,
+    selectedExcludeIds,
     selectedInsertIds,
     seed,
     spaceImage,
@@ -951,7 +1030,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             <button
               type="button"
               className={`${BUTTON} ml-auto`}
-              disabled={isReadonly || busy || !spaceImage}
+              disabled={isReadonly || busy}
               onClick={() => void generateCreativeOnly()}
             >
               {status === 'creative' ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
@@ -1052,6 +1131,73 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                     onClick={() => void saveInsertPresets()}
                   >
                     {insertSaving ? '保存中' : '保存'}
+                  </button>
+                </div>
+              </div>
+            )}
+        </section>
+
+        <section className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold text-cyan-100">排除项</span>
+              <span className="min-w-0 flex-1 truncate text-[9px] text-white/40">
+                优先于 LLM 创意描述，强调不要出现
+              </span>
+              {canManageTeam && (
+                <button
+                  type="button"
+                  className={BUTTON}
+                  disabled={busy}
+                  onClick={() => setExcludeEditorOpen((open) => !open)}
+                >
+                  {excludeEditorOpen ? '收起' : '编辑'}
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {excludeOptions.map((item) => {
+                const active = selectedExcludeIds.includes(item.id);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    disabled={isReadonly || busy}
+                    className={`rounded border px-1.5 py-1 text-[10px] ${
+                      active ? 'border-rose-300/55 bg-rose-300/15 text-rose-100' : 'border-white/10 bg-black/15 text-white/55 hover:bg-white/[0.08]'
+                    } disabled:opacity-50`}
+                    onClick={() => toggleExcludeItem(item.id)}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+            {canManageTeam && excludeEditorOpen && (
+              <div className="space-y-1.5 rounded border border-rose-300/15 bg-rose-300/5 p-2">
+                <textarea
+                  className={`${FIELD} min-h-[92px] resize-y`}
+                  value={excludeEditorValue}
+                  disabled={excludeSaving || busy}
+                  placeholder="每行一个排除项，例如：真实品牌标识"
+                  onChange={(event) => setExcludeEditorValue(event.target.value)}
+                />
+                {excludeError && <div className="text-[10px] text-red-200">{excludeError}</div>}
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    className={BUTTON}
+                    disabled={excludeSaving || busy}
+                    onClick={() => setExcludeEditorOpen(false)}
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    className={BUTTON}
+                    disabled={excludeSaving || busy}
+                    onClick={() => void saveExcludePresets()}
+                  >
+                    {excludeSaving ? '保存中' : '保存'}
                   </button>
                 </div>
               </div>

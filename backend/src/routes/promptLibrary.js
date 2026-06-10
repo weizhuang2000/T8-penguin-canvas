@@ -133,6 +133,17 @@ const DEFAULT_EXHIBITION_CREATIVE_INSERT_PRESETS = [
   { id: 'artwork', label: '艺术品' },
 ].map((item, index) => ({ ...item, order: index }));
 
+const DEFAULT_EXHIBITION_CREATIVE_EXCLUDE_PRESETS = [
+  { id: 'readable-wrong-text', label: '可读错字/乱码文字' },
+  { id: 'real-brand-logo', label: '真实品牌标识' },
+  { id: 'instruction-table', label: '说明表格' },
+  { id: 'crowded-people', label: '过多人群' },
+  { id: 'messy-cables', label: '杂乱线缆' },
+  { id: 'cartoon-style', label: '卡通低幼风格' },
+  { id: 'blurry-low-quality', label: '低清晰度/模糊画面' },
+  { id: 'extra-structure', label: '擅自新增或改变建筑结构' },
+].map((item, index) => ({ ...item, order: index }));
+
 function now() {
   return Date.now();
 }
@@ -254,6 +265,29 @@ function normalizeCreativeInsertPresetList(value) {
     .map((item, index) => ({ ...item, order: index }));
 }
 
+function normalizeCreativeExcludePresetList(value) {
+  const source = Array.isArray(value) && value.length > 0 ? value : DEFAULT_EXHIBITION_CREATIVE_EXCLUDE_PRESETS;
+  const used = new Set();
+  return source
+    .map((raw, index) => {
+      const label = safeText(raw?.label || raw?.text, 120);
+      if (!label) return null;
+      let id = safeText(raw?.id, 96).replace(/[^a-zA-Z0-9_-]/g, '');
+      if (!id) id = `exclude_${index + 1}`;
+      while (used.has(id)) id = `${id}_${index + 1}`;
+      used.add(id);
+      return {
+        id,
+        label,
+        order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 80)
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+    .map((item, index) => ({ ...item, order: index }));
+}
+
 function readElevationDb() {
   try {
     if (!fs.existsSync(ELEVATION_DB_FILE)) {
@@ -292,15 +326,18 @@ function readCreativeDb() {
     if (!fs.existsSync(CREATIVE_DB_FILE)) {
       return {
         insertPresets: normalizeCreativeInsertPresetList(DEFAULT_EXHIBITION_CREATIVE_INSERT_PRESETS),
+        excludePresets: normalizeCreativeExcludePresetList(DEFAULT_EXHIBITION_CREATIVE_EXCLUDE_PRESETS),
       };
     }
     const raw = JSON.parse(fs.readFileSync(CREATIVE_DB_FILE, 'utf-8'));
     return {
       insertPresets: normalizeCreativeInsertPresetList(raw?.insertPresets),
+      excludePresets: normalizeCreativeExcludePresetList(raw?.excludePresets),
     };
   } catch {
     return {
       insertPresets: normalizeCreativeInsertPresetList(DEFAULT_EXHIBITION_CREATIVE_INSERT_PRESETS),
+      excludePresets: normalizeCreativeExcludePresetList(DEFAULT_EXHIBITION_CREATIVE_EXCLUDE_PRESETS),
     };
   }
 }
@@ -311,6 +348,7 @@ function writeCreativeDb(db) {
     CREATIVE_DB_FILE,
     JSON.stringify({
       insertPresets: normalizeCreativeInsertPresetList(db?.insertPresets),
+      excludePresets: normalizeCreativeExcludePresetList(db?.excludePresets),
     }, null, 2),
     'utf-8',
   );
@@ -470,6 +508,7 @@ router.get('/exhibition-creative/presets', (_req, res) => {
     success: true,
     data: {
       inserts: normalizeCreativeInsertPresetList(db.insertPresets),
+      exclusions: normalizeCreativeExcludePresetList(db.excludePresets),
     },
   });
 });
@@ -482,6 +521,17 @@ router.put('/exhibition-creative/presets/inserts', (req, res) => {
   const db = readCreativeDb();
   const presets = normalizeCreativeInsertPresetList(req.body?.presets);
   writeCreativeDb({ ...db, insertPresets: presets });
+  res.json({ success: true, data: presets });
+});
+
+router.put('/exhibition-creative/presets/exclusions', (req, res) => {
+  const user = req.user;
+  if (!isAdminRole(user?.role)) {
+    return res.status(403).json({ success: false, error: '只有系统管理员或经理可以维护展陈创意排除项预设' });
+  }
+  const db = readCreativeDb();
+  const presets = normalizeCreativeExcludePresetList(req.body?.presets);
+  writeCreativeDb({ ...db, excludePresets: presets });
   res.json({ success: true, data: presets });
 });
 

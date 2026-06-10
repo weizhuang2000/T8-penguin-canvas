@@ -2,12 +2,15 @@ import {
   buildExhibitionCreativeBriefPrompt,
   buildExhibitionCreativeImagePrompt,
   cleanExhibitionCreativeText,
+  EXHIBITION_CREATIVE_EXCLUDE_ITEMS,
   EXHIBITION_CREATIVE_INSERT_ITEMS,
   EXHIBITION_CREATIVE_SPACE_TYPES,
+  exhibitionCreativeExcludeItemsText,
   exhibitionCreativeInsertItemsText,
   exhibitionCreativeSpaceTypeMeta,
   normalizeExhibitionCreativeBrief,
   normalizeExhibitionCreativeCount,
+  normalizeExhibitionCreativeExcludeItems,
   normalizeExhibitionCreativeInsertItems,
   normalizeExhibitionCreativeSpaceType,
 } from './exhibitionCreativeImagePromptData.js';
@@ -29,6 +32,12 @@ export interface ExhibitionCreativeInsertItem {
   order?: number;
 }
 
+export interface ExhibitionCreativeExcludeItem {
+  id: string;
+  label: string;
+  order?: number;
+}
+
 export interface ExhibitionCreativeBriefPromptValues {
   spaceType?: ExhibitionCreativeSpaceType;
   projectTheme?: string;
@@ -36,6 +45,8 @@ export interface ExhibitionCreativeBriefPromptValues {
   documentSummary?: string;
   insertItems?: string[];
   insertItemOptions?: ExhibitionCreativeInsertItem[];
+  excludeItems?: string[];
+  excludeItemOptions?: ExhibitionCreativeExcludeItem[];
   roundIndex?: number;
   total?: number;
   generationCount?: number;
@@ -48,18 +59,23 @@ export interface ExhibitionCreativeImagePromptValues extends ExhibitionCreativeB
   brief?: string;
   insertItems?: string[];
   insertItemOptions?: ExhibitionCreativeInsertItem[];
+  excludeItems?: string[];
+  excludeItemOptions?: ExhibitionCreativeExcludeItem[];
 }
 
 export {
   buildExhibitionCreativeBriefPrompt,
   buildExhibitionCreativeImagePrompt,
   cleanExhibitionCreativeText,
+  EXHIBITION_CREATIVE_EXCLUDE_ITEMS,
   EXHIBITION_CREATIVE_INSERT_ITEMS,
   EXHIBITION_CREATIVE_SPACE_TYPES,
+  exhibitionCreativeExcludeItemsText,
   exhibitionCreativeInsertItemsText,
   exhibitionCreativeSpaceTypeMeta,
   normalizeExhibitionCreativeBrief,
   normalizeExhibitionCreativeCount,
+  normalizeExhibitionCreativeExcludeItems,
   normalizeExhibitionCreativeInsertItems,
   normalizeExhibitionCreativeSpaceType,
 };

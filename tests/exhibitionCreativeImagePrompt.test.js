@@ -32,6 +32,7 @@ test('exhibition creative brief prompt supports per-run LLM variation', () => {
     inspiration: '入口需要强仪式感',
     documentSummary: '核心资料：企业以智能制造为主线，关键展项包括数字产线、绿色工厂和未来实验室。',
     insertItems: ['large-sculpture', 'multimedia-equipment'],
+    excludeItems: ['real-brand-logo', 'instruction-table'],
     roundIndex: 2,
     total: 5,
     previousBriefs: ['使用环形光幕形成开场。'],
@@ -41,6 +42,8 @@ test('exhibition creative brief prompt supports per-run LLM variation', () => {
   assert.match(prompt, /第 2\/5 个序厅展陈空间生图创意描述/);
   assert.match(prompt, /指定植入项：大型雕塑和多媒体设备/);
   assert.match(prompt, /不要分析、引用或依赖输入图像/);
+  assert.match(prompt, /排除项：真实品牌标识和说明表格/);
+  assert.match(prompt, /不要设计、暗示或要求生成这些内容/);
   assert.doesNotMatch(prompt, /基于输入图片中的室内建筑空间/);
   assert.match(prompt, /项目主题\/展览关键词：企业创新展/);
   assert.match(prompt, /项目资料摘要/);
@@ -48,6 +51,18 @@ test('exhibition creative brief prompt supports per-run LLM variation', () => {
   assert.match(prompt, /个人灵感补充：入口需要强仪式感/);
   assert.match(prompt, /已有创意方向/);
   assert.match(prompt, /适合多方案比选/);
+});
+
+test('exhibition creative image prompt places exclusions before LLM brief', () => {
+  const prompt = buildExhibitionCreativeImagePrompt({
+    spaceType: 'intro-hall',
+    creativeBrief: 'LLM 创意描述里可能提到真实品牌标识，但最终不应生成。',
+    excludeItems: ['real-brand-logo', 'readable-wrong-text'],
+  });
+  assert.match(prompt, /【排除项优先约束】/);
+  assert.match(prompt, /真实品牌标识和可读错字\/乱码文字/);
+  assert.match(prompt, /优先级高于 LLM 创意描述/);
+  assert.ok(prompt.indexOf('【排除项优先约束】') < prompt.indexOf('【LLM创意描述】'));
 });
 
 test('exhibition creative image prompt includes document summary as creative material', () => {

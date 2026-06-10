@@ -31,6 +31,17 @@ export const EXHIBITION_CREATIVE_INSERT_ITEMS = [
 
 const INSERT_ITEM_IDS = new Set(EXHIBITION_CREATIVE_INSERT_ITEMS.map((item) => item.id));
 
+export const EXHIBITION_CREATIVE_EXCLUDE_ITEMS = [
+  { id: 'readable-wrong-text', label: '可读错字/乱码文字' },
+  { id: 'real-brand-logo', label: '真实品牌标识' },
+  { id: 'instruction-table', label: '说明表格' },
+  { id: 'crowded-people', label: '过多人群' },
+  { id: 'messy-cables', label: '杂乱线缆' },
+  { id: 'cartoon-style', label: '卡通低幼风格' },
+  { id: 'blurry-low-quality', label: '低清晰度/模糊画面' },
+  { id: 'extra-structure', label: '擅自新增或改变建筑结构' },
+].map((item, index) => ({ ...item, order: index }));
+
 export function cleanExhibitionCreativeText(value, max = 12000) {
   return String(value || '').replace(/\r\n?/g, '\n').trim().slice(0, max);
 }
@@ -73,6 +84,24 @@ export function exhibitionCreativeInsertItemsText(value, options = EXHIBITION_CR
   return `${items.slice(0, -1).join('、')}和${items[items.length - 1]}`;
 }
 
+export function normalizeExhibitionCreativeExcludeItems(value, options = EXHIBITION_CREATIVE_EXCLUDE_ITEMS) {
+  const source = Array.isArray(options) && options.length > 0 ? options : EXHIBITION_CREATIVE_EXCLUDE_ITEMS;
+  const labelsById = new Map(source.map((item) => [String(item.id), String(item.label || item.id).trim()]));
+  const ids = Array.isArray(value) ? value.map((item) => String(item || '').trim()).filter(Boolean) : [];
+  return Array.from(new Set(ids.filter((id) => labelsById.has(id)))).map((id) => ({
+    id,
+    label: labelsById.get(id) || id,
+  }));
+}
+
+export function exhibitionCreativeExcludeItemsText(value, options = EXHIBITION_CREATIVE_EXCLUDE_ITEMS) {
+  const items = normalizeExhibitionCreativeExcludeItems(value, options).map((item) => item.label).filter(Boolean);
+  if (items.length === 0) return '';
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return items.join('和');
+  return `${items.slice(0, -1).join('、')}和${items[items.length - 1]}`;
+}
+
 export function normalizeExhibitionCreativeBrief(value) {
   return cleanExhibitionCreativeText(value, 5000)
     .replace(/^```(?:json|markdown|md)?/i, '')
@@ -89,6 +118,7 @@ export function buildExhibitionCreativeBriefPrompt(values = {}) {
   const roundIndex = Math.max(1, Number(values.roundIndex) || 1);
   const total = normalizeExhibitionCreativeCount(values.total || values.generationCount || 1);
   const insertItemsText = exhibitionCreativeInsertItemsText(values.insertItems, values.insertItemOptions);
+  const excludeItemsText = exhibitionCreativeExcludeItemsText(values.excludeItems, values.excludeItemOptions);
   const previousBriefs = Array.isArray(values.previousBriefs)
     ? values.previousBriefs.map((item) => cleanExhibitionCreativeText(item, 800)).filter(Boolean)
     : [];
@@ -100,6 +130,9 @@ export function buildExhibitionCreativeBriefPrompt(values = {}) {
     `请把提炼后的创意资料文档与${insertItemsText}结合，进行有艺术性的展陈空间创作，从展陈叙事、空间气质、灯光氛围、材料语言、互动方式、观众视线组织和拍摄画面完成度等角度给出可直接用于图生图的创意描述。`,
     '输出 180 到 320 字中文自然段，只输出创意描述本身，不要标题、编号、Markdown、解释、参数表或英文翻译。',
   ];
+  if (excludeItemsText) {
+    lines.push(`排除项：${excludeItemsText}。创意描述中不要设计、暗示或要求生成这些内容。`);
+  }
   if (projectTheme) lines.push(`项目主题/展览关键词：${projectTheme}`);
   if (documentSummary) {
     lines.push('项目资料摘要：');
@@ -140,6 +173,7 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   const roundIndex = Math.max(1, Number(values.roundIndex) || 1);
   const total = normalizeExhibitionCreativeCount(values.total || values.generationCount || 1);
   const insertItemsText = exhibitionCreativeInsertItemsText(values.insertItems, values.insertItemOptions);
+  const excludeItemsText = exhibitionCreativeExcludeItemsText(values.excludeItems, values.excludeItemOptions);
   const lines = [
     `生成一张专业${meta.label}展陈空间效果图，第 ${roundIndex}/${total} 张。真实室内建筑摄影级渲染，空间尺度可信，材质细节清晰，灯光层次准确，画面干净完整。`,
     `空间类型：${meta.label}。${meta.prompt}`,
@@ -147,10 +181,15 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
     '【输入空间图约束】',
     '输入图像是唯一的室内建筑空间依据。必须保留原图的空间几何、透视角度、层高尺度、主要墙体/柱网/开口、吊顶关系、地面边界、入口出口、通行动线和前后左右空间关系。',
     `允许在该空间内植入${insertItemsText}；不得把空间改成另一处建筑，不得改变主要开口、承重结构和真实尺度关系。`,
-    '',
-    '【LLM创意描述】',
-    creativeBrief || '围绕该室内空间生成具有强记忆点的展陈创意：以主题叙事为核心，在入口/核心/收束视线位置组织主视觉装置、沉浸光影、展陈工艺和观众动线，形成可落地的高完成度展陈效果图。',
   ];
+  if (excludeItemsText) {
+    lines.push('');
+    lines.push('【排除项优先约束】');
+    lines.push(`以下内容优先级高于 LLM 创意描述，不得出现在画面中：${excludeItemsText}。即使 LLM 创意描述、项目资料或个人灵感提到这些内容，也必须忽略并避免生成。`);
+  }
+  lines.push('');
+  lines.push('【LLM创意描述】');
+  lines.push(creativeBrief || '围绕该室内空间生成具有强记忆点的展陈创意：以主题叙事为核心，在入口/核心/收束视线位置组织主视觉装置、沉浸光影、展陈工艺和观众动线，形成可落地的高完成度展陈效果图。');
   if (projectTheme) lines.push(`项目主题：${projectTheme}`);
   if (documentSummary) {
     lines.push('项目资料摘要：');
