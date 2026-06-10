@@ -56,6 +56,26 @@ export function normalizeExhibitionCreativeCount(value) {
   return Math.max(1, Math.min(12, number));
 }
 
+export function normalizeExhibitionCreativeSpaceSize(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  const normalizeNumber = (raw) => {
+    const number = Number(raw);
+    if (!Number.isFinite(number) || number <= 0) return 0;
+    return Math.round(number * 100) / 100;
+  };
+  return {
+    width: normalizeNumber(source.width),
+    depth: normalizeNumber(source.depth),
+    height: normalizeNumber(source.height),
+  };
+}
+
+export function exhibitionCreativeSpaceSizeText(value) {
+  const size = normalizeExhibitionCreativeSpaceSize(value);
+  if (!size.width || !size.depth || !size.height) return '';
+  return `宽度 ${size.width} 米、进深 ${size.depth} 米、高度 ${size.height} 米`;
+}
+
 export function exhibitionCreativeSpaceTypeMeta(value) {
   const id = normalizeExhibitionCreativeSpaceType(value);
   return EXHIBITION_CREATIVE_SPACE_TYPES.find((item) => item.id === id) || EXHIBITION_CREATIVE_SPACE_TYPES[0];
@@ -174,14 +194,24 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   const total = normalizeExhibitionCreativeCount(values.total || values.generationCount || 1);
   const insertItemsText = exhibitionCreativeInsertItemsText(values.insertItems, values.insertItemOptions);
   const excludeItemsText = exhibitionCreativeExcludeItemsText(values.excludeItems, values.excludeItemOptions);
+  const hasSpaceImage = values.hasSpaceImage !== false;
+  const spaceSizeText = exhibitionCreativeSpaceSizeText(values.spaceSize);
   const lines = [
     `生成一张专业${meta.label}展陈空间效果图，第 ${roundIndex}/${total} 张。真实室内建筑摄影级渲染，空间尺度可信，材质细节清晰，灯光层次准确，画面干净完整。`,
     `空间类型：${meta.label}。${meta.prompt}`,
     '',
-    '【输入空间图约束】',
-    '输入图像是唯一的室内建筑空间依据。必须保留原图的空间几何、透视角度、层高尺度、主要墙体/柱网/开口、吊顶关系、地面边界、入口出口、通行动线和前后左右空间关系。',
-    `允许在该空间内植入${insertItemsText}；不得把空间改成另一处建筑，不得改变主要开口、承重结构和真实尺度关系。`,
   ];
+  if (hasSpaceImage) {
+    lines.push('【输入空间图约束】');
+    lines.push('输入图像是唯一的室内建筑空间依据。必须保留原图的空间几何、透视角度、层高尺度、主要墙体/柱网/开口、吊顶关系、地面边界、入口出口、通行动线和前后左右空间关系。');
+    lines.push(`允许在该空间内植入${insertItemsText}；不得把空间改成另一处建筑，不得改变主要开口、承重结构和真实尺度关系。`);
+  } else {
+    lines.push('【手动空间尺寸约束】');
+    lines.push(spaceSizeText
+      ? `没有输入空间图，请在${spaceSizeText}的室内空间体量内生成方案，空间结构、开口位置、墙体组织、吊顶形式和参观动线可以自由发挥，但必须保持真实尺度关系、人体尺度和可落地的建筑室内逻辑。`
+      : '没有输入空间图，请自由设计室内建筑空间结构，但必须保持真实尺度关系、人体尺度和可落地的建筑室内逻辑。');
+    lines.push(`允许在该空间内植入${insertItemsText}；展陈内容、建筑空间和动线都应控制在上述空间体量内，不要生成明显超出尺寸边界的大跨空间、超高空间或不可信尺度。`);
+  }
   if (excludeItemsText) {
     lines.push('');
     lines.push('【排除项优先约束】');
@@ -200,6 +230,8 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   lines.push('【设计深化要求】');
   lines.push(exhibitionCreativeDeepeningRequirement(values.spaceType));
   lines.push('不要出现“LLM创意描述”“个人灵感”“空间类型”“输入空间图约束”等字段名，也不要把上述设计说明作为上墙文字。');
-  lines.push('最终画面必须看得出来自同一张输入室内空间图，只是在展陈创意、灯光、材料、装置和叙事氛围上形成新的方案。');
+  lines.push(hasSpaceImage
+    ? '最终画面必须看得出来自同一张输入室内空间图，只是在展陈创意、灯光、材料、装置和叙事氛围上形成新的方案。'
+    : '最终画面不受既有输入图限制，空间结构可以自由发挥，但所有墙体、开口、展陈装置、展柜、媒体设备、观众尺度和拍摄视角都必须落在手动输入的空间尺寸范围内。');
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }

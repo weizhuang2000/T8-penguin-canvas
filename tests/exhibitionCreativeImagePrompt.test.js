@@ -65,6 +65,21 @@ test('exhibition creative image prompt places exclusions before LLM brief', () =
   assert.ok(prompt.indexOf('【排除项优先约束】') < prompt.indexOf('【LLM创意描述】'));
 });
 
+test('exhibition creative image prompt supports manual space size without input image', () => {
+  const prompt = buildExhibitionCreativeImagePrompt({
+    spaceType: 'highlight-space',
+    hasSpaceImage: false,
+    spaceSize: { width: 12, depth: 18, height: 4.5 },
+    creativeBrief: '围绕核心展品设置自由流线和沉浸光影。',
+  });
+  assert.match(prompt, /【手动空间尺寸约束】/);
+  assert.match(prompt, /宽度 12 米、进深 18 米、高度 4.5 米/);
+  assert.match(prompt, /空间结构、开口位置、墙体组织、吊顶形式和参观动线可以自由发挥/);
+  assert.match(prompt, /控制在上述空间体量内/);
+  assert.doesNotMatch(prompt, /输入图像是唯一的室内建筑空间依据/);
+  assert.doesNotMatch(prompt, /最终画面必须看得出来自同一张输入室内空间图/);
+});
+
 test('exhibition creative image prompt includes document summary as creative material', () => {
   const prompt = buildExhibitionCreativeImagePrompt({
     spaceType: 'outro-hall',

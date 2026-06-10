@@ -42,6 +42,7 @@ import {
   normalizeExhibitionCreativeCount,
   normalizeExhibitionCreativeExcludeItems,
   normalizeExhibitionCreativeInsertItems,
+  normalizeExhibitionCreativeSpaceSize,
   normalizeExhibitionCreativeSpaceType,
   type ExhibitionCreativeExcludeItem,
   type ExhibitionCreativeInsertItem,
@@ -96,6 +97,12 @@ function randomImageSeed(): number {
     return (values[0] % MAX_IMAGE_SEED) + 1;
   }
   return Math.floor(Math.random() * MAX_IMAGE_SEED) + 1;
+}
+
+function normalizeSpaceDimensionInput(value: unknown): number {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return 0;
+  return Math.min(200, Math.round(number * 100) / 100);
 }
 
 function imagesFromData(data: any): string[] {
@@ -281,6 +288,8 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
   const spaceType = normalizeExhibitionCreativeSpaceType(d.spaceType);
+  const manualSpaceSize = normalizeExhibitionCreativeSpaceSize(d.manualSpaceSize);
+  const hasManualSpaceSize = manualSpaceSize.width > 0 && manualSpaceSize.depth > 0 && manualSpaceSize.height > 0;
   const generationCount = normalizeExhibitionCreativeCount(d.generationCount);
   const insertOptions = useMemo<ExhibitionCreativeInsertItem[]>(
     () => (insertPresets.length > 0 ? insertPresets : EXHIBITION_CREATIVE_INSERT_ITEMS),
@@ -300,6 +309,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     [d.excludeItems, excludeOptions],
   );
   const selectedExcludeIds = useMemo(() => selectedExcludeItems.map((item) => item.id), [selectedExcludeItems]);
+  const allExcludeSelected = excludeOptions.length > 0 && selectedExcludeIds.length === excludeOptions.length;
   const regenerateEachTime = d.regenerateEachTime !== false;
   const projectTheme = String(d.projectTheme || '').trim();
   const inspiration = String(d.inspiration || '').trim();
@@ -325,10 +335,12 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       insertItemOptions: insertOptions,
       excludeItems: selectedExcludeIds,
       excludeItemOptions: excludeOptions,
+      hasSpaceImage: !!spaceImage,
+      spaceSize: manualSpaceSize,
       roundIndex: 1,
       total: generationCount,
     }),
-    [creativeBrief, documentSummary, excludeOptions, generationCount, inspiration, insertOptions, projectTheme, selectedExcludeIds, selectedInsertIds, spaceType],
+    [creativeBrief, documentSummary, excludeOptions, generationCount, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, spaceImage, spaceType],
   );
 
   useEffect(() => {
@@ -440,6 +452,11 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       ? selectedExcludeIds.filter((item) => item !== itemId)
       : [...selectedExcludeIds, itemId];
     update({ excludeItems: next });
+  };
+
+  const toggleAllExcludeItems = () => {
+    if (isReadonly || busy) return;
+    update({ excludeItems: allExcludeSelected ? [] : excludeOptions.map((item) => item.id) });
   };
 
   const buildCreativeBrief = useCallback(async (roundIndex: number, previousBriefs: string[] = []) => {
@@ -599,6 +616,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     runSeed: number;
     roundIndex: number;
   }): Promise<{ urls: string[]; taskId?: string }> => {
+    const referenceImages = spaceImage ? [spaceImage] : [];
     const historyContext = {
       canvasId: activeCanvasId,
       sourceNodeId: id,
@@ -624,7 +642,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
         size,
         aspect_ratio: aspectRatio,
         image_size: sizeLevel,
-        images: [spaceImage],
+        images: referenceImages,
         outputFormat,
         seed: runSeed,
         n: 1,
@@ -660,7 +678,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       prompt: imagePrompt,
       aspect_ratio: aspectRatio,
       image_size: sizeLevel,
-      images: [spaceImage],
+      images: referenceImages,
       n: 1,
       outputFormat,
       seed: runSeed,
@@ -711,8 +729,8 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
 
   const runGenerate = useCallback(async () => {
     if (isReadonly) return;
-    if (!spaceImage) {
-      const msg = '请先连接一张室内建筑空间图';
+    if (!spaceImage && !hasManualSpaceSize) {
+      const msg = '请先连接一张室内建筑空间图，或填写完整的宽度、进深和高度';
       update({ status: 'error', error: msg });
       throw new Error(msg);
     }
@@ -723,7 +741,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       status: 'generating',
       progress: `0/${generationCount}`,
       error: '',
-      usedI2I: true,
+      usedI2I: !!spaceImage,
       creativeResults: [],
       imageUrls: [],
     });
@@ -795,6 +813,8 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           insertItemOptions: insertOptions,
           excludeItems: selectedExcludeIds,
           excludeItemOptions: excludeOptions,
+          hasSpaceImage: !!spaceImage,
+          spaceSize: manualSpaceSize,
           roundIndex: index,
           total: generationCount,
         });
@@ -834,7 +854,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
         imageUrl: imageUrls[imageUrls.length - 1] || '',
         imageUrls,
         lastCreativeBriefs: briefs,
-        usedI2I: true,
+        usedI2I: !!spaceImage,
         error: '',
       });
       logBus.success(`展陈创意生图完成: ${imageUrls.length} 张`, src);
@@ -852,10 +872,12 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     excludeOptions,
     generateOneImage,
     generationCount,
+    hasManualSpaceSize,
     id,
     insertOptions,
     inspiration,
     isReadonly,
+    manualSpaceSize,
     projectTheme,
     regenerateEachTime,
     selectedExcludeIds,
@@ -913,8 +935,45 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               <div className="mt-1 truncate text-[10px] text-white/40" title={spaceImage}>{spaceImage.split('/').pop() || spaceImage}</div>
             </div>
           ) : (
-            <div className="rounded border border-dashed border-white/15 px-2 py-10 text-center text-[10px] text-white/35">
-              连接一张图像作为室内空间骨架
+            <div className="rounded border border-dashed border-white/15 p-2">
+              <div className="py-6 text-center text-[10px] text-white/35">
+                连接一张图像作为室内空间骨架，或填写下方尺寸进行无图生图
+              </div>
+              <div className="grid grid-cols-3 gap-1">
+                <input
+                  className={FIELD}
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  value={manualSpaceSize.width || ''}
+                  disabled={isReadonly || busy}
+                  placeholder="宽度 m"
+                  onChange={(event) => update({ manualSpaceSize: { ...manualSpaceSize, width: normalizeSpaceDimensionInput(event.target.value) } })}
+                />
+                <input
+                  className={FIELD}
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  value={manualSpaceSize.depth || ''}
+                  disabled={isReadonly || busy}
+                  placeholder="进深 m"
+                  onChange={(event) => update({ manualSpaceSize: { ...manualSpaceSize, depth: normalizeSpaceDimensionInput(event.target.value) } })}
+                />
+                <input
+                  className={FIELD}
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  value={manualSpaceSize.height || ''}
+                  disabled={isReadonly || busy}
+                  placeholder="高度 m"
+                  onChange={(event) => update({ manualSpaceSize: { ...manualSpaceSize, height: normalizeSpaceDimensionInput(event.target.value) } })}
+                />
+              </div>
+              <div className="mt-1 text-[9px] leading-snug text-white/35">
+                无图时按该尺寸控制空间体量，空间结构可自由发挥。
+              </div>
             </div>
           )}
           <div className="grid grid-cols-3 gap-1">
@@ -1143,6 +1202,14 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               <span className="min-w-0 flex-1 truncate text-[9px] text-white/40">
                 优先于 LLM 创意描述，强调不要出现
               </span>
+              <button
+                type="button"
+                className={BUTTON}
+                disabled={isReadonly || busy || excludeOptions.length === 0}
+                onClick={() => void toggleAllExcludeItems()}
+              >
+                {allExcludeSelected ? '清空' : '全选'}
+              </button>
               {canManageTeam && (
                 <button
                   type="button"
@@ -1372,7 +1439,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
         <button
           type="button"
           className="col-span-2 flex h-8 w-full items-center justify-center gap-1.5 rounded border border-cyan-300/30 bg-cyan-300/15 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-45"
-          disabled={isReadonly || busy || !spaceImage}
+          disabled={isReadonly || busy || (!spaceImage && !hasManualSpaceSize)}
           onClick={() => void runGenerate()}
         >
           {busy ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
@@ -1380,7 +1447,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
         </button>
         {!spaceImage && (
           <div className="col-span-2 text-[10px] text-white/35">
-            需要连接一张室内建筑空间图。
+            未连接空间图时，需要填写完整的宽度、进深和高度。
           </div>
         )}
       </div>

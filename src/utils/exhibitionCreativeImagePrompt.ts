@@ -8,10 +8,12 @@ import {
   exhibitionCreativeExcludeItemsText,
   exhibitionCreativeInsertItemsText,
   exhibitionCreativeSpaceTypeMeta,
+  exhibitionCreativeSpaceSizeText,
   normalizeExhibitionCreativeBrief,
   normalizeExhibitionCreativeCount,
   normalizeExhibitionCreativeExcludeItems,
   normalizeExhibitionCreativeInsertItems,
+  normalizeExhibitionCreativeSpaceSize,
   normalizeExhibitionCreativeSpaceType,
 } from './exhibitionCreativeImagePromptData.js';
 
@@ -61,6 +63,12 @@ export interface ExhibitionCreativeImagePromptValues extends ExhibitionCreativeB
   insertItemOptions?: ExhibitionCreativeInsertItem[];
   excludeItems?: string[];
   excludeItemOptions?: ExhibitionCreativeExcludeItem[];
+  hasSpaceImage?: boolean;
+  spaceSize?: {
+    width?: number | string;
+    depth?: number | string;
+    height?: number | string;
+  };
 }
 
 export {
@@ -73,9 +81,11 @@ export {
   exhibitionCreativeExcludeItemsText,
   exhibitionCreativeInsertItemsText,
   exhibitionCreativeSpaceTypeMeta,
+  exhibitionCreativeSpaceSizeText,
   normalizeExhibitionCreativeBrief,
   normalizeExhibitionCreativeCount,
   normalizeExhibitionCreativeExcludeItems,
   normalizeExhibitionCreativeInsertItems,
+  normalizeExhibitionCreativeSpaceSize,
   normalizeExhibitionCreativeSpaceType,
 };

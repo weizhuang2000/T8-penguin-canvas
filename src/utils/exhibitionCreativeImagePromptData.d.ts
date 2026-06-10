@@ -44,6 +44,12 @@ export interface ExhibitionCreativeImagePromptValues extends ExhibitionCreativeB
   insertItemOptions?: ExhibitionCreativeInsertItem[];
   excludeItems?: string[];
   excludeItemOptions?: ExhibitionCreativeExcludeItem[];
+  hasSpaceImage?: boolean;
+  spaceSize?: {
+    width?: number | string;
+    depth?: number | string;
+    height?: number | string;
+  };
 }
 
 export const EXHIBITION_CREATIVE_SPACE_TYPES: ExhibitionCreativeSpaceTypeMeta[];
@@ -52,6 +58,8 @@ export const EXHIBITION_CREATIVE_EXCLUDE_ITEMS: ExhibitionCreativeExcludeItem[];
 export function cleanExhibitionCreativeText(value: unknown, max?: number): string;
 export function normalizeExhibitionCreativeSpaceType(value: unknown): ExhibitionCreativeSpaceType;
 export function normalizeExhibitionCreativeCount(value: unknown): number;
+export function normalizeExhibitionCreativeSpaceSize(value: unknown): { width: number; depth: number; height: number };
+export function exhibitionCreativeSpaceSizeText(value: unknown): string;
 export function exhibitionCreativeSpaceTypeMeta(value: unknown): ExhibitionCreativeSpaceTypeMeta;
 export function normalizeExhibitionCreativeInsertItems(value: unknown, options?: ExhibitionCreativeInsertItem[]): ExhibitionCreativeInsertItem[];
 export function exhibitionCreativeInsertItemsText(value: unknown, options?: ExhibitionCreativeInsertItem[]): string;
