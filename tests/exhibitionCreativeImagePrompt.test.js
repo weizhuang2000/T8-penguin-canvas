@@ -31,12 +31,17 @@ test('exhibition creative brief prompt supports per-run LLM variation', () => {
     projectTheme: '企业创新展',
     inspiration: '入口需要强仪式感',
     documentSummary: '核心资料：企业以智能制造为主线，关键展项包括数字产线、绿色工厂和未来实验室。',
+    insertItems: ['large-sculpture', 'multimedia-equipment'],
     roundIndex: 2,
     total: 5,
     previousBriefs: ['使用环形光幕形成开场。'],
     regenerateEachTime: true,
   });
+  assert.match(prompt, /基于项目资料摘要、项目主题\/个人灵感和指定植入项/);
   assert.match(prompt, /第 2\/5 个序厅展陈空间生图创意描述/);
+  assert.match(prompt, /指定植入项：大型雕塑和多媒体设备/);
+  assert.match(prompt, /不要分析、引用或依赖输入图像/);
+  assert.doesNotMatch(prompt, /基于输入图片中的室内建筑空间/);
   assert.match(prompt, /项目主题\/展览关键词：企业创新展/);
   assert.match(prompt, /项目资料摘要/);
   assert.match(prompt, /数字产线、绿色工厂和未来实验室/);

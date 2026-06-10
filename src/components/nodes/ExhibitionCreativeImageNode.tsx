@@ -112,12 +112,6 @@ function firstImageFromData(data: any): string {
   return imagesFromData(data)[0] || '';
 }
 
-function llmImageUrl(value: string): string {
-  const url = String(value || '').trim();
-  if (/^(https?:\/\/|data:image\/|\/files\/|\/input\/|\/output\/)/i.test(url)) return url;
-  return '';
-}
-
 function useInputSpaceImage(nodeId: string): string {
   const conns = useNodeConnections({ id: nodeId, handleType: 'target' });
   const sourceIds = useMemo(
@@ -380,9 +374,6 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   };
 
   const buildCreativeBrief = useCallback(async (roundIndex: number, previousBriefs: string[] = []) => {
-    if (!spaceImage) throw new Error('请先连接一张室内建筑空间图');
-    const visionImage = llmImageUrl(spaceImage);
-    if (!visionImage) throw new Error('当前输入图片地址不能直接用于 LLM 视觉理解，已改用本地创意描述继续生图');
     const requestPrompt = buildExhibitionCreativeBriefPrompt({
       spaceType,
       projectTheme,
@@ -407,10 +398,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
         },
         {
           role: 'user',
-          content: [
-            { type: 'text', text: requestPrompt },
-            { type: 'image_url', image_url: { url: visionImage } },
-          ],
+          content: requestPrompt,
         },
       ] as any,
     });
@@ -427,7 +415,6 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     regenerateEachTime,
     insertOptions,
     selectedInsertIds,
-    spaceImage,
     spaceType,
   ]);
 

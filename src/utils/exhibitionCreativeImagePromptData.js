@@ -93,10 +93,11 @@ export function buildExhibitionCreativeBriefPrompt(values = {}) {
     ? values.previousBriefs.map((item) => cleanExhibitionCreativeText(item, 800)).filter(Boolean)
     : [];
   const lines = [
-    `请基于输入图片中的室内建筑空间，创作第 ${roundIndex}/${total} 个${meta.label}展陈空间生图创意描述。`,
+    `请基于项目资料摘要、项目主题/个人灵感和指定植入项，创作第 ${roundIndex}/${total} 个${meta.label}展陈空间生图创意描述。`,
     `空间类型：${meta.label}。${meta.prompt}`,
-    '输入图片只用于确定室内建筑空间的几何关系、透视角度、尺度、开口、墙体、柱网、吊顶、地面和主要动线，不要擅自改成另一套空间。',
-    `请从展陈叙事、空间气质、${insertItemsText}、灯光氛围、材料语言、互动方式、观众视线组织和拍摄画面完成度等角度给出可直接用于图生图的创意描述。`,
+    `指定植入项：${insertItemsText}`,
+    '创意描述不要分析、引用或依赖输入图像；输入图像只会在后续图生图阶段作为空间结构约束。',
+    `请把提炼后的创意资料文档与${insertItemsText}结合，进行有艺术性的展陈空间创作，从展陈叙事、空间气质、灯光氛围、材料语言、互动方式、观众视线组织和拍摄画面完成度等角度给出可直接用于图生图的创意描述。`,
     '输出 180 到 320 字中文自然段，只输出创意描述本身，不要标题、编号、Markdown、解释、参数表或英文翻译。',
   ];
   if (projectTheme) lines.push(`项目主题/展览关键词：${projectTheme}`);
