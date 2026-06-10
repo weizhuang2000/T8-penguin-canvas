@@ -110,6 +110,7 @@ import ToolboxParamNode from './nodes/ToolboxParamNode';
 import ExhibitionPromptNode from './nodes/ExhibitionPromptNode';
 import ElevationPromptNode from './nodes/ElevationPromptNode';
 import ExhibitionImg2ImgNode from './nodes/ExhibitionImg2ImgNode';
+import ExhibitionCreativeImageNode from './nodes/ExhibitionCreativeImageNode';
 import PortraitMasterNode from './nodes/PortraitMasterNode';
 import PoseMasterNode from './nodes/PoseMasterNode';
 import IdeaNode from './nodes/IdeaNode';
@@ -196,6 +197,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'exhibition-prompt': ExhibitionPromptNode,
   'elevation-prompt': ElevationPromptNode,
   'exhibition-img2img': ExhibitionImg2ImgNode,
+  'exhibition-creative-image': ExhibitionCreativeImageNode,
   'multi-angle-visual': ToolboxParamNode,
   'portrait-master': PortraitMasterNode,
   'pose-master': PoseMasterNode,
@@ -350,6 +352,27 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     text: '',
     imageUrls: [],
     referenceImages: [],
+    status: 'idle',
+    error: '',
+  },
+  'exhibition-creative-image': {
+    model: 'gpt-image-2',
+    apiModel: 'gpt-image-2-all',
+    aspectRatio: '1:1',
+    sizeLevel: '2K',
+    outputFormat: 'jpg',
+    spaceType: 'intro-hall',
+    generationCount: 4,
+    regenerateEachTime: true,
+    projectTheme: '',
+    inspiration: '',
+    creativeBrief: '',
+    prompt: '',
+    outputText: '',
+    text: '',
+    imageUrls: [],
+    referenceImages: [],
+    creativeResults: [],
     status: 'idle',
     error: '',
   },
@@ -523,6 +546,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'cinematic', 'video-motion', 'multi-angle-visual', 'portrait-master', 'pose-master',
   'elevation-prompt',
   'exhibition-img2img',
+  'exhibition-creative-image',
   'remove-ai-watermark',
 ]);
 

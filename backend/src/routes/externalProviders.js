@@ -459,7 +459,7 @@ router.post('/llm', requireNodePermission('llm'), async (req, res) => {
   }
 });
 
-router.post('/image', requireNodePermission(['image', 'exhibition-img2img']), async (req, res) => {
+router.post('/image', requireNodePermission(['image', 'exhibition-img2img', 'exhibition-creative-image']), async (req, res) => {
   try {
     const settings = settingsRouter.loadSettings({ persistMigrations: false });
     const currentProviders = normalizeAdvancedProviders(settings.advancedProviders);
@@ -497,7 +497,7 @@ router.post('/image', requireNodePermission(['image', 'exhibition-img2img']), as
   }
 });
 
-router.get('/image/status/:taskId', requireNodePermission(['image', 'exhibition-img2img']), async (req, res) => {
+router.get('/image/status/:taskId', requireNodePermission(['image', 'exhibition-img2img', 'exhibition-creative-image']), async (req, res) => {
   try {
     pruneExternalImageJobs();
     const taskId = String(req.params.taskId || '').trim();

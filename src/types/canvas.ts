@@ -50,6 +50,7 @@ export type NodeType =
   | 'exhibition-prompt'
   | 'elevation-prompt'
   | 'exhibition-img2img'
+  | 'exhibition-creative-image'
   | 'multi-angle-visual'
   | 'portrait-master'
   | 'pose-master'

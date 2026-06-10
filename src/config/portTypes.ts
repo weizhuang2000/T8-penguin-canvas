@@ -108,6 +108,7 @@ export const NODE_PORTS: Record<string, NodePorts> = {
   'exhibition-prompt': { inputs: ['text', 'image'], outputs: ['text', 'image'] },
   'elevation-prompt': { inputs: [], outputs: ['text'] },
   'exhibition-img2img': { inputs: ['image'], outputs: ['image'] },
+  'exhibition-creative-image': { inputs: ['image'], outputs: ['image'] },
   'multi-angle-visual': { inputs: ['image'], outputs: ['text'] },
   'portrait-master': { inputs: ['text', 'metadata'], outputs: ['text', 'metadata'] },
   // 姿势大师二阶段: 兼容上游肖像/运镜文本与参考图。未连接时保持旧版独立输出行为。

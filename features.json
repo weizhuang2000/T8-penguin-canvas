@@ -276,7 +276,7 @@
       "每次同步上游后必须重新跑 status/capability、代表性 process smoke、node --test tests/*.test.ts、npm run build 和 Electron 打包后置检查。"
     ]
   },
-  "totalNodes": 41,
+  "totalNodes": 42,
   "phases": {
     "phase0": {
       "label": "基础设施",
@@ -2021,7 +2021,7 @@
     },
     "exhibition": {
       "label": "展陈工具",
-      "count": 4,
+      "count": 5,
       "nodes": [
         {
           "type": "import-cam-project",
@@ -2042,6 +2042,11 @@
           "type": "exhibition-img2img",
           "label": "展陈图生图",
           "description": "双参考图展陈图生图：空间结构示意图 + 空间表现效果图，支持工艺版式与优先级控制，并约束不渲染结构图标注文字"
+        },
+        {
+          "type": "exhibition-creative-image",
+          "label": "展陈创意生图",
+          "description": "面向序厅、尾厅和重亮点展项空间：单空间图约束室内建筑空间，LLM 创意描述后支持多次图生图，并可选择每次生图前是否重新创意"
         }
       ]
     },

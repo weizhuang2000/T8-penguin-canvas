@@ -38,6 +38,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'cinematic', 'video-motion',
   'elevation-prompt',
   'exhibition-img2img',
+  'exhibition-creative-image',
   'portrait-master', 'pose-master',
   'remove-ai-watermark',
 ]);
