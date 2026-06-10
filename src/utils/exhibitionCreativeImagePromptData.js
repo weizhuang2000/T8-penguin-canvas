@@ -217,6 +217,11 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
     lines.push('【排除项优先约束】');
     lines.push(`以下内容优先级高于 LLM 创意描述，不得出现在画面中：${excludeItemsText}。即使 LLM 创意描述、项目资料或个人灵感提到这些内容，也必须忽略并避免生成。`);
   }
+  if (inspiration) {
+    lines.push('');
+    lines.push('【强制要求】');
+    lines.push(inspiration);
+  }
   lines.push('');
   lines.push('【LLM创意描述】');
   lines.push(creativeBrief || '围绕该室内空间生成具有强记忆点的展陈创意：以主题叙事为核心，在入口/核心/收束视线位置组织主视觉装置、沉浸光影、展陈工艺和观众动线，形成可落地的高完成度展陈效果图。');
@@ -225,7 +230,6 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
     lines.push('项目资料摘要：');
     lines.push(documentSummary);
   }
-  if (inspiration) lines.push(`个人灵感：${inspiration}`);
   lines.push('');
   lines.push('【设计深化要求】');
   lines.push(exhibitionCreativeDeepeningRequirement(values.spaceType));

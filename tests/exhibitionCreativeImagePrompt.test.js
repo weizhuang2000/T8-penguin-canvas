@@ -22,7 +22,9 @@ test('exhibition creative image prompt locks the single input space image', () =
   assert.match(prompt, /不得把空间改成另一处建筑/);
   assert.match(prompt, /最终画面必须看得出来自同一张输入室内空间图/);
   assert.match(prompt, /城市更新/);
+  assert.match(prompt, /【强制要求】/);
   assert.match(prompt, /旧厂房钢结构/);
+  assert.ok(prompt.indexOf('【强制要求】') < prompt.indexOf('【LLM创意描述】'));
 });
 
 test('exhibition creative brief prompt supports per-run LLM variation', () => {
