@@ -4,11 +4,13 @@ import {
   Brain,
   CheckCircle2,
   Clipboard,
+  FileText,
   Image as ImageIcon,
   Layers3,
   Loader2,
   Play,
   Sparkles,
+  Upload,
 } from 'lucide-react';
 import {
   DEFAULT_LLM_MODEL,
@@ -35,6 +37,10 @@ import {
   normalizeExhibitionCreativeCount,
   normalizeExhibitionCreativeSpaceType,
 } from '../../utils/exhibitionCreativeImagePrompt';
+import {
+  extractDocument,
+  type ExtractedDocument,
+} from '../../services/api';
 import { useApiKeysStore } from '../../stores/apiKeys';
 import { useCanvasStore } from '../../stores/canvas';
 import { logBus } from '../../stores/logs';
@@ -57,6 +63,12 @@ interface CreativeResult {
   imageUrl: string;
   seed: number;
   taskId?: string;
+}
+
+function documentLabel(meta?: Omit<ExtractedDocument, 'text'> | null) {
+  if (!meta) return '未选择文档';
+  const pages = meta.pageCount ? ` · ${meta.pageCount} 页` : '';
+  return `${meta.name} · ${meta.charCount} 字${pages}`;
 }
 
 function randomImageSeed(): number {
@@ -137,6 +149,7 @@ function llmErrorMessage(error: any) {
 const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
+  const fileRef = useRef<HTMLInputElement>(null);
   const { style } = useThemeStore();
   const isPixel = style === 'pixel';
   const activeCanvas = useCanvasStore((state) => state.canvases.find((canvas) => canvas.id === state.activeId) || null);
@@ -188,11 +201,14 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const regenerateEachTime = d.regenerateEachTime !== false;
   const projectTheme = String(d.projectTheme || '').trim();
   const inspiration = String(d.inspiration || '').trim();
+  const sourceText = String(d.sourceText || '');
+  const documentSummary = String(d.documentSummary || '').trim();
   const creativeBrief = normalizeExhibitionCreativeBrief(d.creativeBrief);
   const creativeResults = useMemo(() => creativeResultsFromData(d.creativeResults), [d.creativeResults]);
   const status = String(d.status || 'idle');
-  const busy = status === 'generating' || status === 'creative';
+  const busy = status === 'generating' || status === 'creative' || status === 'extracting' || status === 'summarizing';
   const isGenerating = status === 'generating';
+  const contentBusy = status === 'extracting' || status === 'summarizing';
   const pollAbortRef = useRef(false);
   const spaceImage = useInputSpaceImage(id);
 
@@ -201,11 +217,12 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       spaceType,
       projectTheme,
       inspiration,
+      documentSummary,
       creativeBrief,
       roundIndex: 1,
       total: generationCount,
     }),
-    [creativeBrief, generationCount, inspiration, projectTheme, spaceType],
+    [creativeBrief, documentSummary, generationCount, inspiration, projectTheme, spaceType],
   );
 
   useEffect(() => {
@@ -242,6 +259,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       spaceType,
       projectTheme,
       inspiration,
+      documentSummary,
       roundIndex,
       total: generationCount,
       previousBriefs,
@@ -271,6 +289,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     return nextBrief;
   }, [
     activeLlmConfig?.id,
+    documentSummary,
     generationCount,
     inspiration,
     llmModel,
@@ -297,6 +316,85 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       throw error;
     }
   }, [buildCreativeBrief, busy, isReadonly, update]);
+
+  const summarizeDocument = useCallback(async (textOverride?: string, rethrow = false) => {
+    if (isReadonly || busy) return;
+    const text = String(textOverride ?? sourceText).trim();
+    if (!text) {
+      update({ status: 'error', error: '请先导入文档或粘贴资料原文' });
+      return;
+    }
+    update({ status: 'summarizing', progress: '资料总结中', error: '' });
+    try {
+      const response = await generateLlm({
+        model: llmModel,
+        llmKeyId: activeLlmConfig?.id,
+        temperature: 0.25,
+        max_tokens: 1400,
+        messages: [
+          {
+            role: 'system',
+            content: '你是展陈策划资料整理助手。请把项目资料总结成可供空间创意使用的高密度中文摘要。',
+          },
+          {
+            role: 'user',
+            content: [
+              '请总结以下展陈项目资料，供序厅、尾厅、重点展项空间的创意生图使用。',
+              '输出 5 到 9 条要点，覆盖：项目主题、核心叙事、关键内容/展项、情绪基调、可转化为空间装置或视觉符号的元素、必须避免误读的事实。',
+              '只输出中文要点，不要 Markdown 表格，不要泛泛而谈。',
+              '',
+              text.slice(0, 50000),
+            ].join('\n'),
+          },
+        ],
+      });
+      const summary = String(response.content || '').trim();
+      if (!summary) throw new Error('LLM 未返回有效资料摘要');
+      update({
+        documentSummary: summary,
+        status: 'success',
+        progress: '',
+        error: '',
+        summarizedAt: Date.now(),
+      });
+    } catch (error: any) {
+      update({ status: 'error', error: llmErrorMessage(error), progress: '' });
+      if (rethrow) throw error;
+    }
+  }, [
+    activeLlmConfig?.id,
+    busy,
+    isReadonly,
+    llmModel,
+    sourceText,
+    update,
+  ]);
+
+  const pickDocument = useCallback(async (file?: File) => {
+    if (!file || isReadonly || busy) return;
+    if (file.size > 10 * 1024 * 1024) {
+      update({ status: 'error', error: '文档不能超过 10MB' });
+      return;
+    }
+    update({ status: 'extracting', progress: '文档解析中', error: '' });
+    try {
+      const extracted = await extractDocument(file);
+      const { text, ...documentMeta } = extracted;
+      update({
+        documentMeta,
+        sourceText: text,
+        documentSummary: '',
+        status: 'summarizing',
+        progress: '资料总结中',
+        error: '',
+      });
+      await summarizeDocument(text);
+    } catch (error: any) {
+      update({ status: 'error', error: error?.message || '文档解析失败', progress: '' });
+    } finally {
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }, [busy, isReadonly, summarizeDocument, update]);
 
   const generateOneImage = useCallback(async ({
     brief,
@@ -466,6 +564,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           spaceType,
           projectTheme,
           inspiration,
+          documentSummary,
           creativeBrief: brief,
           roundIndex: index,
           total: generationCount,
@@ -520,6 +619,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   }, [
     buildCreativeBrief,
     creativeBrief,
+    documentSummary,
     generateOneImage,
     generationCount,
     id,
@@ -616,6 +716,63 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             disabled={isReadonly || busy}
             placeholder="个人灵感：想要的情绪、装置、材料、互动、叙事方向"
             onChange={(event) => update({ inspiration: event.target.value })}
+          />
+        </section>
+
+        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+          <div className="mb-1 flex items-center gap-1.5">
+            <FileText size={13} className="text-cyan-200" />
+            <span className="text-[11px] font-semibold text-cyan-100">创意资料文档</span>
+            <button
+              type="button"
+              className={`${BUTTON} ml-auto`}
+              disabled={isReadonly || busy}
+              onClick={() => fileRef.current?.click()}
+            >
+              <Upload size={12} />
+              导入
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              className="hidden"
+              accept=".docx,.pdf,.txt,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              onChange={(event) => void pickDocument(event.target.files?.[0])}
+            />
+          </div>
+          <div className="truncate text-[10px] text-white/55" title={documentLabel(d.documentMeta)}>
+            {documentLabel(d.documentMeta)}
+          </div>
+          {Array.isArray(d.documentMeta?.warnings) && d.documentMeta.warnings.length > 0 && (
+            <div className="text-[10px] text-amber-200/80">{d.documentMeta.warnings.join('；')}</div>
+          )}
+          <textarea
+            className={`${FIELD} min-h-[72px] resize-y`}
+            value={sourceText}
+            disabled={isReadonly || busy}
+            placeholder="导入 DOCX、文本型 PDF、TXT，或直接粘贴项目资料原文"
+            onChange={(event) => update({ sourceText: event.target.value })}
+          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className={BUTTON}
+              disabled={isReadonly || busy || !sourceText.trim()}
+              onClick={() => void summarizeDocument()}
+            >
+              {contentBusy ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+              {contentBusy ? (status === 'extracting' ? '解析中' : '总结中') : '总结资料'}
+            </button>
+            <span className="min-w-0 flex-1 truncate text-[10px] text-white/40">
+              摘要会参与后续创意描述和生图 Prompt。
+            </span>
+          </div>
+          <textarea
+            className={`${FIELD} min-h-[92px] resize-y`}
+            value={documentSummary}
+            disabled={isReadonly || busy}
+            placeholder="LLM 总结后的创意资料摘要，可手动调整"
+            onChange={(event) => update({ documentSummary: event.target.value })}
           />
         </section>
 

@@ -49,6 +49,7 @@ export function buildExhibitionCreativeBriefPrompt(values = {}) {
   const meta = exhibitionCreativeSpaceTypeMeta(values.spaceType);
   const projectTheme = cleanExhibitionCreativeText(values.projectTheme, 500);
   const inspiration = cleanExhibitionCreativeText(values.inspiration, 2000);
+  const documentSummary = cleanExhibitionCreativeText(values.documentSummary, 3000);
   const roundIndex = Math.max(1, Number(values.roundIndex) || 1);
   const total = normalizeExhibitionCreativeCount(values.total || values.generationCount || 1);
   const previousBriefs = Array.isArray(values.previousBriefs)
@@ -62,6 +63,10 @@ export function buildExhibitionCreativeBriefPrompt(values = {}) {
     '输出 180 到 320 字中文自然段，只输出创意描述本身，不要标题、编号、Markdown、解释、参数表或英文翻译。',
   ];
   if (projectTheme) lines.push(`项目主题/展览关键词：${projectTheme}`);
+  if (documentSummary) {
+    lines.push('项目资料摘要：');
+    lines.push(documentSummary);
+  }
   if (inspiration) lines.push(`个人灵感补充：${inspiration}`);
   if (previousBriefs.length > 0) {
     lines.push('已有创意方向，新的描述需要明显区分，避免重复：');
@@ -81,6 +86,7 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   const meta = exhibitionCreativeSpaceTypeMeta(values.spaceType);
   const projectTheme = cleanExhibitionCreativeText(values.projectTheme, 500);
   const inspiration = cleanExhibitionCreativeText(values.inspiration, 2000);
+  const documentSummary = cleanExhibitionCreativeText(values.documentSummary, 3000);
   const creativeBrief = normalizeExhibitionCreativeBrief(values.creativeBrief || values.brief);
   const roundIndex = Math.max(1, Number(values.roundIndex) || 1);
   const total = normalizeExhibitionCreativeCount(values.total || values.generationCount || 1);
@@ -96,6 +102,10 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
     creativeBrief || '围绕该室内空间生成具有强记忆点的展陈创意：以主题叙事为核心，在入口/核心/收束视线位置组织主视觉装置、沉浸光影、展陈工艺和观众动线，形成可落地的高完成度展陈效果图。',
   ];
   if (projectTheme) lines.push(`项目主题：${projectTheme}`);
+  if (documentSummary) {
+    lines.push('项目资料摘要：');
+    lines.push(documentSummary);
+  }
   if (inspiration) lines.push(`个人灵感：${inspiration}`);
   lines.push('');
   lines.push('【设计深化要求】');

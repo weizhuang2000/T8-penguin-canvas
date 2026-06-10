@@ -30,6 +30,7 @@ test('exhibition creative brief prompt supports per-run LLM variation', () => {
     spaceType: 'intro-hall',
     projectTheme: '企业创新展',
     inspiration: '入口需要强仪式感',
+    documentSummary: '核心资料：企业以智能制造为主线，关键展项包括数字产线、绿色工厂和未来实验室。',
     roundIndex: 2,
     total: 5,
     previousBriefs: ['使用环形光幕形成开场。'],
@@ -37,9 +38,22 @@ test('exhibition creative brief prompt supports per-run LLM variation', () => {
   });
   assert.match(prompt, /第 2\/5 个序厅展陈空间生图创意描述/);
   assert.match(prompt, /项目主题\/展览关键词：企业创新展/);
+  assert.match(prompt, /项目资料摘要/);
+  assert.match(prompt, /数字产线、绿色工厂和未来实验室/);
   assert.match(prompt, /个人灵感补充：入口需要强仪式感/);
   assert.match(prompt, /已有创意方向/);
   assert.match(prompt, /适合多方案比选/);
+});
+
+test('exhibition creative image prompt includes document summary as creative material', () => {
+  const prompt = buildExhibitionCreativeImagePrompt({
+    spaceType: 'outro-hall',
+    documentSummary: '资料摘要：结尾需要突出开放合作、产业生态和面向未来的行动倡议。',
+    creativeBrief: '以一面逐渐展开的光幕作为出口前的情绪收束。',
+  });
+  assert.match(prompt, /项目资料摘要/);
+  assert.match(prompt, /开放合作、产业生态/);
+  assert.match(prompt, /逐渐展开的光幕/);
 });
 
 test('exhibition creative brief prompt can reuse one creative direction', () => {

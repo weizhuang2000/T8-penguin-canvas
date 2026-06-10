@@ -13,6 +13,7 @@ export interface ExhibitionCreativeBriefPromptValues {
   spaceType?: ExhibitionCreativeSpaceType;
   projectTheme?: string;
   inspiration?: string;
+  documentSummary?: string;
   roundIndex?: number;
   total?: number;
   generationCount?: number;
