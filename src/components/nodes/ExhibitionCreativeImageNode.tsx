@@ -1133,7 +1133,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-semibold text-cyan-100">植入项</span>
               <span className="min-w-0 flex-1 truncate text-[9px] text-white/40">
-                写入“允许在该空间内植入...”提示词
+                写入“需要在该空间内植入...”提示词
               </span>
               {canManageTeam && (
                 <button

@@ -204,13 +204,13 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   if (hasSpaceImage) {
     lines.push('【输入空间图约束】');
     lines.push('输入图像是唯一的室内建筑空间依据。必须保留原图的空间几何、透视角度、层高尺度、主要墙体/柱网/开口、吊顶关系、地面边界、入口出口、通行动线和前后左右空间关系。');
-    lines.push(`允许在该空间内植入${insertItemsText}；不得把空间改成另一处建筑，不得改变主要开口、承重结构和真实尺度关系。`);
+    lines.push(`需要在该空间内植入${insertItemsText}；不得把空间改成另一处建筑，不得改变主要开口、承重结构和真实尺度关系。`);
   } else {
     lines.push('【手动空间尺寸约束】');
     lines.push(spaceSizeText
       ? `没有输入空间图，请在${spaceSizeText}的室内空间体量内生成方案，空间结构、开口位置、墙体组织、吊顶形式和参观动线可以自由发挥，但必须保持真实尺度关系、人体尺度和可落地的建筑室内逻辑。`
       : '没有输入空间图，请自由设计室内建筑空间结构，但必须保持真实尺度关系、人体尺度和可落地的建筑室内逻辑。');
-    lines.push(`允许在该空间内植入${insertItemsText}；展陈内容、建筑空间和动线都应控制在上述空间体量内，不要生成明显超出尺寸边界的大跨空间、超高空间或不可信尺度。`);
+    lines.push(`需要在该空间内植入${insertItemsText}；展陈内容、建筑空间和动线都应控制在上述空间体量内，不要生成明显超出尺寸边界的大跨空间、超高空间或不可信尺度。`);
   }
   if (excludeItemsText) {
     lines.push('');

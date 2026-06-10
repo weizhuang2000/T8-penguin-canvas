@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Clock3,
+  Copy,
   Eye,
   Image as ImageIcon,
   Music,
@@ -198,6 +199,20 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
     setMsg(`已发送 seed: ${seed}`);
   };
 
+  const copyPrompt = async (item: GenerationHistoryItem) => {
+    const prompt = String(item.prompt || '').trim();
+    if (!prompt || typeof navigator === 'undefined' || !navigator.clipboard) {
+      setMsg('没有可复制的提示词');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setMsg('已复制提示词');
+    } catch {
+      setMsg('复制提示词失败');
+    }
+  };
+
   if (!open) return null;
 
   const panelCls = isPixel
@@ -318,6 +333,16 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
                     <button onClick={() => updateItem(item, { favorite: !item.favorite })} className="absolute right-1.5 top-1.5 h-7 w-7 rounded-full bg-black/55 text-amber-300 flex items-center justify-center" title="收藏">
                       <Star size={13} fill={item.favorite ? 'currentColor' : 'none'} />
                     </button>
+                    {item.kind === 'image' && (
+                      <button
+                        onClick={() => copyPrompt(item)}
+                        disabled={!String(item.prompt || '').trim()}
+                        className="absolute right-1.5 top-9 h-7 w-7 rounded-full bg-black/55 text-white flex items-center justify-center disabled:cursor-not-allowed disabled:opacity-45"
+                        title={String(item.prompt || '').trim() ? '复制提示词' : '没有可复制的提示词'}
+                      >
+                        <Copy size={13} />
+                      </button>
+                    )}
                   </div>
                   <div className="p-2 space-y-1.5">
                     <div className="flex items-center gap-1 text-xs font-medium">
