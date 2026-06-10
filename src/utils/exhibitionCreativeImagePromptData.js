@@ -18,6 +18,19 @@ export const EXHIBITION_CREATIVE_SPACE_TYPES = [
 
 const SPACE_TYPE_IDS = new Set(EXHIBITION_CREATIVE_SPACE_TYPES.map((item) => item.id));
 
+export const EXHIBITION_CREATIVE_INSERT_ITEMS = [
+  { id: 'large-sculpture', label: '大型雕塑' },
+  { id: 'relief', label: '浮雕' },
+  { id: 'group-sculpture', label: '群雕' },
+  { id: 'art-installation', label: '艺术装置' },
+  { id: 'multimedia-equipment', label: '多媒体设备' },
+  { id: 'showcase', label: '展柜' },
+  { id: 'scene', label: '场景' },
+  { id: 'artwork', label: '艺术品' },
+].map((item, index) => ({ ...item, order: index }));
+
+const INSERT_ITEM_IDS = new Set(EXHIBITION_CREATIVE_INSERT_ITEMS.map((item) => item.id));
+
 export function cleanExhibitionCreativeText(value, max = 12000) {
   return String(value || '').replace(/\r\n?/g, '\n').trim().slice(0, max);
 }
@@ -35,6 +48,29 @@ export function normalizeExhibitionCreativeCount(value) {
 export function exhibitionCreativeSpaceTypeMeta(value) {
   const id = normalizeExhibitionCreativeSpaceType(value);
   return EXHIBITION_CREATIVE_SPACE_TYPES.find((item) => item.id === id) || EXHIBITION_CREATIVE_SPACE_TYPES[0];
+}
+
+export function normalizeExhibitionCreativeInsertItems(value, options = EXHIBITION_CREATIVE_INSERT_ITEMS) {
+  const source = Array.isArray(options) && options.length > 0 ? options : EXHIBITION_CREATIVE_INSERT_ITEMS;
+  const labelsById = new Map(source.map((item) => [String(item.id), String(item.label || item.id).trim()]));
+  const ids = Array.isArray(value) ? value.map((item) => String(item || '').trim()).filter(Boolean) : [];
+  const validIds = ids.filter((id) => labelsById.has(id));
+  const fallback = source
+    .filter((item) => INSERT_ITEM_IDS.has(String(item.id)))
+    .map((item) => String(item.id));
+  const picked = validIds.length > 0 ? validIds : fallback;
+  return Array.from(new Set(picked)).map((id) => ({
+    id,
+    label: labelsById.get(id) || id,
+  }));
+}
+
+export function exhibitionCreativeInsertItemsText(value, options = EXHIBITION_CREATIVE_INSERT_ITEMS) {
+  const items = normalizeExhibitionCreativeInsertItems(value, options).map((item) => item.label).filter(Boolean);
+  if (items.length === 0) return '展陈装置、展墙、展柜、灯光、图文层级、数字媒体和互动界面';
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return items.join('和');
+  return `${items.slice(0, -1).join('、')}和${items[items.length - 1]}`;
 }
 
 export function normalizeExhibitionCreativeBrief(value) {
@@ -82,6 +118,17 @@ export function buildExhibitionCreativeBriefPrompt(values = {}) {
   return lines.join('\n');
 }
 
+function exhibitionCreativeDeepeningRequirement(spaceType) {
+  const id = normalizeExhibitionCreativeSpaceType(spaceType);
+  if (id === 'outro-hall') {
+    return '画面应服务尾厅或出口前收束空间的方案比选：突出总结升华、情绪沉淀、互动留念和未来展望，形成清晰的离场动线、柔和但有记忆点的灯光层次、可停留拍照的收束装置和完整的参观体验余韵。';
+  }
+  if (id === 'highlight-space') {
+    return '画面应服务重点展项空间的方案比选：突出核心展品或核心叙事节点，形成强视觉焦点、沉浸式观看关系、戏剧化灯光、可信材料工艺、清晰观众围观路径和高完成度展陈体验。';
+  }
+  return '画面应服务序厅或入口形象区的方案比选：突出开场仪式感、第一视觉记忆点、主题总览、品牌或展览核心精神的瞬间建立，形成明确入口动线、主视觉焦点、可信材料工艺和高品质空间氛围。';
+}
+
 export function buildExhibitionCreativeImagePrompt(values = {}) {
   const meta = exhibitionCreativeSpaceTypeMeta(values.spaceType);
   const projectTheme = cleanExhibitionCreativeText(values.projectTheme, 500);
@@ -90,13 +137,14 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   const creativeBrief = normalizeExhibitionCreativeBrief(values.creativeBrief || values.brief);
   const roundIndex = Math.max(1, Number(values.roundIndex) || 1);
   const total = normalizeExhibitionCreativeCount(values.total || values.generationCount || 1);
+  const insertItemsText = exhibitionCreativeInsertItemsText(values.insertItems, values.insertItemOptions);
   const lines = [
     `生成一张专业${meta.label}展陈空间效果图，第 ${roundIndex}/${total} 张。真实室内建筑摄影级渲染，空间尺度可信，材质细节清晰，灯光层次准确，画面干净完整。`,
     `空间类型：${meta.label}。${meta.prompt}`,
     '',
     '【输入空间图约束】',
     '输入图像是唯一的室内建筑空间依据。必须保留原图的空间几何、透视角度、层高尺度、主要墙体/柱网/开口、吊顶关系、地面边界、入口出口、通行动线和前后左右空间关系。',
-    '允许在该空间内植入展陈装置、展墙、展柜、灯光、图文层级、数字媒体和互动界面；不得把空间改成另一处建筑，不得改变主要开口、承重结构和真实尺度关系。',
+    `允许在该空间内植入${insertItemsText}；不得把空间改成另一处建筑，不得改变主要开口、承重结构和真实尺度关系。`,
     '',
     '【LLM创意描述】',
     creativeBrief || '围绕该室内空间生成具有强记忆点的展陈创意：以主题叙事为核心，在入口/核心/收束视线位置组织主视觉装置、沉浸光影、展陈工艺和观众动线，形成可落地的高完成度展陈效果图。',
@@ -109,8 +157,7 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   if (inspiration) lines.push(`个人灵感：${inspiration}`);
   lines.push('');
   lines.push('【设计深化要求】');
-  lines.push('画面应适合序厅、尾厅或重点展项空间的方案比选：有清晰主视觉焦点、明确参观路径、可信材料工艺、可实施的灯光系统、适度的信息层级和高品质空间氛围。');
-  lines.push('展墙图文可使用抽象占位块、光带、图像面板和不可读的小字质感表达，不要生成可读错字、乱码文字、真实品牌标识、说明表格或把提示词字段直接渲染到墙面。');
+  lines.push(exhibitionCreativeDeepeningRequirement(values.spaceType));
   lines.push('不要出现“LLM创意描述”“个人灵感”“空间类型”“输入空间图约束”等字段名，也不要把上述设计说明作为上墙文字。');
   lines.push('最终画面必须看得出来自同一张输入室内空间图，只是在展陈创意、灯光、材料、装置和叙事氛围上形成新的方案。');
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();

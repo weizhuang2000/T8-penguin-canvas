@@ -10,6 +10,7 @@ const router = express.Router();
 
 const DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition.json');
 const ELEVATION_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_elevation.json');
+const CREATIVE_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition_creative.json');
 const DIMENSIONS = new Set([
   'spaceType',
   'functionalZones',
@@ -121,6 +122,17 @@ const DEFAULT_ELEVATION_CRAFT_PRESETS = [
   { id: 'wayfinding', label: '导视标识', prompt: '统一的导视标识系统，编号与方向信息清晰' },
 ].map((item, index) => ({ ...item, order: index }));
 
+const DEFAULT_EXHIBITION_CREATIVE_INSERT_PRESETS = [
+  { id: 'large-sculpture', label: '大型雕塑' },
+  { id: 'relief', label: '浮雕' },
+  { id: 'group-sculpture', label: '群雕' },
+  { id: 'art-installation', label: '艺术装置' },
+  { id: 'multimedia-equipment', label: '多媒体设备' },
+  { id: 'showcase', label: '展柜' },
+  { id: 'scene', label: '场景' },
+  { id: 'artwork', label: '艺术品' },
+].map((item, index) => ({ ...item, order: index }));
+
 function now() {
   return Date.now();
 }
@@ -219,6 +231,29 @@ function normalizeElevationCraftPresetList(value) {
     .map((item, index) => ({ ...item, order: index }));
 }
 
+function normalizeCreativeInsertPresetList(value) {
+  const source = Array.isArray(value) && value.length > 0 ? value : DEFAULT_EXHIBITION_CREATIVE_INSERT_PRESETS;
+  const used = new Set();
+  return source
+    .map((raw, index) => {
+      const label = safeText(raw?.label || raw?.text, 120);
+      if (!label) return null;
+      let id = safeText(raw?.id, 96).replace(/[^a-zA-Z0-9_-]/g, '');
+      if (!id) id = `insert_${index + 1}`;
+      while (used.has(id)) id = `${id}_${index + 1}`;
+      used.add(id);
+      return {
+        id,
+        label,
+        order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 80)
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+    .map((item, index) => ({ ...item, order: index }));
+}
+
 function readElevationDb() {
   try {
     if (!fs.existsSync(ELEVATION_DB_FILE)) {
@@ -247,6 +282,35 @@ function writeElevationDb(db) {
     JSON.stringify({
       colorMaterialPresets: normalizeElevationPresetList(db?.colorMaterialPresets),
       craftPresets: normalizeElevationCraftPresetList(db?.craftPresets),
+    }, null, 2),
+    'utf-8',
+  );
+}
+
+function readCreativeDb() {
+  try {
+    if (!fs.existsSync(CREATIVE_DB_FILE)) {
+      return {
+        insertPresets: normalizeCreativeInsertPresetList(DEFAULT_EXHIBITION_CREATIVE_INSERT_PRESETS),
+      };
+    }
+    const raw = JSON.parse(fs.readFileSync(CREATIVE_DB_FILE, 'utf-8'));
+    return {
+      insertPresets: normalizeCreativeInsertPresetList(raw?.insertPresets),
+    };
+  } catch {
+    return {
+      insertPresets: normalizeCreativeInsertPresetList(DEFAULT_EXHIBITION_CREATIVE_INSERT_PRESETS),
+    };
+  }
+}
+
+function writeCreativeDb(db) {
+  fs.mkdirSync(path.dirname(CREATIVE_DB_FILE), { recursive: true });
+  fs.writeFileSync(
+    CREATIVE_DB_FILE,
+    JSON.stringify({
+      insertPresets: normalizeCreativeInsertPresetList(db?.insertPresets),
     }, null, 2),
     'utf-8',
   );
@@ -397,6 +461,27 @@ router.put('/elevation/presets/crafts', (req, res) => {
   const db = readElevationDb();
   const presets = normalizeElevationCraftPresetList(req.body?.presets);
   writeElevationDb({ ...db, craftPresets: presets });
+  res.json({ success: true, data: presets });
+});
+
+router.get('/exhibition-creative/presets', (_req, res) => {
+  const db = readCreativeDb();
+  res.json({
+    success: true,
+    data: {
+      inserts: normalizeCreativeInsertPresetList(db.insertPresets),
+    },
+  });
+});
+
+router.put('/exhibition-creative/presets/inserts', (req, res) => {
+  const user = req.user;
+  if (!isAdminRole(user?.role)) {
+    return res.status(403).json({ success: false, error: '只有系统管理员或经理可以维护展陈创意植入项预设' });
+  }
+  const db = readCreativeDb();
+  const presets = normalizeCreativeInsertPresetList(req.body?.presets);
+  writeCreativeDb({ ...db, insertPresets: presets });
   res.json({ success: true, data: presets });
 });
 

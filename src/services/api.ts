@@ -282,6 +282,16 @@ export interface ElevationPromptPresetMap {
   crafts: ElevationCraftPresetItem[];
 }
 
+export interface ExhibitionCreativeInsertPresetItem {
+  id: string;
+  label: string;
+  order: number;
+}
+
+export interface ExhibitionCreativePromptPresetMap {
+  inserts: ExhibitionCreativeInsertPresetItem[];
+}
+
 export async function listExhibitionPromptLibrary(options?: {
   dimension?: ExhibitionPromptDimension;
   includePersonal?: boolean;
@@ -362,6 +372,26 @@ export async function updateElevationCraftPresets(
 ): Promise<ElevationCraftPresetItem[]> {
   const res = await request<{ success: boolean; data: ElevationCraftPresetItem[] }>(
     `${BASE}/prompt-library/elevation/presets/crafts`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ presets }),
+    },
+  );
+  return res.data || [];
+}
+
+export async function getExhibitionCreativePromptPresets(): Promise<ExhibitionCreativePromptPresetMap> {
+  const res = await request<{ success: boolean; data: ExhibitionCreativePromptPresetMap }>(
+    `${BASE}/prompt-library/exhibition-creative/presets`,
+  );
+  return res.data || { inserts: [] };
+}
+
+export async function updateExhibitionCreativeInsertPresets(
+  presets: Array<Pick<ExhibitionCreativeInsertPresetItem, 'label'> & Partial<Pick<ExhibitionCreativeInsertPresetItem, 'id' | 'order'>>>,
+): Promise<ExhibitionCreativeInsertPresetItem[]> {
+  const res = await request<{ success: boolean; data: ExhibitionCreativeInsertPresetItem[] }>(
+    `${BASE}/prompt-library/exhibition-creative/presets/inserts`,
     {
       method: 'PUT',
       body: JSON.stringify({ presets }),

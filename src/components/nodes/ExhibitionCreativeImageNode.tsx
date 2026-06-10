@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
 import {
   Brain,
@@ -32,14 +32,22 @@ import {
 import {
   buildExhibitionCreativeBriefPrompt,
   buildExhibitionCreativeImagePrompt,
+  EXHIBITION_CREATIVE_INSERT_ITEMS,
   EXHIBITION_CREATIVE_SPACE_TYPES,
   exhibitionCreativeSpaceTypeMeta,
+  normalizeExhibitionCreativeInsertItems,
   normalizeExhibitionCreativeBrief,
   normalizeExhibitionCreativeCount,
   normalizeExhibitionCreativeSpaceType,
+  type ExhibitionCreativeInsertItem,
 } from '../../utils/exhibitionCreativeImagePrompt';
 import {
   extractDocument,
+  getCurrentUser,
+  getExhibitionCreativePromptPresets,
+  updateExhibitionCreativeInsertPresets,
+  type AuthUser,
+  type ExhibitionCreativeInsertPresetItem,
   type ExtractedDocument,
 } from '../../services/api';
 import { useApiKeysStore } from '../../stores/apiKeys';
@@ -172,15 +180,41 @@ function fallbackCreativeBrief(values: {
   ].join('');
 }
 
+function insertPresetEditorText(presets: ExhibitionCreativeInsertPresetItem[]) {
+  return presets.map((preset) => preset.label).join('\n');
+}
+
+function parseInsertPresetEditorText(text: string) {
+  return text
+    .split(/\r?\n/)
+    .map((line, index) => {
+      const label = line.trim();
+      if (!label) return null;
+      return {
+        id: `${label.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'insert'}-${index + 1}`,
+        label,
+        order: index,
+      };
+    })
+    .filter(Boolean) as Array<{ id: string; label: string; order: number }>;
+}
+
 const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [insertPresets, setInsertPresets] = useState<ExhibitionCreativeInsertPresetItem[]>([]);
+  const [insertEditorOpen, setInsertEditorOpen] = useState(false);
+  const [insertEditorValue, setInsertEditorValue] = useState('');
+  const [insertSaving, setInsertSaving] = useState(false);
+  const [insertError, setInsertError] = useState('');
   const { style } = useThemeStore();
   const isPixel = style === 'pixel';
   const activeCanvas = useCanvasStore((state) => state.canvases.find((canvas) => canvas.id === state.activeId) || null);
   const activeCanvasId = useCanvasStore((state) => state.activeId);
   const isReadonly = activeCanvas?.access?.canEdit === false;
+  const canManageTeam = currentUser?.role === 'admin' || currentUser?.role === 'manager';
   const advancedProviders = useApiKeysStore((state) => state.settings.advancedProviders);
   const configuredLlmModel = useApiKeysStore((state) => state.settings.llmModel)?.trim() || DEFAULT_LLM_MODEL;
   const llmConfigs = useApiKeysStore((state) => state.settings.llmConfigs || state.settings.llmApiKeys) || [];
@@ -229,6 +263,15 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
   const spaceType = normalizeExhibitionCreativeSpaceType(d.spaceType);
   const generationCount = normalizeExhibitionCreativeCount(d.generationCount);
+  const insertOptions = useMemo<ExhibitionCreativeInsertItem[]>(
+    () => (insertPresets.length > 0 ? insertPresets : EXHIBITION_CREATIVE_INSERT_ITEMS),
+    [insertPresets],
+  );
+  const selectedInsertItems = useMemo(
+    () => normalizeExhibitionCreativeInsertItems(d.insertItems, insertOptions),
+    [d.insertItems, insertOptions],
+  );
+  const selectedInsertIds = useMemo(() => selectedInsertItems.map((item) => item.id), [selectedInsertItems]);
   const regenerateEachTime = d.regenerateEachTime !== false;
   const projectTheme = String(d.projectTheme || '').trim();
   const inspiration = String(d.inspiration || '').trim();
@@ -250,10 +293,12 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       inspiration,
       documentSummary,
       creativeBrief,
+      insertItems: selectedInsertIds,
+      insertItemOptions: insertOptions,
       roundIndex: 1,
       total: generationCount,
     }),
-    [creativeBrief, documentSummary, generationCount, inspiration, projectTheme, spaceType],
+    [creativeBrief, documentSummary, generationCount, inspiration, insertOptions, projectTheme, selectedInsertIds, spaceType],
   );
 
   useEffect(() => {
@@ -283,6 +328,48 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       providerModel: nextModels[0] || '',
     });
   }, [allowZhenzhenFallback, firstImageAdvancedProvider, isExternalSelected, update]);
+
+  useEffect(() => {
+    getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
+    getExhibitionCreativePromptPresets()
+      .then((presets) => setInsertPresets(presets.inserts || []))
+      .catch(() => setInsertPresets([]));
+  }, []);
+
+  useEffect(() => {
+    if (!insertEditorOpen) return;
+    setInsertEditorValue(insertPresetEditorText(insertPresets));
+    setInsertError('');
+  }, [insertEditorOpen, insertPresets]);
+
+  const saveInsertPresets = async () => {
+    if (!canManageTeam) return;
+    const presets = parseInsertPresetEditorText(insertEditorValue);
+    if (presets.length === 0) {
+      setInsertError('请至少保留一项植入内容。');
+      return;
+    }
+    setInsertSaving(true);
+    setInsertError('');
+    try {
+      const saved = await updateExhibitionCreativeInsertPresets(presets);
+      setInsertPresets(saved);
+      update({ insertItems: normalizeExhibitionCreativeInsertItems(selectedInsertIds, saved).map((item) => item.id) });
+      setInsertEditorOpen(false);
+    } catch (error: any) {
+      setInsertError(error?.message || '保存植入项失败');
+    } finally {
+      setInsertSaving(false);
+    }
+  };
+
+  const toggleInsertItem = (itemId: string) => {
+    if (isReadonly || busy) return;
+    const next = selectedInsertIds.includes(itemId)
+      ? selectedInsertIds.filter((item) => item !== itemId)
+      : [...selectedInsertIds, itemId];
+    update({ insertItems: next });
+  };
 
   const buildCreativeBrief = useCallback(async (roundIndex: number, previousBriefs: string[] = []) => {
     if (!spaceImage) throw new Error('请先连接一张室内建筑空间图');
@@ -626,6 +713,8 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           inspiration,
           documentSummary,
           creativeBrief: brief,
+          insertItems: selectedInsertIds,
+          insertItemOptions: insertOptions,
           roundIndex: index,
           total: generationCount,
         });
@@ -683,10 +772,12 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     generateOneImage,
     generationCount,
     id,
+    insertOptions,
     inspiration,
     isReadonly,
     projectTheme,
     regenerateEachTime,
+    selectedInsertIds,
     seed,
     spaceImage,
     spaceType,
@@ -895,6 +986,73 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             />
             每次生图前重新用 LLM 创意
           </label>
+        </section>
+
+        <section className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold text-cyan-100">植入项</span>
+              <span className="min-w-0 flex-1 truncate text-[9px] text-white/40">
+                写入“允许在该空间内植入...”提示词
+              </span>
+              {canManageTeam && (
+                <button
+                  type="button"
+                  className={BUTTON}
+                  disabled={busy}
+                  onClick={() => setInsertEditorOpen((open) => !open)}
+                >
+                  {insertEditorOpen ? '收起' : '编辑'}
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {insertOptions.map((item) => {
+                const active = selectedInsertIds.includes(item.id);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    disabled={isReadonly || busy}
+                    className={`rounded border px-1.5 py-1 text-[10px] ${
+                      active ? 'border-cyan-300/55 bg-cyan-300/15 text-cyan-100' : 'border-white/10 bg-black/15 text-white/55 hover:bg-white/[0.08]'
+                    } disabled:opacity-50`}
+                    onClick={() => toggleInsertItem(item.id)}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+            {canManageTeam && insertEditorOpen && (
+              <div className="space-y-1.5 rounded border border-cyan-300/15 bg-cyan-300/5 p-2">
+                <textarea
+                  className={`${FIELD} min-h-[92px] resize-y`}
+                  value={insertEditorValue}
+                  disabled={insertSaving || busy}
+                  placeholder="每行一个植入项，例如：大型雕塑"
+                  onChange={(event) => setInsertEditorValue(event.target.value)}
+                />
+                {insertError && <div className="text-[10px] text-red-200">{insertError}</div>}
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    className={BUTTON}
+                    disabled={insertSaving || busy}
+                    onClick={() => setInsertEditorOpen(false)}
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    className={BUTTON}
+                    disabled={insertSaving || busy}
+                    onClick={() => void saveInsertPresets()}
+                  >
+                    {insertSaving ? '保存中' : '保存'}
+                  </button>
+                </div>
+              </div>
+            )}
         </section>
 
         <section className="rounded border border-white/10 bg-white/[0.035] p-2 space-y-2">

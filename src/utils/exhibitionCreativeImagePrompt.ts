@@ -2,10 +2,13 @@ import {
   buildExhibitionCreativeBriefPrompt,
   buildExhibitionCreativeImagePrompt,
   cleanExhibitionCreativeText,
+  EXHIBITION_CREATIVE_INSERT_ITEMS,
   EXHIBITION_CREATIVE_SPACE_TYPES,
+  exhibitionCreativeInsertItemsText,
   exhibitionCreativeSpaceTypeMeta,
   normalizeExhibitionCreativeBrief,
   normalizeExhibitionCreativeCount,
+  normalizeExhibitionCreativeInsertItems,
   normalizeExhibitionCreativeSpaceType,
 } from './exhibitionCreativeImagePromptData.js';
 
@@ -18,6 +21,12 @@ export interface ExhibitionCreativeSpaceTypeMeta {
   id: ExhibitionCreativeSpaceType;
   label: string;
   prompt: string;
+}
+
+export interface ExhibitionCreativeInsertItem {
+  id: string;
+  label: string;
+  order?: number;
 }
 
 export interface ExhibitionCreativeBriefPromptValues {
@@ -35,15 +44,20 @@ export interface ExhibitionCreativeBriefPromptValues {
 export interface ExhibitionCreativeImagePromptValues extends ExhibitionCreativeBriefPromptValues {
   creativeBrief?: string;
   brief?: string;
+  insertItems?: string[];
+  insertItemOptions?: ExhibitionCreativeInsertItem[];
 }
 
 export {
   buildExhibitionCreativeBriefPrompt,
   buildExhibitionCreativeImagePrompt,
   cleanExhibitionCreativeText,
+  EXHIBITION_CREATIVE_INSERT_ITEMS,
   EXHIBITION_CREATIVE_SPACE_TYPES,
+  exhibitionCreativeInsertItemsText,
   exhibitionCreativeSpaceTypeMeta,
   normalizeExhibitionCreativeBrief,
   normalizeExhibitionCreativeCount,
+  normalizeExhibitionCreativeInsertItems,
   normalizeExhibitionCreativeSpaceType,
 };

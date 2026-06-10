@@ -363,6 +363,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     outputFormat: 'jpg',
     spaceType: 'intro-hall',
     generationCount: 4,
+    insertItems: ['large-sculpture', 'relief', 'group-sculpture', 'art-installation', 'multimedia-equipment', 'showcase', 'scene', 'artwork'],
     regenerateEachTime: true,
     projectTheme: '',
     inspiration: '',
