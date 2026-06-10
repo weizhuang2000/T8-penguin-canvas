@@ -22,6 +22,10 @@ function safeText(value, fallback = '') {
   return String(value ?? fallback).trim().slice(0, 500);
 }
 
+function safePrompt(value, fallback = '') {
+  return String(value ?? fallback).trim();
+}
+
 function normalizeSeed(value) {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
@@ -98,7 +102,7 @@ function normalizeItem(raw) {
     canvasId: safeText(raw.canvasId),
     sourceNodeId: safeText(raw.sourceNodeId),
     sourceNodeType: safeText(raw.sourceNodeType),
-    prompt: safeText(raw.prompt).slice(0, 20_000),
+    prompt: safePrompt(raw.prompt),
     provider: safeText(raw.provider),
     model: safeText(raw.model),
     taskId: safeText(raw.taskId),
@@ -258,7 +262,7 @@ function addHistoryItems(items, context = {}, user = null) {
       canvasId: normalizedContext.canvasId,
       sourceNodeId: normalizedContext.sourceNodeId,
       sourceNodeType: normalizedContext.sourceNodeType,
-      prompt: safeText(raw?.prompt || context.prompt).slice(0, 20_000),
+      prompt: safePrompt(raw?.prompt || context.prompt),
       provider: safeText(raw?.provider || context.provider),
       model: safeText(raw?.model || context.model),
       taskId: safeText(raw?.taskId || context.taskId),

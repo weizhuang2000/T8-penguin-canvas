@@ -56,6 +56,21 @@ test('addHistoryItems deduplicates by url and updates context', () => withTempDa
   assert.equal(items[0].prompt, 'new');
 }));
 
+test('history keeps full long prompts for copy actions', () => withTempData(() => {
+  writeCanvases([{ id: 'c1', ownerUserId: 'u1' }]);
+  const longPrompt = Array.from({ length: 900 }, (_, index) => `section-${index}`).join('\n');
+  const [created] = history.addHistoryItems(
+    [{ url: '/files/output/long.png', kind: 'image', title: 'Long' }],
+    { canvasId: 'c1', prompt: longPrompt },
+    { id: 'u1', role: 'designer' },
+  );
+  assert.equal(created.prompt, longPrompt);
+
+  const items = history.listVisibleItems({ id: 'u1', role: 'designer' });
+  assert.equal(items[0].prompt, longPrompt);
+  assert.ok(items[0].prompt.length > 500);
+}));
+
 test('history items persist, update, and search image seed', () => withTempData(() => {
   writeCanvases([{ id: 'c1', ownerUserId: 'u1' }]);
   history.addHistoryItems([{ url: '/files/output/a.png', kind: 'image', title: 'A' }], { canvasId: 'c1', seed: 12345 }, { id: 'u1', role: 'designer' });
