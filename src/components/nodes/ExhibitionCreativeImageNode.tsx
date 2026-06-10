@@ -169,6 +169,11 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     || llmConfigOptions.find((item) => item.isDefault)
     || llmConfigOptions[0];
   const llmModel = activeLlmConfig?.model || String(d.llmModel || '').trim() || configuredLlmModel;
+  const selectedDocumentLlmKeyId = String(d.documentLlmKeyId || d.llmKeyId || '').trim();
+  const activeDocumentLlmConfig = llmConfigOptions.find((item) => item.id === selectedDocumentLlmKeyId)
+    || llmConfigOptions.find((item) => item.isDefault)
+    || llmConfigOptions[0];
+  const documentLlmModel = activeDocumentLlmConfig?.model || String(d.documentLlmModel || '').trim() || llmModel;
 
   const providerSelection = useMemo(
     () => resolveAdvancedProviderSelection(advancedProviders, 'image', {
@@ -327,8 +332,8 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     update({ status: 'summarizing', progress: '资料总结中', error: '' });
     try {
       const response = await generateLlm({
-        model: llmModel,
-        llmKeyId: activeLlmConfig?.id,
+        model: documentLlmModel,
+        llmKeyId: activeDocumentLlmConfig?.id,
         temperature: 0.25,
         max_tokens: 1400,
         messages: [
@@ -362,10 +367,10 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       if (rethrow) throw error;
     }
   }, [
-    activeLlmConfig?.id,
+    activeDocumentLlmConfig?.id,
     busy,
+    documentLlmModel,
     isReadonly,
-    llmModel,
     sourceText,
     update,
   ]);
@@ -746,6 +751,20 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           {Array.isArray(d.documentMeta?.warnings) && d.documentMeta.warnings.length > 0 && (
             <div className="text-[10px] text-amber-200/80">{d.documentMeta.warnings.join('；')}</div>
           )}
+          <div className="grid grid-cols-2 gap-1">
+            <select
+              className={FIELD}
+              disabled={isReadonly || busy}
+              value={`llm-key:${activeDocumentLlmConfig?.id || 'default'}`}
+              onChange={(event) => {
+                const nextId = event.target.value;
+                if (nextId.startsWith('llm-key:')) update({ documentLlmKeyId: nextId.slice(8), documentLlmModel: '' });
+              }}
+            >
+              {llmConfigOptions.map((item) => <option key={item.id} value={`llm-key:${item.id}`}>{item.label || item.id}{item.model ? ` · ${item.model}` : ''}</option>)}
+            </select>
+            <input className={FIELD} disabled value={documentLlmModel} title="资料总结模型由所选 LLM 配置决定" />
+          </div>
           <textarea
             className={`${FIELD} min-h-[72px] resize-y`}
             value={sourceText}

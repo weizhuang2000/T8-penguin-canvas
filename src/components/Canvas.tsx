@@ -368,6 +368,8 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     inspiration: '',
     sourceText: '',
     documentMeta: null,
+    documentLlmKeyId: '',
+    documentLlmModel: '',
     documentSummary: '',
     creativeBrief: '',
     prompt: '',
