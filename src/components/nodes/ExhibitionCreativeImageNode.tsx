@@ -34,6 +34,7 @@ import {
   buildExhibitionCreativeImagePrompt,
   EXHIBITION_CREATIVE_INSERT_ITEMS,
   EXHIBITION_CREATIVE_SPACE_TYPES,
+  exhibitionCreativeInsertItemsText,
   exhibitionCreativeSpaceTypeMeta,
   normalizeExhibitionCreativeInsertItems,
   normalizeExhibitionCreativeBrief,
@@ -162,6 +163,7 @@ function fallbackCreativeBrief(values: {
   projectTheme: string;
   inspiration: string;
   documentSummary: string;
+  insertItemsText: string;
   roundIndex: number;
   total: number;
 }) {
@@ -175,7 +177,7 @@ function fallbackCreativeBrief(values: {
     : '';
   return [
     `围绕${theme}创作第 ${values.roundIndex}/${values.total} 个${meta.label}展陈空间方案。`,
-    `${material}${inspiration}在不改变原始室内建筑空间几何、透视、尺度和主要开口关系的前提下，植入清晰的主视觉装置、展墙展柜、灯光层次、图文信息界面和观众动线。`,
+    `${material}${inspiration}在不改变原始室内建筑空间几何、透视、尺度和主要开口关系的前提下，植入${values.insertItemsText}。`,
     `整体气质应符合${meta.prompt}，画面具有专业展陈效果图的完成度、真实材料细节和可落地的施工表达，并与同批次其他方案形成可比较的差异化。`,
   ].join('');
 }
@@ -378,6 +380,8 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       projectTheme,
       inspiration,
       documentSummary,
+      insertItems: selectedInsertIds,
+      insertItemOptions: insertOptions,
       roundIndex,
       total: generationCount,
       previousBriefs,
@@ -413,6 +417,8 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     llmModel,
     projectTheme,
     regenerateEachTime,
+    insertOptions,
+    selectedInsertIds,
     spaceImage,
     spaceType,
   ]);
@@ -671,6 +677,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               projectTheme,
               inspiration,
               documentSummary,
+              insertItemsText: exhibitionCreativeInsertItemsText(selectedInsertIds, insertOptions),
               roundIndex: 1,
               total: generationCount,
             });
@@ -696,6 +703,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               projectTheme,
               inspiration,
               documentSummary,
+              insertItemsText: exhibitionCreativeInsertItemsText(selectedInsertIds, insertOptions),
               roundIndex: index,
               total: generationCount,
             });

@@ -56,7 +56,7 @@ export default function LoginScreen({ onAuthenticated }: LoginScreenProps) {
             <Sparkles size={20} className="text-emerald-300" />
           </div>
           <div>
-            <h1 className="text-lg font-bold">T8 Penguin Canvas</h1>
+            <h1 className="text-lg font-bold">百达画布</h1>
             <p className="text-xs text-white/55">公司内部账号登录</p>
           </div>
         </div>

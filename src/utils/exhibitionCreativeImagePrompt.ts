@@ -34,6 +34,8 @@ export interface ExhibitionCreativeBriefPromptValues {
   projectTheme?: string;
   inspiration?: string;
   documentSummary?: string;
+  insertItems?: string[];
+  insertItemOptions?: ExhibitionCreativeInsertItem[];
   roundIndex?: number;
   total?: number;
   generationCount?: number;
