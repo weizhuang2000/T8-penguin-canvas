@@ -33,6 +33,7 @@ import {
   buildExhibitionCreativeBriefPrompt,
   buildExhibitionCreativeImagePrompt,
   EXHIBITION_CREATIVE_SPACE_TYPES,
+  exhibitionCreativeSpaceTypeMeta,
   normalizeExhibitionCreativeBrief,
   normalizeExhibitionCreativeCount,
   normalizeExhibitionCreativeSpaceType,
@@ -52,6 +53,8 @@ import { useUpdateNodeData } from './useUpdateNodeData';
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
 const MAX_IMAGE_SEED = 2147483647;
+const MIN_GENERATION_COUNT = 1;
+const MAX_GENERATION_COUNT = 12;
 const EXTERNAL_SIZE_LEVELS = ['1K', '2K', '4K'];
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
@@ -144,6 +147,29 @@ function llmErrorMessage(error: any) {
     return '当前 LLM 配置不支持视觉输入。请切换支持图片理解的 LLM 配置，或改用文字灵感补充。';
   }
   return message || 'LLM 创意描述失败';
+}
+
+function fallbackCreativeBrief(values: {
+  spaceType: string;
+  projectTheme: string;
+  inspiration: string;
+  documentSummary: string;
+  roundIndex: number;
+  total: number;
+}) {
+  const meta = exhibitionCreativeSpaceTypeMeta(values.spaceType);
+  const theme = values.projectTheme || '展陈项目主题';
+  const material = values.documentSummary
+    ? '结合项目资料摘要中的核心叙事、关键展项和情绪基调，'
+    : '';
+  const inspiration = values.inspiration
+    ? `吸收个人灵感中关于${values.inspiration.slice(0, 120)}的方向，`
+    : '';
+  return [
+    `围绕${theme}创作第 ${values.roundIndex}/${values.total} 个${meta.label}展陈空间方案。`,
+    `${material}${inspiration}在不改变原始室内建筑空间几何、透视、尺度和主要开口关系的前提下，植入清晰的主视觉装置、展墙展柜、灯光层次、图文信息界面和观众动线。`,
+    `整体气质应符合${meta.prompt}，画面具有专业展陈效果图的完成度、真实材料细节和可落地的施工表达，并与同批次其他方案形成可比较的差异化。`,
+  ].join('');
 }
 
 const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
@@ -284,7 +310,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           role: 'user',
           content: [
             { type: 'text', text: requestPrompt },
-            { type: 'image', image_url: { url: spaceImage } },
+            { type: 'image_url', image_url: { url: spaceImage } },
           ],
         },
       ] as any,
@@ -548,7 +574,21 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       if (!regenerateEachTime) {
         if (!sharedBrief) {
           update({ progress: `创意描述 1/${generationCount}` });
-          sharedBrief = await buildCreativeBrief(1, []);
+          try {
+            sharedBrief = await buildCreativeBrief(1, []);
+          } catch (error: any) {
+            const reason = llmErrorMessage(error);
+            logBus.warn(`展陈创意描述失败，改用本地兜底描述: ${reason}`, src);
+            sharedBrief = fallbackCreativeBrief({
+              spaceType,
+              projectTheme,
+              inspiration,
+              documentSummary,
+              roundIndex: 1,
+              total: generationCount,
+            });
+            update({ progress: `创意描述降级 1/${generationCount}` });
+          }
           update({ creativeBrief: sharedBrief });
         }
         briefs.push(sharedBrief);
@@ -557,9 +597,24 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
 
       for (let index = 1; index <= generationCount; index += 1) {
         const nextSeed = seed > 0 && generationCount === 1 ? seed : randomImageSeed();
-        const brief = regenerateEachTime
-          ? await buildCreativeBrief(index, briefs)
-          : sharedBrief;
+        let brief = sharedBrief;
+        if (regenerateEachTime) {
+          try {
+            brief = await buildCreativeBrief(index, briefs);
+          } catch (error: any) {
+            const reason = llmErrorMessage(error);
+            logBus.warn(`展陈创意描述失败，改用本地兜底描述: ${index}/${generationCount} ${reason}`, src);
+            brief = fallbackCreativeBrief({
+              spaceType,
+              projectTheme,
+              inspiration,
+              documentSummary,
+              roundIndex: index,
+              total: generationCount,
+            });
+            update({ progress: `创意描述降级 ${index}/${generationCount}` });
+          }
+        }
         if (!brief) throw new Error('缺少有效创意描述');
         if (regenerateEachTime) {
           briefs.push(brief);
@@ -947,19 +1002,31 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               onChange={(event) => update({ seed: Math.max(0, Math.floor(Number(event.target.value) || 0)) })}
             />
           </div>
-          <label className="flex items-center gap-2 text-[10px] text-white/60">
-            <span>生图次数 {generationCount}</span>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2 text-[10px] text-white/60">
+              <span>生图数量</span>
+              <input
+                className="h-7 w-16 rounded border border-white/10 bg-black/20 px-2 text-center text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55"
+                type="number"
+                min={MIN_GENERATION_COUNT}
+                max={MAX_GENERATION_COUNT}
+                step={1}
+                value={generationCount}
+                disabled={isReadonly || busy}
+                onChange={(event) => update({ generationCount: normalizeExhibitionCreativeCount(event.target.value) })}
+              />
+            </div>
             <input
               type="range"
-              min={1}
-              max={12}
+              min={MIN_GENERATION_COUNT}
+              max={MAX_GENERATION_COUNT}
               step={1}
               value={generationCount}
               disabled={isReadonly || busy}
-              className="h-1 flex-1 accent-cyan-300"
-              onChange={(event) => update({ generationCount: Number(event.target.value) })}
+              className="h-1 w-full accent-cyan-300"
+              onChange={(event) => update({ generationCount: normalizeExhibitionCreativeCount(event.target.value) })}
             />
-          </label>
+          </div>
         </section>
 
         <section className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
