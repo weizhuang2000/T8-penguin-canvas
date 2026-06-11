@@ -33,6 +33,26 @@ const KIND_META: Record<GenerationHistoryKind | 'all', { label: string; icon: ty
   audio: { label: '音频', icon: Music, accent: '#a78bfa' },
 };
 
+const HISTORY_GRID_COLUMN_STORAGE_KEY = 'penguin:generation-history-columns';
+const HISTORY_GRID_COLUMN_OPTIONS = [1, 2, 3] as const;
+type HistoryGridColumnCount = (typeof HISTORY_GRID_COLUMN_OPTIONS)[number];
+
+function normalizeHistoryGridColumns(value: unknown): HistoryGridColumnCount {
+  const n = Number(value);
+  return HISTORY_GRID_COLUMN_OPTIONS.includes(n as HistoryGridColumnCount)
+    ? (n as HistoryGridColumnCount)
+    : 2;
+}
+
+function readHistoryGridColumns(): HistoryGridColumnCount {
+  if (typeof window === 'undefined') return 2;
+  try {
+    return normalizeHistoryGridColumns(window.localStorage?.getItem(HISTORY_GRID_COLUMN_STORAGE_KEY));
+  } catch {
+    return 2;
+  }
+}
+
 function formatTime(value: number) {
   if (!Number.isFinite(value) || value <= 0) return '';
   return new Date(value).toLocaleString();
@@ -75,6 +95,7 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
   const [msg, setMsg] = useState('');
   const [preview, setPreview] = useState<GenerationHistoryItem | null>(null);
   const [infoItem, setInfoItem] = useState<GenerationHistoryItem | null>(null);
+  const [gridColumns, setGridColumns] = useState<HistoryGridColumnCount>(() => readHistoryGridColumns());
   const isAdmin = userRole === 'admin' || userRole === 'manager';
 
   const load = useCallback(async () => {
@@ -116,6 +137,15 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
     window.addEventListener('penguin:generation-history-changed', onChanged);
     return () => window.removeEventListener('penguin:generation-history-changed', onChanged);
   }, [load, open]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage?.setItem(HISTORY_GRID_COLUMN_STORAGE_KEY, String(gridColumns));
+    } catch {
+      // Ignore private browsing or storage quota failures.
+    }
+  }, [gridColumns]);
 
   const activeProject = useMemo(
     () => projects.find((project) => project.id === projectId) || null,
@@ -238,9 +268,39 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
             <div className={`text-[11px] mt-1 ${subtle}`}>{activeProject?.name || '选择项目'} · {items.length} 个媒体</div>
           </div>
         </div>
-        <button onClick={onClose} className={isPixel ? 't8-mini-icon-button px-btn px-btn--icon px-btn--ghost' : `t8-mini-icon-button h-9 w-9 p-0 rounded-md ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`} title="关闭">
-          <X size={16} />
-        </button>
+        <div className="ml-2 flex items-center gap-1 shrink-0">
+          <div
+            className={isPixel ? 'flex items-center gap-0.5' : `flex items-center rounded-md border p-0.5 ${isDark ? 'border-white/10 bg-white/5' : 'border-black/10 bg-black/5'}`}
+            title="Columns"
+          >
+            {HISTORY_GRID_COLUMN_OPTIONS.map((count) => (
+              <button
+                key={count}
+                type="button"
+                onClick={() => setGridColumns(count)}
+                className={
+                  isPixel
+                    ? `px-btn px-btn--sm min-w-7 ${gridColumns === count ? 'px-btn--yellow' : 'px-btn--ghost'}`
+                    : `h-7 min-w-7 rounded text-[11px] font-semibold transition ${
+                        gridColumns === count
+                          ? isDark
+                            ? 'bg-cyan-400 text-zinc-950'
+                            : 'bg-cyan-500 text-white'
+                          : isDark
+                            ? 'text-white/60 hover:bg-white/10'
+                            : 'text-zinc-500 hover:bg-black/10'
+                      }`
+                }
+                title={`${count} columns`}
+              >
+                {count}
+              </button>
+            ))}
+          </div>
+          <button onClick={onClose} className={isPixel ? 't8-mini-icon-button px-btn px-btn--icon px-btn--ghost' : `t8-mini-icon-button h-9 w-9 p-0 rounded-md ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`} title="Close">
+            <X size={16} />
+          </button>
+        </div>
       </div>
 
       <div className={`px-3 py-2 flex items-center gap-1.5 shrink-0 ${isPixel ? 'border-b-2 border-[var(--px-ink)]' : isDark ? 'border-b border-white/10' : 'border-b border-black/10'}`}>
@@ -309,7 +369,10 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
           {msg && <div className={`mb-2 text-[11px] px-2 py-1 rounded ${isPixel ? 'bg-[var(--px-yellow)] border-2 border-[var(--px-ink)]' : isDark ? 'bg-white/10 text-white/70' : 'bg-black/5 text-zinc-600'}`}>{msg}</div>}
           {loading && <div className={`text-xs ${subtle}`}>加载中...</div>}
           {!loading && items.length === 0 && <div className={`h-56 flex items-center justify-center text-xs ${subtle}`}>暂无历史媒体</div>}
-          <div className="grid grid-cols-2 gap-2">
+          <div
+            className="grid gap-2"
+            style={{ gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))` }}
+          >
             {items.map((item) => {
               const Icon = KIND_META[item.kind].icon;
               const seed = validSeed(item.seed);
