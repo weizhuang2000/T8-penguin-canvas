@@ -6,6 +6,7 @@ import {
   normalizeOutlineSegmentCount,
   normalizeOutlineSegments,
   normalizeOutlineSplitMode,
+  normalizeWeightPercents,
   parseExhibitionOutlineSplitJson,
 } from './exhibitionOutlineSplitData.js';
 
@@ -23,5 +24,6 @@ export {
   normalizeOutlineSegmentCount,
   normalizeOutlineSegments,
   normalizeOutlineSplitMode,
+  normalizeWeightPercents,
   parseExhibitionOutlineSplitJson,
 };

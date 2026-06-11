@@ -18,6 +18,8 @@ test('exhibition outline split prompt supports manual and auto modes', () => {
   });
   assert.match(manual, /严格拆分为 3 个单元/);
   assert.match(manual, /项目主题\/关键词：城市更新/);
+  assert.match(manual, /weightPercent/);
+  assert.match(manual, /合计 100/);
 
   const auto = buildExhibitionOutlineSplitPrompt({
     sourceText: '第一部分介绍城市源起。第二部分介绍产业成果。',
@@ -37,12 +39,14 @@ test('exhibition outline split parser accepts fenced JSON and normalizes segment
       "title": "序章",
       "summary": "提炼城市精神与展览开场。",
       "keywords": "城市精神、序厅,开场",
+      "weightPercent": 70,
       "sourceHint": "第 1 章"
     },
     {
       "title": "产业成果",
       "summary": "总结重点产业、创新平台与代表性成果。",
-      "keywords": ["产业", "创新", "成果"]
+      "keywords": ["产业", "创新", "成果"],
+      "weightPercent": 70
     }
   ]
 }
@@ -51,8 +55,10 @@ test('exhibition outline split parser accepts fenced JSON and normalizes segment
   assert.equal(parsed.mode, 'auto');
   assert.equal(parsed.segmentCount, 2);
   assert.equal(parsed.segments.length, 2);
+  assert.equal(parsed.segments.reduce((sum, segment) => sum + segment.weightPercent, 0), 100);
+  assert.deepEqual(parsed.segments.map((segment) => segment.weightPercent), [50, 50]);
   assert.deepEqual(parsed.segments[0].keywords, ['城市精神', '序厅', '开场']);
-  assert.match(formatOutlineSegments(parsed.segments), /单元 2：产业成果/);
+  assert.match(formatOutlineSegments(parsed.segments), /单元 2：产业成果（权重 50%）/);
 });
 
 test('exhibition outline split fallback chunks text by requested count', () => {
@@ -61,6 +67,7 @@ test('exhibition outline split fallback chunks text by requested count', () => {
     2,
   );
   assert.equal(segments.length, 2);
+  assert.equal(segments.reduce((sum, segment) => sum + segment.weightPercent, 0), 100);
   assert.equal(normalizeOutlineSegmentCount(99), 24);
   assert.match(formatOutlineSegments(segments), /规则分块/);
 });

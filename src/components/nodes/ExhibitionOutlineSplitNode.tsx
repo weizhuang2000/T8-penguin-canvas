@@ -16,6 +16,7 @@ import {
   fallbackOutlineSplit,
   formatOutlineSegments,
   normalizeOutlineSegmentCount,
+  normalizeOutlineSegments,
   normalizeOutlineSplitMode,
   parseExhibitionOutlineSplitJson,
   type ExhibitionOutlineSegment,
@@ -37,19 +38,14 @@ function llmErrorMessage(error: any) {
 }
 
 function segmentsFromData(value: unknown): ExhibitionOutlineSegment[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item: any, index) => {
-      const title = cleanOutlineText(item?.title || `单元 ${index + 1}`, 80);
-      const summary = cleanOutlineText(item?.summary, 1200);
-      if (!summary) return null;
-      const keywords = Array.isArray(item?.keywords)
-        ? item.keywords.map((keyword: any) => cleanOutlineText(keyword, 30)).filter(Boolean).slice(0, 8)
-        : [];
-      const sourceHint = cleanOutlineText(item?.sourceHint, 160);
-      return { title, summary, keywords, ...(sourceHint ? { sourceHint } : {}) };
-    })
-    .filter(Boolean) as ExhibitionOutlineSegment[];
+  return normalizeOutlineSegments(value);
+}
+
+function formatOneSegment(segment: ExhibitionOutlineSegment, index: number) {
+  const lines = [`单元 ${index + 1}：${segment.title}（权重 ${segment.weightPercent}%）`, segment.summary];
+  if (segment.keywords.length > 0) lines.push(`关键词：${segment.keywords.join('、')}`);
+  if (segment.sourceHint) lines.push(`依据：${segment.sourceHint}`);
+  return lines.join('\n');
 }
 
 const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
@@ -86,10 +82,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
 
   useEffect(() => {
     const textSegments = segments.map((segment, index) => {
-      const lines = [`单元 ${index + 1}：${segment.title}`, segment.summary];
-      if (segment.keywords.length > 0) lines.push(`关键词：${segment.keywords.join('、')}`);
-      if (segment.sourceHint) lines.push(`依据：${segment.sourceHint}`);
-      return lines.join('\n');
+      return formatOneSegment(segment, index);
     });
     const nextStatus = segments.length > 0 ? 'success' : (status === 'error' ? 'error' : 'idle');
     const changed =
@@ -145,10 +138,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
       const nextSegments = parsed.segments;
       const nextText = formatOutlineSegments(nextSegments);
       const textSegments = nextSegments.map((segment, index) => {
-        const lines = [`单元 ${index + 1}：${segment.title}`, segment.summary];
-        if (segment.keywords.length > 0) lines.push(`关键词：${segment.keywords.join('、')}`);
-        if (segment.sourceHint) lines.push(`依据：${segment.sourceHint}`);
-        return lines.join('\n');
+        return formatOneSegment(segment, index);
       });
       update({
         outlineSegments: nextSegments,
@@ -167,7 +157,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
       const fallback = fallbackOutlineSplit(text, segmentCount);
       if (fallback.length > 0) {
         const nextText = formatOutlineSegments(fallback);
-        const textSegments = fallback.map((segment, index) => `单元 ${index + 1}：${segment.title}\n${segment.summary}`);
+        const textSegments = fallback.map((segment, index) => formatOneSegment(segment, index));
         update({
           outlineSegments: fallback,
           resolvedSegmentCount: fallback.length,
@@ -367,7 +357,12 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
             <div className="max-h-[280px] space-y-2 overflow-y-auto pr-1">
               {segments.map((segment, index) => (
                 <div key={`${segment.title}-${index}`} className="rounded border border-cyan-300/15 bg-cyan-300/[0.06] p-2">
-                  <div className="text-[11px] font-semibold text-cyan-100">单元 {index + 1}：{segment.title}</div>
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1 text-[11px] font-semibold text-cyan-100">单元 {index + 1}：{segment.title}</div>
+                    <div className="shrink-0 rounded border border-cyan-300/25 bg-cyan-300/10 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-100">
+                      {segment.weightPercent}%
+                    </div>
+                  </div>
                   <div className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-white/78">{segment.summary}</div>
                   {segment.keywords.length > 0 && (
                     <div className="mt-1 text-[10px] text-white/45">关键词：{segment.keywords.join('、')}</div>
