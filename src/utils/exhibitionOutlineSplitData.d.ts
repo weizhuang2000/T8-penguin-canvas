@@ -20,6 +20,7 @@ export interface ExhibitionOutlineSplitPromptValues {
   extraInstruction?: string;
 }
 
+export const MAX_OUTLINE_SEGMENT_COUNT: number;
 export function normalizeOutlineSplitMode(value: unknown): 'auto' | 'manual';
 export function normalizeOutlineSegmentCount(value: unknown): number;
 export function cleanOutlineText(value: unknown, max?: number): string;

@@ -15,6 +15,7 @@ import {
   cleanOutlineText,
   fallbackOutlineSplit,
   formatOutlineSegments,
+  MAX_OUTLINE_SEGMENT_COUNT,
   normalizeOutlineSegmentCount,
   normalizeOutlineSegments,
   normalizeOutlineSplitMode,
@@ -116,7 +117,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
         model: llmModel,
         llmKeyId: activeLlmConfig?.id,
         temperature: splitMode === 'auto' ? 0.28 : 0.2,
-        max_tokens: splitMode === 'auto' ? 3200 : Math.min(4800, 900 + segmentCount * 420),
+        max_tokens: splitMode === 'auto' ? 3200 : Math.min(32000, 1200 + segmentCount * 260),
         messages: [
           {
             role: 'system',
@@ -299,7 +300,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
                 className={FIELD}
                 type="number"
                 min={1}
-                max={24}
+                max={MAX_OUTLINE_SEGMENT_COUNT}
                 value={segmentCount}
                 disabled={isReadonly || busy || splitMode === 'auto'}
                 onChange={(event) => update({ segmentCount: normalizeOutlineSegmentCount(event.target.value) })}

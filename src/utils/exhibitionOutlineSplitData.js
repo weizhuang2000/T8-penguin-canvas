@@ -2,9 +2,11 @@ export function normalizeOutlineSplitMode(value) {
   return value === 'auto' ? 'auto' : 'manual';
 }
 
+export const MAX_OUTLINE_SEGMENT_COUNT = 100;
+
 export function normalizeOutlineSegmentCount(value) {
   const number = Math.floor(Number(value) || 4);
-  return Math.max(1, Math.min(24, number));
+  return Math.max(1, Math.min(MAX_OUTLINE_SEGMENT_COUNT, number));
 }
 
 export function cleanOutlineText(value, max = 60000) {

@@ -5,6 +5,7 @@ import {
   buildExhibitionOutlineSplitPrompt,
   fallbackOutlineSplit,
   formatOutlineSegments,
+  MAX_OUTLINE_SEGMENT_COUNT,
   normalizeOutlineSegmentCount,
   parseExhibitionOutlineSplitJson,
 } from '../src/utils/exhibitionOutlineSplitData.js';
@@ -68,6 +69,7 @@ test('exhibition outline split fallback chunks text by requested count', () => {
   );
   assert.equal(segments.length, 2);
   assert.equal(segments.reduce((sum, segment) => sum + segment.weightPercent, 0), 100);
-  assert.equal(normalizeOutlineSegmentCount(99), 24);
+  assert.equal(MAX_OUTLINE_SEGMENT_COUNT, 100);
+  assert.equal(normalizeOutlineSegmentCount(999), 100);
   assert.match(formatOutlineSegments(segments), /规则分块/);
 });
