@@ -1,0 +1,29 @@
+export interface ExhibitionOutlineSegment {
+  title: string;
+  summary: string;
+  keywords: string[];
+  sourceHint?: string;
+}
+
+export interface ExhibitionOutlineSplitResult {
+  mode: 'auto' | 'manual';
+  segmentCount: number;
+  segments: ExhibitionOutlineSegment[];
+}
+
+export interface ExhibitionOutlineSplitPromptValues {
+  sourceText: string;
+  mode?: 'auto' | 'manual';
+  segmentCount?: number;
+  projectTheme?: string;
+  extraInstruction?: string;
+}
+
+export function normalizeOutlineSplitMode(value: unknown): 'auto' | 'manual';
+export function normalizeOutlineSegmentCount(value: unknown): number;
+export function cleanOutlineText(value: unknown, max?: number): string;
+export function buildExhibitionOutlineSplitPrompt(values: ExhibitionOutlineSplitPromptValues): string;
+export function normalizeOutlineSegments(value: unknown): ExhibitionOutlineSegment[];
+export function parseExhibitionOutlineSplitJson(content: string): ExhibitionOutlineSplitResult;
+export function formatOutlineSegments(segments: ExhibitionOutlineSegment[]): string;
+export function fallbackOutlineSplit(sourceText: string, segmentCount: number): ExhibitionOutlineSegment[];

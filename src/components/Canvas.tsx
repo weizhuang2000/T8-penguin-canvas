@@ -111,6 +111,7 @@ import ExhibitionPromptNode from './nodes/ExhibitionPromptNode';
 import ElevationPromptNode from './nodes/ElevationPromptNode';
 import ExhibitionImg2ImgNode from './nodes/ExhibitionImg2ImgNode';
 import ExhibitionCreativeImageNode from './nodes/ExhibitionCreativeImageNode';
+import ExhibitionOutlineSplitNode from './nodes/ExhibitionOutlineSplitNode';
 import PortraitMasterNode from './nodes/PortraitMasterNode';
 import PoseMasterNode from './nodes/PoseMasterNode';
 import IdeaNode from './nodes/IdeaNode';
@@ -198,6 +199,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'elevation-prompt': ElevationPromptNode,
   'exhibition-img2img': ExhibitionImg2ImgNode,
   'exhibition-creative-image': ExhibitionCreativeImageNode,
+  'exhibition-outline-split': ExhibitionOutlineSplitNode,
   'multi-angle-visual': ToolboxParamNode,
   'portrait-master': PortraitMasterNode,
   'pose-master': PoseMasterNode,
@@ -379,6 +381,25 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     imageUrls: [],
     referenceImages: [],
     creativeResults: [],
+    status: 'idle',
+    error: '',
+  },
+  'exhibition-outline-split': {
+    splitMode: 'manual',
+    segmentCount: 4,
+    useUpstream: true,
+    projectTheme: '',
+    extraInstruction: '',
+    sourceText: '',
+    documentMeta: null,
+    llmKeyId: '',
+    llmModel: '',
+    outlineSegments: [],
+    textSegments: [],
+    segments: [],
+    prompt: '',
+    outputText: '',
+    text: '',
     status: 'idle',
     error: '',
   },
