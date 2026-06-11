@@ -170,7 +170,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
         status: nextStatus,
       });
     }
-  }, [busy, d.imageUrl, d.imageUrls, d.outputSegmentIndex, d.outputText, d.prompt, d.segments, d.status, d.text, d.textSegments, d.urls, documentImages, segments, status, update]);
+  }, [busy, d.imageUrl, d.imageUrls, d.outputSegmentEnabled, d.outputSegmentIndex, d.outputText, d.prompt, d.segments, d.status, d.text, d.textSegments, d.urls, documentImages, outputText, segments, status, update]);
 
   const createOutlineMaterialSets = useCallback((segmentsForItems: ExhibitionOutlineSegment[]) => {
     if (isReadonly) return;
