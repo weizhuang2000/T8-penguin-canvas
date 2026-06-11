@@ -81,6 +81,13 @@ test('exhibition creative image prompt adds selected view angles to first senten
     viewAngles: ['front', 'left', 'right', 'top'],
   });
   assert.match(quad.split('\n')[0], /生成四视图，分别包含正视角、左视角、右视角、上视角/);
+
+  const five = buildExhibitionCreativeImagePrompt({
+    spaceType: 'intro-hall',
+    viewControlEnabled: true,
+    viewAngles: ['front', 'left', 'right', 'back', 'top'],
+  });
+  assert.match(five.split('\n')[0], /生成5视图，分别包含正视角、左视角、右视角、后视角、上视角/);
 });
 
 test('exhibition creative image prompt supports manual space size without input image', () => {
@@ -94,6 +101,7 @@ test('exhibition creative image prompt supports manual space size without input 
   assert.match(prompt, /宽度 12 米、进深 18 米、高度 4.5 米/);
   assert.match(prompt, /空间结构、开口位置、墙体组织、吊顶形式和参观动线可以自由发挥/);
   assert.match(prompt, /控制在上述空间体量内/);
+  assert.doesNotMatch(prompt, /没有输入空间图/);
   assert.doesNotMatch(prompt, /输入图像是唯一的室内建筑空间依据/);
   assert.doesNotMatch(prompt, /最终画面必须看得出来自同一张输入室内空间图/);
 });

@@ -519,7 +519,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     if (isReadonly || busy || !viewControlEnabled) return;
     const next = selectedViewAngleIds.includes(itemId)
       ? selectedViewAngleIds.filter((item) => item !== itemId)
-      : [...selectedViewAngleIds, itemId].slice(0, 4);
+      : [...selectedViewAngleIds, itemId];
     update({ viewAngles: next });
   };
 
@@ -1278,7 +1278,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-semibold text-cyan-100">视角控制</span>
               <span className="min-w-0 flex-1 truncate text-[9px] text-white/40">
-                融入第一句话，1 项控视角，4 项生成四视图
+                融入第一句话，1 项控视角，多项生成多视图
               </span>
               <label className="flex items-center gap-1 text-[10px] text-white/60">
                 <input
@@ -1304,7 +1304,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             <div className="flex flex-wrap gap-1">
               {viewAngleOptions.map((item) => {
                 const active = selectedViewAngleIds.includes(item.id);
-                const disabled = isReadonly || busy || !viewControlEnabled || (!active && selectedViewAngleIds.length >= 4);
+                const disabled = isReadonly || busy || !viewControlEnabled;
                 return (
                   <button
                     key={item.id}

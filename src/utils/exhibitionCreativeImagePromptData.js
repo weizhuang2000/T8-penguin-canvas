@@ -137,7 +137,7 @@ export function normalizeExhibitionCreativeViewAngles(value, options = EXHIBITIO
   const source = Array.isArray(options) && options.length > 0 ? options : EXHIBITION_CREATIVE_VIEW_ANGLES;
   const labelsById = new Map(source.map((item) => [String(item.id), String(item.label || item.id).trim()]));
   const ids = Array.isArray(value) ? value.map((item) => String(item || '').trim()).filter(Boolean) : [];
-  return Array.from(new Set(ids.filter((id) => labelsById.has(id)))).slice(0, 4).map((id) => ({
+  return Array.from(new Set(ids.filter((id) => labelsById.has(id)))).map((id) => ({
     id,
     label: labelsById.get(id) || id,
   }));
@@ -147,7 +147,7 @@ export function exhibitionCreativeViewAnglesText(value, options = EXHIBITION_CRE
   const items = normalizeExhibitionCreativeViewAngles(value, options).map((item) => item.label).filter(Boolean);
   if (items.length === 0) return '';
   if (items.length === 1) return `控制生图视角为${items[0]}`;
-  return `生成四视图，分别包含${items.join('、')}`;
+  return `生成${items.length === 4 ? '四' : items.length}视图，分别包含${items.join('、')}`;
 }
 
 export function normalizeExhibitionCreativeBrief(value) {
@@ -238,8 +238,8 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   } else {
     lines.push('【手动空间尺寸约束】');
     lines.push(spaceSizeText
-      ? `没有输入空间图，请在${spaceSizeText}的室内空间体量内生成方案，空间结构、开口位置、墙体组织、吊顶形式和参观动线可以自由发挥，但必须保持真实尺度关系、人体尺度和可落地的建筑室内逻辑。`
-      : '没有输入空间图，请自由设计室内建筑空间结构，但必须保持真实尺度关系、人体尺度和可落地的建筑室内逻辑。');
+      ? `请在${spaceSizeText}的室内空间体量内生成方案，空间结构、开口位置、墙体组织、吊顶形式和参观动线可以自由发挥，但必须保持真实尺度关系、人体尺度和可落地的建筑室内逻辑。`
+      : '请自由设计室内建筑空间结构，但必须保持真实尺度关系、人体尺度和可落地的建筑室内逻辑。');
     lines.push(`需要在该空间内植入${insertItemsText}；展陈内容、建筑空间和动线都应控制在上述空间体量内，不要生成明显超出尺寸边界的大跨空间、超高空间或不可信尺度。`);
   }
   if (excludeItemsText) {
