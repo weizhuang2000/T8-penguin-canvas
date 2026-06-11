@@ -235,6 +235,17 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
         const handles = handleMap.get(sid) || new Set<string | null>([null]);
 
         // 显式素材集: 按内部顺序透传；跳过旧字段读取，避免素材集同步字段造成重复。
+        if ((n as any)?.type === 'exhibition-outline-split') {
+          const wantText = handles.has('outline-text') || handles.has(null);
+          const wantImages = handles.has('outline-image') || handles.has(null);
+          if (wantText) pushUniqueText(out.texts, ud.outputText || ud.text || ud.prompt);
+          if (wantImages) {
+            const arr = Array.isArray(ud.imageUrls) ? ud.imageUrls : [];
+            arr.forEach((url: any) => pushUnique(out.images, url));
+          }
+          continue;
+        }
+
         if ((n as any)?.type === 'material-set' && Array.isArray(ud.materialSetItems)) {
           const buckets = collectMaterialSetBucketsFromData(ud);
           buckets.text.forEach((item) => pushTextSegment(out.texts, valueOfMaterialSetItem(item)));

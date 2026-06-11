@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Handle, Position, useReactFlow, type Node, type NodeProps } from '@xyflow/react';
-import { Brain, Clipboard, FileText, Layers3, Loader2, Play, Sparkles, Upload } from 'lucide-react';
+import { Brain, Clipboard, FileText, Image as ImageIcon, Layers3, Loader2, Play, Sparkles, Upload } from 'lucide-react';
 import { PORT_COLOR } from '../../config/portTypes';
 import { DEFAULT_LLM_MODEL } from '../../providers/models';
 import { extractDocument, MAX_DOCUMENT_FILE_SIZE, MAX_DOCUMENT_FILE_SIZE_MB, type ExtractedDocument } from '../../services/api';
@@ -29,6 +29,8 @@ import {
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
+const OUTLINE_TEXT_HANDLE = 'outline-text';
+const OUTLINE_IMAGE_HANDLE = 'outline-image';
 
 function documentLabel(meta?: Omit<ExtractedDocument, 'text'> | null) {
   if (!meta) return '未选择文档';
@@ -51,6 +53,18 @@ function formatOneSegment(segment: ExhibitionOutlineSegment, index: number) {
   if (segment.keywords.length > 0) lines.push(`关键词：${segment.keywords.join('、')}`);
   if (segment.sourceHint) lines.push(`依据：${segment.sourceHint}`);
   return lines.join('\n');
+}
+
+function clampOutputSegmentIndex(value: unknown, count: number) {
+  if (count <= 0) return 0;
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(count - 1, n));
+}
+
+function segmentIndexForDocumentImage(imageIndex: number, imageCount: number, segmentCount: number) {
+  if (segmentCount <= 0 || imageCount <= 0) return 0;
+  return Math.min(segmentCount - 1, Math.floor((imageIndex * segmentCount) / Math.max(1, imageCount)));
 }
 
 const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
@@ -91,29 +105,56 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
     () => (Array.isArray(d.documentImages) ? d.documentImages : []),
     [d.documentImages],
   );
+  const outputSegmentIndex = clampOutputSegmentIndex(d.outputSegmentIndex, segments.length);
+  const selectedSegment = segments[outputSegmentIndex] || null;
+  const selectedSegmentText = useMemo(
+    () => selectedSegment ? formatOneSegment(selectedSegment, outputSegmentIndex) : '',
+    [outputSegmentIndex, selectedSegment],
+  );
+  const selectedSegmentImages = useMemo(
+    () => documentImages
+      .filter((image: any, index: number) => segmentIndexForDocumentImage(index, documentImages.length, segments.length) === outputSegmentIndex)
+      .map((image: any) => (typeof image?.url === 'string' ? image.url.trim() : ''))
+      .filter(Boolean),
+    [documentImages, outputSegmentIndex, segments.length],
+  );
 
   useEffect(() => {
     const textSegments = segments.map((segment, index) => {
       return formatOneSegment(segment, index);
     });
     const nextStatus = segments.length > 0 ? 'success' : (status === 'error' ? 'error' : 'idle');
+    const nextOutputSegmentIndex = clampOutputSegmentIndex(d.outputSegmentIndex, segments.length);
+    const nextOutputText = textSegments[nextOutputSegmentIndex] || '';
+    const nextImageUrls = documentImages
+      .filter((image: any, index: number) => segmentIndexForDocumentImage(index, documentImages.length, segments.length) === nextOutputSegmentIndex)
+      .map((image: any) => (typeof image?.url === 'string' ? image.url.trim() : ''))
+      .filter(Boolean);
     const changed =
       JSON.stringify(d.textSegments || []) !== JSON.stringify(textSegments) ||
-      (d.text || '') !== outputText ||
-      (d.outputText || '') !== outputText ||
-      (d.prompt || '') !== outputText ||
+      d.outputSegmentIndex !== nextOutputSegmentIndex ||
+      (d.text || '') !== nextOutputText ||
+      (d.outputText || '') !== nextOutputText ||
+      (d.prompt || '') !== nextOutputText ||
+      JSON.stringify(d.imageUrls || []) !== JSON.stringify(nextImageUrls) ||
+      (d.imageUrl || '') !== (nextImageUrls[0] || '') ||
+      JSON.stringify(d.urls || []) !== JSON.stringify(nextImageUrls) ||
       d.status !== nextStatus && !busy;
     if (changed && !busy) {
       update({
         textSegments,
         segments: textSegments,
-        text: outputText,
-        outputText,
-        prompt: outputText,
+        outputSegmentIndex: nextOutputSegmentIndex,
+        text: nextOutputText,
+        outputText: nextOutputText,
+        prompt: nextOutputText,
+        imageUrl: nextImageUrls[0] || '',
+        imageUrls: nextImageUrls,
+        urls: nextImageUrls,
         status: nextStatus,
       });
     }
-  }, [busy, d.outputText, d.prompt, d.segments, d.status, d.text, d.textSegments, outputText, segments, status, update]);
+  }, [busy, d.imageUrl, d.imageUrls, d.outputSegmentIndex, d.outputText, d.prompt, d.segments, d.status, d.text, d.textSegments, d.urls, documentImages, segments, status, update]);
 
   const createOutlineMaterialSets = useCallback((segmentsForItems: ExhibitionOutlineSegment[]) => {
     if (isReadonly) return;
@@ -138,10 +179,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
       .map((image: any, index: number): MaterialSetItem | null => {
         const url = typeof image?.url === 'string' ? image.url.trim() : '';
         if (!url) return null;
-        const segmentIndex = Math.min(
-          normalizedSegments.length - 1,
-          Math.floor((index * normalizedSegments.length) / Math.max(1, documentImages.length)),
-        );
+        const segmentIndex = segmentIndexForDocumentImage(index, documentImages.length, normalizedSegments.length);
         const segment = normalizedSegments[segmentIndex];
         const ext = String(image.filename || image.name || '').match(/\.[a-z0-9]+$/i)?.[0] || '.png';
         return {
@@ -224,16 +262,16 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
         update({ status: 'error', error: `未识别到 ${outlineLevel} 级目录标题，请调整目录级别或使用自动/指定数量拆分`, progress: '' });
         throw new Error('未识别到指定目录级别');
       }
-      const nextText = formatOutlineSegments(nextSegments);
       const textSegments = nextSegments.map((segment, index) => formatOneSegment(segment, index));
       update({
         outlineSegments: nextSegments,
         resolvedSegmentCount: nextSegments.length,
+        outputSegmentIndex: 0,
         textSegments,
         segments: textSegments,
-        text: nextText,
-        outputText: nextText,
-        prompt: nextText,
+        text: textSegments[0] || '',
+        outputText: textSegments[0] || '',
+        prompt: textSegments[0] || '',
         status: 'success',
         progress: '',
         error: '',
@@ -272,18 +310,18 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
       });
       const parsed = parseExhibitionOutlineSplitJson(response.content || '');
       const nextSegments = parsed.segments;
-      const nextText = formatOutlineSegments(nextSegments);
       const textSegments = nextSegments.map((segment, index) => {
         return formatOneSegment(segment, index);
       });
       update({
         outlineSegments: nextSegments,
         resolvedSegmentCount: nextSegments.length,
+        outputSegmentIndex: 0,
         textSegments,
         segments: textSegments,
-        text: nextText,
-        outputText: nextText,
-        prompt: nextText,
+        text: textSegments[0] || '',
+        outputText: textSegments[0] || '',
+        prompt: textSegments[0] || '',
         status: 'success',
         progress: '',
         error: '',
@@ -293,16 +331,16 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
     } catch (error: any) {
       const fallback = fallbackOutlineSplit(text, segmentCount);
       if (fallback.length > 0) {
-        const nextText = formatOutlineSegments(fallback);
         const textSegments = fallback.map((segment, index) => formatOneSegment(segment, index));
         update({
           outlineSegments: fallback,
           resolvedSegmentCount: fallback.length,
+          outputSegmentIndex: 0,
           textSegments,
           segments: textSegments,
-          text: nextText,
-          outputText: nextText,
-          prompt: nextText,
+          text: textSegments[0] || '',
+          outputText: textSegments[0] || '',
+          prompt: textSegments[0] || '',
           status: 'success',
           progress: '',
           error: `LLM 拆分失败，已使用规则分块：${llmErrorMessage(error)}`,
@@ -333,6 +371,10 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
         outlineSegments: [],
         textSegments: [],
         segments: [],
+        outputSegmentIndex: 0,
+        imageUrl: '',
+        imageUrls: [],
+        urls: [],
         text: '',
         outputText: '',
         prompt: '',
@@ -348,8 +390,8 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
   }, [busy, isReadonly, update]);
 
   const copyOutput = async () => {
-    if (!outputText) return;
-    await navigator.clipboard?.writeText(outputText);
+    if (!selectedSegmentText) return;
+    await navigator.clipboard?.writeText(selectedSegmentText);
   };
 
   useRunTrigger(id, runSplit, 'text');
@@ -357,7 +399,10 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
   return (
     <div className={`t8-node relative w-[620px] transition-all ${selected ? 'ring-2 ring-cyan-300' : ''}`}>
       <Handle type="target" position={Position.Left} className="!border-0" style={{ background: PORT_COLOR.text }} />
-      <Handle type="source" position={Position.Right} className="!border-0" style={{ background: PORT_COLOR.text }} />
+      <Handle id={OUTLINE_TEXT_HANDLE} type="source" position={Position.Right} className="!border-0" style={{ top: '42%', background: PORT_COLOR.text }} />
+      <Handle id={OUTLINE_IMAGE_HANDLE} type="source" position={Position.Right} className="!border-0" style={{ top: '58%', background: PORT_COLOR.image }} />
+      <div className="pointer-events-none absolute right-2 top-[42%] z-10 -translate-y-1/2 text-[9px] font-semibold text-white/45">文本</div>
+      <div className="pointer-events-none absolute right-2 top-[58%] z-10 -translate-y-1/2 text-[9px] font-semibold text-white/45">图片</div>
 
       <div className="t8-node-header flex items-center gap-2 rounded-t-[inherit] px-3 py-2">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-current/20 bg-current/10">
@@ -499,6 +544,34 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
             {busy ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
             {busy ? (d.progress || '处理中...') : '拆分并总结'}
           </button>
+        </section>
+
+        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+          <div className="flex items-center gap-1.5">
+            <ImageIcon size={13} className="text-cyan-200" />
+            <span className="text-[11px] font-semibold text-cyan-100">输出单元</span>
+            <span className="ml-auto text-[10px] text-white/45">
+              {segments.length > 0 ? `文本 1 条 · 图片 ${selectedSegmentImages.length} 张` : '等待拆分'}
+            </span>
+          </div>
+          <select
+            className={FIELD}
+            value={outputSegmentIndex}
+            disabled={isReadonly || busy || segments.length === 0}
+            onChange={(event) => update({ outputSegmentIndex: clampOutputSegmentIndex(event.target.value, segments.length) })}
+          >
+            {segments.length > 0 ? segments.map((segment, index) => (
+              <option key={`${segment.title}-${index}`} value={index}>
+                {`单元 ${index + 1} · ${segment.title}`}
+              </option>
+            )) : (
+              <option value={0}>暂无可输出单元</option>
+            )}
+          </select>
+          <div className="grid grid-cols-2 gap-2 text-[10px] text-white/55">
+            <div className="rounded border border-white/10 bg-black/15 px-2 py-1.5">文本口输出当前单元摘要</div>
+            <div className="rounded border border-white/10 bg-black/15 px-2 py-1.5">图片口输出当前单元图片素材集</div>
+          </div>
         </section>
 
         <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">

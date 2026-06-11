@@ -398,6 +398,10 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     outlineSegments: [],
     textSegments: [],
     segments: [],
+    outputSegmentIndex: 0,
+    imageUrl: '',
+    imageUrls: [],
+    urls: [],
     prompt: '',
     outputText: '',
     text: '',
@@ -4134,6 +4138,57 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
       // === v1.2.8.3: FramePair 双端口专属路径 ===
       // 不走通用 imageUrls 聚合 (FramePair 已不再写 imageUrl/imageUrls), 按 first/last
       // 各创建一个带 sourceHandle 的 OutputNode, useUpstreamMaterials 按 handle 正确过滤到对应帧。
+      if (t === 'exhibition-outline-split') {
+        const text = typeof d.outputText === 'string' ? d.outputText : '';
+        const images = Array.isArray(d.imageUrls) ? d.imageUrls.filter((u: any) => typeof u === 'string' && u) : [];
+        if (!text && images.length === 0) continue;
+        const sig = `outline-split:${d.outputSegmentIndex ?? 0}:${text}|${images.join('|')}`;
+        if (autoOutputProcessedRef.current.get(n.id) === sig) continue;
+        const usedHandles = new Set<string | null>();
+        for (const e of edges) {
+          if (e.source !== n.id) continue;
+          usedHandles.add((e as any).sourceHandle ?? null);
+        }
+        const need: Array<'outline-text' | 'outline-image'> = [];
+        if (text && !usedHandles.has('outline-text') && !usedHandles.has(null)) need.push('outline-text');
+        if (images.length > 0 && !usedHandles.has('outline-image')) need.push('outline-image');
+        newSigPatches.push([n.id, sig]);
+        if (need.length === 0) continue;
+        const srcRect = rectOf(n);
+        const baseX = (n.position?.x ?? 0) + srcRect.w + 80;
+        const outSize = defaultSizeOf('output');
+        const groupH = (need.length - 1) * 360 + outSize.h;
+        const baseY = (n.position?.y ?? 0) + srcRect.h / 2 - groupH / 2;
+        const desired: PlacementRect[] = need.map((_, i) => ({
+          x: baseX,
+          y: baseY + i * 360,
+          w: outSize.w,
+          h: outSize.h,
+        }));
+        const offset = placeBatchNodes(desired, [...nodes, ...pendingPlacedNodes], { source: 'placement:auto-outline-split', gap: 0 });
+        for (let i = 0; i < need.length; i++) {
+          const h = need[i];
+          const newId = `output-auto-${n.id}-${Date.now()}-${h}-${Math.random().toString(36).slice(2, 6)}`;
+          const newNode: Node = {
+            id: newId,
+            type: 'output',
+            position: { x: baseX + offset.dx, y: baseY + i * 360 + offset.dy },
+            data: {},
+            selected: false,
+          } as Node;
+          toAddNodes.push(newNode);
+          pendingPlacedNodes.push(newNode);
+          toAddEdges.push({
+            id: `e-auto-${newId}`,
+            source: n.id,
+            target: newId,
+            sourceHandle: h,
+            type: 'deletable',
+          } as Edge);
+        }
+        continue;
+      }
+
       if (t === 'frame-pair') {
         const first = typeof d.firstFrameUrl === 'string' ? d.firstFrameUrl : '';
         const last = typeof d.lastFrameUrl === 'string' ? d.lastFrameUrl : '';

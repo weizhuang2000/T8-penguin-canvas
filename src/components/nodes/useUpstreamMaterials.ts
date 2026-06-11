@@ -139,6 +139,21 @@ export function useUpstreamMaterials(nodeId: string): UpstreamMaterials {
 
       // 显式素材集: 保留素材集内部顺序，并用序号 key 避免相同 URL 被全局去重误删。
       // 同时跳过下面的旧字段读取，避免 imageUrls/textSegments 双写后重复出现。
+      if (n.type === 'exhibition-outline-split') {
+        const wantText = handles.has('outline-text') || handles.has(null);
+        const wantImages = handles.has('outline-image') || handles.has(null);
+        if (wantText) {
+          pushText(sid, ud.outputText || ud.text || ud.prompt, `outline-split:${sid}:selected-text`, '当前单元文本', textMeta);
+        }
+        if (wantImages) {
+          const arr = Array.isArray(ud.imageUrls) ? ud.imageUrls : [];
+          arr.forEach((url: any, index: number) => {
+            pushUrl(sid, 'image', url, images, `outline-split:${sid}:selected-image:${index}`, `当前单元图片 ${index + 1}`);
+          });
+        }
+        continue;
+      }
+
       if (n.type === 'material-set' && Array.isArray(ud.materialSetItems)) {
         const buckets = collectMaterialSetBucketsFromData(ud);
         buckets.text.forEach((item, index) => {
