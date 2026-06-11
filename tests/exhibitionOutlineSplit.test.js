@@ -6,8 +6,10 @@ import {
   fallbackOutlineSplit,
   formatOutlineSegments,
   MAX_OUTLINE_SEGMENT_COUNT,
+  normalizeOutlineLevel,
   normalizeOutlineSegmentCount,
   parseExhibitionOutlineSplitJson,
+  splitOutlineByHeadingLevel,
 } from '../src/utils/exhibitionOutlineSplitData.js';
 
 test('exhibition outline split prompt supports manual and auto modes', () => {
@@ -72,4 +74,29 @@ test('exhibition outline split fallback chunks text by requested count', () => {
   assert.equal(MAX_OUTLINE_SEGMENT_COUNT, 100);
   assert.equal(normalizeOutlineSegmentCount(999), 100);
   assert.match(formatOutlineSegments(segments), /规则分块/);
+});
+test('exhibition outline split chunks by heading level', () => {
+  const source = [
+    '一、序厅',
+    '城市精神与展览开场。',
+    '（一）源起',
+    '讲述城市起源。',
+    '（二）使命',
+    '讲述时代使命。',
+    '二、成果展区',
+    '产业平台与创新成果。',
+    '（一）产业',
+    '重点产业内容。',
+  ].join('\n');
+
+  const top = splitOutlineByHeadingLevel(source, 1);
+  assert.equal(top.length, 2);
+  assert.equal(top.reduce((sum, segment) => sum + segment.weightPercent, 0), 100);
+  assert.match(top[0].title, /序厅/);
+  assert.match(top[1].summary, /产业平台/);
+
+  const second = splitOutlineByHeadingLevel(source, 2);
+  assert.equal(second.length, 3);
+  assert.match(second[0].summary, /讲述城市起源/);
+  assert.equal(normalizeOutlineLevel(99), 6);
 });

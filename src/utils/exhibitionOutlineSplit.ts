@@ -4,11 +4,13 @@ import {
   fallbackOutlineSplit,
   formatOutlineSegments,
   MAX_OUTLINE_SEGMENT_COUNT,
+  normalizeOutlineLevel,
   normalizeOutlineSegmentCount,
   normalizeOutlineSegments,
   normalizeOutlineSplitMode,
   normalizeWeightPercents,
   parseExhibitionOutlineSplitJson,
+  splitOutlineByHeadingLevel,
 } from './exhibitionOutlineSplitData.js';
 
 export type {
@@ -23,9 +25,11 @@ export {
   fallbackOutlineSplit,
   formatOutlineSegments,
   MAX_OUTLINE_SEGMENT_COUNT,
+  normalizeOutlineLevel,
   normalizeOutlineSegmentCount,
   normalizeOutlineSegments,
   normalizeOutlineSplitMode,
   normalizeWeightPercents,
   parseExhibitionOutlineSplitJson,
+  splitOutlineByHeadingLevel,
 };

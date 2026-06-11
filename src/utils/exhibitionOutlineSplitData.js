@@ -1,4 +1,5 @@
 export function normalizeOutlineSplitMode(value) {
+  if (value === 'heading') return 'heading';
   return value === 'auto' ? 'auto' : 'manual';
 }
 
@@ -7,6 +8,11 @@ export const MAX_OUTLINE_SEGMENT_COUNT = 100;
 export function normalizeOutlineSegmentCount(value) {
   const number = Math.floor(Number(value) || 4);
   return Math.max(1, Math.min(MAX_OUTLINE_SEGMENT_COUNT, number));
+}
+
+export function normalizeOutlineLevel(value) {
+  const number = Math.floor(Number(value) || 1);
+  return Math.max(1, Math.min(6, number));
 }
 
 export function cleanOutlineText(value, max = 60000) {
@@ -175,6 +181,80 @@ export function fallbackOutlineSplit(sourceText, segmentCount) {
   }];
   const weights = normalizeWeightPercents(fallback.map((segment) => segment.summary.length), fallback.length);
   return fallback.map((segment, index) => ({
+    ...segment,
+    weightPercent: weights[index] || 0,
+  }));
+}
+
+function headingInfoOfLine(value) {
+  const line = String(value || '').trim();
+  if (!line) return null;
+
+  const markdown = line.match(/^(#{1,6})\s+(.+)$/);
+  if (markdown) {
+    return { level: markdown[1].length, title: markdown[2].trim() };
+  }
+
+  const numbered = line.match(/^(\d+(?:[.．]\d+)*)(?:[.．、]|\s+)\s*(\S.*)$/);
+  if (numbered && !/^\d{4}$/.test(numbered[1])) {
+    return { level: numbered[1].split(/[.．]/).filter(Boolean).length, title: numbered[2].trim() };
+  }
+
+  const chapter = line.match(/^第[一二三四五六七八九十百千万\d]+(部分|[章节篇卷部])[：:、\s-]*(\S.*)?$/);
+  if (chapter) {
+    const marker = chapter[1];
+    return {
+      level: marker === '节' ? 2 : 1,
+      title: (chapter[2] || line).trim(),
+    };
+  }
+
+  const cnTop = line.match(/^[一二三四五六七八九十百千万]+[、.．]\s*(\S.*)$/);
+  if (cnTop) return { level: 1, title: cnTop[1].trim() };
+
+  const cnSecond = line.match(/^[（(][一二三四五六七八九十百千万\d]+[）)]\s*(\S.*)$/);
+  if (cnSecond) return { level: 2, title: cnSecond[1].trim() };
+
+  const alpha = line.match(/^[A-Za-z][.．、]\s*(\S.*)$/);
+  if (alpha) return { level: 2, title: alpha[1].trim() };
+
+  return null;
+}
+
+export function splitOutlineByHeadingLevel(sourceText, outlineLevel = 1) {
+  const text = cleanOutlineText(sourceText, 60000);
+  if (!text) return [];
+  const targetLevel = normalizeOutlineLevel(outlineLevel);
+  const lines = text.split('\n');
+  const headings = [];
+
+  lines.forEach((line, index) => {
+    const info = headingInfoOfLine(line);
+    if (info) headings.push({ ...info, index });
+  });
+
+  const targetHeadings = headings.filter((heading) => heading.level === targetLevel);
+  if (targetHeadings.length === 0) return [];
+
+  const segments = targetHeadings.map((heading, order) => {
+    const nextBoundary = headings.find((candidate) => (
+      candidate.index > heading.index && candidate.level <= targetLevel
+    ));
+    const endIndex = nextBoundary ? nextBoundary.index : lines.length;
+    const bodyLines = lines.slice(heading.index + 1, endIndex).map((line) => line.trim()).filter(Boolean);
+    const body = bodyLines.join('\n');
+    const summary = cleanOutlineText(body || lines[heading.index] || heading.title, 1200);
+    return {
+      title: cleanOutlineText(heading.title || `目录 ${order + 1}`, 80),
+      summary,
+      keywords: [],
+      weightPercent: 0,
+      sourceHint: `目录 ${targetLevel} 级 ${order + 1}/${targetHeadings.length}`,
+    };
+  }).filter((segment) => segment.summary);
+
+  const weights = normalizeWeightPercents(segments.map((segment) => segment.summary.length), segments.length);
+  return segments.map((segment, index) => ({
     ...segment,
     weightPercent: weights[index] || 0,
   }));

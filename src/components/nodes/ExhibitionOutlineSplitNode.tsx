@@ -18,10 +18,12 @@ import {
   fallbackOutlineSplit,
   formatOutlineSegments,
   MAX_OUTLINE_SEGMENT_COUNT,
+  normalizeOutlineLevel,
   normalizeOutlineSegmentCount,
   normalizeOutlineSegments,
   normalizeOutlineSplitMode,
   parseExhibitionOutlineSplitJson,
+  splitOutlineByHeadingLevel,
   type ExhibitionOutlineSegment,
 } from '../../utils/exhibitionOutlineSplit';
 
@@ -73,6 +75,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
 
   const splitMode = normalizeOutlineSplitMode(d.splitMode);
   const segmentCount = normalizeOutlineSegmentCount(d.segmentCount);
+  const outlineLevel = normalizeOutlineLevel(d.outlineLevel);
   const sourceText = String(d.sourceText || '');
   const upstreamText = useMemo(() => upstream.texts.map((item) => item.url).join('\n\n'), [upstream.texts]);
   const useUpstream = d.useUpstream !== false;
@@ -112,66 +115,133 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
     }
   }, [busy, d.outputText, d.prompt, d.segments, d.status, d.text, d.textSegments, outputText, segments, status, update]);
 
-  const createDocumentImageMaterialSet = useCallback((segmentsForNames: ExhibitionOutlineSegment[]) => {
-    if (isReadonly || documentImages.length === 0) return;
-    const items = documentImages
+  const createOutlineMaterialSets = useCallback((segmentsForItems: ExhibitionOutlineSegment[]) => {
+    if (isReadonly) return;
+    const normalizedSegments = normalizeOutlineSegments(segmentsForItems);
+    if (normalizedSegments.length === 0) return;
+
+    const stamp = Date.now();
+    const namePrefix = (segment: ExhibitionOutlineSegment, index: number) => {
+      const title = cleanOutlineText(segment.title || `单元 ${index + 1}`, 48);
+      return `${String(index + 1).padStart(2, '0')}-${title}`;
+    };
+
+    const textItems = normalizedSegments.map((segment, index): MaterialSetItem => ({
+      id: `ms-outline-text-${stamp}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+      kind: 'text',
+      text: formatOneSegment(segment, index),
+      name: namePrefix(segment, index),
+      mime: 'text/plain',
+    }));
+
+    const imageItems = documentImages
       .map((image: any, index: number): MaterialSetItem | null => {
         const url = typeof image?.url === 'string' ? image.url.trim() : '';
         if (!url) return null;
-        const segment = segmentsForNames[index] || segmentsForNames[segmentsForNames.length - 1];
-        const title = cleanOutlineText(segment?.title || `单元 ${index + 1}`, 48);
+        const segmentIndex = Math.min(
+          normalizedSegments.length - 1,
+          Math.floor((index * normalizedSegments.length) / Math.max(1, documentImages.length)),
+        );
+        const segment = normalizedSegments[segmentIndex];
         const ext = String(image.filename || image.name || '').match(/\.[a-z0-9]+$/i)?.[0] || '.png';
         return {
-          id: `ms-doc-image-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+          id: `ms-outline-image-${stamp}-${index}-${Math.random().toString(36).slice(2, 7)}`,
           kind: 'image',
           url,
-          name: `${String(index + 1).padStart(2, '0')}-${title}${ext}`,
+          name: `${namePrefix(segment, segmentIndex)}-${String(index + 1).padStart(2, '0')}${ext}`,
           size: typeof image.size === 'number' ? image.size : undefined,
           mime: typeof image.mime === 'string' ? image.mime : 'image/*',
         };
       })
       .filter(Boolean) as MaterialSetItem[];
-    if (items.length === 0) return;
 
     const nodes = rf.getNodes();
     const me = rf.getNode(id);
     const myW = (me as any)?.measured?.width || (me as any)?.width || 620;
     const baseX = (me?.position?.x ?? 0) + myW + 80;
-    const baseY = (me?.position?.y ?? 0) + 340;
-    const dataPatch = {
-      ...materialSetItemsToData('image', items),
-      label: '文档图片素材集',
+    const baseY = (me?.position?.y ?? 0) + 300;
+
+    const upsertMaterialSet = (
+      role: 'outline-text' | 'outline-image',
+      dataPatch: Record<string, any>,
+      yOffset: number,
+      legacyImage = false,
+    ) => {
+      const existing = nodes.find((node) => {
+        if (node.type !== 'material-set') return false;
+        const nd = (node.data as any) || {};
+        if (nd.sourceOutlineNodeId !== id) return false;
+        if (nd.outlineMaterialSetRole === role) return true;
+        return legacyImage && nd.autoFromOutlineDocumentImages === true;
+      });
+      if (existing) {
+        rf.setNodes((current) => current.map((node) => (
+          node.id === existing.id
+            ? { ...node, data: { ...(node.data as any), ...dataPatch } }
+            : node
+        )));
+        return;
+      }
+      const pos = placeSingleNode(baseX, baseY + yOffset, 'material-set', nodes, { source: `placement:outline-material-set:${id}:${role}` });
+      const newNode: Node = {
+        id: `material-set-${role}-${id}-${stamp}-${Math.random().toString(36).slice(2, 6)}`,
+        type: 'material-set',
+        position: pos,
+        selected: false,
+        data: dataPatch,
+      };
+      rf.addNodes(newNode);
+    };
+
+    upsertMaterialSet('outline-text', {
+      ...materialSetItemsToData('text', textItems),
+      label: '大纲文本素材集',
       sourceDocumentName: d.documentMeta?.name || '',
       sourceOutlineNodeId: id,
-      autoFromOutlineDocumentImages: true,
-    };
-    const existing = nodes.find((node) => (
-      node.type === 'material-set' &&
-      (node.data as any)?.autoFromOutlineDocumentImages === true &&
-      (node.data as any)?.sourceOutlineNodeId === id
-    ));
-    if (existing) {
-      rf.setNodes((current) => current.map((node) => (
-        node.id === existing.id
-          ? { ...node, data: { ...(node.data as any), ...dataPatch } }
-          : node
-      )));
-      return;
+      outlineMaterialSetRole: 'outline-text',
+      autoFromOutlineSegments: true,
+    }, 0);
+
+    if (imageItems.length > 0) {
+      upsertMaterialSet('outline-image', {
+        ...materialSetItemsToData('image', imageItems),
+        label: '大纲图片素材集',
+        sourceDocumentName: d.documentMeta?.name || '',
+        sourceOutlineNodeId: id,
+        outlineMaterialSetRole: 'outline-image',
+        autoFromOutlineDocumentImages: true,
+      }, 250, true);
     }
-    const pos = placeSingleNode(baseX, baseY, 'material-set', nodes, { source: `placement:outline-document-images:${id}` });
-    const newNode: Node = {
-      id: `material-set-outline-doc-images-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      type: 'material-set',
-      position: pos,
-      selected: false,
-      data: dataPatch,
-    };
-    rf.addNodes(newNode);
   }, [d.documentMeta?.name, documentImages, id, isReadonly, rf]);
 
   const runSplit = useCallback(async () => {
     if (isReadonly || busy) return;
     const text = effectiveSourceText.trim();
+    if (splitMode === 'heading' && text) {
+      update({ status: 'splitting', progress: `按 ${outlineLevel} 级目录拆分中...`, error: '' });
+      const nextSegments = splitOutlineByHeadingLevel(text, outlineLevel);
+      if (nextSegments.length === 0) {
+        update({ status: 'error', error: `未识别到 ${outlineLevel} 级目录标题，请调整目录级别或使用自动/指定数量拆分`, progress: '' });
+        throw new Error('未识别到指定目录级别');
+      }
+      const nextText = formatOutlineSegments(nextSegments);
+      const textSegments = nextSegments.map((segment, index) => formatOneSegment(segment, index));
+      update({
+        outlineSegments: nextSegments,
+        resolvedSegmentCount: nextSegments.length,
+        textSegments,
+        segments: textSegments,
+        text: nextText,
+        outputText: nextText,
+        prompt: nextText,
+        status: 'success',
+        progress: '',
+        error: '',
+        splitAt: Date.now(),
+      });
+      createOutlineMaterialSets(nextSegments);
+      return;
+    }
     if (!text) {
       update({ status: 'error', error: '请先导入文档、粘贴资料，或连接上游文本。', progress: '' });
       throw new Error('请先提供资料文本');
@@ -219,7 +289,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
         error: '',
         splitAt: Date.now(),
       });
-      createDocumentImageMaterialSet(nextSegments);
+      createOutlineMaterialSets(nextSegments);
     } catch (error: any) {
       const fallback = fallbackOutlineSplit(text, segmentCount);
       if (fallback.length > 0) {
@@ -238,13 +308,13 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
           error: `LLM 拆分失败，已使用规则分块：${llmErrorMessage(error)}`,
           splitAt: Date.now(),
         });
-        createDocumentImageMaterialSet(fallback);
+        createOutlineMaterialSets(fallback);
         return;
       }
       update({ status: 'error', error: llmErrorMessage(error), progress: '' });
       throw error;
     }
-  }, [activeLlmConfig?.id, busy, createDocumentImageMaterialSet, effectiveSourceText, extraInstruction, isReadonly, llmModel, projectTheme, segmentCount, splitMode, update]);
+  }, [activeLlmConfig?.id, busy, createOutlineMaterialSets, effectiveSourceText, extraInstruction, isReadonly, llmModel, outlineLevel, projectTheme, segmentCount, splitMode, update]);
 
   const pickDocument = useCallback(async (file?: File) => {
     if (!file || isReadonly || busy) return;
@@ -363,6 +433,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
               >
                 <option value="manual">指定单元数</option>
                 <option value="auto">自动判断</option>
+                <option value="heading">按目录级别</option>
               </select>
             </label>
             <label className="space-y-1">
@@ -373,11 +444,25 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
                 min={1}
                 max={MAX_OUTLINE_SEGMENT_COUNT}
                 value={segmentCount}
-                disabled={isReadonly || busy || splitMode === 'auto'}
+                disabled={isReadonly || busy || splitMode !== 'manual'}
                 onChange={(event) => update({ segmentCount: normalizeOutlineSegmentCount(event.target.value) })}
               />
             </label>
           </div>
+          {splitMode === 'heading' && (
+            <label className="space-y-1">
+              <span className="text-[10px] font-bold text-white/65">目录级别</span>
+              <input
+                className={FIELD}
+                type="number"
+                min={1}
+                max={6}
+                value={outlineLevel}
+                disabled={isReadonly || busy}
+                onChange={(event) => update({ outlineLevel: normalizeOutlineLevel(event.target.value) })}
+              />
+            </label>
+          )}
           <input
             className={FIELD}
             value={projectTheme}

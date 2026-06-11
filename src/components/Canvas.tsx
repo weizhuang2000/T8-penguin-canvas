@@ -387,6 +387,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
   'exhibition-outline-split': {
     splitMode: 'manual',
     segmentCount: 4,
+    outlineLevel: 1,
     useUpstream: true,
     projectTheme: '',
     extraInstruction: '',
