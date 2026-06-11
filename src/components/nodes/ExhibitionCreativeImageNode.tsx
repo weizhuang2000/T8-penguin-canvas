@@ -135,7 +135,10 @@ function firstImageFromData(data: any): string {
 function useInputSpaceImage(nodeId: string): string {
   const conns = useNodeConnections({ id: nodeId, handleType: 'target' });
   const sourceIds = useMemo(
-    () => Array.from(new Set(conns.map((conn: any) => conn.source).filter(Boolean))),
+    () => Array.from(new Set(conns
+      .filter((conn: any) => !conn.targetHandle || conn.targetHandle === 'space')
+      .map((conn: any) => conn.source)
+      .filter(Boolean))),
     [conns],
   );
   const nodesData = useNodesData(sourceIds);
@@ -146,6 +149,49 @@ function useInputSpaceImage(nodeId: string): string {
       if (url) return url;
     }
     return '';
+  }, [nodesData]);
+}
+
+function textValuesFromData(data: any): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (value: any) => {
+    if (typeof value !== 'string') return;
+    const text = value.trim();
+    if (!text || seen.has(text)) return;
+    seen.add(text);
+    out.push(text);
+  };
+  const arrayFields = ['textSegments', 'segments', 'texts'];
+  const arrayField = arrayFields.find((field) => Array.isArray(data?.[field]) && data[field].length > 0);
+  if (arrayField) {
+    data[arrayField].forEach(push);
+    return out;
+  }
+  push(data?.outputText);
+  push(data?.reply);
+  push(data?.prompt);
+  push(data?.text);
+  return out;
+}
+
+function useInputDocumentText(nodeId: string): string {
+  const conns = useNodeConnections({ id: nodeId, handleType: 'target' });
+  const sourceIds = useMemo(
+    () => Array.from(new Set(conns
+      .filter((conn: any) => conn.targetHandle === 'document-text')
+      .map((conn: any) => conn.source)
+      .filter(Boolean))),
+    [conns],
+  );
+  const nodesData = useNodesData(sourceIds);
+  return useMemo(() => {
+    const list = Array.isArray(nodesData) ? nodesData : [nodesData];
+    const texts: string[] = [];
+    for (const node of list) {
+      texts.push(...textValuesFromData((node as any)?.data || {}));
+    }
+    return texts.join('\n\n').trim();
   }, [nodesData]);
 }
 
@@ -349,6 +395,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const contentBusy = status === 'extracting' || status === 'summarizing';
   const pollAbortRef = useRef(false);
   const spaceImage = useInputSpaceImage(id);
+  const inputDocumentText = useInputDocumentText(id);
 
   const previewPrompt = useMemo(
     () => buildExhibitionCreativeImagePrompt({
@@ -389,6 +436,11 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       update(patch);
     }
   }, [d.outputText, d.prompt, d.referenceImages, d.text, previewPrompt, spaceImage, update]);
+
+  useEffect(() => {
+    if (!inputDocumentText || d.sourceText === inputDocumentText) return;
+    update({ sourceText: inputDocumentText, documentMeta: null });
+  }, [d.sourceText, inputDocumentText, update]);
 
   useEffect(() => {
     if (allowZhenzhenFallback || isExternalSelected || !firstImageAdvancedProvider) return;
@@ -981,6 +1033,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     >
       <Handle type="source" position={Position.Right} className="!bg-cyan-300 !border-0" />
       <Handle id="space" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-cyan-300" style={{ top: '30%' }} />
+      <Handle id="document-text" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-sky-300" style={{ top: '57%' }} />
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex h-8 w-8 items-center justify-center rounded bg-cyan-300/15 text-cyan-200">
           <Layers3 size={16} />

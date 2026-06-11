@@ -108,7 +108,7 @@ export const NODE_PORTS: Record<string, NodePorts> = {
   'exhibition-prompt': { inputs: ['text', 'image'], outputs: ['text', 'image'] },
   'elevation-prompt': { inputs: [], outputs: ['text'] },
   'exhibition-img2img': { inputs: ['image'], outputs: ['image'] },
-  'exhibition-creative-image': { inputs: ['image'], outputs: ['image'] },
+  'exhibition-creative-image': { inputs: ['text', 'image'], outputs: ['image'] },
   'exhibition-outline-split': { inputs: ['text'], outputs: ['text', 'image'] },
   'multi-angle-visual': { inputs: ['image'], outputs: ['text'] },
   'portrait-master': { inputs: ['text', 'metadata'], outputs: ['text', 'metadata'] },
