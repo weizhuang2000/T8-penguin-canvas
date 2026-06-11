@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Handle, Position, useReactFlow, type Node, type NodeProps } from '@xyflow/react';
 import { Brain, Clipboard, FileText, Layers3, Loader2, Play, Sparkles, Upload } from 'lucide-react';
 import { PORT_COLOR } from '../../config/portTypes';
 import { DEFAULT_LLM_MODEL } from '../../providers/models';
@@ -10,6 +10,8 @@ import { useCanvasStore } from '../../stores/canvas';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useUpstreamMaterials } from './useUpstreamMaterials';
+import { materialSetItemsToData, type MaterialSetItem } from '../../utils/materialSet';
+import { placeSingleNode } from '../../utils/nodePlacement';
 import {
   buildExhibitionOutlineSplitPrompt,
   cleanOutlineText,
@@ -52,6 +54,7 @@ function formatOneSegment(segment: ExhibitionOutlineSegment, index: number) {
 const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
+  const rf = useReactFlow();
   const fileRef = useRef<HTMLInputElement>(null);
   const upstream = useUpstreamMaterials(id);
   const activeCanvas = useCanvasStore((state) => state.canvases.find((canvas) => canvas.id === state.activeId) || null);
@@ -81,6 +84,11 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
   const status = String(d.status || 'idle');
   const busy = status === 'extracting' || status === 'splitting';
 
+  const documentImages = useMemo(
+    () => (Array.isArray(d.documentImages) ? d.documentImages : []),
+    [d.documentImages],
+  );
+
   useEffect(() => {
     const textSegments = segments.map((segment, index) => {
       return formatOneSegment(segment, index);
@@ -103,6 +111,63 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
       });
     }
   }, [busy, d.outputText, d.prompt, d.segments, d.status, d.text, d.textSegments, outputText, segments, status, update]);
+
+  const createDocumentImageMaterialSet = useCallback((segmentsForNames: ExhibitionOutlineSegment[]) => {
+    if (isReadonly || documentImages.length === 0) return;
+    const items = documentImages
+      .map((image: any, index: number): MaterialSetItem | null => {
+        const url = typeof image?.url === 'string' ? image.url.trim() : '';
+        if (!url) return null;
+        const segment = segmentsForNames[index] || segmentsForNames[segmentsForNames.length - 1];
+        const title = cleanOutlineText(segment?.title || `单元 ${index + 1}`, 48);
+        const ext = String(image.filename || image.name || '').match(/\.[a-z0-9]+$/i)?.[0] || '.png';
+        return {
+          id: `ms-doc-image-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+          kind: 'image',
+          url,
+          name: `${String(index + 1).padStart(2, '0')}-${title}${ext}`,
+          size: typeof image.size === 'number' ? image.size : undefined,
+          mime: typeof image.mime === 'string' ? image.mime : 'image/*',
+        };
+      })
+      .filter(Boolean) as MaterialSetItem[];
+    if (items.length === 0) return;
+
+    const nodes = rf.getNodes();
+    const me = rf.getNode(id);
+    const myW = (me as any)?.measured?.width || (me as any)?.width || 620;
+    const baseX = (me?.position?.x ?? 0) + myW + 80;
+    const baseY = (me?.position?.y ?? 0) + 340;
+    const dataPatch = {
+      ...materialSetItemsToData('image', items),
+      label: '文档图片素材集',
+      sourceDocumentName: d.documentMeta?.name || '',
+      sourceOutlineNodeId: id,
+      autoFromOutlineDocumentImages: true,
+    };
+    const existing = nodes.find((node) => (
+      node.type === 'material-set' &&
+      (node.data as any)?.autoFromOutlineDocumentImages === true &&
+      (node.data as any)?.sourceOutlineNodeId === id
+    ));
+    if (existing) {
+      rf.setNodes((current) => current.map((node) => (
+        node.id === existing.id
+          ? { ...node, data: { ...(node.data as any), ...dataPatch } }
+          : node
+      )));
+      return;
+    }
+    const pos = placeSingleNode(baseX, baseY, 'material-set', nodes, { source: `placement:outline-document-images:${id}` });
+    const newNode: Node = {
+      id: `material-set-outline-doc-images-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      type: 'material-set',
+      position: pos,
+      selected: false,
+      data: dataPatch,
+    };
+    rf.addNodes(newNode);
+  }, [d.documentMeta?.name, documentImages, id, isReadonly, rf]);
 
   const runSplit = useCallback(async () => {
     if (isReadonly || busy) return;
@@ -154,6 +219,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
         error: '',
         splitAt: Date.now(),
       });
+      createDocumentImageMaterialSet(nextSegments);
     } catch (error: any) {
       const fallback = fallbackOutlineSplit(text, segmentCount);
       if (fallback.length > 0) {
@@ -172,12 +238,13 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
           error: `LLM 拆分失败，已使用规则分块：${llmErrorMessage(error)}`,
           splitAt: Date.now(),
         });
+        createDocumentImageMaterialSet(fallback);
         return;
       }
       update({ status: 'error', error: llmErrorMessage(error), progress: '' });
       throw error;
     }
-  }, [activeLlmConfig?.id, busy, effectiveSourceText, extraInstruction, isReadonly, llmModel, projectTheme, segmentCount, splitMode, update]);
+  }, [activeLlmConfig?.id, busy, createDocumentImageMaterialSet, effectiveSourceText, extraInstruction, isReadonly, llmModel, projectTheme, segmentCount, splitMode, update]);
 
   const pickDocument = useCallback(async (file?: File) => {
     if (!file || isReadonly || busy) return;
@@ -191,6 +258,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
       const { text, ...documentMeta } = extracted;
       update({
         documentMeta,
+        documentImages: extracted.images || [],
         sourceText: text,
         outlineSegments: [],
         textSegments: [],
@@ -254,6 +322,9 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
           <div className="truncate text-[10px] text-white/55" title={documentLabel(d.documentMeta)}>
             {documentLabel(d.documentMeta)}
           </div>
+          {documentImages.length > 0 && (
+            <div className="text-[10px] text-cyan-100/70">已提取 {documentImages.length} 张文档图片，拆分后会生成图片素材集</div>
+          )}
           {Array.isArray(d.documentMeta?.warnings) && d.documentMeta.warnings.length > 0 && (
             <div className="text-[10px] text-amber-200/80">{d.documentMeta.warnings.join('；')}</div>
           )}

@@ -137,6 +137,14 @@ export interface ExtractedDocument {
   text: string;
   charCount: number;
   pageCount?: number;
+  images?: Array<{
+    filename: string;
+    url: string;
+    name: string;
+    size: number;
+    mime: string;
+    index: number;
+  }>;
   warnings: string[];
 }
 

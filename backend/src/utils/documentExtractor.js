@@ -1,11 +1,14 @@
 'use strict';
 
 const path = require('path');
+const fs = require('fs');
 const { inflateRawSync } = require('zlib');
+const config = require('../config');
 
 const MAX_EXTRACTED_CHARS = 120000;
 const MAX_DOCX_ENTRY_BYTES = 16 * 1024 * 1024;
 const MAX_DOCX_TOTAL_BYTES = 32 * 1024 * 1024;
+const MAX_DOCX_IMAGES = 200;
 const MIN_PDF_TEXT_CHARS = 10;
 const SUPPORTED_KINDS = new Set(['docx', 'pdf', 'txt']);
 const MIME_BY_KIND = {
@@ -17,6 +20,17 @@ const MIME_BY_KIND = {
   ]),
   pdf: new Set(['', 'application/octet-stream', 'application/pdf']),
   txt: new Set(['', 'application/octet-stream', 'text/plain']),
+};
+const IMAGE_MIME_BY_EXT = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.bmp': 'image/bmp',
+  '.webp': 'image/webp',
+  '.tif': 'image/tiff',
+  '.tiff': 'image/tiff',
+  '.svg': 'image/svg+xml',
 };
 
 function documentKind(filename) {
@@ -183,6 +197,114 @@ function wordXmlToText(xml) {
   );
 }
 
+function safeOutputStem(value) {
+  return String(value || 'document')
+    .replace(/\.[^.]+$/, '')
+    .replace(/[^\w\u4e00-\u9fa5-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 60) || 'document';
+}
+
+function xmlAttr(value, attr) {
+  const match = String(value || '').match(new RegExp(`${attr}="([^"]+)"`));
+  return match ? decodeXmlEntities(match[1]) : '';
+}
+
+function relTargetToEntryName(target) {
+  const clean = String(target || '').replace(/\\/g, '/').trim();
+  if (!clean || /^[a-z][a-z0-9+.-]*:/i.test(clean)) return '';
+  const normalized = path.posix.normalize(clean.startsWith('/') ? clean.slice(1) : `word/${clean}`);
+  if (normalized.startsWith('../') || normalized.includes('/../')) return '';
+  return normalized;
+}
+
+function parseDocxRelationships(xml) {
+  const rels = new Map();
+  const re = /<Relationship\b[^>]*>/gi;
+  let match;
+  while ((match = re.exec(String(xml || '')))) {
+    const tag = match[0];
+    const id = xmlAttr(tag, 'Id');
+    const target = xmlAttr(tag, 'Target');
+    const type = xmlAttr(tag, 'Type');
+    if (!id || !target) continue;
+    if (type && !/image/i.test(type) && !/\bmedia\//i.test(target)) continue;
+    const entryName = relTargetToEntryName(target);
+    if (entryName) rels.set(id, entryName);
+  }
+  return rels;
+}
+
+function imageRelationshipIdsInOrder(documentXml) {
+  const ids = [];
+  const seen = new Set();
+  const re = /\b(?:r:embed|r:id)="([^"]+)"/gi;
+  let match;
+  while ((match = re.exec(String(documentXml || '')))) {
+    const id = decodeXmlEntities(match[1]);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
+function writeDocxImageOutput(buffer, originalName, index, sourceName, mime) {
+  fs.mkdirSync(config.OUTPUT_DIR, { recursive: true });
+  const ext = path.extname(sourceName).toLowerCase() || '.png';
+  const stem = safeOutputStem(originalName);
+  const filename = `docimg_${Date.now()}_${index + 1}_${stem}${ext}`;
+  const filePath = path.join(config.OUTPUT_DIR, filename);
+  fs.writeFileSync(filePath, buffer);
+  return {
+    filename,
+    url: `/files/output/${filename}`,
+    name: path.basename(sourceName),
+    size: buffer.length,
+    mime,
+    index: index + 1,
+  };
+}
+
+function extractDocxImages(buffer, originalName) {
+  const entries = listZipEntries(buffer);
+  const byName = new Map(entries.map((entry) => [entry.name, entry]));
+  const documentEntry = byName.get('word/document.xml');
+  const relsEntry = byName.get('word/_rels/document.xml.rels');
+  if (!documentEntry || !relsEntry) return [];
+
+  const documentXml = readZipEntry(buffer, documentEntry).toString('utf8');
+  const rels = parseDocxRelationships(readZipEntry(buffer, relsEntry).toString('utf8'));
+  const orderedNames = imageRelationshipIdsInOrder(documentXml)
+    .map((id) => rels.get(id))
+    .filter(Boolean);
+
+  const mediaEntries = entries
+    .filter((entry) => /^word\/media\/[^/]+$/i.test(entry.name) && IMAGE_MIME_BY_EXT[path.extname(entry.name).toLowerCase()])
+    .map((entry) => entry.name);
+
+  const seen = new Set();
+  const names = [...orderedNames, ...mediaEntries]
+    .filter((name) => {
+      if (!name || seen.has(name)) return false;
+      seen.add(name);
+      return true;
+    })
+    .slice(0, MAX_DOCX_IMAGES);
+
+  return names
+    .map((name, index) => {
+      const entry = byName.get(name);
+      const ext = path.extname(name).toLowerCase();
+      const mime = IMAGE_MIME_BY_EXT[ext];
+      if (!entry || !mime) return null;
+      const image = readZipEntry(buffer, entry);
+      if (!image.length) return null;
+      return writeDocxImageOutput(image, originalName, index, name, mime);
+    })
+    .filter(Boolean);
+}
+
 async function builtInDocxParser(buffer) {
   const entries = listZipEntries(buffer);
   const contentEntries = entries.filter((entry) => (
@@ -250,10 +372,12 @@ async function extractDocument(file, parsers = {}) {
   const warnings = [];
   let rawText = '';
   let pageCount;
+  let images = [];
 
   if (kind === 'docx') {
     const result = await (parsers.docxParser || builtInDocxParser)(file.buffer);
     rawText = result?.value || '';
+    images = extractDocxImages(file.buffer, file.originalname);
     for (const message of result?.messages || []) {
       const text = sanitizeExtractedText(message?.message || message);
       if (text) warnings.push(text.slice(0, 300));
@@ -290,6 +414,7 @@ async function extractDocument(file, parsers = {}) {
     text,
     charCount: text.length,
     ...(pageCount ? { pageCount } : {}),
+    ...(images.length > 0 ? { images } : {}),
     warnings: warnings.slice(0, 20),
   };
 }
@@ -300,6 +425,7 @@ module.exports = {
   sanitizeExtractedText,
   decodeTxt,
   builtInDocxParser,
+  extractDocxImages,
   wordXmlToText,
   extractDocument,
 };

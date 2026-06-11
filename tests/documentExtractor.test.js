@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { deflateRawSync } from 'node:zlib';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 const require = createRequire(import.meta.url);
 const {
@@ -10,6 +13,7 @@ const {
   extractDocument,
   sanitizeExtractedText,
 } = require('../backend/src/utils/documentExtractor.js');
+const config = require('../backend/src/config.js');
 
 function file(name, mime, buffer) {
   return { originalname: name, mimetype: mime, buffer, size: buffer.length };
@@ -21,7 +25,7 @@ function createZip(entries) {
   let localOffset = 0;
   for (const [name, content] of entries) {
     const nameBuffer = Buffer.from(name, 'utf8');
-    const raw = Buffer.from(content, 'utf8');
+    const raw = Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf8');
     const compressed = deflateRawSync(raw);
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0);
@@ -76,6 +80,39 @@ test('document extractor parses a real minimal docx zip without external depende
   assert.match(data.text, /灯箱/);
   assert.equal(data.charCount, data.text.length);
   assert.deepEqual(data.warnings, []);
+});
+
+test('document extractor saves embedded docx images as output files', async () => {
+  const previousOutputDir = config.OUTPUT_DIR;
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 't8-doc-images-'));
+  config.OUTPUT_DIR = tmp;
+  try {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const docx = createZip([
+      ['[Content_Types].xml', '<Types />'],
+      [
+        'word/document.xml',
+        '<w:document xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:p><w:r><w:t>资料正文</w:t></w:r></w:p><w:drawing><a:blip r:embed="rId5"/></w:drawing></w:body></w:document>',
+      ],
+      [
+        'word/_rels/document.xml.rels',
+        '<Relationships><Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/></Relationships>',
+      ],
+      ['word/media/image1.png', png],
+    ]);
+
+    const data = await extractDocument(
+      file('方案.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', docx),
+    );
+
+    assert.equal(data.images.length, 1);
+    assert.equal(data.images[0].mime, 'image/png');
+    assert.match(data.images[0].url, /^\/files\/output\/docimg_/);
+    assert.equal(fs.existsSync(path.join(tmp, data.images[0].filename)), true);
+  } finally {
+    config.OUTPUT_DIR = previousOutputDir;
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });
 
 test('document extractor rejects mismatched signatures and scanned pdf', async () => {
