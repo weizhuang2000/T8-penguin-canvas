@@ -3,7 +3,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Brain, Clipboard, FileText, Layers3, Loader2, Play, Sparkles, Upload } from 'lucide-react';
 import { PORT_COLOR } from '../../config/portTypes';
 import { DEFAULT_LLM_MODEL } from '../../providers/models';
-import { extractDocument, type ExtractedDocument } from '../../services/api';
+import { extractDocument, MAX_DOCUMENT_FILE_SIZE, MAX_DOCUMENT_FILE_SIZE_MB, type ExtractedDocument } from '../../services/api';
 import { generateLlm } from '../../services/generation';
 import { useApiKeysStore } from '../../stores/apiKeys';
 import { useCanvasStore } from '../../stores/canvas';
@@ -180,8 +180,8 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
 
   const pickDocument = useCallback(async (file?: File) => {
     if (!file || isReadonly || busy) return;
-    if (file.size > 10 * 1024 * 1024) {
-      update({ status: 'error', error: '文档不能超过 10MB', progress: '' });
+    if (file.size > MAX_DOCUMENT_FILE_SIZE) {
+      update({ status: 'error', error: `文档不能超过 ${MAX_DOCUMENT_FILE_SIZE_MB}MB`, progress: '' });
       return;
     }
     update({ status: 'extracting', progress: '文档解析中...', error: '' });

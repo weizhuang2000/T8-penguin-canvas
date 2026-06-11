@@ -65,6 +65,7 @@ const config = {
 
   // 业务配置
   MAX_FILE_SIZE: 10 * 1024 * 1024,
+  MAX_DOCUMENT_FILE_SIZE: 30 * 1024 * 1024,
 
   // 三套 API Key 默认值(均可在 settings 中覆盖)
   // 百达工坊固定地址；LLM 独立 Key 默认使用此地址，但可在设置中覆盖。

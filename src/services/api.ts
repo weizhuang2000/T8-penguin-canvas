@@ -7,6 +7,8 @@ import type { ThemeTemplate } from '../theme/types';
 import type { MediaKind } from '../utils/mediaCollection';
 
 const BASE = '/api';
+export const MAX_DOCUMENT_FILE_SIZE_MB = 30;
+export const MAX_DOCUMENT_FILE_SIZE = MAX_DOCUMENT_FILE_SIZE_MB * 1024 * 1024;
 
 export interface AuthUser {
   id: string;

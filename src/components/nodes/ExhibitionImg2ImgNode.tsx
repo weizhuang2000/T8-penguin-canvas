@@ -55,6 +55,8 @@ import {
   extractDocument,
   getCurrentUser,
   getElevationPromptPresets,
+  MAX_DOCUMENT_FILE_SIZE,
+  MAX_DOCUMENT_FILE_SIZE_MB,
   updateElevationCraftPresets,
   type AuthUser,
   type ElevationCraftPresetItem,
@@ -749,8 +751,8 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
 
   const pickDocument = async (file?: File) => {
     if (!file || isReadonly || !contentEnabled) return;
-    if (file.size > 10 * 1024 * 1024) {
-      update({ status: 'error', error: '文档不能超过 10MB' });
+    if (file.size > MAX_DOCUMENT_FILE_SIZE) {
+      update({ status: 'error', error: `文档不能超过 ${MAX_DOCUMENT_FILE_SIZE_MB}MB` });
       return;
     }
     update({ status: 'extracting', error: '' });

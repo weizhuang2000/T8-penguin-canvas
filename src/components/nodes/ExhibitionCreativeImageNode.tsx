@@ -54,6 +54,8 @@ import {
   extractDocument,
   getCurrentUser,
   getExhibitionCreativePromptPresets,
+  MAX_DOCUMENT_FILE_SIZE,
+  MAX_DOCUMENT_FILE_SIZE_MB,
   updateExhibitionCreativeExcludePresets,
   updateExhibitionCreativeInsertPresets,
   updateExhibitionCreativeViewAnglePresets,
@@ -653,8 +655,8 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
 
   const pickDocument = useCallback(async (file?: File) => {
     if (!file || isReadonly || busy) return;
-    if (file.size > 10 * 1024 * 1024) {
-      update({ status: 'error', error: '文档不能超过 10MB' });
+    if (file.size > MAX_DOCUMENT_FILE_SIZE) {
+      update({ status: 'error', error: `文档不能超过 ${MAX_DOCUMENT_FILE_SIZE_MB}MB` });
       return;
     }
     update({ status: 'extracting', progress: '文档解析中', error: '' });

@@ -6,16 +6,17 @@ const config = require('../config');
 const { extractDocument } = require('../utils/documentExtractor');
 
 const router = express.Router();
+const maxDocumentFileSize = config.MAX_DOCUMENT_FILE_SIZE || config.MAX_FILE_SIZE;
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: config.MAX_FILE_SIZE, files: 1 },
+  limits: { fileSize: maxDocumentFileSize, files: 1 },
 });
 
 router.post('/extract', (req, res) => {
   upload.single('file')(req, res, async (uploadError) => {
     if (uploadError) {
       const message = uploadError.code === 'LIMIT_FILE_SIZE'
-        ? `文档不能超过 ${Math.round(config.MAX_FILE_SIZE / 1024 / 1024)}MB`
+        ? `文档不能超过 ${Math.round(maxDocumentFileSize / 1024 / 1024)}MB`
         : (uploadError.message || '文档上传失败');
       return res.status(400).json({ success: false, error: message });
     }
