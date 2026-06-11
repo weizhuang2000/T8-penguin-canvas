@@ -4,6 +4,7 @@ import {
   Copy,
   Eye,
   Image as ImageIcon,
+  Info,
   Music,
   Pencil,
   Search,
@@ -73,6 +74,7 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');
   const [preview, setPreview] = useState<GenerationHistoryItem | null>(null);
+  const [infoItem, setInfoItem] = useState<GenerationHistoryItem | null>(null);
   const isAdmin = userRole === 'admin' || userRole === 'manager';
 
   const load = useCallback(async () => {
@@ -329,15 +331,26 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
                     {item.kind === 'video' && <LoopingVideo src={item.url} muted className="h-full w-full object-cover" />}
                     {item.kind === 'audio' && <div className="h-full w-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#312e81,#7c3aed,#db2777)' }}><Music size={34} className="text-white" /></div>}
                     {item.hidden && <span className="absolute left-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">已隐藏</span>}
-                    {seed > 0 && <span className="absolute left-1.5 bottom-1.5 rounded bg-amber-400/90 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-950">Seed: {seed}</span>}
                     <button onClick={() => updateItem(item, { favorite: !item.favorite })} className="absolute right-1.5 top-1.5 h-7 w-7 rounded-full bg-black/55 text-amber-300 flex items-center justify-center" title="收藏">
                       <Star size={13} fill={item.favorite ? 'currentColor' : 'none'} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setInfoItem(item);
+                      }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      className="absolute right-1.5 top-9 h-7 w-7 rounded-full bg-black/55 text-white flex items-center justify-center"
+                      title="Info"
+                    >
+                      <Info size={13} />
                     </button>
                     {item.kind === 'image' && (
                       <button
                         onClick={() => copyPrompt(item)}
                         disabled={!String(item.prompt || '').trim()}
-                        className="absolute right-1.5 top-9 h-7 w-7 rounded-full bg-black/55 text-white flex items-center justify-center disabled:cursor-not-allowed disabled:opacity-45"
+                        className="absolute right-1.5 top-[66px] h-7 w-7 rounded-full bg-black/55 text-white flex items-center justify-center disabled:cursor-not-allowed disabled:opacity-45"
                         title={String(item.prompt || '').trim() ? '复制提示词' : '没有可复制的提示词'}
                       >
                         <Copy size={13} />
@@ -350,13 +363,6 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
                       <span className="truncate" title={item.title}>{item.title}</span>
                     </div>
                     <div className={`text-[10px] truncate ${subtle}`}>{item.provider || item.model || item.fileName}</div>
-                    {isAdmin && (
-                      <div className={`text-[10px] truncate ${subtle}`}>
-                        {item.createdByUserName || item.createdByUserId || '未知用户'} · {item.sourceNodeType || '-'}
-                      </div>
-                    )}
-                    {seed > 0 && <div className={`text-[10px] truncate ${subtle}`}>Seed: {seed}</div>}
-                    <div className={`text-[10px] truncate ${subtle}`}>{formatTime(item.createdAt)}</div>
                     {item.kind === 'audio' && <audio src={item.url} controls className="w-full h-8" />}
                     <div className="flex items-center justify-center gap-1.5 pt-0.5">
                       <button onClick={() => setPreview(item)} className="h-7 w-7 rounded-full border flex items-center justify-center" title="预览"><Eye size={13} /></button>
@@ -374,6 +380,44 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
           </div>
         </main>
       </div>
+
+      {infoItem && (
+        <div className="fixed inset-0 z-[60] bg-black/55 flex items-center justify-center p-4" onClick={() => setInfoItem(null)}>
+          <div
+            className={`${isPixel ? 'bg-[var(--px-surface)] text-[var(--px-ink)] border-2 border-[var(--px-ink)]' : isDark ? 'bg-zinc-950 text-white border-white/10' : 'bg-white text-zinc-900 border-black/10'} w-[360px] max-w-[86vw] rounded-lg border p-3 shadow-2xl`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-semibold truncate">生成信息</div>
+                <div className={`text-[11px] truncate ${subtle}`}>{infoItem.title}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInfoItem(null)}
+                className={isPixel ? 't8-mini-icon-button px-btn px-btn--icon px-btn--ghost' : `h-8 w-8 rounded-md flex items-center justify-center ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}
+                title="关闭"
+              >
+                <X size={15} />
+              </button>
+            </div>
+            <div className="space-y-2 text-xs">
+              <div className="flex items-start gap-3">
+                <span className={`w-16 shrink-0 ${subtle}`}>生成用户</span>
+                <span className="min-w-0 flex-1 break-words">{infoItem.createdByUserName || infoItem.createdByUserId || '未知用户'}</span>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className={`w-16 shrink-0 ${subtle}`}>Seed</span>
+                <span className="min-w-0 flex-1 break-words">{validSeed(infoItem.seed) > 0 ? validSeed(infoItem.seed) : '-'}</span>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className={`w-16 shrink-0 ${subtle}`}>时间</span>
+                <span className="min-w-0 flex-1 break-words">{formatTime(infoItem.createdAt) || '-'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {preview && (
         <div className="fixed inset-0 z-[60] bg-black/70 flex items-center justify-center p-4" onClick={() => setPreview(null)}>
