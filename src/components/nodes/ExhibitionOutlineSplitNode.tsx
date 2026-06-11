@@ -105,6 +105,13 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
     () => (Array.isArray(d.documentImages) ? d.documentImages : []),
     [d.documentImages],
   );
+  const outputSegmentEnabled = d.outputSegmentEnabled !== false;
+  const allDocumentImageUrls = useMemo(
+    () => documentImages
+      .map((image: any) => (typeof image?.url === 'string' ? image.url.trim() : ''))
+      .filter(Boolean),
+    [documentImages],
+  );
   const outputSegmentIndex = clampOutputSegmentIndex(d.outputSegmentIndex, segments.length);
   const selectedSegment = segments[outputSegmentIndex] || null;
   const selectedSegmentText = useMemo(
@@ -118,20 +125,28 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
       .filter(Boolean),
     [documentImages, outputSegmentIndex, segments.length],
   );
+  const activeOutputText = outputSegmentEnabled ? selectedSegmentText : outputText;
+  const activeOutputImages = outputSegmentEnabled ? selectedSegmentImages : allDocumentImageUrls;
 
   useEffect(() => {
     const textSegments = segments.map((segment, index) => {
       return formatOneSegment(segment, index);
     });
     const nextStatus = segments.length > 0 ? 'success' : (status === 'error' ? 'error' : 'idle');
+    const nextOutputSegmentEnabled = d.outputSegmentEnabled !== false;
     const nextOutputSegmentIndex = clampOutputSegmentIndex(d.outputSegmentIndex, segments.length);
-    const nextOutputText = textSegments[nextOutputSegmentIndex] || '';
-    const nextImageUrls = documentImages
+    const allImageUrls = documentImages
+      .map((image: any) => (typeof image?.url === 'string' ? image.url.trim() : ''))
+      .filter(Boolean);
+    const segmentImageUrls = documentImages
       .filter((image: any, index: number) => segmentIndexForDocumentImage(index, documentImages.length, segments.length) === nextOutputSegmentIndex)
       .map((image: any) => (typeof image?.url === 'string' ? image.url.trim() : ''))
       .filter(Boolean);
+    const nextOutputText = nextOutputSegmentEnabled ? (textSegments[nextOutputSegmentIndex] || '') : outputText;
+    const nextImageUrls = nextOutputSegmentEnabled ? segmentImageUrls : allImageUrls;
     const changed =
       JSON.stringify(d.textSegments || []) !== JSON.stringify(textSegments) ||
+      d.outputSegmentEnabled !== nextOutputSegmentEnabled ||
       d.outputSegmentIndex !== nextOutputSegmentIndex ||
       (d.text || '') !== nextOutputText ||
       (d.outputText || '') !== nextOutputText ||
@@ -144,6 +159,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
       update({
         textSegments,
         segments: textSegments,
+        outputSegmentEnabled: nextOutputSegmentEnabled,
         outputSegmentIndex: nextOutputSegmentIndex,
         text: nextOutputText,
         outputText: nextOutputText,
@@ -390,8 +406,8 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
   }, [busy, isReadonly, update]);
 
   const copyOutput = async () => {
-    if (!selectedSegmentText) return;
-    await navigator.clipboard?.writeText(selectedSegmentText);
+    if (!activeOutputText) return;
+    await navigator.clipboard?.writeText(activeOutputText);
   };
 
   useRunTrigger(id, runSplit, 'text');
@@ -550,14 +566,30 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
           <div className="flex items-center gap-1.5">
             <ImageIcon size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">输出单元</span>
-            <span className="ml-auto text-[10px] text-white/45">
-              {segments.length > 0 ? `文本 1 条 · 图片 ${selectedSegmentImages.length} 张` : '等待拆分'}
-            </span>
+            <div className="ml-auto flex items-center gap-2">
+              <label className="flex items-center gap-1.5 text-[10px] text-white/60">
+                <input
+                  type="checkbox"
+                  className="h-3 w-3 accent-cyan-300"
+                  checked={outputSegmentEnabled}
+                  disabled={isReadonly || busy}
+                  onChange={(event) => update({ outputSegmentEnabled: event.target.checked })}
+                />
+                有效
+              </label>
+              <span className="text-[10px] text-white/45">
+                {segments.length > 0
+                  ? outputSegmentEnabled
+                    ? `文本 1 条 · 图片 ${selectedSegmentImages.length} 张`
+                    : `整体输出 · 图片 ${allDocumentImageUrls.length} 张`
+                  : '等待拆分'}
+              </span>
+            </div>
           </div>
           <select
             className={FIELD}
             value={outputSegmentIndex}
-            disabled={isReadonly || busy || segments.length === 0}
+            disabled={isReadonly || busy || segments.length === 0 || !outputSegmentEnabled}
             onChange={(event) => update({ outputSegmentIndex: clampOutputSegmentIndex(event.target.value, segments.length) })}
           >
             {segments.length > 0 ? segments.map((segment, index) => (
@@ -569,8 +601,12 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
             )}
           </select>
           <div className="grid grid-cols-2 gap-2 text-[10px] text-white/55">
-            <div className="rounded border border-white/10 bg-black/15 px-2 py-1.5">文本口输出当前单元摘要</div>
-            <div className="rounded border border-white/10 bg-black/15 px-2 py-1.5">图片口输出当前单元图片素材集</div>
+            <div className="rounded border border-white/10 bg-black/15 px-2 py-1.5">
+              {outputSegmentEnabled ? '文本口输出当前单元摘要' : '文本口输出完整大纲'}
+            </div>
+            <div className="rounded border border-white/10 bg-black/15 px-2 py-1.5">
+              {outputSegmentEnabled ? '图片口输出当前单元图片素材集' : '图片口输出全部文档图片'}
+            </div>
           </div>
         </section>
 
@@ -578,7 +614,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
           <div className="flex items-center gap-1.5">
             <Clipboard size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">分段输出</span>
-            <button type="button" className={`${BUTTON} ml-auto`} disabled={!outputText} onClick={() => void copyOutput()}>
+            <button type="button" className={`${BUTTON} ml-auto`} disabled={!activeOutputText} onClick={() => void copyOutput()}>
               复制
             </button>
           </div>

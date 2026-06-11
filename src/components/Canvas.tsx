@@ -398,6 +398,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     outlineSegments: [],
     textSegments: [],
     segments: [],
+    outputSegmentEnabled: true,
     outputSegmentIndex: 0,
     imageUrl: '',
     imageUrls: [],
