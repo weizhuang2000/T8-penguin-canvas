@@ -34,7 +34,7 @@ const KIND_META: Record<GenerationHistoryKind | 'all', { label: string; icon: ty
 };
 
 const HISTORY_GRID_COLUMN_STORAGE_KEY = 'penguin:generation-history-columns';
-const HISTORY_GRID_COLUMN_OPTIONS = [1, 2, 3] as const;
+const HISTORY_GRID_COLUMN_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
 type HistoryGridColumnCount = (typeof HISTORY_GRID_COLUMN_OPTIONS)[number];
 
 function normalizeHistoryGridColumns(value: unknown): HistoryGridColumnCount {
@@ -257,9 +257,13 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
     ? 'px-input h-9 text-sm'
     : `h-9 px-3 rounded-md border text-sm outline-none ${isDark ? 'bg-white/5 border-white/10 text-white' : 'bg-black/5 border-black/10 text-zinc-900'}`;
   const activeMeta = KIND_META[kind];
+  const drawerWidth = `min(calc(100vw - 18px), ${Math.max(520, 188 + gridColumns * 180)}px)`;
 
   return (
-    <div className={`generation-history-drawer fixed top-0 right-0 z-50 h-screen w-[520px] max-w-[calc(100vw-18px)] shadow-2xl flex flex-col ${panelCls}`}>
+    <div
+      className={`generation-history-drawer fixed top-0 right-0 z-50 h-screen shadow-2xl flex flex-col ${panelCls}`}
+      style={{ width: drawerWidth }}
+    >
       <div className={`h-[52px] px-4 py-3 flex items-center justify-between shrink-0 ${isPixel ? 'border-b-2 border-[var(--px-ink)] bg-[var(--px-muted)]' : isDark ? 'border-b border-white/10' : 'border-b border-black/10'}`}>
         <div className="flex items-center gap-2 min-w-0">
           <Clock3 size={18} style={{ color: activeMeta.accent }} />
@@ -268,9 +272,9 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
             <div className={`text-[11px] mt-1 ${subtle}`}>{activeProject?.name || '选择项目'} · {items.length} 个媒体</div>
           </div>
         </div>
-        <div className="ml-2 flex items-center gap-1 shrink-0">
+        <div className="ml-2 flex items-center gap-1 shrink-0 min-w-0">
           <div
-            className={isPixel ? 'flex items-center gap-0.5' : `flex items-center rounded-md border p-0.5 ${isDark ? 'border-white/10 bg-white/5' : 'border-black/10 bg-black/5'}`}
+            className={isPixel ? 'flex max-w-[240px] items-center gap-0.5 overflow-x-auto' : `flex max-w-[240px] items-center overflow-x-auto rounded-md border p-0.5 ${isDark ? 'border-white/10 bg-white/5' : 'border-black/10 bg-black/5'}`}
             title="Columns"
           >
             {HISTORY_GRID_COLUMN_OPTIONS.map((count) => (
