@@ -157,6 +157,34 @@ type LlmConfigForm = LlmConfig & {
   show: boolean;
 };
 
+interface AdvancedProviderFormBlockProps {
+  title: string;
+  note?: string;
+  formBlockCls: string;
+  labelCls: string;
+  hintCls: string;
+  children: ReactNode;
+}
+
+function AdvancedProviderFormBlock({
+  title,
+  note,
+  formBlockCls,
+  labelCls,
+  hintCls,
+  children,
+}: AdvancedProviderFormBlockProps) {
+  return (
+    <section className={formBlockCls}>
+      <div className="space-y-1">
+        <div className={`text-xs font-black ${labelCls}`}>{title}</div>
+        {note && <p className={`text-[11px] leading-relaxed ${hintCls}`}>{note}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 const makeLlmKeyId = () => `llm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
 const normalizeLlmConfigForms = (settings: ApiSettings): LlmConfigForm[] => {
@@ -935,15 +963,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
         setAdvancedTestStatus((prev) => ({ ...prev, [provider.id]: { ok: false, message: '参数映射 JSON 需要是数组' } }));
       }
     };
-    const FormBlock = ({ title, note, children }: { title: string; note?: string; children: ReactNode }) => (
-      <section className={formBlockCls}>
-        <div className="space-y-1">
-          <div className={`text-xs font-black ${labelCls}`}>{title}</div>
-          {note && <p className={`text-[11px] leading-relaxed ${hintCls}`}>{note}</p>}
-        </div>
-        {children}
-      </section>
-    );
+    const advancedFormBlockProps = { formBlockCls, labelCls, hintCls };
 
     return (
       <div className={sectionCls}>
@@ -1026,7 +1046,8 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
           </div>
         </div>
 
-        <FormBlock
+        <AdvancedProviderFormBlock
+          {...advancedFormBlockProps}
           title="1. 基础信息"
           note="显示名称只影响下拉菜单里的名字；关闭“在节点中显示”后，这个平台不会出现在图像 / 视频 / LLM 节点的高级来源里。"
         >
@@ -1052,10 +1073,10 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
               </label>
             )}
           </div>
-        </FormBlock>
+        </AdvancedProviderFormBlock>
 
         {!isComfy && !isJimeng && (
-          <FormBlock title="2. 连接密钥" note={guide?.connectionHint}>
+          <AdvancedProviderFormBlock {...advancedFormBlockProps} title="2. 连接密钥" note={guide?.connectionHint}>
             <label className="space-y-1 block">
               <span className={`text-[11px] ${labelCls}`}>{guide?.keyLabel || 'API Key / Token'}</span>
               <input
@@ -1066,11 +1087,12 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                 placeholder={provider.hasApiKey || provider.apiKey ? '留空或保留 **** 表示不覆盖后端密钥' : '请输入 API Key'}
               />
             </label>
-          </FormBlock>
+          </AdvancedProviderFormBlock>
         )}
 
         {isVolc && (
-          <FormBlock
+          <AdvancedProviderFormBlock
+            {...advancedFormBlockProps}
             title="3. 火山高级项（可选）"
             note="普通 Ark / Seedream / Seedance 调用通常只需要上面的 API Key。只有需要素材上传或特定项目隔离时，再补充这些字段。"
           >
@@ -1114,11 +1136,11 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                 />
               </label>
             </div>
-          </FormBlock>
+          </AdvancedProviderFormBlock>
         )}
 
         {isComfy && (
-          <FormBlock title="2. ComfyUI 工作流" note={guide?.connectionHint}>
+          <AdvancedProviderFormBlock {...advancedFormBlockProps} title="2. ComfyUI 工作流" note={guide?.connectionHint}>
             <label className="space-y-1 block">
               <span className={`text-[11px] ${labelCls}`}>实例地址列表（一行一个）</span>
               <textarea
@@ -1170,11 +1192,11 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
               />
               <p className={`text-[11px] ${hintCls}`}>用于把节点 prompt、参考图等写入指定 ComfyUI 节点字段；不填时后端会尝试按常见字段自动写入。</p>
             </label>
-          </FormBlock>
+          </AdvancedProviderFormBlock>
         )}
 
         {isJimeng && (
-          <FormBlock title="2. 本地 CLI" note={guide?.connectionHint}>
+          <AdvancedProviderFormBlock {...advancedFormBlockProps} title="2. 本地 CLI" note={guide?.connectionHint}>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               <label className="space-y-1 lg:col-span-2">
                 <span className={`text-[11px] ${labelCls}`}>dreamina 可执行路径</span>
@@ -1203,11 +1225,11 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                 />
               </label>
             </div>
-          </FormBlock>
+          </AdvancedProviderFormBlock>
         )}
 
         {!isComfy && (
-          <FormBlock title="3. 节点里可选的模型" note={guide?.modelHint}>
+          <AdvancedProviderFormBlock {...advancedFormBlockProps} title="3. 节点里可选的模型" note={guide?.modelHint}>
             <div className={`grid grid-cols-1 ${isGemini ? 'xl:grid-cols-2' : 'xl:grid-cols-3'} gap-3`}>
               <label className="space-y-1 min-w-0">
                 <span className={`text-[11px] ${labelCls}`}>图像模型（一行一个）</span>
@@ -1239,7 +1261,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                 />
               </label>
             </div>
-          </FormBlock>
+          </AdvancedProviderFormBlock>
         )}
       </div>
     );
