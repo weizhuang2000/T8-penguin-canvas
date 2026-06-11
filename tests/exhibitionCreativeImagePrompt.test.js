@@ -24,7 +24,7 @@ test('exhibition creative image prompt locks the single input space image', () =
   assert.match(prompt, /城市更新/);
   assert.match(prompt, /【强制要求】/);
   assert.match(prompt, /旧厂房钢结构/);
-  assert.ok(prompt.indexOf('【强制要求】') < prompt.indexOf('【LLM创意描述】'));
+  assert.ok(prompt.indexOf('【强制要求】') < prompt.indexOf('【创意描述】'));
 });
 
 test('exhibition creative brief prompt supports per-run LLM variation', () => {
@@ -63,8 +63,24 @@ test('exhibition creative image prompt places exclusions before LLM brief', () =
   });
   assert.match(prompt, /【排除项优先约束】/);
   assert.match(prompt, /真实品牌标识和可读错字\/乱码文字/);
-  assert.match(prompt, /优先级高于 LLM 创意描述/);
-  assert.ok(prompt.indexOf('【排除项优先约束】') < prompt.indexOf('【LLM创意描述】'));
+  assert.match(prompt, /优先级高于创意描述/);
+  assert.ok(prompt.indexOf('【排除项优先约束】') < prompt.indexOf('【创意描述】'));
+});
+
+test('exhibition creative image prompt adds selected view angles to first sentence', () => {
+  const single = buildExhibitionCreativeImagePrompt({
+    spaceType: 'intro-hall',
+    viewControlEnabled: true,
+    viewAngles: ['front'],
+  });
+  assert.match(single.split('\n')[0], /控制生图视角为正视角/);
+
+  const quad = buildExhibitionCreativeImagePrompt({
+    spaceType: 'intro-hall',
+    viewControlEnabled: true,
+    viewAngles: ['front', 'left', 'right', 'top'],
+  });
+  assert.match(quad.split('\n')[0], /生成四视图，分别包含正视角、左视角、右视角、上视角/);
 });
 
 test('exhibition creative image prompt supports manual space size without input image', () => {

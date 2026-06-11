@@ -42,6 +42,17 @@ export const EXHIBITION_CREATIVE_EXCLUDE_ITEMS = [
   { id: 'extra-structure', label: '擅自新增或改变建筑结构' },
 ].map((item, index) => ({ ...item, order: index }));
 
+export const EXHIBITION_CREATIVE_VIEW_ANGLES = [
+  { id: 'front', label: '正视角' },
+  { id: 'left', label: '左视角' },
+  { id: 'right', label: '右视角' },
+  { id: 'back', label: '后视角' },
+  { id: 'top', label: '上视角' },
+  { id: 'left-45', label: '左45度视角' },
+  { id: 'right-45', label: '右45度视角' },
+  { id: 'top-45', label: '上45度视角' },
+].map((item, index) => ({ ...item, order: index }));
+
 export function cleanExhibitionCreativeText(value, max = 12000) {
   return String(value || '').replace(/\r\n?/g, '\n').trim().slice(0, max);
 }
@@ -122,6 +133,23 @@ export function exhibitionCreativeExcludeItemsText(value, options = EXHIBITION_C
   return `${items.slice(0, -1).join('、')}和${items[items.length - 1]}`;
 }
 
+export function normalizeExhibitionCreativeViewAngles(value, options = EXHIBITION_CREATIVE_VIEW_ANGLES) {
+  const source = Array.isArray(options) && options.length > 0 ? options : EXHIBITION_CREATIVE_VIEW_ANGLES;
+  const labelsById = new Map(source.map((item) => [String(item.id), String(item.label || item.id).trim()]));
+  const ids = Array.isArray(value) ? value.map((item) => String(item || '').trim()).filter(Boolean) : [];
+  return Array.from(new Set(ids.filter((id) => labelsById.has(id)))).slice(0, 4).map((id) => ({
+    id,
+    label: labelsById.get(id) || id,
+  }));
+}
+
+export function exhibitionCreativeViewAnglesText(value, options = EXHIBITION_CREATIVE_VIEW_ANGLES) {
+  const items = normalizeExhibitionCreativeViewAngles(value, options).map((item) => item.label).filter(Boolean);
+  if (items.length === 0) return '';
+  if (items.length === 1) return `控制生图视角为${items[0]}`;
+  return `生成四视图，分别包含${items.join('、')}`;
+}
+
 export function normalizeExhibitionCreativeBrief(value) {
   return cleanExhibitionCreativeText(value, 5000)
     .replace(/^```(?:json|markdown|md)?/i, '')
@@ -196,8 +224,10 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   const excludeItemsText = exhibitionCreativeExcludeItemsText(values.excludeItems, values.excludeItemOptions);
   const hasSpaceImage = values.hasSpaceImage !== false;
   const spaceSizeText = exhibitionCreativeSpaceSizeText(values.spaceSize);
+  const viewAnglesText = values.viewControlEnabled ? exhibitionCreativeViewAnglesText(values.viewAngles, values.viewAngleOptions) : '';
+  const viewPrefix = viewAnglesText ? `${viewAnglesText}，` : '';
   const lines = [
-    `生成一张专业${meta.label}展陈空间效果图，第 ${roundIndex}/${total} 张。真实室内建筑摄影级渲染，空间尺度可信，材质细节清晰，灯光层次准确，画面干净完整。`,
+    `生成一张专业${meta.label}展陈空间效果图，第 ${roundIndex}/${total} 张。${viewPrefix}真实室内建筑摄影级渲染，空间尺度可信，材质细节清晰，灯光层次准确，画面干净完整。`,
     `空间类型：${meta.label}。${meta.prompt}`,
     '',
   ];
@@ -215,7 +245,7 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   if (excludeItemsText) {
     lines.push('');
     lines.push('【排除项优先约束】');
-    lines.push(`以下内容优先级高于 LLM 创意描述，不得出现在画面中：${excludeItemsText}。即使 LLM 创意描述、项目资料或个人灵感提到这些内容，也必须忽略并避免生成。`);
+    lines.push(`以下内容优先级高于创意描述，不得出现在画面中：${excludeItemsText}。即使创意描述、项目资料或个人灵感提到这些内容，也必须忽略并避免生成。`);
   }
   if (inspiration) {
     lines.push('');
@@ -223,7 +253,7 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
     lines.push(inspiration);
   }
   lines.push('');
-  lines.push('【LLM创意描述】');
+  lines.push('【创意描述】');
   lines.push(creativeBrief || '围绕该室内空间生成具有强记忆点的展陈创意：以主题叙事为核心，在入口/核心/收束视线位置组织主视觉装置、沉浸光影、展陈工艺和观众动线，形成可落地的高完成度展陈效果图。');
   if (projectTheme) lines.push(`项目主题：${projectTheme}`);
   if (documentSummary) {
@@ -233,7 +263,7 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   lines.push('');
   lines.push('【设计深化要求】');
   lines.push(exhibitionCreativeDeepeningRequirement(values.spaceType));
-  lines.push('不要出现“LLM创意描述”“个人灵感”“空间类型”“输入空间图约束”等字段名，也不要把上述设计说明作为上墙文字。');
+  lines.push('不要出现“创意描述”“个人灵感”“空间类型”“输入空间图约束”等字段名，也不要把上述设计说明作为上墙文字。');
   lines.push(hasSpaceImage
     ? '最终画面必须看得出来自同一张输入室内空间图，只是在展陈创意、灯光、材料、装置和叙事氛围上形成新的方案。'
     : '最终画面不受既有输入图限制，空间结构可以自由发挥，但所有墙体、开口、展陈装置、展柜、媒体设备、观众尺度和拍摄视角都必须落在手动输入的空间尺寸范围内。');

@@ -294,9 +294,16 @@ export interface ExhibitionCreativeExcludePresetItem {
   order: number;
 }
 
+export interface ExhibitionCreativeViewAnglePresetItem {
+  id: string;
+  label: string;
+  order: number;
+}
+
 export interface ExhibitionCreativePromptPresetMap {
   inserts: ExhibitionCreativeInsertPresetItem[];
   exclusions: ExhibitionCreativeExcludePresetItem[];
+  viewAngles: ExhibitionCreativeViewAnglePresetItem[];
 }
 
 export async function listExhibitionPromptLibrary(options?: {
@@ -391,7 +398,7 @@ export async function getExhibitionCreativePromptPresets(): Promise<ExhibitionCr
   const res = await request<{ success: boolean; data: ExhibitionCreativePromptPresetMap }>(
     `${BASE}/prompt-library/exhibition-creative/presets`,
   );
-  return res.data || { inserts: [], exclusions: [] };
+  return res.data || { inserts: [], exclusions: [], viewAngles: [] };
 }
 
 export async function updateExhibitionCreativeInsertPresets(
@@ -412,6 +419,19 @@ export async function updateExhibitionCreativeExcludePresets(
 ): Promise<ExhibitionCreativeExcludePresetItem[]> {
   const res = await request<{ success: boolean; data: ExhibitionCreativeExcludePresetItem[] }>(
     `${BASE}/prompt-library/exhibition-creative/presets/exclusions`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ presets }),
+    },
+  );
+  return res.data || [];
+}
+
+export async function updateExhibitionCreativeViewAnglePresets(
+  presets: Array<Pick<ExhibitionCreativeViewAnglePresetItem, 'label'> & Partial<Pick<ExhibitionCreativeViewAnglePresetItem, 'id' | 'order'>>>,
+): Promise<ExhibitionCreativeViewAnglePresetItem[]> {
+  const res = await request<{ success: boolean; data: ExhibitionCreativeViewAnglePresetItem[] }>(
+    `${BASE}/prompt-library/exhibition-creative/presets/view-angles`,
     {
       method: 'PUT',
       body: JSON.stringify({ presets }),

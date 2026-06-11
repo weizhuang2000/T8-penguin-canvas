@@ -144,6 +144,17 @@ const DEFAULT_EXHIBITION_CREATIVE_EXCLUDE_PRESETS = [
   { id: 'extra-structure', label: '擅自新增或改变建筑结构' },
 ].map((item, index) => ({ ...item, order: index }));
 
+const DEFAULT_EXHIBITION_CREATIVE_VIEW_ANGLE_PRESETS = [
+  { id: 'front', label: '正视角' },
+  { id: 'left', label: '左视角' },
+  { id: 'right', label: '右视角' },
+  { id: 'back', label: '后视角' },
+  { id: 'top', label: '上视角' },
+  { id: 'left-45', label: '左45度视角' },
+  { id: 'right-45', label: '右45度视角' },
+  { id: 'top-45', label: '上45度视角' },
+].map((item, index) => ({ ...item, order: index }));
+
 function now() {
   return Date.now();
 }
@@ -288,6 +299,29 @@ function normalizeCreativeExcludePresetList(value) {
     .map((item, index) => ({ ...item, order: index }));
 }
 
+function normalizeCreativeViewAnglePresetList(value) {
+  const source = Array.isArray(value) && value.length > 0 ? value : DEFAULT_EXHIBITION_CREATIVE_VIEW_ANGLE_PRESETS;
+  const used = new Set();
+  return source
+    .map((raw, index) => {
+      const label = safeText(raw?.label || raw?.text, 120);
+      if (!label) return null;
+      let id = safeText(raw?.id, 96).replace(/[^a-zA-Z0-9_-]/g, '');
+      if (!id) id = `view_${index + 1}`;
+      while (used.has(id)) id = `${id}_${index + 1}`;
+      used.add(id);
+      return {
+        id,
+        label,
+        order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 80)
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+    .map((item, index) => ({ ...item, order: index }));
+}
+
 function readElevationDb() {
   try {
     if (!fs.existsSync(ELEVATION_DB_FILE)) {
@@ -327,17 +361,20 @@ function readCreativeDb() {
       return {
         insertPresets: normalizeCreativeInsertPresetList(DEFAULT_EXHIBITION_CREATIVE_INSERT_PRESETS),
         excludePresets: normalizeCreativeExcludePresetList(DEFAULT_EXHIBITION_CREATIVE_EXCLUDE_PRESETS),
+        viewAnglePresets: normalizeCreativeViewAnglePresetList(DEFAULT_EXHIBITION_CREATIVE_VIEW_ANGLE_PRESETS),
       };
     }
     const raw = JSON.parse(fs.readFileSync(CREATIVE_DB_FILE, 'utf-8'));
     return {
       insertPresets: normalizeCreativeInsertPresetList(raw?.insertPresets),
       excludePresets: normalizeCreativeExcludePresetList(raw?.excludePresets),
+      viewAnglePresets: normalizeCreativeViewAnglePresetList(raw?.viewAnglePresets),
     };
   } catch {
     return {
       insertPresets: normalizeCreativeInsertPresetList(DEFAULT_EXHIBITION_CREATIVE_INSERT_PRESETS),
       excludePresets: normalizeCreativeExcludePresetList(DEFAULT_EXHIBITION_CREATIVE_EXCLUDE_PRESETS),
+      viewAnglePresets: normalizeCreativeViewAnglePresetList(DEFAULT_EXHIBITION_CREATIVE_VIEW_ANGLE_PRESETS),
     };
   }
 }
@@ -349,6 +386,7 @@ function writeCreativeDb(db) {
     JSON.stringify({
       insertPresets: normalizeCreativeInsertPresetList(db?.insertPresets),
       excludePresets: normalizeCreativeExcludePresetList(db?.excludePresets),
+      viewAnglePresets: normalizeCreativeViewAnglePresetList(db?.viewAnglePresets),
     }, null, 2),
     'utf-8',
   );
@@ -509,6 +547,7 @@ router.get('/exhibition-creative/presets', (_req, res) => {
     data: {
       inserts: normalizeCreativeInsertPresetList(db.insertPresets),
       exclusions: normalizeCreativeExcludePresetList(db.excludePresets),
+      viewAngles: normalizeCreativeViewAnglePresetList(db.viewAnglePresets),
     },
   });
 });
@@ -532,6 +571,17 @@ router.put('/exhibition-creative/presets/exclusions', (req, res) => {
   const db = readCreativeDb();
   const presets = normalizeCreativeExcludePresetList(req.body?.presets);
   writeCreativeDb({ ...db, excludePresets: presets });
+  res.json({ success: true, data: presets });
+});
+
+router.put('/exhibition-creative/presets/view-angles', (req, res) => {
+  const user = req.user;
+  if (!isAdminRole(user?.role)) {
+    return res.status(403).json({ success: false, error: '只有系统管理员或经理可以维护展陈创意视角预设' });
+  }
+  const db = readCreativeDb();
+  const presets = normalizeCreativeViewAnglePresetList(req.body?.presets);
+  writeCreativeDb({ ...db, viewAnglePresets: presets });
   res.json({ success: true, data: presets });
 });
 

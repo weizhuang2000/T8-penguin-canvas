@@ -5,16 +5,19 @@ import {
   EXHIBITION_CREATIVE_EXCLUDE_ITEMS,
   EXHIBITION_CREATIVE_INSERT_ITEMS,
   EXHIBITION_CREATIVE_SPACE_TYPES,
+  EXHIBITION_CREATIVE_VIEW_ANGLES,
   exhibitionCreativeExcludeItemsText,
   exhibitionCreativeInsertItemsText,
   exhibitionCreativeSpaceTypeMeta,
   exhibitionCreativeSpaceSizeText,
+  exhibitionCreativeViewAnglesText,
   normalizeExhibitionCreativeBrief,
   normalizeExhibitionCreativeCount,
   normalizeExhibitionCreativeExcludeItems,
   normalizeExhibitionCreativeInsertItems,
   normalizeExhibitionCreativeSpaceSize,
   normalizeExhibitionCreativeSpaceType,
+  normalizeExhibitionCreativeViewAngles,
 } from './exhibitionCreativeImagePromptData.js';
 
 export type ExhibitionCreativeSpaceType =
@@ -35,6 +38,12 @@ export interface ExhibitionCreativeInsertItem {
 }
 
 export interface ExhibitionCreativeExcludeItem {
+  id: string;
+  label: string;
+  order?: number;
+}
+
+export interface ExhibitionCreativeViewAngle {
   id: string;
   label: string;
   order?: number;
@@ -69,6 +78,9 @@ export interface ExhibitionCreativeImagePromptValues extends ExhibitionCreativeB
     depth?: number | string;
     height?: number | string;
   };
+  viewControlEnabled?: boolean;
+  viewAngles?: string[];
+  viewAngleOptions?: ExhibitionCreativeViewAngle[];
 }
 
 export {
@@ -78,14 +90,17 @@ export {
   EXHIBITION_CREATIVE_EXCLUDE_ITEMS,
   EXHIBITION_CREATIVE_INSERT_ITEMS,
   EXHIBITION_CREATIVE_SPACE_TYPES,
+  EXHIBITION_CREATIVE_VIEW_ANGLES,
   exhibitionCreativeExcludeItemsText,
   exhibitionCreativeInsertItemsText,
   exhibitionCreativeSpaceTypeMeta,
   exhibitionCreativeSpaceSizeText,
+  exhibitionCreativeViewAnglesText,
   normalizeExhibitionCreativeBrief,
   normalizeExhibitionCreativeCount,
   normalizeExhibitionCreativeExcludeItems,
   normalizeExhibitionCreativeInsertItems,
   normalizeExhibitionCreativeSpaceSize,
   normalizeExhibitionCreativeSpaceType,
+  normalizeExhibitionCreativeViewAngles,
 };

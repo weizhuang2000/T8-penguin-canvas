@@ -35,6 +35,7 @@ import {
   EXHIBITION_CREATIVE_EXCLUDE_ITEMS,
   EXHIBITION_CREATIVE_INSERT_ITEMS,
   EXHIBITION_CREATIVE_SPACE_TYPES,
+  EXHIBITION_CREATIVE_VIEW_ANGLES,
   exhibitionCreativeExcludeItemsText,
   exhibitionCreativeInsertItemsText,
   exhibitionCreativeSpaceTypeMeta,
@@ -44,8 +45,10 @@ import {
   normalizeExhibitionCreativeInsertItems,
   normalizeExhibitionCreativeSpaceSize,
   normalizeExhibitionCreativeSpaceType,
+  normalizeExhibitionCreativeViewAngles,
   type ExhibitionCreativeExcludeItem,
   type ExhibitionCreativeInsertItem,
+  type ExhibitionCreativeViewAngle,
 } from '../../utils/exhibitionCreativeImagePrompt';
 import {
   extractDocument,
@@ -53,9 +56,11 @@ import {
   getExhibitionCreativePromptPresets,
   updateExhibitionCreativeExcludePresets,
   updateExhibitionCreativeInsertPresets,
+  updateExhibitionCreativeViewAnglePresets,
   type AuthUser,
   type ExhibitionCreativeExcludePresetItem,
   type ExhibitionCreativeInsertPresetItem,
+  type ExhibitionCreativeViewAnglePresetItem,
   type ExtractedDocument,
 } from '../../services/api';
 import { useApiKeysStore } from '../../stores/apiKeys';
@@ -205,6 +210,10 @@ function excludePresetEditorText(presets: ExhibitionCreativeExcludePresetItem[])
   return presets.map((preset) => preset.label).join('\n');
 }
 
+function viewAnglePresetEditorText(presets: ExhibitionCreativeViewAnglePresetItem[]) {
+  return presets.map((preset) => preset.label).join('\n');
+}
+
 function parseLabelPresetEditorText(text: string, fallbackId: string) {
   return text
     .split(/\r?\n/)
@@ -227,14 +236,19 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [insertPresets, setInsertPresets] = useState<ExhibitionCreativeInsertPresetItem[]>([]);
   const [excludePresets, setExcludePresets] = useState<ExhibitionCreativeExcludePresetItem[]>([]);
+  const [viewAnglePresets, setViewAnglePresets] = useState<ExhibitionCreativeViewAnglePresetItem[]>([]);
   const [insertEditorOpen, setInsertEditorOpen] = useState(false);
   const [excludeEditorOpen, setExcludeEditorOpen] = useState(false);
+  const [viewAngleEditorOpen, setViewAngleEditorOpen] = useState(false);
   const [insertEditorValue, setInsertEditorValue] = useState('');
   const [excludeEditorValue, setExcludeEditorValue] = useState('');
+  const [viewAngleEditorValue, setViewAngleEditorValue] = useState('');
   const [insertSaving, setInsertSaving] = useState(false);
   const [excludeSaving, setExcludeSaving] = useState(false);
+  const [viewAngleSaving, setViewAngleSaving] = useState(false);
   const [insertError, setInsertError] = useState('');
   const [excludeError, setExcludeError] = useState('');
+  const [viewAngleError, setViewAngleError] = useState('');
   const { style } = useThemeStore();
   const isPixel = style === 'pixel';
   const activeCanvas = useCanvasStore((state) => state.canvases.find((canvas) => canvas.id === state.activeId) || null);
@@ -299,6 +313,10 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     () => (excludePresets.length > 0 ? excludePresets : EXHIBITION_CREATIVE_EXCLUDE_ITEMS),
     [excludePresets],
   );
+  const viewAngleOptions = useMemo<ExhibitionCreativeViewAngle[]>(
+    () => (viewAnglePresets.length > 0 ? viewAnglePresets : EXHIBITION_CREATIVE_VIEW_ANGLES),
+    [viewAnglePresets],
+  );
   const selectedInsertItems = useMemo(
     () => normalizeExhibitionCreativeInsertItems(d.insertItems, insertOptions),
     [d.insertItems, insertOptions],
@@ -310,6 +328,12 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   );
   const selectedExcludeIds = useMemo(() => selectedExcludeItems.map((item) => item.id), [selectedExcludeItems]);
   const allExcludeSelected = excludeOptions.length > 0 && selectedExcludeIds.length === excludeOptions.length;
+  const viewControlEnabled = d.viewControlEnabled === true;
+  const selectedViewAngles = useMemo(
+    () => normalizeExhibitionCreativeViewAngles(d.viewAngles, viewAngleOptions),
+    [d.viewAngles, viewAngleOptions],
+  );
+  const selectedViewAngleIds = useMemo(() => selectedViewAngles.map((item) => item.id), [selectedViewAngles]);
   const regenerateEachTime = d.regenerateEachTime !== false;
   const projectTheme = String(d.projectTheme || '').trim();
   const inspiration = String(d.inspiration || '').trim();
@@ -337,10 +361,13 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       excludeItemOptions: excludeOptions,
       hasSpaceImage: !!spaceImage,
       spaceSize: manualSpaceSize,
+      viewControlEnabled,
+      viewAngles: selectedViewAngleIds,
+      viewAngleOptions,
       roundIndex: 1,
       total: generationCount,
     }),
-    [creativeBrief, documentSummary, excludeOptions, generationCount, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, spaceImage, spaceType],
+    [creativeBrief, documentSummary, excludeOptions, generationCount, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceType, viewAngleOptions, viewControlEnabled],
   );
 
   useEffect(() => {
@@ -377,10 +404,12 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       .then((presets) => {
         setInsertPresets(presets.inserts || []);
         setExcludePresets(presets.exclusions || []);
+        setViewAnglePresets(presets.viewAngles || []);
       })
       .catch(() => {
         setInsertPresets([]);
         setExcludePresets([]);
+        setViewAnglePresets([]);
       });
   }, []);
 
@@ -395,6 +424,12 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     setExcludeEditorValue(excludePresetEditorText(excludePresets));
     setExcludeError('');
   }, [excludeEditorOpen, excludePresets]);
+
+  useEffect(() => {
+    if (!viewAngleEditorOpen) return;
+    setViewAngleEditorValue(viewAnglePresetEditorText(viewAnglePresets));
+    setViewAngleError('');
+  }, [viewAngleEditorOpen, viewAnglePresets]);
 
   const saveInsertPresets = async () => {
     if (!canManageTeam) return;
@@ -438,6 +473,27 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     }
   };
 
+  const saveViewAnglePresets = async () => {
+    if (!canManageTeam) return;
+    const presets = parseLabelPresetEditorText(viewAngleEditorValue, 'view');
+    if (presets.length === 0) {
+      setViewAngleError('请至少保留一项视角内容。');
+      return;
+    }
+    setViewAngleSaving(true);
+    setViewAngleError('');
+    try {
+      const saved = await updateExhibitionCreativeViewAnglePresets(presets);
+      setViewAnglePresets(saved);
+      update({ viewAngles: normalizeExhibitionCreativeViewAngles(selectedViewAngleIds, saved).map((item) => item.id) });
+      setViewAngleEditorOpen(false);
+    } catch (error: any) {
+      setViewAngleError(error?.message || '保存视角项失败');
+    } finally {
+      setViewAngleSaving(false);
+    }
+  };
+
   const toggleInsertItem = (itemId: string) => {
     if (isReadonly || busy) return;
     const next = selectedInsertIds.includes(itemId)
@@ -457,6 +513,22 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const toggleAllExcludeItems = () => {
     if (isReadonly || busy) return;
     update({ excludeItems: allExcludeSelected ? [] : excludeOptions.map((item) => item.id) });
+  };
+
+  const toggleViewAngle = (itemId: string) => {
+    if (isReadonly || busy || !viewControlEnabled) return;
+    const next = selectedViewAngleIds.includes(itemId)
+      ? selectedViewAngleIds.filter((item) => item !== itemId)
+      : [...selectedViewAngleIds, itemId].slice(0, 4);
+    update({ viewAngles: next });
+  };
+
+  const toggleViewControl = (enabled: boolean) => {
+    if (isReadonly || busy) return;
+    update({
+      viewControlEnabled: enabled,
+      viewAngles: enabled && selectedViewAngleIds.length === 0 ? [viewAngleOptions[0]?.id].filter(Boolean) : selectedViewAngleIds,
+    });
   };
 
   const buildCreativeBrief = useCallback(async (roundIndex: number, previousBriefs: string[] = []) => {
@@ -815,6 +887,9 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           excludeItemOptions: excludeOptions,
           hasSpaceImage: !!spaceImage,
           spaceSize: manualSpaceSize,
+          viewControlEnabled,
+          viewAngles: selectedViewAngleIds,
+          viewAngleOptions,
           roundIndex: index,
           total: generationCount,
         });
@@ -882,10 +957,13 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     regenerateEachTime,
     selectedExcludeIds,
     selectedInsertIds,
+    selectedViewAngleIds,
     seed,
     spaceImage,
     spaceType,
     update,
+    viewAngleOptions,
+    viewControlEnabled,
   ]);
 
   useRunTrigger(id, runGenerate, 'image');
@@ -1190,6 +1268,84 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                     onClick={() => void saveInsertPresets()}
                   >
                     {insertSaving ? '保存中' : '保存'}
+                  </button>
+                </div>
+              </div>
+            )}
+        </section>
+
+        <section className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold text-cyan-100">视角控制</span>
+              <span className="min-w-0 flex-1 truncate text-[9px] text-white/40">
+                融入第一句话，1 项控视角，4 项生成四视图
+              </span>
+              <label className="flex items-center gap-1 text-[10px] text-white/60">
+                <input
+                  type="checkbox"
+                  className="h-3 w-3 accent-cyan-300"
+                  checked={viewControlEnabled}
+                  disabled={isReadonly || busy}
+                  onChange={(event) => toggleViewControl(event.target.checked)}
+                />
+                启用
+              </label>
+              {canManageTeam && (
+                <button
+                  type="button"
+                  className={BUTTON}
+                  disabled={busy}
+                  onClick={() => setViewAngleEditorOpen((open) => !open)}
+                >
+                  {viewAngleEditorOpen ? '收起' : '编辑'}
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {viewAngleOptions.map((item) => {
+                const active = selectedViewAngleIds.includes(item.id);
+                const disabled = isReadonly || busy || !viewControlEnabled || (!active && selectedViewAngleIds.length >= 4);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    disabled={disabled}
+                    className={`rounded border px-1.5 py-1 text-[10px] ${
+                      active ? 'border-emerald-300/55 bg-emerald-300/15 text-emerald-100' : 'border-white/10 bg-black/15 text-white/55 hover:bg-white/[0.08]'
+                    } disabled:opacity-45`}
+                    onClick={() => toggleViewAngle(item.id)}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+            {canManageTeam && viewAngleEditorOpen && (
+              <div className="space-y-1.5 rounded border border-emerald-300/15 bg-emerald-300/5 p-2">
+                <textarea
+                  className={`${FIELD} min-h-[92px] resize-y`}
+                  value={viewAngleEditorValue}
+                  disabled={viewAngleSaving || busy}
+                  placeholder="每行一个视角项，例如：正视角"
+                  onChange={(event) => setViewAngleEditorValue(event.target.value)}
+                />
+                {viewAngleError && <div className="text-[10px] text-red-200">{viewAngleError}</div>}
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    className={BUTTON}
+                    disabled={viewAngleSaving || busy}
+                    onClick={() => setViewAngleEditorOpen(false)}
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    className={BUTTON}
+                    disabled={viewAngleSaving || busy}
+                    onClick={() => void saveViewAnglePresets()}
+                  >
+                    {viewAngleSaving ? '保存中' : '保存'}
                   </button>
                 </div>
               </div>
