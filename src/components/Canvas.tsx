@@ -368,6 +368,8 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     insertItems: ['large-sculpture', 'relief', 'group-sculpture', 'art-installation', 'multimedia-equipment', 'showcase', 'scene', 'artwork'],
     regenerateEachTime: true,
     projectTheme: '',
+    colorMaterialPreset: '',
+    colorMaterial: '',
     inspiration: '',
     sourceText: '',
     documentMeta: null,

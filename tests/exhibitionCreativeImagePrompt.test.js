@@ -12,6 +12,7 @@ test('exhibition creative image prompt locks the single input space image', () =
   const prompt = buildExhibitionCreativeImagePrompt({
     spaceType: 'highlight-space',
     projectTheme: '城市更新',
+    colorMaterial: '深色拉丝金属、暖白灯带与低反射微水泥',
     inspiration: '用旧厂房钢结构和数字光幕形成记忆点',
     creativeBrief: '以一条悬浮时间轴串联城市记忆，中央设置可步入式光盒装置。',
     generationCount: 4,
@@ -22,8 +23,12 @@ test('exhibition creative image prompt locks the single input space image', () =
   assert.match(prompt, /不得把空间改成另一处建筑/);
   assert.match(prompt, /最终画面必须看得出来自同一张输入室内空间图/);
   assert.match(prompt, /城市更新/);
+  assert.match(prompt, /【色彩与材质】/);
+  assert.match(prompt, /深色拉丝金属、暖白灯带与低反射微水泥/);
+  assert.match(prompt, /优先于自由创意描述/);
   assert.match(prompt, /【强制要求】/);
   assert.match(prompt, /旧厂房钢结构/);
+  assert.ok(prompt.indexOf('【色彩与材质】') < prompt.indexOf('【创意描述】'));
   assert.ok(prompt.indexOf('【强制要求】') < prompt.indexOf('【创意描述】'));
 });
 
@@ -31,6 +36,7 @@ test('exhibition creative brief prompt supports per-run LLM variation', () => {
   const prompt = buildExhibitionCreativeBriefPrompt({
     spaceType: 'intro-hall',
     projectTheme: '企业创新展',
+    colorMaterial: '白色烤漆、半透明亚克力与冷蓝数字光',
     inspiration: '入口需要强仪式感',
     documentSummary: '核心资料：企业以智能制造为主线，关键展项包括数字产线、绿色工厂和未来实验室。',
     insertItems: ['large-sculpture', 'multimedia-equipment'],
@@ -40,7 +46,7 @@ test('exhibition creative brief prompt supports per-run LLM variation', () => {
     previousBriefs: ['使用环形光幕形成开场。'],
     regenerateEachTime: true,
   });
-  assert.match(prompt, /基于项目资料摘要、项目主题\/个人灵感和指定植入项/);
+  assert.match(prompt, /基于项目资料摘要、色彩与材质\/个人灵感和指定植入项/);
   assert.match(prompt, /第 2\/5 个序厅展陈空间生图创意描述/);
   assert.match(prompt, /指定植入项：大型雕塑和多媒体设备/);
   assert.match(prompt, /不要分析、引用或依赖输入图像/);
@@ -48,6 +54,7 @@ test('exhibition creative brief prompt supports per-run LLM variation', () => {
   assert.match(prompt, /不要设计、暗示或要求生成这些内容/);
   assert.doesNotMatch(prompt, /基于输入图片中的室内建筑空间/);
   assert.match(prompt, /项目主题\/展览关键词：企业创新展/);
+  assert.match(prompt, /色彩与材质：白色烤漆、半透明亚克力与冷蓝数字光/);
   assert.match(prompt, /项目资料摘要/);
   assert.match(prompt, /数字产线、绿色工厂和未来实验室/);
   assert.match(prompt, /个人灵感补充：入口需要强仪式感/);

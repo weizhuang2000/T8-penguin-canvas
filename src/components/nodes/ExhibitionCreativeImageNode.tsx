@@ -53,13 +53,16 @@ import {
 import {
   extractDocument,
   getCurrentUser,
+  getElevationPromptPresets,
   getExhibitionCreativePromptPresets,
   MAX_DOCUMENT_FILE_SIZE,
   MAX_DOCUMENT_FILE_SIZE_MB,
+  updateElevationColorMaterialPresets,
   updateExhibitionCreativeExcludePresets,
   updateExhibitionCreativeInsertPresets,
   updateExhibitionCreativeViewAnglePresets,
   type AuthUser,
+  type ElevationColorMaterialPresetItem,
   type ExhibitionCreativeExcludePresetItem,
   type ExhibitionCreativeInsertPresetItem,
   type ExhibitionCreativeViewAnglePresetItem,
@@ -227,6 +230,7 @@ function llmErrorMessage(error: any) {
 function fallbackCreativeBrief(values: {
   spaceType: string;
   projectTheme: string;
+  colorMaterial: string;
   inspiration: string;
   documentSummary: string;
   insertItemsText: string;
@@ -236,6 +240,9 @@ function fallbackCreativeBrief(values: {
 }) {
   const meta = exhibitionCreativeSpaceTypeMeta(values.spaceType);
   const theme = values.projectTheme || '展陈项目主题';
+  const colorMaterial = values.colorMaterial
+    ? `色彩与材质体系采用${values.colorMaterial}，`
+    : '';
   const material = values.documentSummary
     ? '结合项目资料摘要中的核心叙事、关键展项和情绪基调，'
     : '';
@@ -245,7 +252,7 @@ function fallbackCreativeBrief(values: {
   const exclusion = values.excludeItemsText ? `同时避开${values.excludeItemsText}。` : '';
   return [
     `围绕${theme}创作第 ${values.roundIndex}/${values.total} 个${meta.label}展陈空间方案。`,
-    `${material}${inspiration}在不改变原始室内建筑空间几何、透视、尺度和主要开口关系的前提下，植入${values.insertItemsText}。${exclusion}`,
+    `${material}${colorMaterial}${inspiration}在不改变原始室内建筑空间几何、透视、尺度和主要开口关系的前提下，植入${values.insertItemsText}。${exclusion}`,
     `整体气质应符合${meta.prompt}，画面具有专业展陈效果图的完成度、真实材料细节和可落地的施工表达，并与同批次其他方案形成可比较的差异化。`,
   ].join('');
 }
@@ -260,6 +267,55 @@ function excludePresetEditorText(presets: ExhibitionCreativeExcludePresetItem[])
 
 function viewAnglePresetEditorText(presets: ExhibitionCreativeViewAnglePresetItem[]) {
   return presets.map((preset) => preset.label).join('\n');
+}
+
+function colorPresetEditorText(presets: ElevationColorMaterialPresetItem[]): string {
+  return presets
+    .map((preset) => {
+      const core = String(preset.core || '').trim();
+      const features = String(preset.features || '').trim();
+      const usage = String(preset.usage || '').trim();
+      if (core || features || usage) return [preset.label, core, features, usage].join('｜');
+      return preset.info ? `${preset.label}｜${preset.info}` : preset.label;
+    })
+    .join('\n');
+}
+
+function parseColorPresetEditorText(text: string) {
+  return text
+    .split(/\r?\n/)
+    .map((line, index) => {
+      const raw = line.trim();
+      if (!raw) return null;
+      const [labelRaw, ...rest] = raw.split(/[｜|]/);
+      const label = String(labelRaw || '').trim();
+      if (!label) return null;
+      const core = String(rest[0] || '').trim();
+      const features = String(rest[1] || '').trim();
+      const usage = rest.slice(2).join('｜').trim();
+      const info = rest.length > 2
+        ? [core && `核心：${core}`, features && `特征：${features}`, usage && `适用：${usage}`].filter(Boolean).join('')
+        : rest.join('｜').trim();
+      return {
+        id: `${label.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'preset'}-${index + 1}`,
+        label,
+        core,
+        features,
+        usage,
+        info,
+        order: index,
+      };
+    })
+    .filter(Boolean) as Array<{ id: string; label: string; core: string; features: string; usage: string; info: string; order: number }>;
+}
+
+function colorMaterialTextFromPreset(preset: ElevationColorMaterialPresetItem): string {
+  const values = [
+    preset.label,
+    String(preset.core || '').trim(),
+    String(preset.features || '').trim(),
+  ].filter(Boolean);
+  return values.join('，');
 }
 
 function parseLabelPresetEditorText(text: string, fallbackId: string) {
@@ -285,18 +341,23 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const [insertPresets, setInsertPresets] = useState<ExhibitionCreativeInsertPresetItem[]>([]);
   const [excludePresets, setExcludePresets] = useState<ExhibitionCreativeExcludePresetItem[]>([]);
   const [viewAnglePresets, setViewAnglePresets] = useState<ExhibitionCreativeViewAnglePresetItem[]>([]);
+  const [colorMaterialPresets, setColorMaterialPresets] = useState<ElevationColorMaterialPresetItem[]>([]);
   const [insertEditorOpen, setInsertEditorOpen] = useState(false);
   const [excludeEditorOpen, setExcludeEditorOpen] = useState(false);
   const [viewAngleEditorOpen, setViewAngleEditorOpen] = useState(false);
+  const [colorMaterialEditorOpen, setColorMaterialEditorOpen] = useState(false);
   const [insertEditorValue, setInsertEditorValue] = useState('');
   const [excludeEditorValue, setExcludeEditorValue] = useState('');
   const [viewAngleEditorValue, setViewAngleEditorValue] = useState('');
+  const [colorMaterialEditorValue, setColorMaterialEditorValue] = useState('');
   const [insertSaving, setInsertSaving] = useState(false);
   const [excludeSaving, setExcludeSaving] = useState(false);
   const [viewAngleSaving, setViewAngleSaving] = useState(false);
+  const [colorMaterialSaving, setColorMaterialSaving] = useState(false);
   const [insertError, setInsertError] = useState('');
   const [excludeError, setExcludeError] = useState('');
   const [viewAngleError, setViewAngleError] = useState('');
+  const [colorMaterialError, setColorMaterialError] = useState('');
   const { style } = useThemeStore();
   const isPixel = style === 'pixel';
   const activeCanvas = useCanvasStore((state) => state.canvases.find((canvas) => canvas.id === state.activeId) || null);
@@ -382,8 +443,13 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     [d.viewAngles, viewAngleOptions],
   );
   const selectedViewAngleIds = useMemo(() => selectedViewAngles.map((item) => item.id), [selectedViewAngles]);
+  const selectedColorMaterialPreset = useMemo(
+    () => colorMaterialPresets.find((preset) => preset.id === d.colorMaterialPreset) || null,
+    [colorMaterialPresets, d.colorMaterialPreset],
+  );
   const regenerateEachTime = d.regenerateEachTime !== false;
   const projectTheme = String(d.projectTheme || '').trim();
+  const colorMaterial = String(d.colorMaterial || '').trim();
   const inspiration = String(d.inspiration || '').trim();
   const sourceText = String(d.sourceText || '');
   const documentSummary = String(d.documentSummary || '').trim();
@@ -401,6 +467,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     () => buildExhibitionCreativeImagePrompt({
       spaceType,
       projectTheme,
+      colorMaterial,
       inspiration,
       documentSummary,
       creativeBrief,
@@ -416,7 +483,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       roundIndex: 1,
       total: generationCount,
     }),
-    [creativeBrief, documentSummary, excludeOptions, generationCount, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceType, viewAngleOptions, viewControlEnabled],
+    [colorMaterial, creativeBrief, documentSummary, excludeOptions, generationCount, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceType, viewAngleOptions, viewControlEnabled],
   );
 
   useEffect(() => {
@@ -465,6 +532,9 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
         setExcludePresets([]);
         setViewAnglePresets([]);
       });
+    getElevationPromptPresets()
+      .then((presets) => setColorMaterialPresets(presets.colorMaterial || []))
+      .catch(() => setColorMaterialPresets([]));
   }, []);
 
   useEffect(() => {
@@ -484,6 +554,32 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     setViewAngleEditorValue(viewAnglePresetEditorText(viewAnglePresets));
     setViewAngleError('');
   }, [viewAngleEditorOpen, viewAnglePresets]);
+
+  useEffect(() => {
+    if (!colorMaterialEditorOpen) return;
+    setColorMaterialEditorValue(colorPresetEditorText(colorMaterialPresets));
+    setColorMaterialError('');
+  }, [colorMaterialEditorOpen, colorMaterialPresets]);
+
+  const saveColorMaterialPresets = async () => {
+    if (!canManageTeam) return;
+    const presets = parseColorPresetEditorText(colorMaterialEditorValue);
+    if (presets.length === 0) {
+      setColorMaterialError('请至少保留一条“名称｜核心内容｜特征内容｜适用提示”格式的预设。');
+      return;
+    }
+    setColorMaterialSaving(true);
+    setColorMaterialError('');
+    try {
+      const saved = await updateElevationColorMaterialPresets(presets);
+      setColorMaterialPresets(saved);
+      setColorMaterialEditorOpen(false);
+    } catch (error: any) {
+      setColorMaterialError(error?.message || '保存色彩与材质预设失败');
+    } finally {
+      setColorMaterialSaving(false);
+    }
+  };
 
   const saveInsertPresets = async () => {
     if (!canManageTeam) return;
@@ -589,6 +685,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     const requestPrompt = buildExhibitionCreativeBriefPrompt({
       spaceType,
       projectTheme,
+      colorMaterial,
       inspiration,
       documentSummary,
       insertItems: selectedInsertIds,
@@ -624,6 +721,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     documentSummary,
     excludeOptions,
     generationCount,
+    colorMaterial,
     inspiration,
     llmModel,
     projectTheme,
@@ -887,6 +985,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             sharedBrief = fallbackCreativeBrief({
               spaceType,
               projectTheme,
+              colorMaterial,
               inspiration,
               documentSummary,
               insertItemsText: exhibitionCreativeInsertItemsText(selectedInsertIds, insertOptions),
@@ -914,6 +1013,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             brief = fallbackCreativeBrief({
               spaceType,
               projectTheme,
+              colorMaterial,
               inspiration,
               documentSummary,
               insertItemsText: exhibitionCreativeInsertItemsText(selectedInsertIds, insertOptions),
@@ -932,6 +1032,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
         const imagePrompt = buildExhibitionCreativeImagePrompt({
           spaceType,
           projectTheme,
+          colorMaterial,
           inspiration,
           documentSummary,
           creativeBrief: brief,
@@ -1004,6 +1105,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     hasManualSpaceSize,
     id,
     insertOptions,
+    colorMaterial,
     inspiration,
     isReadonly,
     manualSpaceSize,
@@ -1128,13 +1230,86 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               );
             })}
           </div>
-          <input
-            className={FIELD}
-            value={projectTheme}
-            disabled={isReadonly || busy}
-            placeholder="项目主题 / 展览关键词"
-            onChange={(event) => update({ projectTheme: event.target.value })}
-          />
+          <div className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold text-cyan-100">色彩与材质预设</span>
+              <span className="min-w-0 flex-1 truncate text-[9px] text-white/40">
+                参与 LLM 创意描述和最终生图 Prompt
+              </span>
+              {canManageTeam && (
+                <button
+                  type="button"
+                  className={BUTTON}
+                  disabled={busy}
+                  onClick={() => setColorMaterialEditorOpen((open) => !open)}
+                >
+                  {colorMaterialEditorOpen ? '收起' : '编辑'}
+                </button>
+              )}
+            </div>
+            <select
+              className={FIELD}
+              value={d.colorMaterialPreset || ''}
+              disabled={isReadonly || busy}
+              onChange={(event) => {
+                const presetId = event.target.value;
+                const preset = colorMaterialPresets.find((item) => item.id === presetId);
+                update({
+                  colorMaterialPreset: presetId,
+                  ...(preset ? { colorMaterial: colorMaterialTextFromPreset(preset) } : {}),
+                });
+              }}
+            >
+              <option value="">不使用色彩与材质预设</option>
+              {colorMaterialPresets.map((preset) => (
+                <option key={preset.id} value={preset.id} title={preset.info}>
+                  {preset.label}
+                </option>
+              ))}
+            </select>
+            {selectedColorMaterialPreset?.info && (
+              <div className="rounded border border-cyan-300/15 bg-cyan-300/10 px-2 py-1 text-[10px] leading-relaxed text-cyan-50/75">
+                {selectedColorMaterialPreset.info}
+              </div>
+            )}
+            {canManageTeam && colorMaterialEditorOpen && (
+              <div className="space-y-1.5 rounded border border-cyan-300/15 bg-cyan-300/5 p-2">
+                <div className="text-[10px] text-white/45">每行一个预设：名称｜核心内容｜特征内容｜适用提示。输入框只写入名称、核心内容和特征内容。</div>
+                <textarea
+                  className={`${FIELD} min-h-[120px] resize-y font-mono`}
+                  value={colorMaterialEditorValue}
+                  disabled={colorMaterialSaving || busy}
+                  onChange={(event) => setColorMaterialEditorValue(event.target.value)}
+                />
+                {colorMaterialError && <div className="text-[10px] text-red-200">{colorMaterialError}</div>}
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    className={BUTTON}
+                    disabled={colorMaterialSaving || busy}
+                    onClick={() => setColorMaterialEditorOpen(false)}
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    className={BUTTON}
+                    disabled={colorMaterialSaving || busy}
+                    onClick={() => void saveColorMaterialPresets()}
+                  >
+                    {colorMaterialSaving ? '保存中' : '保存'}
+                  </button>
+                </div>
+              </div>
+            )}
+            <textarea
+              className={`${FIELD} min-h-[46px] resize-y`}
+              value={d.colorMaterial || ''}
+              disabled={isReadonly || busy}
+              placeholder="色彩与材质体系"
+              onChange={(event) => update({ colorMaterial: event.target.value, colorMaterialPreset: '' })}
+            />
+          </div>
           <textarea
             className={`${FIELD} min-h-[78px] resize-y`}
             value={inspiration}

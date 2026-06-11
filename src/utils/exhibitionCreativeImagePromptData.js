@@ -161,6 +161,7 @@ export function normalizeExhibitionCreativeBrief(value) {
 export function buildExhibitionCreativeBriefPrompt(values = {}) {
   const meta = exhibitionCreativeSpaceTypeMeta(values.spaceType);
   const projectTheme = cleanExhibitionCreativeText(values.projectTheme, 500);
+  const colorMaterial = cleanExhibitionCreativeText(values.colorMaterial, 1000);
   const inspiration = cleanExhibitionCreativeText(values.inspiration, 2000);
   const documentSummary = cleanExhibitionCreativeText(values.documentSummary, 3000);
   const roundIndex = Math.max(1, Number(values.roundIndex) || 1);
@@ -171,17 +172,18 @@ export function buildExhibitionCreativeBriefPrompt(values = {}) {
     ? values.previousBriefs.map((item) => cleanExhibitionCreativeText(item, 800)).filter(Boolean)
     : [];
   const lines = [
-    `请基于项目资料摘要、项目主题/个人灵感和指定植入项，创作第 ${roundIndex}/${total} 个${meta.label}展陈空间生图创意描述。`,
+    `请基于项目资料摘要、色彩与材质/个人灵感和指定植入项，创作第 ${roundIndex}/${total} 个${meta.label}展陈空间生图创意描述。`,
     `空间类型：${meta.label}。${meta.prompt}`,
     `指定植入项：${insertItemsText}`,
     '创意描述不要分析、引用或依赖输入图像；输入图像只会在后续图生图阶段作为空间结构约束。',
-    `请把提炼后的创意资料文档与${insertItemsText}结合，进行有艺术性的展陈空间创作，从展陈叙事、空间气质、灯光氛围、材料语言、互动方式、观众视线组织和拍摄画面完成度等角度给出可直接用于图生图的创意描述。`,
+    `请把提炼后的创意资料文档、色彩与材质要求与${insertItemsText}结合，进行有艺术性的展陈空间创作，从展陈叙事、空间气质、灯光氛围、材料语言、互动方式、观众视线组织和拍摄画面完成度等角度给出可直接用于图生图的创意描述。`,
     '输出 180 到 320 字中文自然段，只输出创意描述本身，不要标题、编号、Markdown、解释、参数表或英文翻译。',
   ];
   if (excludeItemsText) {
     lines.push(`排除项：${excludeItemsText}。创意描述中不要设计、暗示或要求生成这些内容。`);
   }
   if (projectTheme) lines.push(`项目主题/展览关键词：${projectTheme}`);
+  if (colorMaterial) lines.push(`色彩与材质：${colorMaterial}`);
   if (documentSummary) {
     lines.push('项目资料摘要：');
     lines.push(documentSummary);
@@ -215,6 +217,7 @@ function exhibitionCreativeDeepeningRequirement(spaceType) {
 export function buildExhibitionCreativeImagePrompt(values = {}) {
   const meta = exhibitionCreativeSpaceTypeMeta(values.spaceType);
   const projectTheme = cleanExhibitionCreativeText(values.projectTheme, 500);
+  const colorMaterial = cleanExhibitionCreativeText(values.colorMaterial, 1000);
   const inspiration = cleanExhibitionCreativeText(values.inspiration, 2000);
   const documentSummary = cleanExhibitionCreativeText(values.documentSummary, 3000);
   const creativeBrief = normalizeExhibitionCreativeBrief(values.creativeBrief || values.brief);
@@ -246,6 +249,12 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
     lines.push('');
     lines.push('【排除项优先约束】');
     lines.push(`以下内容优先级高于创意描述，不得出现在画面中：${excludeItemsText}。即使创意描述、项目资料或个人灵感提到这些内容，也必须忽略并避免生成。`);
+  }
+  if (colorMaterial) {
+    lines.push('');
+    lines.push('【色彩与材质】');
+    lines.push(colorMaterial);
+    lines.push('上述色彩与材质体系优先于自由创意描述，必须转化为可落地的墙面、地面、展柜、装置、灯光和表面工艺表达。');
   }
   if (inspiration) {
     lines.push('');

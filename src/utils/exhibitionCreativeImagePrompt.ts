@@ -52,6 +52,7 @@ export interface ExhibitionCreativeViewAngle {
 export interface ExhibitionCreativeBriefPromptValues {
   spaceType?: ExhibitionCreativeSpaceType;
   projectTheme?: string;
+  colorMaterial?: string;
   inspiration?: string;
   documentSummary?: string;
   insertItems?: string[];
