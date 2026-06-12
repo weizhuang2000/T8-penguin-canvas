@@ -168,6 +168,16 @@ function nextDefaultCanvasName(list, user) {
   return `${prefix}${maxIndex + 1}`;
 }
 
+function isGenericDefaultCanvasName(name) {
+  const value = String(name || '').trim();
+  return (
+    !value ||
+    /^画布\s*\d+$/i.test(value) ||
+    value === '未命名画布' ||
+    value === 'Untitled Canvas'
+  );
+}
+
 function readCanvasDataFile(id) {
   const file = getCanvasFile(id);
   if (!fs.existsSync(file)) return null;
@@ -206,7 +216,7 @@ router.post('/', (req, res) => {
   const requestedName = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
   const canvas = {
     id,
-    name: requestedName || nextDefaultCanvasName(list, req.user),
+    name: isGenericDefaultCanvasName(requestedName) ? nextDefaultCanvasName(list, req.user) : requestedName,
     ...owner,
     sharedWith: [],
     nodeCount: 0,
