@@ -42,6 +42,7 @@ import {
 } from '../utils/nodePlacement';
 import { createOutputDataFromItems, createUploadDataFromItems, fileNameFromUrl, getMediaItemsFromData, type MediaItem, type MediaKind } from '../utils/mediaCollection';
 import { markCanvasNodesDeleted } from '../utils/deletedNodeRegistry';
+import { CanvasRuntimeProvider } from './nodes/canvasRuntimeContext';
 import {
   bucketSendableMaterials,
   collectSendableMaterialsFromNode,
@@ -4916,6 +4917,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
         className="hidden"
         onChange={handleImportFile}
       />
+      <CanvasRuntimeProvider value={{ loadedCanvasId }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -5117,6 +5119,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
         {/* 选中可执行节点时的浮动操作栏 (执行 / 中止 / 关闭) */}
         <NodeActionBar />
       </ReactFlow>
+      </CanvasRuntimeProvider>
 
       {/* 跨节点素材拖拽浮层 (Ctrl + 鼠标左键 从素材缩略图拖出) */}
       <MaterialDragOverlay />

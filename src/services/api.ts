@@ -191,6 +191,21 @@ export async function saveCanvasData(id: string, data: CanvasData, options?: { a
   });
 }
 
+export async function patchCanvasNodeData(
+  canvasId: string,
+  nodeId: string,
+  patch: Record<string, any>,
+): Promise<CanvasData> {
+  const res = await request<{ success: boolean; data: CanvasData }>(
+    `${BASE}/canvas/${encodeURIComponent(canvasId)}/nodes/${encodeURIComponent(nodeId)}/data`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ patch }),
+    },
+  );
+  return res.data;
+}
+
 export async function autoSaveCanvasData(
   id: string,
   data: CanvasData,

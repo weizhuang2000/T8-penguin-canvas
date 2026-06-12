@@ -13,6 +13,7 @@ const {
   normalizeSharedWith,
 } = require('../auth/canvasAccess');
 const { findUnauthorizedNewNodes } = require('../auth/toolPermissions');
+const { patchCanvasNodeData } = require('../utils/canvasDataPatch');
 
 const router = express.Router();
 
@@ -320,6 +321,42 @@ router.put('/:id', (req, res) => {
   found.item.updatedAt = Date.now();
   saveCanvasList(found.list);
   res.json({ success: true });
+});
+
+router.patch('/:id/nodes/:nodeId/data', express.json({ limit: '50mb' }), (req, res) => {
+  const found = findCanvasForRequest(req, res);
+  if (!found) return;
+  if (!requireCanvasEdit(req, res, found)) return;
+
+  const file = getCanvasFile(req.params.id);
+  const existing = readCanvasDataFile(req.params.id);
+  if (!existing || !Array.isArray(existing.nodes)) {
+    return res.status(404).json({ success: false, error: 'Canvas data not found' });
+  }
+
+  const result = patchCanvasNodeData(existing, req.params.nodeId, req.body?.patch);
+  if (result.status !== 200) {
+    return res.status(result.status).json({ success: false, error: result.error });
+  }
+  const nodes = result.data.nodes;
+
+  const persisted = {
+    ...result.data,
+    ownerUserId: found.item.ownerUserId || existing.ownerUserId || null,
+    ownerName: found.item.ownerName || existing.ownerName || '',
+    ownerRole: found.item.ownerRole || existing.ownerRole || '',
+    sharedWith: normalizeSharedWith(found.item.sharedWith),
+    nodes,
+    edges: Array.isArray(existing.edges) ? existing.edges : [],
+    viewport: existing.viewport || { x: 0, y: 0, zoom: 1 },
+    nextNodeSerialId: deriveNextNodeSerialId(nodes, existing.nextNodeSerialId),
+  };
+
+  fs.writeFileSync(file, JSON.stringify(persisted, null, 2), 'utf-8');
+  found.item.nodeCount = nodes.length;
+  found.item.updatedAt = Date.now();
+  saveCanvasList(found.list);
+  res.json({ success: true, data: persisted });
 });
 
 router.post('/:id/auto-save', (req, res) => {

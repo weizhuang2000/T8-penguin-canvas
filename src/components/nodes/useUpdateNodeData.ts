@@ -3,6 +3,7 @@ import { useCallback, useRef } from 'react';
 import * as api from '../../services/api';
 import { useCanvasStore } from '../../stores/canvas';
 import { isCanvasNodeDeleted } from '../../utils/deletedNodeRegistry';
+import { useCanvasRuntime } from './canvasRuntimeContext';
 
 const offscreenPatchQueues = new Map<string, Promise<void>>();
 
@@ -17,27 +18,14 @@ function enqueueOffscreenCanvasPatch(
     .catch(() => undefined)
     .then(async () => {
       if (isCanvasNodeDeleted(canvasId, nodeId)) return;
-      const data = await api.getCanvasData(canvasId);
+      const data = await api.patchCanvasNodeData(canvasId, nodeId, patch);
       if (isCanvasNodeDeleted(canvasId, nodeId)) return;
-      let found = false;
-      const nodes = (Array.isArray(data.nodes) ? data.nodes : []).map((node: any) => {
-        if (node?.id !== nodeId) return node;
-        found = true;
-        return {
-          ...node,
-          data: {
-            ...(node.data || {}),
-            ...patch,
-          },
-        };
-      });
-      if (!found) return;
       const payload = {
-        nodes,
+        nodes: Array.isArray(data.nodes) ? data.nodes : [],
         edges: Array.isArray(data.edges) ? data.edges : [],
         viewport: data.viewport || { x: 0, y: 0, zoom: 1 },
+        nextNodeSerialId: data.nextNodeSerialId,
       };
-      await api.saveCanvasData(canvasId, payload);
       api.autoSaveCanvasData(canvasId, payload).catch((e) => {
         console.warn('离屏画布自动保存到本地路径失败', e);
       });
@@ -51,18 +39,24 @@ function enqueueOffscreenCanvasPatch(
 }
 
 /**
- * 用于在节点内部更新自身 data 的 hook
- * 通过 reactflow 的 setNodes 接口更新指定 id 的节点
- * 如果节点运行期间用户切换到其他画布，则按节点挂载时的画布 id
- * 直接补写对应画布 JSON，避免异步生成结果丢到当前画布之外。
+ * 更新节点自身 data。
+ *
+ * 异步任务会捕获触发时实际加载的画布 id。若任务完成时用户已经切到其他画布，
+ * 只 patch 原画布的目标节点，避免把结果写进当前画布或用旧整图覆盖他人改动。
  */
 export function useUpdateNodeData(nodeId: string) {
   const { setNodes } = useReactFlow();
-  const originCanvasIdRef = useRef(useCanvasStore.getState().activeId);
+  const { loadedCanvasId } = useCanvasRuntime();
+  const originCanvasIdRef = useRef<string | null>(loadedCanvasId || useCanvasStore.getState().activeId);
+
+  if (loadedCanvasId && originCanvasIdRef.current !== loadedCanvasId) {
+    originCanvasIdRef.current = loadedCanvasId;
+  }
+
+  const originCanvasId = originCanvasIdRef.current;
 
   return useCallback(
     (patch: Record<string, any>) => {
-      const originCanvasId = originCanvasIdRef.current;
       const activeCanvasId = useCanvasStore.getState().activeId;
       const queueKey = originCanvasId ? `${originCanvasId}::${nodeId}` : '';
       const hasPendingOffscreenPatch = queueKey ? offscreenPatchQueues.has(queueKey) : false;
@@ -78,6 +72,6 @@ export function useUpdateNodeData(nodeId: string) {
         )
       );
     },
-    [nodeId, setNodes]
+    [nodeId, originCanvasId, setNodes]
   );
 }

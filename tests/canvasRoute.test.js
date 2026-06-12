@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const access = require('../backend/src/auth/canvasAccess.js');
+const { patchCanvasNodeData, sanitizeNodeDataPatch } = require('../backend/src/utils/canvasDataPatch.js');
 
 const {
   canEditCanvas,
@@ -119,4 +120,43 @@ test('normalizeSharedWith dedupes and defaults old entries to view', () => {
     { id: 3, username: 'carol', permission: 'edit' },
   ]);
   assert.deepEqual(shares.map((share) => [share.userId, share.permission]), [['2', 'view'], ['3', 'edit']]);
+});
+
+test('patchCanvasNodeData only updates target node data and keeps canvas shape', () => {
+  const existing = {
+    nodes: [
+      { id: 'img-1', type: 'image', data: { status: 'generating', prompt: 'A' } },
+      { id: 'img-2', type: 'image', data: { status: 'idle', imageUrl: '/files/output/b.png' } },
+    ],
+    edges: [{ id: 'e1', source: 'img-1', target: 'img-2' }],
+    viewport: { x: 12, y: 34, zoom: 0.8 },
+    nextNodeSerialId: 9,
+  };
+
+  const result = patchCanvasNodeData(existing, 'img-1', {
+    status: 'success',
+    imageUrl: '/files/output/a.png',
+    data: { imageUrl: '/files/output/evil.png' },
+    id: 'other-node',
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.data.nodes[0].id, 'img-1');
+  assert.deepEqual(result.data.nodes[0].data, {
+    status: 'success',
+    prompt: 'A',
+    imageUrl: '/files/output/a.png',
+  });
+  assert.deepEqual(result.data.nodes[1], existing.nodes[1]);
+  assert.deepEqual(result.data.edges, existing.edges);
+  assert.deepEqual(result.data.viewport, existing.viewport);
+  assert.equal(result.data.nextNodeSerialId, 9);
+});
+
+test('sanitizeNodeDataPatch rejects arrays and strips structural fields', () => {
+  assert.equal(sanitizeNodeDataPatch([]), null);
+  assert.deepEqual(
+    sanitizeNodeDataPatch({ id: 'n2', type: 'text', position: { x: 1 }, data: {}, status: 'success' }),
+    { status: 'success' },
+  );
 });
