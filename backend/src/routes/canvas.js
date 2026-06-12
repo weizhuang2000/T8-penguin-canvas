@@ -145,6 +145,29 @@ function ownerFieldsFromUser(user) {
   };
 }
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function displayNameFromUser(user) {
+  return String(user?.name || user?.realName || user?.username || '').trim() || '用户';
+}
+
+function nextDefaultCanvasName(list, user) {
+  const userName = displayNameFromUser(user);
+  const prefix = `${userName}画布`;
+  const pattern = new RegExp(`^${escapeRegExp(prefix)}(\\d+)$`);
+  const ownerUserId = user?.id == null ? '' : String(user.id);
+  let maxIndex = 0;
+  for (const item of Array.isArray(list) ? list : []) {
+    if (ownerUserId && String(item?.ownerUserId || '') !== ownerUserId) continue;
+    const match = String(item?.name || '').trim().match(pattern);
+    if (!match) continue;
+    maxIndex = Math.max(maxIndex, Number(match[1]) || 0);
+  }
+  return `${prefix}${maxIndex + 1}`;
+}
+
 function readCanvasDataFile(id) {
   const file = getCanvasFile(id);
   if (!fs.existsSync(file)) return null;
@@ -180,9 +203,10 @@ router.post('/', (req, res) => {
   const id = `canvas-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const now = Date.now();
   const owner = ownerFieldsFromUser(req.user);
+  const requestedName = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
   const canvas = {
     id,
-    name: req.body?.name || 'Untitled Canvas',
+    name: requestedName || nextDefaultCanvasName(list, req.user),
     ...owner,
     sharedWith: [],
     nodeCount: 0,

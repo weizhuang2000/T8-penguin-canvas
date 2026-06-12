@@ -171,9 +171,10 @@ export async function listCanvases(): Promise<CanvasListItem[]> {
 }
 
 export async function createCanvas(name?: string): Promise<CanvasListItem> {
+  const trimmedName = typeof name === 'string' ? name.trim() : '';
   const res = await request<{ success: boolean; data: CanvasListItem }>(`${BASE}/canvas`, {
     method: 'POST',
-    body: JSON.stringify({ name: name || '未命名画布' }),
+    body: JSON.stringify(trimmedName ? { name: trimmedName } : {}),
   });
   return res.data;
 }

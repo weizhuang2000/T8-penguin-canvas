@@ -18,8 +18,7 @@ export default function CanvasManager() {
   const isDark = theme === 'dark';
 
   const handleCreate = async () => {
-    const name = `画布 ${canvases.length + 1}`;
-    await createCanvas(name);
+    await createCanvas();
   };
 
   const startEdit = (id: string, name: string) => {
