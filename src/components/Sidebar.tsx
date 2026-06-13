@@ -260,6 +260,7 @@ export default function Sidebar({ onAddNode, visibleNodeTypes }: SidebarProps) {
   const [editingName, setEditingName] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [shareCanvas, setShareCanvas] = useState<CanvasListItem | null>(null);
+  const [canvasKeyword, setCanvasKeyword] = useState('');
 
   useEffect(() => {
     loadCanvases();
@@ -288,6 +289,11 @@ export default function Sidebar({ onAddNode, visibleNodeTypes }: SidebarProps) {
 
   const activeCanvas = canvases.find((canvas) => canvas.id === activeId) || null;
   const canEditActiveCanvas = activeCanvas?.access?.canEdit !== false;
+  const filteredCanvases = useMemo(() => {
+    const keyword = canvasKeyword.trim().toLowerCase();
+    if (!keyword) return canvases;
+    return canvases.filter((canvas) => canvas.name.toLowerCase().includes(keyword));
+  }, [canvases, canvasKeyword]);
 
   const toggle = (key: string) => setCollapsed((s) => ({ ...s, [key]: !s[key] }));
 
@@ -384,7 +390,7 @@ export default function Sidebar({ onAddNode, visibleNodeTypes }: SidebarProps) {
         >
           <button
             onClick={() => setCanvasPanelOpen((v) => !v)}
-            className={`flex items-center gap-1 flex-1 text-left text-[11px] font-semibold uppercase tracking-wider ${
+            className={`flex items-center gap-1 shrink-0 text-left text-[11px] font-semibold uppercase tracking-wider ${
               isPixel
                 ? 'px-group-title'
                 : isDark
@@ -397,6 +403,29 @@ export default function Sidebar({ onAddNode, visibleNodeTypes }: SidebarProps) {
             <span>画布</span>
             <span className="opacity-60 ml-1 normal-case">{canvases.length}</span>
           </button>
+          <div
+            className={`min-w-0 flex-1 flex items-center gap-1 px-1.5 py-1 ${
+              isPixel
+                ? 'px-input rounded-[10px]'
+                : `rounded-md ${isDark ? 'bg-white/5' : 'bg-black/5'}`
+            }`}
+          >
+            <Search size={11} className="shrink-0 opacity-50" />
+            <input
+              type="text"
+              value={canvasKeyword}
+              onChange={(e) => setCanvasKeyword(e.target.value)}
+              onFocus={() => setCanvasPanelOpen(true)}
+              placeholder="搜索画布"
+              className={`min-w-0 flex-1 bg-transparent outline-none text-[10px] ${
+                isPixel
+                  ? ''
+                  : isDark
+                    ? 'text-white placeholder:text-white/30'
+                    : 'text-zinc-900 placeholder:text-zinc-400'
+              }`}
+            />
+          </div>
           <button
             onClick={handleCreateCanvas}
             className={
@@ -443,7 +472,16 @@ export default function Sidebar({ onAddNode, visibleNodeTypes }: SidebarProps) {
                 </button>
               </div>
             )}
-            {canvases.map((c) => {
+            {!canvasLoading && canvases.length > 0 && filteredCanvases.length === 0 && (
+              <div
+                className={`px-2 py-2 text-center text-[11px] ${
+                  isPixel ? '' : isDark ? 'text-white/40' : 'text-zinc-500'
+                }`}
+              >
+                没有匹配的画布
+              </div>
+            )}
+            {filteredCanvases.map((c) => {
               const isActive = c.id === activeId;
               const isEditing = editingId === c.id;
               const needConfirm = confirmDelete === c.id;

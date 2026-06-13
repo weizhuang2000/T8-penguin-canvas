@@ -15,9 +15,12 @@ import {
   X,
 } from 'lucide-react';
 import { useThemeStore } from '../stores/theme';
+import { useApiKeysStore } from '../stores/apiKeys';
 import * as api from '../services/api';
 import type { GenerationHistoryItem, GenerationHistoryKind, GenerationHistoryProject } from '../services/api';
 import type { GenerationHistoryUserSummary } from '../services/api';
+import { AUDIO_MODELS, IMAGE_MODELS, LLM_MODELS, SUNO_VERSIONS, VIDEO_MODELS } from '../providers/models';
+import { advancedProviderModelOptions, advancedProvidersForNode } from '../utils/advancedProviders';
 import LoopingVideo from './LoopingVideo';
 
 interface GenerationHistoryDrawerProps {
@@ -37,6 +40,12 @@ const HISTORY_GRID_COLUMN_STORAGE_KEY = 'penguin:generation-history-columns';
 const HISTORY_GRID_COLUMN_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
 const HISTORY_PAGE_SIZE = 60;
 type HistoryGridColumnCount = (typeof HISTORY_GRID_COLUMN_OPTIONS)[number];
+
+interface HistoryProviderOption {
+  value: string;
+  label: string;
+  models: string[];
+}
 
 function normalizeHistoryGridColumns(value: unknown): HistoryGridColumnCount {
   const n = Number(value);
@@ -76,8 +85,75 @@ function dragSourceNodeId(item: GenerationHistoryItem): string {
   return item.sourceNodeId || `generation-history-${item.id}`;
 }
 
+function uniqueText(values: unknown[]): string[] {
+  const out: string[] = [];
+  for (const value of values) {
+    const item = String(value || '').trim();
+    if (!item || out.includes(item)) continue;
+    out.push(item);
+  }
+  return out;
+}
+
+function buildHistoryProviderOptions(settings: ReturnType<typeof useApiKeysStore.getState>['settings']): HistoryProviderOption[] {
+  const zhenzhenModels = uniqueText([
+    ...IMAGE_MODELS.flatMap((model) => [model.id, model.apiModel, ...model.apiModelOptions.map((option) => option.value)]),
+    ...VIDEO_MODELS.flatMap((model) => [model.id, ...model.apiModelOptions.map((option) => option.value)]),
+  ]);
+  const audioModels = uniqueText([
+    'suno',
+    ...AUDIO_MODELS.map((model) => model.id),
+    ...SUNO_VERSIONS.map((version) => version.value),
+  ]);
+  const llmModels = uniqueText([
+    settings.llmModel,
+    ...(settings.llmConfigs || settings.llmApiKeys || []).map((config) => config?.model),
+    ...LLM_MODELS.map((model) => model.id),
+  ]);
+
+  const options: HistoryProviderOption[] = [
+    { value: 'zhenzhen', label: '百达工坊 / zhenzhen', models: zhenzhenModels },
+    { value: 'seedance', label: 'Seedance', models: uniqueText(VIDEO_MODELS.find((model) => model.kind === 'seedance')?.apiModelOptions.map((option) => option.value) || []) },
+    { value: 'suno', label: 'Suno', models: audioModels },
+    { value: 'fal', label: 'FAL', models: uniqueText([...zhenzhenModels, ...VIDEO_MODELS.flatMap((model) => model.apiModelOptions.map((option) => option.value))].filter((model) => /fal/i.test(model))) },
+    { value: 'mj', label: 'Midjourney / MJ', models: ['fast', 'turbo', 'relax'] },
+    { value: 'runninghub', label: 'RunningHub', models: [] },
+    { value: 'llm-direct', label: 'LLM 配置', models: llmModels },
+  ];
+
+  for (const provider of settings.advancedProviders || []) {
+    const imageModels = advancedProvidersForNode([provider], 'image').length ? advancedProviderModelOptions(provider, 'image') : [];
+    const videoModels = advancedProvidersForNode([provider], 'video').length ? advancedProviderModelOptions(provider, 'video') : [];
+    const chatModels = advancedProvidersForNode([provider], 'llm').length ? advancedProviderModelOptions(provider, 'llm') : [];
+    const models = uniqueText([...imageModels, ...videoModels, ...chatModels]);
+    if (!models.length) continue;
+    const value = provider.label || provider.id;
+    options.push({
+      value,
+      label: `${provider.label || provider.id} · ${provider.protocol}`,
+      models,
+    });
+    if (provider.id && provider.id !== value) {
+      options.push({
+        value: provider.id,
+        label: `${provider.id} · ${provider.protocol}`,
+        models,
+      });
+    }
+  }
+
+  const deduped = new Map<string, HistoryProviderOption>();
+  for (const option of options) {
+    const key = option.value.toLowerCase();
+    const existing = deduped.get(key);
+    deduped.set(key, existing ? { ...existing, models: uniqueText([...existing.models, ...option.models]) } : option);
+  }
+  return Array.from(deduped.values()).filter((option) => option.value);
+}
+
 export default function GenerationHistoryDrawer({ open, onClose, userRole }: GenerationHistoryDrawerProps) {
   const { theme, style } = useThemeStore();
+  const settings = useApiKeysStore((state) => state.settings);
   const isDark = theme === 'dark';
   const isPixel = style === 'pixel';
   const [projects, setProjects] = useState<GenerationHistoryProject[]>([]);
@@ -103,6 +179,17 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
   const itemsRef = useRef<GenerationHistoryItem[]>([]);
   const projectsRef = useRef<GenerationHistoryProject[]>([]);
   const skipAutoProjectReloadRef = useRef('');
+  const providerOptions = useMemo(() => buildHistoryProviderOptions(settings), [settings]);
+  const modelOptions = useMemo(() => {
+    const providerKeyword = provider.trim().toLowerCase();
+    const scopedProviders = providerKeyword
+      ? providerOptions.filter((option) => (
+          option.value.toLowerCase() === providerKeyword ||
+          option.label.toLowerCase().includes(providerKeyword)
+        ))
+      : providerOptions;
+    return uniqueText(scopedProviders.flatMap((option) => option.models));
+  }, [provider, providerOptions]);
 
   useEffect(() => {
     itemsRef.current = items;
@@ -389,8 +476,30 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
             ))}
           </select>
           <input value={sourceNodeType} onChange={(e) => setSourceNodeType(e.target.value)} className={`${inputCls} w-full text-xs`} placeholder="工具类型 image / video" />
-          <input value={provider} onChange={(e) => setProvider(e.target.value)} className={`${inputCls} w-full text-xs`} placeholder="平台 provider" />
-          <input value={model} onChange={(e) => setModel(e.target.value)} className={`${inputCls} w-full text-xs`} placeholder="模型 model" />
+          <input
+            value={provider}
+            onChange={(e) => setProvider(e.target.value)}
+            className={`${inputCls} w-full text-xs`}
+            placeholder="平台 provider"
+            list="generation-history-provider-options"
+          />
+          <datalist id="generation-history-provider-options">
+            {providerOptions.map((option) => (
+              <option key={option.value} value={option.value} label={option.label} />
+            ))}
+          </datalist>
+          <input
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            className={`${inputCls} w-full text-xs`}
+            placeholder="模型 model"
+            list="generation-history-model-options"
+          />
+          <datalist id="generation-history-model-options">
+            {modelOptions.map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
         </div>
       )}
 
