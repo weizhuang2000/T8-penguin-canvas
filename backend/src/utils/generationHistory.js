@@ -13,6 +13,7 @@ const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.a
 const VIDEO_EXT = new Set(['.mp4', '.webm', '.mov', '.m4v', '.mkv', '.avi']);
 const AUDIO_EXT = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.aac']);
 const UNARCHIVED_PROJECT_ID = '__unarchived__';
+const MAX_LIST_LIMIT = 200;
 
 function now() {
   return Date.now();
@@ -29,6 +30,18 @@ function safePrompt(value, fallback = '') {
 function normalizeSeed(value) {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+function parsePositiveInt(value, fallback = 0, max = MAX_LIST_LIMIT) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(Math.floor(n), max);
+}
+
+function parseNonNegativeInt(value, fallback = 0) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return fallback;
+  return Math.floor(n);
 }
 
 function genId() {
@@ -218,10 +231,17 @@ function findOrMaterializeItem(db, id) {
   return null;
 }
 
-function decorateItem(item, user, canvases) {
+function decorateItem(item, user, canvases, seedReaderCache = null) {
   const canManage = canManageHistoryItem(user, item, canvases);
-  const canvasData = item.seed ? null : loadCanvasData(item.canvasId);
-  const fallbackSeed = item.seed || seedFromCanvasNode(canvasData)(item.sourceNodeId);
+  let fallbackSeed = item.seed;
+  if (!fallbackSeed && item.canvasId && item.canvasId !== UNARCHIVED_PROJECT_ID) {
+    let seedReader = seedReaderCache?.get(item.canvasId);
+    if (!seedReader) {
+      seedReader = seedFromCanvasNode(loadCanvasData(item.canvasId));
+      seedReaderCache?.set(item.canvasId, seedReader);
+    }
+    fallbackSeed = seedReader(item.sourceNodeId);
+  }
   return {
     ...item,
     seed: fallbackSeed,
@@ -322,10 +342,8 @@ function scanOutputItems() {
   return entries.filter(Boolean);
 }
 
-function listVisibleItems(user, params = {}) {
-  const canvases = loadCanvasList();
+function collectMergedItems() {
   const db = readDb();
-  const admin = isAdminRole(user?.role);
   const seen = new Set();
   const merged = [];
   for (const item of db.items) {
@@ -340,6 +358,27 @@ function listVisibleItems(user, params = {}) {
       merged.push(item);
     }
   }
+  return merged;
+}
+
+async function mapWithConcurrency(items, limit, mapper) {
+  const out = new Array(items.length);
+  let index = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (index < items.length) {
+      const current = index;
+      index += 1;
+      out[current] = await mapper(items[current], current);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
+function listVisibleItems(user, params = {}) {
+  const canvases = loadCanvasList();
+  const admin = isAdminRole(user?.role);
+  const merged = collectMergedItems();
   const kind = normalizeKind(params.kind);
   const q = safeText(params.q).toLowerCase();
   const includeHidden = params.includeHidden === true || params.includeHidden === '1' || params.includeHidden === 'true';
@@ -350,7 +389,9 @@ function listVisibleItems(user, params = {}) {
   const provider = admin ? safeText(params.provider).toLowerCase() : '';
   const model = admin ? safeText(params.model).toLowerCase() : '';
   const sourceNodeType = admin ? safeText(params.sourceNodeType).toLowerCase() : '';
-  return merged
+  const limit = parsePositiveInt(params.limit);
+  const offset = parseNonNegativeInt(params.offset);
+  const sorted = merged
     .filter((item) => {
       if (item.deletedAt) return false;
       if (!includeHidden && item.hidden) return false;
@@ -369,8 +410,10 @@ function listVisibleItems(user, params = {}) {
       }
       return true;
     })
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .map((item) => decorateItem(item, user, canvases));
+    .sort((a, b) => b.createdAt - a.createdAt);
+  const page = limit ? sorted.slice(offset, offset + limit) : (offset ? sorted.slice(offset) : sorted);
+  const seedReaderCache = new Map();
+  return page.map((item) => decorateItem(item, user, canvases, seedReaderCache));
 }
 
 async function listHistoryUsers(user) {
@@ -394,8 +437,8 @@ async function listHistoryUsers(user) {
     if (item.createdByUserRole) current.role = item.createdByUserRole;
     counts.set(item.createdByUserId, current);
   }
-  const out = [];
-  for (const entry of counts.values()) {
+  const entries = Array.from(counts.values());
+  const out = await mapWithConcurrency(entries, 8, async (entry) => {
     try {
       const found = await findUserById(entry.userId);
       if (found) {
@@ -406,17 +449,18 @@ async function listHistoryUsers(user) {
     } catch {
       // Best effort enrichment only.
     }
-    out.push(entry);
-  }
+    return entry;
+  });
   return out.sort((a, b) => b.lastCreatedAt - a.lastCreatedAt);
 }
 
 function listProjects(user) {
   const canvases = loadCanvasList();
-  const items = listVisibleItems(user, { includeHidden: true });
+  const items = collectMergedItems();
   const counts = new Map();
   for (const item of items) {
     if (item.hidden || item.deletedAt) continue;
+    if (!canViewProject(user, item.canvasId, canvases)) continue;
     const key = item.canvasId || UNARCHIVED_PROJECT_ID;
     const current = counts.get(key) || { image: 0, video: 0, audio: 0, total: 0 };
     current[item.kind] += 1;

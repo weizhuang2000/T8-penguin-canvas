@@ -985,6 +985,8 @@ export function getGenerationHistoryItems(params: {
   provider?: string;
   model?: string;
   sourceNodeType?: string;
+  limit?: number;
+  offset?: number;
 } = {}) {
   const sp = new URLSearchParams();
   if (params.canvasId) sp.set('canvasId', params.canvasId);
@@ -997,6 +999,8 @@ export function getGenerationHistoryItems(params: {
   if (params.provider) sp.set('provider', params.provider);
   if (params.model) sp.set('model', params.model);
   if (params.sourceNodeType) sp.set('sourceNodeType', params.sourceNodeType);
+  if (params.limit && params.limit > 0) sp.set('limit', String(Math.floor(params.limit)));
+  if (params.offset && params.offset > 0) sp.set('offset', String(Math.floor(params.offset)));
   const qs = sp.toString();
   return safeRequest<GenerationHistoryItem[]>(`${BASE}/generation-history/items${qs ? `?${qs}` : ''}`);
 }

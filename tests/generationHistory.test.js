@@ -116,6 +116,23 @@ test('admin can filter history by user and model while regular users cannot wide
   assert.deepEqual(regular.map((item) => item.url), ['/files/output/a.png']);
 }));
 
+test('history item listing supports bounded pagination', () => withTempData(() => {
+  writeCanvases([{ id: 'c1', ownerUserId: 'u1' }]);
+  for (let i = 0; i < 5; i += 1) {
+    history.addHistoryItems(
+      [{ url: `/files/output/page-${i}.png`, kind: 'image', title: `Page ${i}` }],
+      { canvasId: 'c1' },
+      { id: 'u1', role: 'designer' },
+    );
+  }
+
+  const page1 = history.listVisibleItems({ id: 'u1', role: 'designer' }, { limit: 2 });
+  const page2 = history.listVisibleItems({ id: 'u1', role: 'designer' }, { limit: 2, offset: 2 });
+  assert.equal(page1.length, 2);
+  assert.equal(page2.length, 2);
+  assert.equal(new Set([...page1, ...page2].map((item) => item.id)).size, 4);
+}));
+
 test('owner can hide without deleting output file', () => withTempData(() => {
   writeCanvases([{ id: 'c1', ownerUserId: 'u1' }]);
   const file = path.join(config.OUTPUT_DIR, 'a.png');

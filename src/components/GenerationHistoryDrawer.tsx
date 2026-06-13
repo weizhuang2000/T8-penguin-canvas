@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Clock3,
   Copy,
@@ -35,6 +35,7 @@ const KIND_META: Record<GenerationHistoryKind | 'all', { label: string; icon: ty
 
 const HISTORY_GRID_COLUMN_STORAGE_KEY = 'penguin:generation-history-columns';
 const HISTORY_GRID_COLUMN_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
+const HISTORY_PAGE_SIZE = 60;
 type HistoryGridColumnCount = (typeof HISTORY_GRID_COLUMN_OPTIONS)[number];
 
 function normalizeHistoryGridColumns(value: unknown): HistoryGridColumnCount {
@@ -84,6 +85,7 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
   const [projectId, setProjectId] = useState('');
   const [kind, setKind] = useState<GenerationHistoryKind | 'all'>('all');
   const [q, setQ] = useState('');
+  const [debouncedQ, setDebouncedQ] = useState('');
   const [favoriteOnly, setFavoriteOnly] = useState(false);
   const [includeHidden, setIncludeHidden] = useState(false);
   const [historyUsers, setHistoryUsers] = useState<GenerationHistoryUserSummary[]>([]);
@@ -92,40 +94,78 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
   const [model, setModel] = useState('');
   const [sourceNodeType, setSourceNodeType] = useState('');
   const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [msg, setMsg] = useState('');
   const [preview, setPreview] = useState<GenerationHistoryItem | null>(null);
   const [infoItem, setInfoItem] = useState<GenerationHistoryItem | null>(null);
   const [gridColumns, setGridColumns] = useState<HistoryGridColumnCount>(() => readHistoryGridColumns());
   const isAdmin = userRole === 'admin' || userRole === 'manager';
+  const itemsRef = useRef<GenerationHistoryItem[]>([]);
+  const projectsRef = useRef<GenerationHistoryProject[]>([]);
+  const skipAutoProjectReloadRef = useRef('');
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
+  useEffect(() => {
+    projectsRef.current = projects;
+  }, [projects]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQ(q), 300);
+    return () => window.clearTimeout(timer);
+  }, [q]);
+
+  const load = useCallback(async (append = false) => {
     if (!open) return;
-    setLoading(true);
-    const projectRes = await api.getGenerationHistoryProjects();
-    const nextProjects = resultData<GenerationHistoryProject[]>(projectRes) || [];
-    if (isAdmin) {
-      const usersRes = await api.getGenerationHistoryUsers();
-      if (usersRes.success) setHistoryUsers(usersRes.data || []);
+    if (!append && skipAutoProjectReloadRef.current && skipAutoProjectReloadRef.current === projectId) {
+      skipAutoProjectReloadRef.current = '';
+      return;
     }
-    setProjects(nextProjects);
+    setLoading(true);
+    setMsg('');
+    let projectRes: api.Result<GenerationHistoryProject[]> = { success: true, data: projectsRef.current };
+    let nextProjects = projectsRef.current;
+    if (!append) {
+      projectRes = await api.getGenerationHistoryProjects();
+      nextProjects = resultData<GenerationHistoryProject[]>(projectRes) || [];
+      if (isAdmin) {
+        const usersRes = await api.getGenerationHistoryUsers();
+        if (usersRes.success) setHistoryUsers(usersRes.data || []);
+      }
+      setProjects(nextProjects);
+    }
     const nextProjectId = projectId || nextProjects.find((project) => project.counts.total > 0)?.id || nextProjects[0]?.id || '';
-    if (!projectId && nextProjectId) setProjectId(nextProjectId);
+    if (!projectId && nextProjectId) {
+      skipAutoProjectReloadRef.current = nextProjectId;
+      setProjectId(nextProjectId);
+    }
     const itemRes = await api.getGenerationHistoryItems({
       canvasId: nextProjectId || undefined,
       kind,
-      q,
+      q: debouncedQ,
       favorite: favoriteOnly,
       includeHidden,
       userId: isAdmin ? userId : undefined,
       provider: isAdmin ? provider : undefined,
       model: isAdmin ? model : undefined,
       sourceNodeType: isAdmin ? sourceNodeType : undefined,
+      limit: HISTORY_PAGE_SIZE,
+      offset: append ? itemsRef.current.length : 0,
     });
-    const nextItems = resultData<GenerationHistoryItem[]>(itemRes);
-    if (nextItems) setItems(nextItems);
+    const nextItems = resultData<GenerationHistoryItem[]>(itemRes) || [];
+    setHasMore(nextItems.length === HISTORY_PAGE_SIZE);
+    if (itemRes.success) {
+      setItems((prev) => {
+        if (!append) return nextItems;
+        const seen = new Set(prev.map((item) => item.id));
+        return [...prev, ...nextItems.filter((item) => !seen.has(item.id))];
+      });
+    }
     if (!projectRes.success || !itemRes.success) setMsg((projectRes as any).error || (itemRes as any).error || '加载历史失败');
     setLoading(false);
-  }, [favoriteOnly, includeHidden, isAdmin, kind, model, open, projectId, provider, q, sourceNodeType, userId]);
+  }, [debouncedQ, favoriteOnly, includeHidden, isAdmin, kind, model, open, projectId, provider, sourceNodeType, userId]);
 
   useEffect(() => {
     load();
@@ -445,6 +485,16 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
               );
             })}
           </div>
+          {hasMore && (
+            <button
+              type="button"
+              onClick={() => load(true)}
+              disabled={loading}
+              className={isPixel ? 'px-btn mt-3 w-full' : `mt-3 h-9 w-full rounded-md border text-xs ${isDark ? 'border-white/10 hover:bg-white/10 disabled:text-white/35' : 'border-black/10 hover:bg-black/5 disabled:text-zinc-400'}`}
+            >
+              {loading ? 'Loading...' : 'Load more'}
+            </button>
+          )}
         </main>
       </div>
 
