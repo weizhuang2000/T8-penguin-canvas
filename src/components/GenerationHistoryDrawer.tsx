@@ -180,16 +180,10 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
   const projectsRef = useRef<GenerationHistoryProject[]>([]);
   const skipAutoProjectReloadRef = useRef('');
   const providerOptions = useMemo(() => buildHistoryProviderOptions(settings), [settings]);
-  const modelOptions = useMemo(() => {
-    const providerKeyword = provider.trim().toLowerCase();
-    const scopedProviders = providerKeyword
-      ? providerOptions.filter((option) => (
-          option.value.toLowerCase() === providerKeyword ||
-          option.label.toLowerCase().includes(providerKeyword)
-        ))
-      : providerOptions;
-    return uniqueText(scopedProviders.flatMap((option) => option.models));
-  }, [provider, providerOptions]);
+  const modelOptions = useMemo(
+    () => uniqueText(providerOptions.flatMap((option) => option.models)),
+    [providerOptions],
+  );
 
   useEffect(() => {
     itemsRef.current = items;
@@ -485,7 +479,9 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
           />
           <datalist id="generation-history-provider-options">
             {providerOptions.map((option) => (
-              <option key={option.value} value={option.value} label={option.label} />
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
             ))}
           </datalist>
           <input
@@ -497,7 +493,9 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
           />
           <datalist id="generation-history-model-options">
             {modelOptions.map((option) => (
-              <option key={option} value={option} />
+              <option key={option} value={option}>
+                {option}
+              </option>
             ))}
           </datalist>
         </div>
