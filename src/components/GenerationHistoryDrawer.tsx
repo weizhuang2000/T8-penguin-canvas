@@ -216,9 +216,23 @@ function HistoryFilterCombobox({
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
-          className={`${inputCls} w-full pr-8 text-xs`}
+          className={`${inputCls} w-full pr-14 text-xs`}
           placeholder={placeholder}
         />
+        {value && (
+          <button
+            type="button"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => {
+              onChange('');
+              setOpen(false);
+            }}
+            className={`absolute right-8 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}
+            title="清空筛选"
+          >
+            <X size={12} />
+          </button>
+        )}
         <button
           type="button"
           onMouseDown={(event) => event.preventDefault()}
@@ -604,6 +618,7 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
             inputCls={inputCls}
             isDark={isDark}
             isPixel={isPixel}
+            filterOptions={false}
           />
         </div>
       )}
