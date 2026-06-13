@@ -2099,7 +2099,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
         };
         await api.saveCanvasData(targetCanvasId, payload);
         api.autoSaveCanvasData(targetCanvasId, payload).catch(() => {});
-        await loadCanvases();
+        await loadCanvases({ force: true });
         if (switchAfter) setActive(targetCanvasId);
         setSendModal(null);
         logBus.success(`已发送 ${summarizeSendNodeFragment(fragment)} 到目标画布`, '发送节点');
@@ -2198,7 +2198,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
       };
       await api.saveCanvasData(targetCanvasId, payload);
       api.autoSaveCanvasData(targetCanvasId, payload).catch(() => {});
-      await loadCanvases();
+      await loadCanvases({ force: true });
       if (switchAfter) setActive(targetCanvasId);
       setSendModal(null);
       logBus.success(

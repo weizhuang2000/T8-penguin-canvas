@@ -6,9 +6,10 @@ interface CanvasStoreState {
   canvases: CanvasListItem[];
   activeId: string | null;
   loading: boolean;
+  loaded: boolean;
   error: string | null;
 
-  loadCanvases: () => Promise<void>;
+  loadCanvases: (options?: { force?: boolean }) => Promise<void>;
   createCanvas: (name?: string) => Promise<CanvasListItem | null>;
   deleteCanvas: (id: string) => Promise<void>;
   renameCanvas: (id: string, name: string) => Promise<void>;
@@ -20,9 +21,13 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
   canvases: [],
   activeId: null,
   loading: false,
+  loaded: false,
   error: null,
 
-  async loadCanvases() {
+  async loadCanvases(options) {
+    const state = get();
+    if (!options?.force && state.loaded) return;
+    if (!options?.force && state.loading) return;
     set({ loading: true, error: null });
     try {
       const list = await api.listCanvases();
@@ -31,6 +36,7 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
       set({
         canvases: sorted,
         loading: false,
+        loaded: true,
         activeId: currentActiveId && sorted.some((canvas) => canvas.id === currentActiveId)
           ? currentActiveId
           : sorted[0]?.id || null,

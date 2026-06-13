@@ -46,6 +46,39 @@ export interface ToolPermissionsConfig {
   users?: AuthUser[];
 }
 
+const canvasDataCache = new Map<string, CanvasData>();
+const pendingCanvasDataRequests = new Map<string, Promise<CanvasData>>();
+
+function cloneCanvasData(data: CanvasData): CanvasData {
+  if (typeof structuredClone === 'function') return structuredClone(data);
+  return JSON.parse(JSON.stringify(data));
+}
+
+function writeCanvasDataCache(id: string, data: CanvasData) {
+  const previous = canvasDataCache.get(id);
+  canvasDataCache.set(id, cloneCanvasData({
+    ...(previous || {}),
+    ...data,
+    nodes: Array.isArray(data.nodes) ? data.nodes : [],
+    edges: Array.isArray(data.edges) ? data.edges : [],
+    viewport: data.viewport || previous?.viewport || { x: 0, y: 0, zoom: 1 },
+  }));
+}
+
+export function primeCanvasDataCache(id: string, data: CanvasData): void {
+  writeCanvasDataCache(id, data);
+}
+
+export function getCachedCanvasData(id: string): CanvasData | null {
+  const cached = canvasDataCache.get(id);
+  return cached ? cloneCanvasData(cached) : null;
+}
+
+export function invalidateCanvasDataCache(id: string): void {
+  canvasDataCache.delete(id);
+  pendingCanvasDataRequests.delete(id);
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
@@ -179,9 +212,25 @@ export async function createCanvas(name?: string): Promise<CanvasListItem> {
   return res.data;
 }
 
-export async function getCanvasData(id: string): Promise<CanvasData> {
-  const res = await request<{ success: boolean; data: CanvasData }>(`${BASE}/canvas/${id}`);
-  return res.data;
+export async function getCanvasData(id: string, options?: { force?: boolean }): Promise<CanvasData> {
+  if (!options?.force) {
+    const cached = getCachedCanvasData(id);
+    if (cached) return cached;
+    const pending = pendingCanvasDataRequests.get(id);
+    if (pending) return pending.then(cloneCanvasData);
+  }
+  const pending = request<{ success: boolean; data: CanvasData }>(`${BASE}/canvas/${id}`)
+    .then((res) => {
+      writeCanvasDataCache(id, res.data);
+      return getCachedCanvasData(id) || res.data;
+    })
+    .finally(() => {
+      if (pendingCanvasDataRequests.get(id) === pending) {
+        pendingCanvasDataRequests.delete(id);
+      }
+    });
+  pendingCanvasDataRequests.set(id, pending);
+  return pending.then(cloneCanvasData);
 }
 
 export async function saveCanvasData(id: string, data: CanvasData, options?: { allowEmpty?: boolean }): Promise<void> {
@@ -190,6 +239,7 @@ export async function saveCanvasData(id: string, data: CanvasData, options?: { a
     method: 'PUT',
     body: JSON.stringify(data),
   });
+  writeCanvasDataCache(id, data);
 }
 
 export async function patchCanvasNodeData(
@@ -204,6 +254,7 @@ export async function patchCanvasNodeData(
       body: JSON.stringify({ patch }),
     },
   );
+  writeCanvasDataCache(canvasId, res.data);
   return res.data;
 }
 
@@ -223,6 +274,7 @@ export async function autoSaveCanvasData(
 
 export async function deleteCanvas(id: string): Promise<void> {
   await request(`${BASE}/canvas/${id}`, { method: 'DELETE' });
+  invalidateCanvasDataCache(id);
 }
 
 export async function renameCanvas(id: string, name: string): Promise<CanvasListItem> {
