@@ -165,6 +165,7 @@ function HistoryFilterCombobox({
   inputCls,
   isDark,
   isPixel,
+  filterOptions = true,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -173,9 +174,11 @@ function HistoryFilterCombobox({
   inputCls: string;
   isDark: boolean;
   isPixel: boolean;
+  filterOptions?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const visibleOptions = useMemo(() => {
+    if (!filterOptions) return options.slice(0, 80);
     const keyword = value.trim().toLowerCase();
     const filtered = keyword
       ? options.filter((option) => (
@@ -184,7 +187,7 @@ function HistoryFilterCombobox({
         ))
       : options;
     return filtered.slice(0, 80);
-  }, [options, value]);
+  }, [filterOptions, options, value]);
 
   const dropdownCls = isPixel
     ? 'border-2 border-[var(--px-ink)] bg-[var(--px-surface)] text-[var(--px-ink)] shadow-[3px_3px_0_var(--px-ink)]'
@@ -591,6 +594,7 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
             inputCls={inputCls}
             isDark={isDark}
             isPixel={isPixel}
+            filterOptions={false}
           />
           <HistoryFilterCombobox
             value={model}
