@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ChevronDown,
   Clock3,
   Copy,
   Eye,
@@ -45,6 +46,11 @@ interface HistoryProviderOption {
   value: string;
   label: string;
   models: string[];
+}
+
+interface HistoryTextOption {
+  value: string;
+  label?: string;
 }
 
 function normalizeHistoryGridColumns(value: unknown): HistoryGridColumnCount {
@@ -151,6 +157,105 @@ function buildHistoryProviderOptions(settings: ReturnType<typeof useApiKeysStore
   return Array.from(deduped.values()).filter((option) => option.value);
 }
 
+function HistoryFilterCombobox({
+  value,
+  onChange,
+  options,
+  placeholder,
+  inputCls,
+  isDark,
+  isPixel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: HistoryTextOption[];
+  placeholder: string;
+  inputCls: string;
+  isDark: boolean;
+  isPixel: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const visibleOptions = useMemo(() => {
+    const keyword = value.trim().toLowerCase();
+    const filtered = keyword
+      ? options.filter((option) => (
+          option.value.toLowerCase().includes(keyword) ||
+          String(option.label || '').toLowerCase().includes(keyword)
+        ))
+      : options;
+    return filtered.slice(0, 80);
+  }, [options, value]);
+
+  const dropdownCls = isPixel
+    ? 'border-2 border-[var(--px-ink)] bg-[var(--px-surface)] text-[var(--px-ink)] shadow-[3px_3px_0_var(--px-ink)]'
+    : `rounded-md border shadow-xl ${isDark ? 'border-white/10 bg-zinc-950 text-white' : 'border-black/10 bg-white text-zinc-900'}`;
+  const itemCls = isPixel
+    ? 'hover:bg-[var(--px-yellow)]'
+    : isDark
+      ? 'hover:bg-white/10'
+      : 'hover:bg-black/5';
+
+  return (
+    <div
+      className="relative min-w-0"
+      onBlur={(event) => {
+        const current = event.currentTarget;
+        window.requestAnimationFrame(() => {
+          if (!current.contains(document.activeElement)) setOpen(false);
+        });
+      }}
+    >
+      <div className="relative">
+        <input
+          value={value}
+          onChange={(event) => {
+            onChange(event.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          className={`${inputCls} w-full pr-8 text-xs`}
+          placeholder={placeholder}
+        />
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => setOpen((next) => !next)}
+          className={`absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}
+          title="展开选项"
+        >
+          <ChevronDown size={13} />
+        </button>
+      </div>
+      {open && (
+        <div className={`absolute left-0 right-0 top-full z-[70] mt-1 max-h-48 overflow-y-auto ${dropdownCls}`}>
+          {visibleOptions.length === 0 ? (
+            <div className="px-2 py-2 text-xs opacity-55">没有匹配项，可继续手动输入</div>
+          ) : (
+            visibleOptions.map((option) => (
+              <button
+                key={`${option.value}::${option.label || ''}`}
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                }}
+                className={`block w-full px-2 py-1.5 text-left text-xs ${itemCls}`}
+                title={option.label || option.value}
+              >
+                <span className="block truncate">{option.value}</span>
+                {option.label && option.label !== option.value && (
+                  <span className="block truncate text-[10px] opacity-55">{option.label}</span>
+                )}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function GenerationHistoryDrawer({ open, onClose, userRole }: GenerationHistoryDrawerProps) {
   const { theme, style } = useThemeStore();
   const settings = useApiKeysStore((state) => state.settings);
@@ -183,6 +288,14 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
   const modelOptions = useMemo(
     () => uniqueText(providerOptions.flatMap((option) => option.models)),
     [providerOptions],
+  );
+  const providerTextOptions = useMemo(
+    () => providerOptions.map((option) => ({ value: option.value, label: option.label })),
+    [providerOptions],
+  );
+  const modelTextOptions = useMemo(
+    () => modelOptions.map((option) => ({ value: option })),
+    [modelOptions],
   );
 
   useEffect(() => {
@@ -470,34 +583,24 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
             ))}
           </select>
           <input value={sourceNodeType} onChange={(e) => setSourceNodeType(e.target.value)} className={`${inputCls} w-full text-xs`} placeholder="工具类型 image / video" />
-          <input
+          <HistoryFilterCombobox
             value={provider}
-            onChange={(e) => setProvider(e.target.value)}
-            className={`${inputCls} w-full text-xs`}
+            onChange={setProvider}
+            options={providerTextOptions}
             placeholder="平台 provider"
-            list="generation-history-provider-options"
+            inputCls={inputCls}
+            isDark={isDark}
+            isPixel={isPixel}
           />
-          <datalist id="generation-history-provider-options">
-            {providerOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </datalist>
-          <input
+          <HistoryFilterCombobox
             value={model}
-            onChange={(e) => setModel(e.target.value)}
-            className={`${inputCls} w-full text-xs`}
+            onChange={setModel}
+            options={modelTextOptions}
             placeholder="模型 model"
-            list="generation-history-model-options"
+            inputCls={inputCls}
+            isDark={isDark}
+            isPixel={isPixel}
           />
-          <datalist id="generation-history-model-options">
-            {modelOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </datalist>
         </div>
       )}
 
