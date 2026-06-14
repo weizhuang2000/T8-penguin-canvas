@@ -136,7 +136,9 @@ test('exhibition creative image prompt describes marked reference roles', () => 
     hasExhibitReferenceImage: true,
     creativeBrief: '围绕核心展品组织沉浸式重点空间。',
   });
-  assert.match(prompt, /第 1 类为空间结构示意图/);
+  assert.match(prompt, /参考图角色说明：纯色素模的参考图是空间结构示意图/);
+  assert.match(prompt, /必须先从空间结构示意图提取干净的空间骨架/);
+  assert.match(prompt, /不要直接沿用色彩与材质参考图原本的平面布局/);
   assert.match(prompt, /纯色素模的参考图是空间结构示意图/);
   assert.match(prompt, /空间几何、布局和动线的主约束/);
   assert.match(prompt, /最终空间结构必须完全遵循空间结构示意图/);
@@ -145,9 +147,10 @@ test('exhibition creative image prompt describes marked reference roles', () => 
   assert.match(prompt, /不要在最终效果图中渲染、复写、临摹或生成空间结构示意图中的标注文字/);
   assert.match(prompt, /左上角带 R 标识的图片为色彩与材质参考图/);
   assert.match(prompt, /色彩关系、材质质感、表面肌理、光泽和冷暖倾向/);
-  assert.match(prompt, /参考图按输入顺序读取/);
   assert.match(prompt, /三类参考图职责互斥/);
   assert.match(prompt, /不要从该图学习或复制空间布局/);
+  assert.match(prompt, /即使该图看起来像完整室内效果图/);
+  assert.match(prompt, /色彩与材质参考图只决定表面语言，不决定空间结构/);
   assert.match(prompt, /展品参考图是唯一展品参考来源/);
   assert.match(prompt, /不作为空间结构或色彩材质体系依据/);
   assert.doesNotMatch(prompt, /手动暖木色和黄铜材质/);

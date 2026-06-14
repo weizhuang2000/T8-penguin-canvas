@@ -254,8 +254,10 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   ];
   if (hasSpaceImage || hasColorMaterialReferenceImage || hasExhibitReferenceImage) {
     lines.push('【参考图读取总规则】');
-    lines.push('参考图按输入顺序读取：第 1 类为空间结构示意图，第 2 类为色彩与材质参考图，第 3 类为展品参考图；三类参考图职责互斥，不能互相替代、混用或推断对方职责。');
+    lines.push('参考图角色说明：纯色素模的参考图是空间结构示意图，是空间几何、布局和动线的主约束；带标识的色彩与材质参考图只用于提取色彩关系、材质质感、表面肌理、光泽、冷暖倾向和材质完成度；展品参考图只用于提取展品外观、内容主题、体量关系和展示重点。');
+    lines.push('生成时必须先从空间结构示意图提取干净的空间骨架，再把色彩与材质参考图的表面语言套用到该骨架上；不要直接沿用色彩与材质参考图原本的平面布局、房间形状、墙体位置、展台位置、入口开口、动线组织、镜头构图或空间比例来替代结构图。');
     lines.push('如果不同参考图之间出现冲突：空间几何、布局、透视、层高、墙柱、吊顶、地面边界和动线只服从空间结构示意图；色彩关系、材质质感、肌理、光泽和冷暖倾向只服从色彩与材质参考图；展品外观、内容主题、体量关系和展示重点只服从展品参考图。');
+    lines.push('三类参考图职责互斥，不能互相替代、混用或推断对方职责；空间结构不参与色彩材质参考的优先级排序，最终空间结构必须完全遵循空间结构示意图。');
     lines.push('');
   }
   if (hasSpaceImage) {
@@ -286,6 +288,7 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
     lines.push('该图不作为展品参考图起任何作用，不从该图提取展品造型、展品内容、展品主题或展示重点。');
     lines.push('该图不作为空间结构依据，不改变空间图或手动空间尺寸给出的几何、透视、层高、开口和动线关系。');
     lines.push('不要从该图学习或复制空间布局、房间形状、墙柱位置、吊顶形式、地面边界、门洞开口、镜头角度、构图比例、展示道具或展品形态；只把它翻译成可用于当前空间的颜色与材质语言。');
+    lines.push('即使该图看起来像完整室内效果图，也只能使用它的表皮、材质、色调、光泽和肌理，不得使用它的空间骨架、墙体组织、展台构成或视角关系。');
   }
   if (hasExhibitReferenceImage) {
     lines.push('');
@@ -315,6 +318,9 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   lines.push('【设计深化要求】');
   lines.push(exhibitionCreativeDeepeningRequirement(values.spaceType));
   lines.push('不要出现“创意描述”“个人灵感”“空间类型”“输入空间图约束”等字段名，也不要把上述设计说明作为上墙文字。');
+  if (hasSpaceImage && hasColorMaterialReferenceImage) {
+    lines.push('再次强调：色彩与材质参考图只决定表面语言，不决定空间结构；最终画面的空间骨架、布局、墙体、展陈体块、分区、动线和主要开口必须完全遵循空间结构示意图。');
+  }
   lines.push(hasSpaceImage
     ? '最终画面必须看得出来自同一张输入室内空间图，只是在展陈创意、灯光、材料、装置和叙事氛围上形成新的方案。'
     : '最终画面不受既有输入图限制，空间结构可以自由发挥，但所有墙体、开口、展陈装置、展柜、媒体设备、观众尺度和拍摄视角都必须落在手动输入的空间尺寸范围内。');
