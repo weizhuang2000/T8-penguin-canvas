@@ -34,6 +34,7 @@ export type NodeType =
   | 'import-cam-project'
   | 'resize'
   | 'combine'
+  | 'mark'
   | 'remove-bg'
   | 'upscale'
   | 'grid-crop'

@@ -52,6 +52,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: 'import-cam-project', label: '导入项目白模', category: 'exhibition', description: '列出 C:\\cam-output 项目目录，并将选中项目 camoutput 文件夹内的图像导入为图像素材集', icon: 'Box', color: 'cyan' },
   { type: 'resize', label: '尺寸调整', category: 'utility', description: '图像尺寸调整', icon: 'Maximize2', color: 'orange' },
   { type: 'combine', label: '合并', category: 'utility', description: '图像合并', icon: 'Combine', color: 'orange' },
+  { type: 'mark', label: '加标识', category: 'utility', description: '给输入图像素材在指定角落添加字符标识', icon: 'Badge', color: 'orange' },
   { type: 'remove-bg', label: '抠图', category: 'utility', description: '去除背景', icon: 'Eraser', color: 'orange', hidden: true },
   { type: 'upscale', label: '放大', category: 'utility', description: '图像放大', icon: 'ZoomIn', color: 'orange', hidden: true },
   { type: 'grid-crop', label: '宫格剪裁', category: 'utility', description: '网格切图', icon: 'Grid3x3', color: 'orange' },

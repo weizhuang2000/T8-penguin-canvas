@@ -105,6 +105,7 @@ import ResizeNode from './nodes/ResizeNode';
 import UpscaleNode from './nodes/UpscaleNode';
 import GridCropNode from './nodes/GridCropNode';
 import CombineNode from './nodes/CombineNode';
+import MarkNode from './nodes/MarkNode';
 import RemoveBgNode from './nodes/RemoveBgNode';
 import ImageCompareNode from './nodes/ImageCompareNode';
 import ToolboxParamNode from './nodes/ToolboxParamNode';
@@ -183,6 +184,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'material-set': MaterialSetNode,
   resize: ResizeNode,
   combine: CombineNode,
+  mark: MarkNode,
   'remove-bg': RemoveBgNode,
   upscale: UpscaleNode,
   'grid-crop': GridCropNode,
@@ -537,6 +539,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
   'image-compare': { mode: 'slider', align: 'contain', split: 50, opacity: 50, threshold: 24 },
   'drawing-board': { boardRatio: '16:9', boardWidth: 960, boardHeight: 540, boardElements: [], boardColor: '#111827', boardStrokeSize: 5 },
   'grid-crop': { rows: 3, cols: 3, gap: 0 },
+  mark: { markText: 'R', markPosition: 'top-left', markColor: '#ff0000', markFontSize: 12 },
   'remove-ai-watermark': {
     aiWatermarkMode: 'smart',
     aiWatermarkProcessAll: false,
@@ -573,7 +576,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'video', 'seedance', 'audio', 'llm', 'runninghub', 'runninghub-wallet',
   // v1.2.10.1: rh-tools 与 RunningHub 同质，同样可被批量运行调起
   'rh-tools',
-  'resize', 'upscale', 'grid-crop', 'remove-bg', 'combine', 'image-compare', 'drawing-board',
+  'resize', 'upscale', 'grid-crop', 'mark', 'remove-bg', 'combine', 'image-compare', 'drawing-board',
   'frame-extractor', 'frame-pair',
   'upload',
   // v1.2.8 工具节点 (循环器 / 从合集获取)

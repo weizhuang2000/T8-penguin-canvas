@@ -88,6 +88,7 @@ export const NODE_PORTS: Record<string, NodePorts> = {
   'import-cam-project': { inputs: [], outputs: ['image'] },
   resize: { inputs: ['image'], outputs: ['image'] },
   combine: { inputs: ['image'], outputs: ['image'] },
+  mark: { inputs: ['image'], outputs: ['image'] },
   'remove-bg': { inputs: ['image'], outputs: ['image'] },
   upscale: { inputs: ['image'], outputs: ['image'] },
   'grid-crop': { inputs: ['image'], outputs: ['image'] },

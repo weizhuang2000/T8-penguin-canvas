@@ -158,6 +158,42 @@ function clampNumber(v, min, max, fallback) {
   return Math.max(min, Math.min(max, n));
 }
 
+function escapeXmlText(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function normalizeMarkPosition(v) {
+  const s = String(v || 'top-left');
+  if (['top-left', 'top-right', 'bottom-left', 'bottom-right'].includes(s)) return s;
+  return 'top-left';
+}
+
+function normalizeHexColor(v) {
+  const s = String(v || '').trim();
+  return /^#[0-9a-f]{6}$/i.test(s) ? s : '#ff0000';
+}
+
+function makeMarkSvg({ width, height, text, position, color, fontSize }) {
+  const safeText = escapeXmlText(text || 'R');
+  const size = Math.max(1, Math.min(512, Math.trunc(Number(fontSize) || 12)));
+  const margin = Math.max(2, Math.ceil(size * 0.25));
+  const isRight = position.endsWith('right');
+  const isBottom = position.startsWith('bottom');
+  const x = isRight ? Math.max(0, width - margin) : margin;
+  const y = isBottom ? Math.max(size, height - margin) : margin;
+  const anchor = isRight ? 'end' : 'start';
+  const baseline = isBottom ? 'alphabetic' : 'hanging';
+
+  return Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">` +
+      `<text x="${x}" y="${y}" fill="${color}" font-family="Arial, Helvetica, sans-serif" font-size="${size}" font-weight="400" text-anchor="${anchor}" dominant-baseline="${baseline}">${safeText}</text>` +
+    `</svg>`,
+  );
+}
+
 function normalizeGridOrderMode(v) {
   const s = String(v || 'row');
   if (['row', 'column', 'snake', 'reverse'].includes(s)) return s;
@@ -667,6 +703,42 @@ router.post('/compare', async (req, res) => {
     res.json({ success: true, data: { imageUrl, metrics } });
   } catch (e) {
     console.error('compare 错误:', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ========== POST /api/image/mark - add corner text mark ==========
+// body: { imageUrl, text?, position?, color?, fontSize? }
+router.post('/mark', async (req, res) => {
+  try {
+    const { imageUrl, text, position, color, fontSize } = req.body || {};
+    if (!imageUrl) return res.status(400).json({ success: false, error: 'imageUrl 必填' });
+    const buf = await fetchImageBuffer(imageUrl);
+    const meta = await sharp(buf).metadata();
+    const width = meta.width || 0;
+    const height = meta.height || 0;
+    if (!width || !height) throw new Error('无法读取图像尺寸');
+
+    const markText = String(text ?? 'R').slice(0, 64) || 'R';
+    const markPosition = normalizeMarkPosition(position);
+    const markColor = normalizeHexColor(color);
+    const markFontSize = Math.max(1, Math.min(512, Math.trunc(Number(fontSize) || 12)));
+    const overlay = makeMarkSvg({
+      width,
+      height,
+      text: markText,
+      position: markPosition,
+      color: markColor,
+      fontSize: markFontSize,
+    });
+    const out = await sharp(buf)
+      .composite([{ input: overlay, left: 0, top: 0 }])
+      .png({ compressionLevel: 3, effort: 1 })
+      .toBuffer();
+    const imageUrlOut = await saveBufferAsync(out, 'png');
+    res.json({ success: true, data: { imageUrl: imageUrlOut } });
+  } catch (e) {
+    console.error('mark error:', e);
     res.status(500).json({ success: false, error: e.message });
   }
 });

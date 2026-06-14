@@ -58,6 +58,7 @@ export const NODE_DEFAULT_SIZE: Record<string, { w: number; h: number }> = {
   'import-cam-project': { w: 300, h: 180 },
   resize: { w: 280, h: 220 },
   combine: { w: 280, h: 220 },
+  mark: { w: 280, h: 280 },
   'remove-bg': { w: 280, h: 220 },
   upscale: { w: 280, h: 220 },
   'frame-extractor': { w: 320, h: 300 },

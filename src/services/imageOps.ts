@@ -99,6 +99,16 @@ export const opCompare = (
     };
   }>('compare', { imageAUrl, imageBUrl, mode, ...(options || {}) });
 
+export const opMark = (
+  imageUrl: string,
+  options?: {
+    text?: string;
+    position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+    color?: string;
+    fontSize?: number;
+  },
+) => postOp<{ imageUrl: string }>('mark', { imageUrl, ...(options || {}) });
+
 export const opRemoveBg = (imageUrl: string) =>
   postOp<{ imageUrl: string; warning?: string }>('remove-bg', { imageUrl });
 
