@@ -194,6 +194,39 @@ function makeMarkSvg({ width, height, text, position, color, fontSize }) {
   );
 }
 
+async function measureMarkText(text, fontSize) {
+  const safeText = escapeXmlText(text || 'R');
+  const size = Math.max(1, Math.min(512, Math.trunc(Number(fontSize) || 12)));
+  const canvasW = Math.max(64, Math.ceil(size * Math.max(4, safeText.length * 1.2)));
+  const canvasH = Math.max(64, Math.ceil(size * 4));
+  const svg = Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${canvasW}" height="${canvasH}" viewBox="0 0 ${canvasW} ${canvasH}">` +
+      `<text x="${size}" y="${size}" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="${size}" font-weight="400" dominant-baseline="hanging">${safeText}</text>` +
+    `</svg>`,
+  );
+  const meta = await sharp(svg).trim({ background: '#000000', threshold: 1 }).metadata();
+  return {
+    width: meta.width || size,
+    height: meta.height || size,
+  };
+}
+
+async function resolveMarkFontSize({ width, height, text, fontSize, autoFontSize }) {
+  const manualSize = Math.max(1, Math.min(512, Math.trunc(Number(fontSize) || 12)));
+  if (autoFontSize !== true) return manualSize;
+  const targetWidth = Math.max(1, width * 0.03);
+  const targetHeight = Math.max(1, height * 0.03);
+  try {
+    const probeSize = 100;
+    const measured = await measureMarkText(text, probeSize);
+    const widthSize = measured.width > 0 ? (targetWidth / measured.width) * probeSize : manualSize;
+    const heightSize = measured.height > 0 ? (targetHeight / measured.height) * probeSize : manualSize;
+    return Math.max(1, Math.min(512, Math.round(Math.max(widthSize, heightSize))));
+  } catch {
+    return Math.max(1, Math.min(512, Math.round(Math.max(targetWidth, targetHeight))));
+  }
+}
+
 function normalizeGridOrderMode(v) {
   const s = String(v || 'row');
   if (['row', 'column', 'snake', 'reverse'].includes(s)) return s;
@@ -711,7 +744,7 @@ router.post('/compare', async (req, res) => {
 // body: { imageUrl, text?, position?, color?, fontSize? }
 router.post('/mark', async (req, res) => {
   try {
-    const { imageUrl, text, position, color, fontSize } = req.body || {};
+    const { imageUrl, text, position, color, fontSize, autoFontSize } = req.body || {};
     if (!imageUrl) return res.status(400).json({ success: false, error: 'imageUrl 必填' });
     const buf = await fetchImageBuffer(imageUrl);
     const meta = await sharp(buf).metadata();
@@ -722,7 +755,13 @@ router.post('/mark', async (req, res) => {
     const markText = String(text ?? 'R').slice(0, 64) || 'R';
     const markPosition = normalizeMarkPosition(position);
     const markColor = normalizeHexColor(color);
-    const markFontSize = Math.max(1, Math.min(512, Math.trunc(Number(fontSize) || 12)));
+    const markFontSize = await resolveMarkFontSize({
+      width,
+      height,
+      text: markText,
+      fontSize,
+      autoFontSize: autoFontSize === true,
+    });
     const overlay = makeMarkSvg({
       width,
       height,

@@ -539,7 +539,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
   'image-compare': { mode: 'slider', align: 'contain', split: 50, opacity: 50, threshold: 24 },
   'drawing-board': { boardRatio: '16:9', boardWidth: 960, boardHeight: 540, boardElements: [], boardColor: '#111827', boardStrokeSize: 5 },
   'grid-crop': { rows: 3, cols: 3, gap: 0 },
-  mark: { markText: 'R', markPosition: 'top-left', markColor: '#ff0000', markFontSize: 12 },
+  mark: { markText: 'R', markPosition: 'top-left', markColor: '#ff0000', markFontSize: 12, markAutoFontSize: false },
   'remove-ai-watermark': {
     aiWatermarkMode: 'smart',
     aiWatermarkProcessAll: false,

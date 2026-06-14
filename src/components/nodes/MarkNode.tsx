@@ -37,6 +37,7 @@ const MarkNode = (p: NodeProps) => {
   const position = normalizePosition(d?.markPosition);
   const color = normalizeColor(d?.markColor);
   const fontSize = clampFontSize(d?.markFontSize);
+  const autoFontSize = d?.markAutoFontSize === true;
   const positionLabel = POSITION_OPTIONS.find((item) => item.value === position)?.label || '左上角';
 
   return (
@@ -45,7 +46,7 @@ const MarkNode = (p: NodeProps) => {
       data={p.data}
       selected={p.selected}
       title="加标识"
-      subtitle={`${text || '空'} · ${positionLabel} · ${fontSize}px`}
+      subtitle={`${text || '空'} · ${positionLabel} · ${autoFontSize ? '自动字号' : `${fontSize}px`}`}
       icon={<Badge size={13} />}
       colorHex="#fb923c"
       bgRgba="rgba(251,146,60,.2)"
@@ -85,9 +86,19 @@ const MarkNode = (p: NodeProps) => {
               max={512}
               value={fontSize}
               onChange={(e) => update({ markFontSize: clampFontSize(e.target.value) })}
-              className="w-full rounded bg-white/5 border border-white/10 px-2 py-1 text-xs text-white outline-none focus:border-white/30"
+              disabled={autoFontSize}
+              className="w-full rounded bg-white/5 border border-white/10 px-2 py-1 text-xs text-white outline-none focus:border-white/30 disabled:opacity-45"
             />
           </div>
+          <label className="col-span-2 flex items-center justify-between gap-2 rounded border border-white/10 bg-white/5 px-2 py-1.5 text-[11px] text-white/70">
+            <span>自动字号</span>
+            <input
+              type="checkbox"
+              checked={autoFontSize}
+              onChange={(e) => update({ markAutoFontSize: e.target.checked })}
+              className="accent-orange-400"
+            />
+          </label>
           <div className="col-span-2">
             <label className="text-[10px] text-white/50 block mb-1">颜色</label>
             <div className="grid grid-cols-[34px_1fr] gap-2">
@@ -113,6 +124,7 @@ const MarkNode = (p: NodeProps) => {
           position,
           color,
           fontSize,
+          autoFontSize,
         })
       }
     />

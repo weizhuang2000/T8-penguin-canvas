@@ -106,6 +106,7 @@ export const opMark = (
     position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
     color?: string;
     fontSize?: number;
+    autoFontSize?: boolean;
   },
 ) => postOp<{ imageUrl: string }>('mark', { imageUrl, ...(options || {}) });
 
