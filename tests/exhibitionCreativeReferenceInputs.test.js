@@ -25,7 +25,13 @@ test('exhibition creative node disables manual color material inputs when refere
 
 test('exhibition creative node creates transient marked data urls without save APIs', () => {
   assert.match(nodeSource, /canvas\.toDataURL\('image\/png'\)/);
-  assert.match(nodeSource, /const runtimeReferenceImages = \[spaceImage, markedColorMaterialImage, exhibitReferenceImage\]\.filter\(Boolean\)/);
+  assert.match(nodeSource, /createColorMaterialAbstractCardDataUrl/);
+  assert.match(nodeSource, /isExternalSelected\s*\?\s*isGptImage2Model\(externalProviderModel\)\s*:\s*\(isGptImage2Model\(apiModel\) \|\| isGptImage2Model\(modelDef\.id\)\)/);
+  assert.match(nodeSource, /const colorMaterialReferenceForModel = colorMaterialReferenceImage/);
+  assert.match(nodeSource, /await createColorMaterialAbstractCardDataUrl\(colorMaterialReferenceImage, colorMaterialMarkSettings\)/);
+  assert.match(nodeSource, /await markImageDataUrl\(colorMaterialReferenceImage, colorMaterialMarkSettings\)/);
+  assert.match(nodeSource, /const runtimeReferenceImages = \[spaceImage, colorMaterialReferenceForModel, exhibitReferenceImage\]\.filter\(Boolean\)/);
+  assert.match(nodeSource, /colorMaterialReferenceMode: ColorMaterialReferenceMode = useColorMaterialAbstractCard \? 'abstract-card' : 'marked-image'/);
   assert.match(nodeSource, /images: referenceImages/);
   assert.doesNotMatch(nodeSource, /markedSpaceImage/);
   assert.doesNotMatch(nodeSource, /空间图标识/);

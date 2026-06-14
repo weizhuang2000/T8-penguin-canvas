@@ -157,6 +157,27 @@ test('exhibition creative image prompt describes marked reference roles', () => 
   assert.doesNotMatch(prompt, /【色彩与材质】/);
 });
 
+test('exhibition creative image prompt describes abstract color material card mode for gpt image 2', () => {
+  const prompt = buildExhibitionCreativeImagePrompt({
+    spaceType: 'highlight-space',
+    colorMaterial: '不应出现的手动色彩材质文本',
+    hasSpaceImage: true,
+    hasColorMaterialReferenceImage: true,
+    colorMaterialReferenceMode: 'abstract-card',
+    colorMaterialReferenceMarkText: 'R',
+    colorMaterialReferenceMarkPosition: 'top-left',
+    hasExhibitReferenceImage: true,
+    creativeBrief: '围绕核心展品组织沉浸式重点空间。',
+  });
+  assert.match(prompt, /图1 \/ 第一张参考图 \/ 纯色素模参考图是唯一空间结构示意图/);
+  assert.match(prompt, /图2是色彩与材质抽象卡片，不是空间结构参考图/);
+  assert.match(prompt, /不包含可采用的空间结构/);
+  assert.match(prompt, /最终空间结构必须完全遵循图1，图2只决定表面语言，不决定空间结构/);
+  assert.match(prompt, /展品参考图是唯一展品参考来源/);
+  assert.doesNotMatch(prompt, /不应出现的手动色彩材质文本/);
+  assert.doesNotMatch(prompt, /【色彩与材质】/);
+});
+
 test('exhibition creative prompt uses custom mark labels and suppresses color material in brief prompt', () => {
   const imagePrompt = buildExhibitionCreativeImagePrompt({
     hasSpaceImage: true,

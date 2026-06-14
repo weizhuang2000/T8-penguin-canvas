@@ -94,6 +94,8 @@ interface ReferenceMarkSettings {
   autoFontSize: boolean;
 }
 
+type ColorMaterialReferenceMode = 'abstract-card' | 'marked-image';
+
 const REFERENCE_MARK_POSITION_OPTIONS: Array<{ value: ReferenceMarkPosition; label: string }> = [
   { value: 'top-left', label: '左上角' },
   { value: 'top-right', label: '右上角' },
@@ -225,6 +227,18 @@ function resolveReferenceMarkFontSize(ctx: CanvasRenderingContext2D, width: numb
   return Math.max(1, Math.min(512, Math.round(Math.max(widthSize, heightSize))));
 }
 
+function drawReferenceMark(ctx: CanvasRenderingContext2D, width: number, height: number, settings: ReferenceMarkSettings) {
+  const fontSize = resolveReferenceMarkFontSize(ctx, width, height, settings);
+  const margin = Math.max(2, Math.ceil(fontSize * 0.25));
+  const isRight = settings.position.endsWith('right');
+  const isBottom = settings.position.startsWith('bottom');
+  ctx.font = `${fontSize}px Arial, Helvetica, sans-serif`;
+  ctx.fillStyle = settings.color;
+  ctx.textAlign = isRight ? 'right' : 'left';
+  ctx.textBaseline = isBottom ? 'alphabetic' : 'top';
+  ctx.fillText(settings.text || 'R', isRight ? Math.max(0, width - margin) : margin, isBottom ? Math.max(fontSize, height - margin) : margin);
+}
+
 async function markImageDataUrl(imageUrl: string, settings: ReferenceMarkSettings): Promise<string> {
   const image = await loadReferenceImage(imageUrl);
   const width = image.naturalWidth || image.width;
@@ -246,6 +260,91 @@ async function markImageDataUrl(imageUrl: string, settings: ReferenceMarkSetting
   ctx.textBaseline = isBottom ? 'alphabetic' : 'top';
   ctx.fillText(settings.text || 'R', isRight ? Math.max(0, width - margin) : margin, isBottom ? Math.max(fontSize, height - margin) : margin);
   return canvas.toDataURL('image/png');
+}
+
+async function createColorMaterialAbstractCardDataUrl(imageUrl: string, settings: ReferenceMarkSettings): Promise<string> {
+  const image = await loadReferenceImage(imageUrl);
+  const sourceWidth = image.naturalWidth || image.width;
+  const sourceHeight = image.naturalHeight || image.height;
+  if (!sourceWidth || !sourceHeight) throw new Error('Invalid color material reference image size');
+  const size = 1024;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Unable to create color material abstract card');
+
+  const sampleCanvas = document.createElement('canvas');
+  sampleCanvas.width = 18;
+  sampleCanvas.height = 18;
+  const sampleCtx = sampleCanvas.getContext('2d');
+  if (!sampleCtx) throw new Error('Unable to sample color material reference image');
+  sampleCtx.drawImage(image, 0, 0, sampleCanvas.width, sampleCanvas.height);
+
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(sampleCanvas, 0, 0, size, size);
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalAlpha = 0.45;
+  ctx.filter = 'blur(24px) saturate(1.12)';
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(sampleCanvas, -48, -48, size + 96, size + 96);
+  ctx.restore();
+
+  const cells = 5;
+  const gap = 18;
+  const cellSize = (size - gap * (cells + 1)) / cells;
+  ctx.save();
+  ctx.globalAlpha = 0.78;
+  ctx.imageSmoothingEnabled = true;
+  for (let row = 0; row < cells; row += 1) {
+    for (let col = 0; col < cells; col += 1) {
+      const index = row * cells + col;
+      const sx = Math.floor((((index * 37) % 100) / 100) * Math.max(1, sourceWidth - sourceWidth * 0.18));
+      const sy = Math.floor((((index * 53 + 17) % 100) / 100) * Math.max(1, sourceHeight - sourceHeight * 0.18));
+      const sw = Math.max(16, Math.floor(sourceWidth * (0.12 + ((index % 4) * 0.035))));
+      const sh = Math.max(16, Math.floor(sourceHeight * (0.12 + (((index + 2) % 4) * 0.035))));
+      const dx = gap + col * (cellSize + gap);
+      const dy = gap + row * (cellSize + gap);
+      ctx.drawImage(image, sx, sy, Math.min(sw, sourceWidth - sx), Math.min(sh, sourceHeight - sy), dx, dy, cellSize, cellSize);
+    }
+  }
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'soft-light';
+  ctx.globalAlpha = 0.28;
+  for (let i = 0; i < 28; i += 1) {
+    const x = ((i * 97) % size);
+    const y = ((i * 61 + 29) % size);
+    const radius = 90 + ((i * 23) % 140);
+    const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+    gradient.addColorStop(0, 'rgba(255,255,255,0.55)');
+    gradient.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(Math.max(0, x - radius), Math.max(0, y - radius), radius * 2, radius * 2);
+  }
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalAlpha = 0.62;
+  ctx.fillStyle = 'rgba(255,255,255,0.72)';
+  ctx.fillRect(0, 0, size, 54);
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.font = '24px Arial, Helvetica, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('COLOR / MATERIAL ONLY - NO SPATIAL STRUCTURE', size / 2, 27);
+  ctx.restore();
+
+  drawReferenceMark(ctx, size, size, settings);
+  return canvas.toDataURL('image/png');
+}
+
+function isGptImage2Model(value: unknown): boolean {
+  return /^gpt-image-2(?:$|-|_)/i.test(String(value || '').trim());
 }
 
 function textValuesFromData(data: any): string[] {
@@ -499,6 +598,10 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const model = d.model || 'gpt-image-2';
   const modelDef = useMemo(() => IMAGE_MODELS.find((item) => item.id === model) || IMAGE_MODELS[0], [model]);
   const apiModel = d.apiModel || modelDef.apiModel;
+  const useColorMaterialAbstractCard = isExternalSelected
+    ? isGptImage2Model(externalProviderModel)
+    : (isGptImage2Model(apiModel) || isGptImage2Model(modelDef.id));
+  const colorMaterialReferenceMode: ColorMaterialReferenceMode = useColorMaterialAbstractCard ? 'abstract-card' : 'marked-image';
   const aspectRatio = d.aspectRatio || modelDef.defaultAspectRatio || '1:1';
   const sizeLevel = d.sizeLevel || modelDef.defaultSize || '2K';
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
@@ -573,6 +676,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       projectTheme,
       colorMaterial: effectiveColorMaterial,
       hasColorMaterialReferenceImage: hasColorMaterialReference,
+      colorMaterialReferenceMode,
       colorMaterialReferenceMarkText: colorMaterialMarkSettings.text,
       colorMaterialReferenceMarkPosition: colorMaterialMarkSettings.position,
       inspiration,
@@ -591,7 +695,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       roundIndex: 1,
       total: generationCount,
     }),
-    [colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, creativeBrief, documentSummary, effectiveColorMaterial, exhibitReferenceImage, excludeOptions, generationCount, hasColorMaterialReference, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceType, viewAngleOptions, viewControlEnabled],
+    [colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialReferenceMode, creativeBrief, documentSummary, effectiveColorMaterial, exhibitReferenceImage, excludeOptions, generationCount, hasColorMaterialReference, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceType, viewAngleOptions, viewControlEnabled],
   );
 
   const renderMarkSettings = (
@@ -1149,10 +1253,12 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     const briefs: string[] = [];
     const imageUrls: string[] = [];
     try {
-      const markedColorMaterialImage = colorMaterialReferenceImage
-        ? await markImageDataUrl(colorMaterialReferenceImage, colorMaterialMarkSettings)
+      const colorMaterialReferenceForModel = colorMaterialReferenceImage
+        ? useColorMaterialAbstractCard
+          ? await createColorMaterialAbstractCardDataUrl(colorMaterialReferenceImage, colorMaterialMarkSettings)
+          : await markImageDataUrl(colorMaterialReferenceImage, colorMaterialMarkSettings)
         : '';
-      const runtimeReferenceImages = [spaceImage, markedColorMaterialImage, exhibitReferenceImage].filter(Boolean);
+      const runtimeReferenceImages = [spaceImage, colorMaterialReferenceForModel, exhibitReferenceImage].filter(Boolean);
       let sharedBrief = creativeBrief;
       if (!regenerateEachTime) {
         if (!sharedBrief) {
@@ -1214,6 +1320,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           projectTheme,
           colorMaterial: effectiveColorMaterial,
           hasColorMaterialReferenceImage: hasColorMaterialReference,
+          colorMaterialReferenceMode,
           colorMaterialReferenceMarkText: colorMaterialMarkSettings.text,
           colorMaterialReferenceMarkPosition: colorMaterialMarkSettings.position,
           inspiration,
