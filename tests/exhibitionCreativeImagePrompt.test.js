@@ -140,8 +140,12 @@ test('exhibition creative image prompt describes marked reference roles', () => 
   assert.match(prompt, /左上角带 F 标识的图片为空间约束参考图/);
   assert.match(prompt, /空间图仍为最高空间约束/);
   assert.match(prompt, /该图不作为展品参考图起任何作用/);
+  assert.match(prompt, /该图也不作为色彩与材质参考图起任何作用/);
   assert.match(prompt, /左上角带 R 标识的图片为色彩与材质参考图/);
   assert.match(prompt, /色彩关系、材质质感、表面肌理、光泽和冷暖倾向/);
+  assert.match(prompt, /参考图按输入顺序读取/);
+  assert.match(prompt, /三类参考图职责互斥/);
+  assert.match(prompt, /不要从该图学习或复制空间布局/);
   assert.match(prompt, /展品参考图是唯一展品参考来源/);
   assert.match(prompt, /不作为空间结构或色彩材质体系依据/);
   assert.doesNotMatch(prompt, /手动暖木色和黄铜材质/);
