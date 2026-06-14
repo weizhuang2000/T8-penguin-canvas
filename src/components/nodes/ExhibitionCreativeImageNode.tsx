@@ -84,6 +84,22 @@ const MAX_GENERATION_COUNT = 12;
 const EXTERNAL_SIZE_LEVELS = ['1K', '2K', '4K'];
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
+type ReferenceMarkPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+interface ReferenceMarkSettings {
+  text: string;
+  position: ReferenceMarkPosition;
+  color: string;
+  fontSize: number;
+  autoFontSize: boolean;
+}
+
+const REFERENCE_MARK_POSITION_OPTIONS: Array<{ value: ReferenceMarkPosition; label: string }> = [
+  { value: 'top-left', label: '左上角' },
+  { value: 'top-right', label: '右上角' },
+  { value: 'bottom-left', label: '左下角' },
+  { value: 'bottom-right', label: '右下角' },
+];
 
 interface CreativeResult {
   index: number;
@@ -135,14 +151,14 @@ function firstImageFromData(data: any): string {
   return imagesFromData(data)[0] || '';
 }
 
-function useInputSpaceImage(nodeId: string): string {
+function useInputImageByHandle(nodeId: string, handle: string, includeLegacySpace = false): string {
   const conns = useNodeConnections({ id: nodeId, handleType: 'target' });
   const sourceIds = useMemo(
     () => Array.from(new Set(conns
-      .filter((conn: any) => !conn.targetHandle || conn.targetHandle === 'space')
+      .filter((conn: any) => conn.targetHandle === handle || (includeLegacySpace && !conn.targetHandle))
       .map((conn: any) => conn.source)
       .filter(Boolean))),
-    [conns],
+    [conns, handle, includeLegacySpace],
   );
   const nodesData = useNodesData(sourceIds);
   return useMemo(() => {
@@ -153,6 +169,83 @@ function useInputSpaceImage(nodeId: string): string {
     }
     return '';
   }, [nodesData]);
+}
+
+function normalizeReferenceMarkPosition(value: unknown): ReferenceMarkPosition {
+  if (value === 'top-right' || value === 'bottom-left' || value === 'bottom-right') return value;
+  return 'top-left';
+}
+
+function clampReferenceMarkFontSize(value: unknown): number {
+  const number = Number.parseInt(String(value), 10);
+  if (!Number.isFinite(number)) return 12;
+  return Math.max(1, Math.min(512, number));
+}
+
+function normalizeReferenceMarkColor(value: unknown): string {
+  const text = String(value || '').trim();
+  return /^#[0-9a-f]{6}$/i.test(text) ? text : '#ff0000';
+}
+
+function normalizeReferenceMarkText(value: unknown, fallback: string): string {
+  const text = typeof value === 'string' ? value.slice(0, 64) : '';
+  return text || fallback;
+}
+
+function normalizeReferenceMarkSettings(data: any, prefix: 'space' | 'colorMaterial'): ReferenceMarkSettings {
+  const fallbackText = prefix === 'space' ? 'F' : 'R';
+  return {
+    text: normalizeReferenceMarkText(data?.[`${prefix}MarkText`], fallbackText),
+    position: normalizeReferenceMarkPosition(data?.[`${prefix}MarkPosition`]),
+    color: normalizeReferenceMarkColor(data?.[`${prefix}MarkColor`]),
+    fontSize: clampReferenceMarkFontSize(data?.[`${prefix}MarkFontSize`]),
+    autoFontSize: data?.[`${prefix}MarkAutoFontSize`] === true,
+  };
+}
+
+function loadReferenceImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('参考图加载失败，无法添加标识'));
+    if (/^https?:\/\//i.test(src)) image.crossOrigin = 'anonymous';
+    image.src = src;
+  });
+}
+
+function resolveReferenceMarkFontSize(ctx: CanvasRenderingContext2D, width: number, height: number, settings: ReferenceMarkSettings): number {
+  if (!settings.autoFontSize) return settings.fontSize;
+  const probeSize = 100;
+  ctx.font = `${probeSize}px Arial, Helvetica, sans-serif`;
+  const metrics = ctx.measureText(settings.text || 'R');
+  const measuredWidth = Math.max(1, metrics.width);
+  const measuredHeight = Math.max(1, (metrics.actualBoundingBoxAscent || probeSize * 0.8) + (metrics.actualBoundingBoxDescent || probeSize * 0.2));
+  const widthSize = (Math.max(1, width * 0.03) / measuredWidth) * probeSize;
+  const heightSize = (Math.max(1, height * 0.03) / measuredHeight) * probeSize;
+  return Math.max(1, Math.min(512, Math.round(Math.max(widthSize, heightSize))));
+}
+
+async function markImageDataUrl(imageUrl: string, settings: ReferenceMarkSettings): Promise<string> {
+  const image = await loadReferenceImage(imageUrl);
+  const width = image.naturalWidth || image.width;
+  const height = image.naturalHeight || image.height;
+  if (!width || !height) throw new Error('参考图尺寸无效，无法添加标识');
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('当前浏览器无法创建标识画布');
+  ctx.drawImage(image, 0, 0, width, height);
+  const fontSize = resolveReferenceMarkFontSize(ctx, width, height, settings);
+  const margin = Math.max(2, Math.ceil(fontSize * 0.25));
+  const isRight = settings.position.endsWith('right');
+  const isBottom = settings.position.startsWith('bottom');
+  ctx.font = `${fontSize}px Arial, Helvetica, sans-serif`;
+  ctx.fillStyle = settings.color;
+  ctx.textAlign = isRight ? 'right' : 'left';
+  ctx.textBaseline = isBottom ? 'alphabetic' : 'top';
+  ctx.fillText(settings.text || 'R', isRight ? Math.max(0, width - margin) : margin, isBottom ? Math.max(fontSize, height - margin) : margin);
+  return canvas.toDataURL('image/png');
 }
 
 function textValuesFromData(data: any): string[] {
@@ -460,14 +553,35 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const isGenerating = status === 'generating';
   const contentBusy = status === 'extracting' || status === 'summarizing';
   const pollAbortRef = useRef(false);
-  const spaceImage = useInputSpaceImage(id);
+  const spaceImage = useInputImageByHandle(id, 'space', true);
+  const colorMaterialReferenceImage = useInputImageByHandle(id, 'color-material-reference');
+  const exhibitReferenceImage = useInputImageByHandle(id, 'exhibit-reference');
+  const hasColorMaterialReference = !!colorMaterialReferenceImage;
+  const effectiveColorMaterial = hasColorMaterialReference ? '' : colorMaterial;
+  const spaceMarkSettings = useMemo(() => normalizeReferenceMarkSettings(d, 'space'), [
+    d.spaceMarkAutoFontSize,
+    d.spaceMarkColor,
+    d.spaceMarkFontSize,
+    d.spaceMarkPosition,
+    d.spaceMarkText,
+  ]);
+  const colorMaterialMarkSettings = useMemo(() => normalizeReferenceMarkSettings(d, 'colorMaterial'), [
+    d.colorMaterialMarkAutoFontSize,
+    d.colorMaterialMarkColor,
+    d.colorMaterialMarkFontSize,
+    d.colorMaterialMarkPosition,
+    d.colorMaterialMarkText,
+  ]);
   const inputDocumentText = useInputDocumentText(id);
 
   const previewPrompt = useMemo(
     () => buildExhibitionCreativeImagePrompt({
       spaceType,
       projectTheme,
-      colorMaterial,
+      colorMaterial: effectiveColorMaterial,
+      hasColorMaterialReferenceImage: hasColorMaterialReference,
+      colorMaterialReferenceMarkText: colorMaterialMarkSettings.text,
+      colorMaterialReferenceMarkPosition: colorMaterialMarkSettings.position,
       inspiration,
       documentSummary,
       creativeBrief,
@@ -476,6 +590,9 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       excludeItems: selectedExcludeIds,
       excludeItemOptions: excludeOptions,
       hasSpaceImage: !!spaceImage,
+      spaceReferenceMarkText: spaceMarkSettings.text,
+      spaceReferenceMarkPosition: spaceMarkSettings.position,
+      hasExhibitReferenceImage: !!exhibitReferenceImage,
       spaceSize: manualSpaceSize,
       viewControlEnabled,
       viewAngles: selectedViewAngleIds,
@@ -483,11 +600,77 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       roundIndex: 1,
       total: generationCount,
     }),
-    [colorMaterial, creativeBrief, documentSummary, excludeOptions, generationCount, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceType, viewAngleOptions, viewControlEnabled],
+    [colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, creativeBrief, documentSummary, effectiveColorMaterial, exhibitReferenceImage, excludeOptions, generationCount, hasColorMaterialReference, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceMarkSettings.position, spaceMarkSettings.text, spaceType, viewAngleOptions, viewControlEnabled],
+  );
+
+  const renderMarkSettings = (
+    title: string,
+    prefix: 'space' | 'colorMaterial',
+    settings: ReferenceMarkSettings,
+  ) => (
+    <div className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-semibold text-cyan-100">{title}</span>
+        <label className="flex items-center gap-1.5 text-[9px] text-white/45">
+          <input
+            type="checkbox"
+            checked={settings.autoFontSize}
+            disabled={isReadonly || busy}
+            className="accent-cyan-300"
+            onChange={(event) => update({ [`${prefix}MarkAutoFontSize`]: event.target.checked })}
+          />
+          自动字号
+        </label>
+      </div>
+      <div className="grid grid-cols-4 gap-1">
+        <input
+          className={FIELD}
+          value={settings.text}
+          disabled={isReadonly || busy}
+          maxLength={64}
+          placeholder="标识"
+          onChange={(event) => update({ [`${prefix}MarkText`]: event.target.value })}
+        />
+        <select
+          className={`${FIELD} col-span-2`}
+          value={settings.position}
+          disabled={isReadonly || busy}
+          onChange={(event) => update({ [`${prefix}MarkPosition`]: normalizeReferenceMarkPosition(event.target.value) })}
+        >
+          {REFERENCE_MARK_POSITION_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+        <input
+          className={FIELD}
+          type="number"
+          min={1}
+          max={512}
+          value={settings.fontSize}
+          disabled={isReadonly || busy || settings.autoFontSize}
+          onChange={(event) => update({ [`${prefix}MarkFontSize`]: clampReferenceMarkFontSize(event.target.value) })}
+        />
+      </div>
+      <div className="grid grid-cols-[34px_1fr] gap-1">
+        <input
+          type="color"
+          value={settings.color}
+          disabled={isReadonly || busy}
+          className="h-7 w-full rounded border border-white/10 bg-black/20 p-0.5 disabled:opacity-55"
+          onChange={(event) => update({ [`${prefix}MarkColor`]: normalizeReferenceMarkColor(event.target.value) })}
+        />
+        <input
+          className={FIELD}
+          value={settings.color}
+          disabled={isReadonly || busy}
+          onChange={(event) => update({ [`${prefix}MarkColor`]: event.target.value })}
+        />
+      </div>
+    </div>
   );
 
   useEffect(() => {
-    const refs = spaceImage ? [spaceImage] : [];
+    const refs = [spaceImage, colorMaterialReferenceImage, exhibitReferenceImage].filter(Boolean);
     const patch = {
       prompt: previewPrompt,
       outputText: previewPrompt,
@@ -502,7 +685,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     ) {
       update(patch);
     }
-  }, [d.outputText, d.prompt, d.referenceImages, d.text, previewPrompt, spaceImage, update]);
+  }, [colorMaterialReferenceImage, d.outputText, d.prompt, d.referenceImages, d.text, exhibitReferenceImage, previewPrompt, spaceImage, update]);
 
   useEffect(() => {
     if (!inputDocumentText || d.sourceText === inputDocumentText) return;
@@ -685,7 +868,8 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     const requestPrompt = buildExhibitionCreativeBriefPrompt({
       spaceType,
       projectTheme,
-      colorMaterial,
+      colorMaterial: effectiveColorMaterial,
+      hasColorMaterialReferenceImage: hasColorMaterialReference,
       inspiration,
       documentSummary,
       insertItems: selectedInsertIds,
@@ -720,8 +904,9 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     activeLlmConfig?.id,
     documentSummary,
     excludeOptions,
+    effectiveColorMaterial,
     generationCount,
-    colorMaterial,
+    hasColorMaterialReference,
     inspiration,
     llmModel,
     projectTheme,
@@ -834,13 +1019,14 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     imagePrompt,
     runSeed,
     roundIndex,
+    referenceImages,
   }: {
     brief: string;
     imagePrompt: string;
     runSeed: number;
     roundIndex: number;
+    referenceImages: string[];
   }): Promise<{ urls: string[]; taskId?: string }> => {
-    const referenceImages = spaceImage ? [spaceImage] : [];
     const historyContext = {
       canvasId: activeCanvasId,
       sourceNodeId: id,
@@ -947,7 +1133,6 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     outputFormat,
     providerSelection.provider,
     sizeLevel,
-    spaceImage,
     update,
   ]);
 
@@ -973,6 +1158,11 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     const briefs: string[] = [];
     const imageUrls: string[] = [];
     try {
+      const markedSpaceImage = spaceImage ? await markImageDataUrl(spaceImage, spaceMarkSettings) : '';
+      const markedColorMaterialImage = colorMaterialReferenceImage
+        ? await markImageDataUrl(colorMaterialReferenceImage, colorMaterialMarkSettings)
+        : '';
+      const runtimeReferenceImages = [markedSpaceImage, markedColorMaterialImage, exhibitReferenceImage].filter(Boolean);
       let sharedBrief = creativeBrief;
       if (!regenerateEachTime) {
         if (!sharedBrief) {
@@ -985,7 +1175,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             sharedBrief = fallbackCreativeBrief({
               spaceType,
               projectTheme,
-              colorMaterial,
+              colorMaterial: effectiveColorMaterial,
               inspiration,
               documentSummary,
               insertItemsText: exhibitionCreativeInsertItemsText(selectedInsertIds, insertOptions),
@@ -1013,7 +1203,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             brief = fallbackCreativeBrief({
               spaceType,
               projectTheme,
-              colorMaterial,
+              colorMaterial: effectiveColorMaterial,
               inspiration,
               documentSummary,
               insertItemsText: exhibitionCreativeInsertItemsText(selectedInsertIds, insertOptions),
@@ -1032,7 +1222,10 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
         const imagePrompt = buildExhibitionCreativeImagePrompt({
           spaceType,
           projectTheme,
-          colorMaterial,
+          colorMaterial: effectiveColorMaterial,
+          hasColorMaterialReferenceImage: hasColorMaterialReference,
+          colorMaterialReferenceMarkText: colorMaterialMarkSettings.text,
+          colorMaterialReferenceMarkPosition: colorMaterialMarkSettings.position,
           inspiration,
           documentSummary,
           creativeBrief: brief,
@@ -1041,6 +1234,9 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           excludeItems: selectedExcludeIds,
           excludeItemOptions: excludeOptions,
           hasSpaceImage: !!spaceImage,
+          spaceReferenceMarkText: spaceMarkSettings.text,
+          spaceReferenceMarkPosition: spaceMarkSettings.position,
+          hasExhibitReferenceImage: !!exhibitReferenceImage,
           spaceSize: manualSpaceSize,
           viewControlEnabled,
           viewAngles: selectedViewAngleIds,
@@ -1055,6 +1251,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           imagePrompt,
           runSeed: nextSeed,
           roundIndex: index,
+          referenceImages: runtimeReferenceImages,
         });
         const url = res.urls[0];
         const nextResult = {
@@ -1105,8 +1302,11 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     hasManualSpaceSize,
     id,
     insertOptions,
-    colorMaterial,
+    colorMaterialMarkSettings,
+    colorMaterialReferenceImage,
     inspiration,
+    effectiveColorMaterial,
+    exhibitReferenceImage,
     isReadonly,
     manualSpaceSize,
     projectTheme,
@@ -1116,6 +1316,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     selectedViewAngleIds,
     seed,
     spaceImage,
+    spaceMarkSettings,
     spaceType,
     update,
     viewAngleOptions,
@@ -1135,7 +1336,9 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     >
       <Handle type="source" position={Position.Right} className="!bg-cyan-300 !border-0" />
       <Handle id="space" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-cyan-300" style={{ top: '30%' }} />
-      <Handle id="document-text" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-sky-300" style={{ top: '57%' }} />
+      <Handle id="color-material-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-rose-300" style={{ top: '43%' }} />
+      <Handle id="exhibit-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-amber-300" style={{ top: '56%' }} />
+      <Handle id="document-text" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-sky-300" style={{ top: '69%' }} />
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex h-8 w-8 items-center justify-center rounded bg-cyan-300/15 text-cyan-200">
           <Layers3 size={16} />
@@ -1211,6 +1414,42 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               </div>
             </div>
           )}
+          {spaceImage && renderMarkSettings('空间图标识', 'space', spaceMarkSettings)}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded border border-white/10 bg-black/15 p-2">
+              <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold text-rose-100">
+                <ImageIcon size={12} />
+                色彩与材质参考图
+              </div>
+              {colorMaterialReferenceImage ? (
+                <>
+                  <img src={colorMaterialReferenceImage} alt="" className="h-24 w-full rounded border border-white/10 object-contain" draggable={false} />
+                  <div className="mt-1 truncate text-[9px] text-white/40" title={colorMaterialReferenceImage}>{colorMaterialReferenceImage.split('/').pop() || colorMaterialReferenceImage}</div>
+                </>
+              ) : (
+                <div className="flex h-24 items-center justify-center rounded border border-dashed border-white/15 px-2 text-center text-[10px] leading-snug text-white/35">
+                  连接色彩、材质、肌理参考图
+                </div>
+              )}
+            </div>
+            <div className="rounded border border-white/10 bg-black/15 p-2">
+              <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold text-amber-100">
+                <ImageIcon size={12} />
+                展品参考图
+              </div>
+              {exhibitReferenceImage ? (
+                <>
+                  <img src={exhibitReferenceImage} alt="" className="h-24 w-full rounded border border-white/10 object-contain" draggable={false} />
+                  <div className="mt-1 truncate text-[9px] text-white/40" title={exhibitReferenceImage}>{exhibitReferenceImage.split('/').pop() || exhibitReferenceImage}</div>
+                </>
+              ) : (
+                <div className="flex h-24 items-center justify-center rounded border border-dashed border-white/15 px-2 text-center text-[10px] leading-snug text-white/35">
+                  连接展品外观与主题参考图
+                </div>
+              )}
+            </div>
+          </div>
+          {colorMaterialReferenceImage && renderMarkSettings('色彩与材质图标识', 'colorMaterial', colorMaterialMarkSettings)}
           <div className="grid grid-cols-3 gap-1">
             {EXHIBITION_CREATIVE_SPACE_TYPES.map((item) => {
               const active = item.id === spaceType;
@@ -1234,7 +1473,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-semibold text-cyan-100">色彩与材质预设</span>
               <span className="min-w-0 flex-1 truncate text-[9px] text-white/40">
-                参与 LLM 创意描述和最终生图 Prompt
+                {hasColorMaterialReference ? '已由接入的色彩与材质参考图接管' : '参与 LLM 创意描述和最终生图 Prompt'}
               </span>
               {canManageTeam && (
                 <button
@@ -1250,7 +1489,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             <select
               className={FIELD}
               value={d.colorMaterialPreset || ''}
-              disabled={isReadonly || busy}
+              disabled={isReadonly || busy || hasColorMaterialReference}
               onChange={(event) => {
                 const presetId = event.target.value;
                 const preset = colorMaterialPresets.find((item) => item.id === presetId);
@@ -1270,6 +1509,11 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             {selectedColorMaterialPreset?.info && (
               <div className="rounded border border-cyan-300/15 bg-cyan-300/10 px-2 py-1 text-[10px] leading-relaxed text-cyan-50/75">
                 {selectedColorMaterialPreset.info}
+              </div>
+            )}
+            {hasColorMaterialReference && (
+              <div className="rounded border border-rose-300/20 bg-rose-300/10 px-2 py-1 text-[10px] leading-relaxed text-rose-50/75">
+                已由接入的色彩与材质参考图接管
               </div>
             )}
             {canManageTeam && colorMaterialEditorOpen && (
@@ -1305,7 +1549,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             <textarea
               className={`${FIELD} min-h-[46px] resize-y`}
               value={d.colorMaterial || ''}
-              disabled={isReadonly || busy}
+              disabled={isReadonly || busy || hasColorMaterialReference}
               placeholder="色彩与材质体系"
               onChange={(event) => update({ colorMaterial: event.target.value, colorMaterialPreset: '' })}
             />

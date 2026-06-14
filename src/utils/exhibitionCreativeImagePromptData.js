@@ -158,10 +158,22 @@ export function normalizeExhibitionCreativeBrief(value) {
     .trim();
 }
 
+function exhibitionCreativeMarkPositionText(value) {
+  if (value === 'top-right') return '右上角';
+  if (value === 'bottom-left') return '左下角';
+  if (value === 'bottom-right') return '右下角';
+  return '左上角';
+}
+
+function exhibitionCreativeReferenceMarkText(value, fallback) {
+  return cleanExhibitionCreativeText(value ?? fallback, 64) || fallback;
+}
+
 export function buildExhibitionCreativeBriefPrompt(values = {}) {
   const meta = exhibitionCreativeSpaceTypeMeta(values.spaceType);
   const projectTheme = cleanExhibitionCreativeText(values.projectTheme, 500);
-  const colorMaterial = cleanExhibitionCreativeText(values.colorMaterial, 1000);
+  const hasColorMaterialReferenceImage = values.hasColorMaterialReferenceImage === true;
+  const colorMaterial = hasColorMaterialReferenceImage ? '' : cleanExhibitionCreativeText(values.colorMaterial, 1000);
   const inspiration = cleanExhibitionCreativeText(values.inspiration, 2000);
   const documentSummary = cleanExhibitionCreativeText(values.documentSummary, 3000);
   const roundIndex = Math.max(1, Number(values.roundIndex) || 1);
@@ -171,12 +183,14 @@ export function buildExhibitionCreativeBriefPrompt(values = {}) {
   const previousBriefs = Array.isArray(values.previousBriefs)
     ? values.previousBriefs.map((item) => cleanExhibitionCreativeText(item, 800)).filter(Boolean)
     : [];
+  const creativeInputText = hasColorMaterialReferenceImage ? '项目资料摘要、个人灵感和指定植入项' : '项目资料摘要、色彩与材质/个人灵感和指定植入项';
+  const creativeRequirementText = hasColorMaterialReferenceImage ? '个人灵感要求' : '色彩与材质要求';
   const lines = [
-    `请基于项目资料摘要、色彩与材质/个人灵感和指定植入项，创作第 ${roundIndex}/${total} 个${meta.label}展陈空间生图创意描述。`,
+    `请基于${creativeInputText}，创作第 ${roundIndex}/${total} 个${meta.label}展陈空间生图创意描述。`,
     `空间类型：${meta.label}。${meta.prompt}`,
     `指定植入项：${insertItemsText}`,
     '创意描述不要分析、引用或依赖输入图像；输入图像只会在后续图生图阶段作为空间结构约束。',
-    `请把提炼后的创意资料文档、色彩与材质要求与${insertItemsText}结合，进行有艺术性的展陈空间创作，从展陈叙事、空间气质、灯光氛围、材料语言、互动方式、观众视线组织和拍摄画面完成度等角度给出可直接用于图生图的创意描述。`,
+    `请把提炼后的创意资料文档、${creativeRequirementText}与${insertItemsText}结合，进行有艺术性的展陈空间创作，从展陈叙事、空间气质、灯光氛围、材料语言、互动方式、观众视线组织和拍摄画面完成度等角度给出可直接用于图生图的创意描述。`,
     '输出 180 到 320 字中文自然段，只输出创意描述本身，不要标题、编号、Markdown、解释、参数表或英文翻译。',
   ];
   if (excludeItemsText) {
@@ -217,7 +231,8 @@ function exhibitionCreativeDeepeningRequirement(spaceType) {
 export function buildExhibitionCreativeImagePrompt(values = {}) {
   const meta = exhibitionCreativeSpaceTypeMeta(values.spaceType);
   const projectTheme = cleanExhibitionCreativeText(values.projectTheme, 500);
-  const colorMaterial = cleanExhibitionCreativeText(values.colorMaterial, 1000);
+  const hasColorMaterialReferenceImage = values.hasColorMaterialReferenceImage === true;
+  const colorMaterial = hasColorMaterialReferenceImage ? '' : cleanExhibitionCreativeText(values.colorMaterial, 1000);
   const inspiration = cleanExhibitionCreativeText(values.inspiration, 2000);
   const documentSummary = cleanExhibitionCreativeText(values.documentSummary, 3000);
   const creativeBrief = normalizeExhibitionCreativeBrief(values.creativeBrief || values.brief);
@@ -226,6 +241,11 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   const insertItemsText = exhibitionCreativeInsertItemsText(values.insertItems, values.insertItemOptions);
   const excludeItemsText = exhibitionCreativeExcludeItemsText(values.excludeItems, values.excludeItemOptions);
   const hasSpaceImage = values.hasSpaceImage !== false;
+  const hasExhibitReferenceImage = values.hasExhibitReferenceImage === true;
+  const spaceReferenceMarkText = exhibitionCreativeReferenceMarkText(values.spaceReferenceMarkText, 'F');
+  const colorMaterialReferenceMarkText = exhibitionCreativeReferenceMarkText(values.colorMaterialReferenceMarkText, 'R');
+  const spaceReferenceMarkPositionText = exhibitionCreativeMarkPositionText(values.spaceReferenceMarkPosition);
+  const colorMaterialReferenceMarkPositionText = exhibitionCreativeMarkPositionText(values.colorMaterialReferenceMarkPosition);
   const spaceSizeText = exhibitionCreativeSpaceSizeText(values.spaceSize);
   const viewAnglesText = values.viewControlEnabled ? exhibitionCreativeViewAnglesText(values.viewAngles, values.viewAngleOptions) : '';
   const viewPrefix = viewAnglesText ? `${viewAnglesText}，` : '';
@@ -236,6 +256,8 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   ];
   if (hasSpaceImage) {
     lines.push('【输入空间图约束】');
+    lines.push(`${spaceReferenceMarkPositionText}带 ${spaceReferenceMarkText} 标识的图片为空间约束参考图，只用于保持空间几何、透视、层高、开口、墙柱、吊顶、地面边界和动线关系。空间图仍为最高空间约束。`);
+    lines.push('该图不作为展品参考图起任何作用，不从该图提取展品造型、展品内容、展品主题或展示重点。');
     lines.push('输入图像是唯一的室内建筑空间依据。必须保留原图的空间几何、透视角度、层高尺度、主要墙体/柱网/开口、吊顶关系、地面边界、入口出口、通行动线和前后左右空间关系。');
     lines.push(`需要在该空间内植入${insertItemsText}；不得把空间改成另一处建筑，不得改变主要开口、承重结构和真实尺度关系。`);
   } else {
@@ -249,6 +271,18 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
     lines.push('');
     lines.push('【排除项优先约束】');
     lines.push(`以下内容优先级高于创意描述，不得出现在画面中：${excludeItemsText}。即使创意描述、项目资料或个人灵感提到这些内容，也必须忽略并避免生成。`);
+  }
+  if (hasColorMaterialReferenceImage) {
+    lines.push('');
+    lines.push('【色彩与材质参考图】');
+    lines.push(`${colorMaterialReferenceMarkPositionText}带 ${colorMaterialReferenceMarkText} 标识的图片为色彩与材质参考图，只用于参考色彩关系、材质质感、表面肌理、光泽和冷暖倾向。`);
+    lines.push('该图不作为展品参考图起任何作用，不从该图提取展品造型、展品内容、展品主题或展示重点。');
+    lines.push('该图不作为空间结构依据，不改变空间图或手动空间尺寸给出的几何、透视、层高、开口和动线关系。');
+  }
+  if (hasExhibitReferenceImage) {
+    lines.push('');
+    lines.push('【展品参考图】');
+    lines.push('展品参考图是唯一展品参考来源，只用于展品外观、内容主题、体量关系和展示重点，不作为空间结构或色彩材质体系依据。');
   }
   if (colorMaterial) {
     lines.push('');

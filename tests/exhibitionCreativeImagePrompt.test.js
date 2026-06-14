@@ -124,6 +124,53 @@ test('exhibition creative image prompt includes document summary as creative mat
   assert.match(prompt, /逐渐展开的光幕/);
 });
 
+test('exhibition creative image prompt describes marked reference roles', () => {
+  const prompt = buildExhibitionCreativeImagePrompt({
+    spaceType: 'highlight-space',
+    colorMaterial: '手动暖木色和黄铜材质',
+    hasSpaceImage: true,
+    spaceReferenceMarkText: 'F',
+    spaceReferenceMarkPosition: 'top-left',
+    hasColorMaterialReferenceImage: true,
+    colorMaterialReferenceMarkText: 'R',
+    colorMaterialReferenceMarkPosition: 'top-left',
+    hasExhibitReferenceImage: true,
+    creativeBrief: '围绕核心展品组织沉浸式重点空间。',
+  });
+  assert.match(prompt, /左上角带 F 标识的图片为空间约束参考图/);
+  assert.match(prompt, /空间图仍为最高空间约束/);
+  assert.match(prompt, /该图不作为展品参考图起任何作用/);
+  assert.match(prompt, /左上角带 R 标识的图片为色彩与材质参考图/);
+  assert.match(prompt, /色彩关系、材质质感、表面肌理、光泽和冷暖倾向/);
+  assert.match(prompt, /展品参考图是唯一展品参考来源/);
+  assert.match(prompt, /不作为空间结构或色彩材质体系依据/);
+  assert.doesNotMatch(prompt, /手动暖木色和黄铜材质/);
+  assert.doesNotMatch(prompt, /【色彩与材质】/);
+});
+
+test('exhibition creative prompt uses custom mark labels and suppresses color material in brief prompt', () => {
+  const imagePrompt = buildExhibitionCreativeImagePrompt({
+    hasSpaceImage: true,
+    spaceReferenceMarkText: 'SPACE',
+    spaceReferenceMarkPosition: 'bottom-right',
+    hasColorMaterialReferenceImage: true,
+    colorMaterialReferenceMarkText: 'CM',
+    colorMaterialReferenceMarkPosition: 'top-right',
+    colorMaterial: '不应出现的手动色彩材质',
+  });
+  assert.match(imagePrompt, /右下角带 SPACE 标识的图片为空间约束参考图/);
+  assert.match(imagePrompt, /右上角带 CM 标识的图片为色彩与材质参考图/);
+  assert.doesNotMatch(imagePrompt, /不应出现的手动色彩材质/);
+
+  const briefPrompt = buildExhibitionCreativeBriefPrompt({
+    hasColorMaterialReferenceImage: true,
+    colorMaterial: '不应进入 LLM 创意描述',
+    inspiration: '可以保留的个人灵感',
+  });
+  assert.doesNotMatch(briefPrompt, /不应进入 LLM 创意描述/);
+  assert.match(briefPrompt, /可以保留的个人灵感/);
+});
+
 test('exhibition creative brief prompt can reuse one creative direction', () => {
   const prompt = buildExhibitionCreativeBriefPrompt({
     spaceType: 'outro-hall',

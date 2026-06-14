@@ -53,6 +53,7 @@ export interface ExhibitionCreativeBriefPromptValues {
   spaceType?: ExhibitionCreativeSpaceType;
   projectTheme?: string;
   colorMaterial?: string;
+  hasColorMaterialReferenceImage?: boolean;
   inspiration?: string;
   documentSummary?: string;
   insertItems?: string[];
@@ -74,6 +75,12 @@ export interface ExhibitionCreativeImagePromptValues extends ExhibitionCreativeB
   excludeItems?: string[];
   excludeItemOptions?: ExhibitionCreativeExcludeItem[];
   hasSpaceImage?: boolean;
+  spaceReferenceMarkText?: string;
+  spaceReferenceMarkPosition?: string;
+  hasColorMaterialReferenceImage?: boolean;
+  colorMaterialReferenceMarkText?: string;
+  colorMaterialReferenceMarkPosition?: string;
+  hasExhibitReferenceImage?: boolean;
   spaceSize?: {
     width?: number | string;
     depth?: number | string;
