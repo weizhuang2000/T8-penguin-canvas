@@ -223,6 +223,19 @@ function readRichEditor(root: HTMLElement, fallbackMentions: MediaMention[]): { 
   return { text, mentions };
 }
 
+function areMentionsSame(a: MediaMention[] = [], b: MediaMention[] = []): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((item, index) => {
+    const other = b[index];
+    return !!other &&
+      item.id === other.id &&
+      item.token === other.token &&
+      item.start === other.start &&
+      item.end === other.end &&
+      item.materialKey === other.materialKey;
+  });
+}
+
 const MentionPromptInput = ({
   value,
   mentions = [],
@@ -386,7 +399,10 @@ const MentionPromptInput = ({
     if (composingRef.current) return;
     const caret = getCaretPlainOffset(el);
     const { text: nextValue, mentions: nextMentions } = readRichEditor(el, mentions);
-    onChange(nextValue, nextMentions);
+    pendingCaretRef.current = caret;
+    if (nextValue !== value || !areMentionsSame(nextMentions, mentions)) {
+      onChange(nextValue, nextMentions);
+    }
     if (composingRef.current) return;
     openFromCaret(nextValue, caret);
   };
@@ -402,8 +418,8 @@ const MentionPromptInput = ({
       queryState.start,
       queryState.end,
     );
-    onChange(result.text, result.mentions);
     pendingCaretRef.current = result.caret;
+    onChange(result.text, result.mentions);
     setQueryState((s) => ({ ...s, open: false }));
     window.setTimeout(() => {
       const el = localRef.current;
@@ -557,8 +573,10 @@ const MentionPromptInput = ({
               composingRef.current = false;
               const caret = getCaretPlainOffset(el);
               const { text, mentions: nextMentions } = readRichEditor(el, mentions);
-              onChange(text, nextMentions);
               pendingCaretRef.current = caret;
+              if (text !== value || !areMentionsSame(nextMentions, mentions)) {
+                onChange(text, nextMentions);
+              }
               openFromCaret(text, caret);
             }, 0);
           }}
