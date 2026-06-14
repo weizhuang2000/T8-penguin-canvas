@@ -19,7 +19,7 @@ test('exhibition creative image prompt locks the single input space image', () =
   });
   assert.match(prompt, /重亮点展项空间/);
   assert.match(prompt, /【空间结构示意图】/);
-  assert.match(prompt, /输入空间图按“展陈图生图”的空间结构示意图方式使用/);
+  assert.match(prompt, /纯色素模的参考图是空间结构示意图/);
   assert.match(prompt, /空间几何、布局和动线的主约束/);
   assert.match(prompt, /不得把空间改成另一处建筑/);
   assert.match(prompt, /最终画面必须看得出来自同一张输入室内空间图/);
@@ -137,7 +137,7 @@ test('exhibition creative image prompt describes marked reference roles', () => 
     creativeBrief: '围绕核心展品组织沉浸式重点空间。',
   });
   assert.match(prompt, /第 1 类为空间结构示意图/);
-  assert.match(prompt, /输入空间图按“展陈图生图”的空间结构示意图方式使用/);
+  assert.match(prompt, /纯色素模的参考图是空间结构示意图/);
   assert.match(prompt, /空间几何、布局和动线的主约束/);
   assert.match(prompt, /最终空间结构必须完全遵循空间结构示意图/);
   assert.match(prompt, /该图不作为展品参考图起任何作用/);
