@@ -53,8 +53,6 @@ export interface ExhibitionCreativeImagePromptValues extends ExhibitionCreativeB
   excludeItems?: string[];
   excludeItemOptions?: ExhibitionCreativeExcludeItem[];
   hasSpaceImage?: boolean;
-  spaceReferenceMarkText?: string;
-  spaceReferenceMarkPosition?: string;
   colorMaterialReferenceMarkText?: string;
   colorMaterialReferenceMarkPosition?: string;
   hasExhibitReferenceImage?: boolean;

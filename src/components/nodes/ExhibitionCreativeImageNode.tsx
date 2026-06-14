@@ -558,13 +558,6 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const exhibitReferenceImage = useInputImageByHandle(id, 'exhibit-reference');
   const hasColorMaterialReference = !!colorMaterialReferenceImage;
   const effectiveColorMaterial = hasColorMaterialReference ? '' : colorMaterial;
-  const spaceMarkSettings = useMemo(() => normalizeReferenceMarkSettings(d, 'space'), [
-    d.spaceMarkAutoFontSize,
-    d.spaceMarkColor,
-    d.spaceMarkFontSize,
-    d.spaceMarkPosition,
-    d.spaceMarkText,
-  ]);
   const colorMaterialMarkSettings = useMemo(() => normalizeReferenceMarkSettings(d, 'colorMaterial'), [
     d.colorMaterialMarkAutoFontSize,
     d.colorMaterialMarkColor,
@@ -590,8 +583,6 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       excludeItems: selectedExcludeIds,
       excludeItemOptions: excludeOptions,
       hasSpaceImage: !!spaceImage,
-      spaceReferenceMarkText: spaceMarkSettings.text,
-      spaceReferenceMarkPosition: spaceMarkSettings.position,
       hasExhibitReferenceImage: !!exhibitReferenceImage,
       spaceSize: manualSpaceSize,
       viewControlEnabled,
@@ -600,12 +591,12 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       roundIndex: 1,
       total: generationCount,
     }),
-    [colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, creativeBrief, documentSummary, effectiveColorMaterial, exhibitReferenceImage, excludeOptions, generationCount, hasColorMaterialReference, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceMarkSettings.position, spaceMarkSettings.text, spaceType, viewAngleOptions, viewControlEnabled],
+    [colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, creativeBrief, documentSummary, effectiveColorMaterial, exhibitReferenceImage, excludeOptions, generationCount, hasColorMaterialReference, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceType, viewAngleOptions, viewControlEnabled],
   );
 
   const renderMarkSettings = (
     title: string,
-    prefix: 'space' | 'colorMaterial',
+    prefix: 'colorMaterial',
     settings: ReferenceMarkSettings,
   ) => (
     <div className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2">
@@ -1158,11 +1149,10 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     const briefs: string[] = [];
     const imageUrls: string[] = [];
     try {
-      const markedSpaceImage = spaceImage ? await markImageDataUrl(spaceImage, spaceMarkSettings) : '';
       const markedColorMaterialImage = colorMaterialReferenceImage
         ? await markImageDataUrl(colorMaterialReferenceImage, colorMaterialMarkSettings)
         : '';
-      const runtimeReferenceImages = [markedSpaceImage, markedColorMaterialImage, exhibitReferenceImage].filter(Boolean);
+      const runtimeReferenceImages = [spaceImage, markedColorMaterialImage, exhibitReferenceImage].filter(Boolean);
       let sharedBrief = creativeBrief;
       if (!regenerateEachTime) {
         if (!sharedBrief) {
@@ -1234,8 +1224,6 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           excludeItems: selectedExcludeIds,
           excludeItemOptions: excludeOptions,
           hasSpaceImage: !!spaceImage,
-          spaceReferenceMarkText: spaceMarkSettings.text,
-          spaceReferenceMarkPosition: spaceMarkSettings.position,
           hasExhibitReferenceImage: !!exhibitReferenceImage,
           spaceSize: manualSpaceSize,
           viewControlEnabled,
@@ -1316,7 +1304,6 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     selectedViewAngleIds,
     seed,
     spaceImage,
-    spaceMarkSettings,
     spaceType,
     update,
     viewAngleOptions,
@@ -1414,7 +1401,6 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               </div>
             </div>
           )}
-          {spaceImage && renderMarkSettings('空间图标识', 'space', spaceMarkSettings)}
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded border border-white/10 bg-black/15 p-2">
               <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold text-rose-100">

@@ -18,8 +18,9 @@ test('exhibition creative image prompt locks the single input space image', () =
     generationCount: 4,
   });
   assert.match(prompt, /重亮点展项空间/);
-  assert.match(prompt, /输入图像是唯一的室内建筑空间依据/);
-  assert.match(prompt, /必须保留原图的空间几何、透视角度、层高尺度/);
+  assert.match(prompt, /【空间结构示意图】/);
+  assert.match(prompt, /输入空间图按“展陈图生图”的空间结构示意图方式使用/);
+  assert.match(prompt, /空间几何、布局和动线的主约束/);
   assert.match(prompt, /不得把空间改成另一处建筑/);
   assert.match(prompt, /最终画面必须看得出来自同一张输入室内空间图/);
   assert.match(prompt, /城市更新/);
@@ -129,18 +130,19 @@ test('exhibition creative image prompt describes marked reference roles', () => 
     spaceType: 'highlight-space',
     colorMaterial: '手动暖木色和黄铜材质',
     hasSpaceImage: true,
-    spaceReferenceMarkText: 'F',
-    spaceReferenceMarkPosition: 'top-left',
     hasColorMaterialReferenceImage: true,
     colorMaterialReferenceMarkText: 'R',
     colorMaterialReferenceMarkPosition: 'top-left',
     hasExhibitReferenceImage: true,
     creativeBrief: '围绕核心展品组织沉浸式重点空间。',
   });
-  assert.match(prompt, /左上角带 F 标识的图片为空间约束参考图/);
-  assert.match(prompt, /空间图仍为最高空间约束/);
+  assert.match(prompt, /第 1 类为空间结构示意图/);
+  assert.match(prompt, /输入空间图按“展陈图生图”的空间结构示意图方式使用/);
+  assert.match(prompt, /空间几何、布局和动线的主约束/);
+  assert.match(prompt, /最终空间结构必须完全遵循空间结构示意图/);
   assert.match(prompt, /该图不作为展品参考图起任何作用/);
   assert.match(prompt, /该图也不作为色彩与材质参考图起任何作用/);
+  assert.match(prompt, /不要在最终效果图中渲染、复写、临摹或生成空间结构示意图中的标注文字/);
   assert.match(prompt, /左上角带 R 标识的图片为色彩与材质参考图/);
   assert.match(prompt, /色彩关系、材质质感、表面肌理、光泽和冷暖倾向/);
   assert.match(prompt, /参考图按输入顺序读取/);
@@ -155,14 +157,13 @@ test('exhibition creative image prompt describes marked reference roles', () => 
 test('exhibition creative prompt uses custom mark labels and suppresses color material in brief prompt', () => {
   const imagePrompt = buildExhibitionCreativeImagePrompt({
     hasSpaceImage: true,
-    spaceReferenceMarkText: 'SPACE',
-    spaceReferenceMarkPosition: 'bottom-right',
     hasColorMaterialReferenceImage: true,
     colorMaterialReferenceMarkText: 'CM',
     colorMaterialReferenceMarkPosition: 'top-right',
     colorMaterial: '不应出现的手动色彩材质',
   });
-  assert.match(imagePrompt, /右下角带 SPACE 标识的图片为空间约束参考图/);
+  assert.match(imagePrompt, /空间结构示意图/);
+  assert.doesNotMatch(imagePrompt, /SPACE 标识的图片为空间约束参考图/);
   assert.match(imagePrompt, /右上角带 CM 标识的图片为色彩与材质参考图/);
   assert.doesNotMatch(imagePrompt, /不应出现的手动色彩材质/);
 

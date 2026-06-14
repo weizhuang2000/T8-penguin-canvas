@@ -242,9 +242,7 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   const excludeItemsText = exhibitionCreativeExcludeItemsText(values.excludeItems, values.excludeItemOptions);
   const hasSpaceImage = values.hasSpaceImage !== false;
   const hasExhibitReferenceImage = values.hasExhibitReferenceImage === true;
-  const spaceReferenceMarkText = exhibitionCreativeReferenceMarkText(values.spaceReferenceMarkText, 'F');
   const colorMaterialReferenceMarkText = exhibitionCreativeReferenceMarkText(values.colorMaterialReferenceMarkText, 'R');
-  const spaceReferenceMarkPositionText = exhibitionCreativeMarkPositionText(values.spaceReferenceMarkPosition);
   const colorMaterialReferenceMarkPositionText = exhibitionCreativeMarkPositionText(values.colorMaterialReferenceMarkPosition);
   const spaceSizeText = exhibitionCreativeSpaceSizeText(values.spaceSize);
   const viewAnglesText = values.viewControlEnabled ? exhibitionCreativeViewAnglesText(values.viewAngles, values.viewAngleOptions) : '';
@@ -256,16 +254,18 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   ];
   if (hasSpaceImage || hasColorMaterialReferenceImage || hasExhibitReferenceImage) {
     lines.push('【参考图读取总规则】');
-    lines.push('参考图按输入顺序读取：第 1 类为空间约束图，第 2 类为色彩与材质参考图，第 3 类为展品参考图；三类参考图职责互斥，不能互相替代、混用或推断对方职责。');
-    lines.push('如果不同参考图之间出现冲突：空间几何、透视、层高、墙柱、吊顶、地面边界和动线只服从空间约束图；色彩关系、材质质感、肌理、光泽和冷暖倾向只服从色彩与材质参考图；展品外观、内容主题、体量关系和展示重点只服从展品参考图。');
+    lines.push('参考图按输入顺序读取：第 1 类为空间结构示意图，第 2 类为色彩与材质参考图，第 3 类为展品参考图；三类参考图职责互斥，不能互相替代、混用或推断对方职责。');
+    lines.push('如果不同参考图之间出现冲突：空间几何、布局、透视、层高、墙柱、吊顶、地面边界和动线只服从空间结构示意图；色彩关系、材质质感、肌理、光泽和冷暖倾向只服从色彩与材质参考图；展品外观、内容主题、体量关系和展示重点只服从展品参考图。');
     lines.push('');
   }
   if (hasSpaceImage) {
-    lines.push('【输入空间图约束】');
-    lines.push(`${spaceReferenceMarkPositionText}带 ${spaceReferenceMarkText} 标识的图片为空间约束参考图，只用于保持空间几何、透视、层高、开口、墙柱、吊顶、地面边界和动线关系。空间图仍为最高空间约束。`);
+    lines.push('【空间结构示意图】');
+    lines.push('输入空间图按“展陈图生图”的空间结构示意图方式使用，是空间几何、布局和动线的主约束，也是空间骨架和布局蓝本。');
+    lines.push('必须把图中的平面关系、动线、分区、展墙/隔断、入口出口、主要体块、墙柱、吊顶、地面边界和开口关系转译为真实透视空间，不能只借鉴风格而改成另一套空间。');
+    lines.push('空间结构不参与表现形式或色彩材质的优先级排序；无论其他参考图如何，最终空间结构必须完全遵循空间结构示意图。');
     lines.push('该图不作为展品参考图起任何作用，不从该图提取展品造型、展品内容、展品主题或展示重点。');
     lines.push('该图也不作为色彩与材质参考图起任何作用，不从该图提取色彩风格、材料质感、表面肌理、灯光色温、软装装饰或展陈饰面。');
-    lines.push('输入图像是唯一的室内建筑空间依据。必须保留原图的空间几何、透视角度、层高尺度、主要墙体/柱网/开口、吊顶关系、地面边界、入口出口、通行动线和前后左右空间关系。');
+    lines.push('不要在最终效果图中渲染、复写、临摹或生成空间结构示意图中的标注文字、箭头编号、尺寸线、图例、说明标签或乱码文本。');
     lines.push(`需要在该空间内植入${insertItemsText}；不得把空间改成另一处建筑，不得改变主要开口、承重结构和真实尺度关系。`);
   } else {
     lines.push('【手动空间尺寸约束】');

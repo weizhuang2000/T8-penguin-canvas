@@ -25,8 +25,10 @@ test('exhibition creative node disables manual color material inputs when refere
 
 test('exhibition creative node creates transient marked data urls without save APIs', () => {
   assert.match(nodeSource, /canvas\.toDataURL\('image\/png'\)/);
-  assert.match(nodeSource, /const runtimeReferenceImages = \[markedSpaceImage, markedColorMaterialImage, exhibitReferenceImage\]\.filter\(Boolean\)/);
+  assert.match(nodeSource, /const runtimeReferenceImages = \[spaceImage, markedColorMaterialImage, exhibitReferenceImage\]\.filter\(Boolean\)/);
   assert.match(nodeSource, /images: referenceImages/);
+  assert.doesNotMatch(nodeSource, /markedSpaceImage/);
+  assert.doesNotMatch(nodeSource, /空间图标识/);
   assert.doesNotMatch(nodeSource, /opMark/);
   assert.doesNotMatch(nodeSource, /\/api\/image\/mark/);
   assert.doesNotMatch(nodeSource, /upload-base64/);
