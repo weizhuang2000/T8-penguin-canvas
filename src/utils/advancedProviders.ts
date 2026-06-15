@@ -47,6 +47,18 @@ export function advancedProviderSummary(providers?: AdvancedProviderConfig[]): A
 }
 
 export type AdvancedProviderNodeKind = 'image' | 'video' | 'llm';
+export type AdvancedImageSizeLevel = '1K' | '2K' | '4K';
+
+export interface AdvancedProviderImageSizeRow {
+  providerId: string;
+  providerLabel: string;
+  protocol: AdvancedProviderConfig['protocol'];
+  enabled: boolean;
+  model: string;
+  source: 'configured' | 'fallback' | 'workflow' | 'missing';
+  supportedSizes: AdvancedImageSizeLevel[];
+  note: string;
+}
 
 export interface AdvancedProviderSelection {
   providerSource: CanvasProviderSource;
@@ -80,6 +92,8 @@ const FALLBACK_MODELS: Record<AdvancedProviderNodeKind, Partial<Record<string, s
     volcengine: ['doubao-seed-1-6-250615'],
   },
 };
+
+export const ADVANCED_IMAGE_SIZE_LEVELS: AdvancedImageSizeLevel[] = ['1K', '2K', '4K'];
 
 function uniqueCompact(values: unknown[]): string[] {
   const out: string[] = [];
@@ -129,6 +143,178 @@ export function advancedProviderModelOptions(
     defaultModelForKind(provider, kind),
     ...(FALLBACK_MODELS[kind][provider.protocol] || []),
   ]);
+}
+
+function explicitModelListForKind(provider: AdvancedProviderConfig, kind: AdvancedProviderNodeKind): string[] {
+  return uniqueCompact(listForKind(provider, kind));
+}
+
+function fallbackModelsForKind(provider: AdvancedProviderConfig, kind: AdvancedProviderNodeKind): string[] {
+  return uniqueCompact([
+    defaultModelForKind(provider, kind),
+    ...(FALLBACK_MODELS[kind][provider.protocol] || []),
+  ]);
+}
+
+function sizeOnlyFromModelName(model: string): AdvancedImageSizeLevel[] {
+  const text = model.toLowerCase();
+  if (/(^|[^a-z0-9])4k([^a-z0-9]|$)/i.test(text)) return ['4K'];
+  if (/(^|[^a-z0-9])2k([^a-z0-9]|$)/i.test(text)) return ['2K'];
+  if (/(^|[^a-z0-9])1k([^a-z0-9]|$)/i.test(text)) return ['1K'];
+  return [];
+}
+
+function inferImageSizeSupport(
+  provider: AdvancedProviderConfig,
+  model: string,
+): { supportedSizes: AdvancedImageSizeLevel[]; note: string } {
+  const modelName = String(model || '').trim();
+  const lower = modelName.toLowerCase();
+  const explicitSize = sizeOnlyFromModelName(modelName);
+
+  if (provider.protocol === 'comfyui') {
+    return {
+      supportedSizes: modelName ? [...ADVANCED_IMAGE_SIZE_LEVELS] : [],
+      note: modelName
+        ? '按工作流 width/height 写入, 需要工作流本身支持对应显存和尺寸。'
+        : '未配置工作流, 暂无可用生图尺寸。',
+    };
+  }
+
+  if (provider.protocol === 'jimeng-cli') {
+    return {
+      supportedSizes: explicitSize.length ? explicitSize : ['2K', '4K'],
+      note: explicitSize.length
+        ? '按即梦 CLI 模型名中的分辨率档位识别。'
+        : '即梦 CLI 未标明档位时按常用 2K/4K 模式展示。',
+    };
+  }
+
+  if (lower.includes('gpt-image-1') || lower.includes('dall-e')) {
+    return {
+      supportedSizes: ['1K'],
+      note: 'OpenAI 旧式 size 兼容模型通常只按 1K 像素尺寸安全透传。',
+    };
+  }
+
+  if (
+    lower.includes('gpt-image-2')
+    || lower.includes('nano-banana')
+    || lower.includes('banana')
+    || lower.includes('seedream-4')
+  ) {
+    return {
+      supportedSizes: [...ADVANCED_IMAGE_SIZE_LEVELS],
+      note: provider.protocol === 'gemini-compatible'
+        ? '按 aspect_ratio + image_size 传入。'
+        : '当前适配器可透传 1K/2K/4K 档位。',
+    };
+  }
+
+  if (lower.includes('seedream-3')) {
+    return {
+      supportedSizes: ['1K', '2K'],
+      note: '按 Seedream 3 常用档位展示, 4K 建议切换 Seedream 4 系列。',
+    };
+  }
+
+  if (explicitSize.length) {
+    return {
+      supportedSizes: explicitSize,
+      note: '按模型名中的分辨率档位识别。',
+    };
+  }
+
+  if (provider.protocol === 'modelscope') {
+    return {
+      supportedSizes: ['1K', '2K'],
+      note: 'ModelScope 适配器传 width/height/size, 具体上限取决于模型卡。',
+    };
+  }
+
+  if (provider.protocol === 'volcengine') {
+    return {
+      supportedSizes: [...ADVANCED_IMAGE_SIZE_LEVELS],
+      note: '火山适配器按 size 像素串透传, 具体以接入点能力为准。',
+    };
+  }
+
+  return {
+    supportedSizes: [...ADVANCED_IMAGE_SIZE_LEVELS],
+    note: '兼容适配器按 size 像素串透传, 具体以第三方服务能力为准。',
+  };
+}
+
+export function buildAdvancedImageSizeMatrix(
+  providers?: AdvancedProviderConfig[],
+): AdvancedProviderImageSizeRow[] {
+  const rows: AdvancedProviderImageSizeRow[] = [];
+  for (const provider of Array.isArray(providers) ? providers : []) {
+    if (!provider) continue;
+    const providerId = String(provider.id || '').trim();
+    const providerLabel = String(provider.label || provider.id || provider.protocol || '').trim();
+    if (!providerId && !providerLabel) continue;
+
+    if (provider.protocol === 'comfyui') {
+      const workflows = Array.isArray(provider.comfyuiConfig?.workflows) ? provider.comfyuiConfig?.workflows || [] : [];
+      if (!workflows.length) {
+        rows.push({
+          providerId,
+          providerLabel,
+          protocol: provider.protocol,
+          enabled: provider.enabled === true,
+          model: '未配置工作流',
+          source: 'missing',
+          supportedSizes: [],
+          note: '请先在 ComfyUI 平台配置至少一个工作流。',
+        });
+        continue;
+      }
+      for (const workflow of workflows) {
+        const model = String(workflow.id || workflow.name || 'workflow').trim();
+        const inferred = inferImageSizeSupport(provider, model);
+        rows.push({
+          providerId,
+          providerLabel,
+          protocol: provider.protocol,
+          enabled: provider.enabled === true,
+          model,
+          source: 'workflow',
+          ...inferred,
+        });
+      }
+      continue;
+    }
+
+    const explicit = explicitModelListForKind(provider, 'image');
+    const models = explicit.length ? explicit : fallbackModelsForKind(provider, 'image');
+    if (!models.length) {
+      rows.push({
+        providerId,
+        providerLabel,
+        protocol: provider.protocol,
+        enabled: provider.enabled === true,
+        model: '未配置图像模型',
+        source: 'missing',
+        supportedSizes: [],
+        note: '请先填写图像模型列表。',
+      });
+      continue;
+    }
+    for (const model of models) {
+      const inferred = inferImageSizeSupport(provider, model);
+      rows.push({
+        providerId,
+        providerLabel,
+        protocol: provider.protocol,
+        enabled: provider.enabled === true,
+        model,
+        source: explicit.length ? 'configured' : 'fallback',
+        ...inferred,
+      });
+    }
+  }
+  return rows;
 }
 
 export function advancedProvidersForNode(

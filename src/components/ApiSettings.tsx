@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, FileUp, Info, KeyRound, Loader2, Lock, Plus, Save, Settings2, TestTube2, Trash2, X, FolderOpen, ServerCog } from 'lucide-react';
+import { ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, FileUp, Info, KeyRound, Loader2, Lock, Plus, Ruler, Save, Settings2, TestTube2, Trash2, X, FolderOpen, ServerCog } from 'lucide-react';
 import { useApiKeysStore, FIXED_ZHENZHEN_BASE, RH_BASE } from '../stores/apiKeys';
 import { useThemeStore } from '../stores/theme';
 import type { AdvancedProviderConfig, AdvancedProviderProtocol, ApiSettings, LlmConfig } from '../types/canvas';
 import { getRawSettings, testAdvancedProvider } from '../services/api';
 import {
+  ADVANCED_IMAGE_SIZE_LEVELS,
   advancedProviderSummary as summarizeAdvancedProviderForm,
+  buildAdvancedImageSizeMatrix,
   parseAdvancedProviderModelText,
   stringifyAdvancedProviderModels,
 } from '../utils/advancedProviders';
@@ -261,6 +263,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   const [advancedDirty, setAdvancedDirty] = useState(false);
   const [advancedTestStatus, setAdvancedTestStatus] = useState<Record<string, { loading?: boolean; ok?: boolean; message?: string }>>({});
   const [advancedComfyDrafts, setAdvancedComfyDrafts] = useState<Record<string, { workflowJson?: string; fields?: string }>>({});
+  const [imageSizeMatrixOpen, setImageSizeMatrixOpen] = useState(false);
   const [backupMessage, setBackupMessage] = useState<string>('');
   const backupFileInputRef = useRef<HTMLInputElement | null>(null);
   // 眼睛预览拉取的明文（仅缓存，不提交）
@@ -294,6 +297,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       setAdvancedDirty(false);
       setAdvancedTestStatus({});
       setAdvancedComfyDrafts({});
+      setImageSizeMatrixOpen(false);
       // 回填文件自动保存路径(明文字段，不脱敏)
       setFileSavePathInput((settings as any)?.fileSavePath || '');
       setCanvasAutoSavePathInput((settings as any)?.canvasAutoSavePath || '');
@@ -797,6 +801,152 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   const activeAdvancedProvider = advancedProvidersInput.find((provider) => provider.id === activeAdvancedProviderId)
     || advancedProvidersInput[0]
     || null;
+  const imageSizeRows = buildAdvancedImageSizeMatrix(advancedProvidersInput);
+
+  const renderImageSizeMatrixModal = () => {
+    const modalCls = isPixel
+      ? 'w-full max-w-5xl mx-4 px-card overflow-hidden flex flex-col max-h-[82vh]'
+      : `w-full max-w-5xl mx-4 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[82vh] ${
+          isDark ? 'bg-zinc-950 border border-white/10' : 'bg-white border border-black/10'
+        }`;
+    const headerCls = isPixel
+      ? 'border-[var(--px-ink)] bg-[var(--px-yellow)]'
+      : isDark
+        ? 'border-white/10 bg-white/[0.03]'
+        : 'border-black/10 bg-black/[0.02]';
+    const tableBorderCls = isPixel ? 'border-[var(--px-ink)]' : isDark ? 'border-white/10' : 'border-black/10';
+    const headCls = isPixel
+      ? 'bg-[var(--px-muted)] text-[var(--px-ink)]'
+      : isDark
+        ? 'bg-white/5 text-white/70'
+        : 'bg-zinc-100 text-zinc-600';
+    const cellCls = isPixel ? 'border-[var(--px-ink)]/30' : isDark ? 'border-white/10' : 'border-black/10';
+    const sourceLabel = {
+      configured: '已配置',
+      fallback: '默认',
+      workflow: '工作流',
+      missing: '未配置',
+    } as const;
+
+    return (
+      <div
+        className={`fixed inset-0 z-[60] flex items-center justify-center ${isPixel ? 'px-modal-mask' : 'bg-black/70'} backdrop-blur-sm`}
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) setImageSizeMatrixOpen(false);
+        }}
+      >
+        <div className={modalCls}>
+          <div className={`flex items-center gap-3 px-5 py-4 border-b shrink-0 ${headerCls}`}>
+            <Ruler size={18} className={isPixel ? 'text-[var(--px-ink)]' : isDark ? 'text-emerald-200' : 'text-emerald-700'} />
+            <div className="min-w-0 flex-1">
+              <h3 className={`text-base font-semibold ${isPixel ? 'px-title text-[var(--px-ink)]' : isDark ? 'text-white' : 'text-zinc-900'}`}>
+                模型生图可用尺寸配置表
+              </h3>
+              <p className={`text-xs mt-0.5 ${hintCls}`}>
+                列出扩展 API 平台当前图像模型的 1K / 2K / 4K 支持情况；未填写模型时显示项目默认兜底模型。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setImageSizeMatrixOpen(false)}
+              className={
+                isPixel
+                  ? 'px-btn px-btn--icon px-btn--ghost'
+                  : `p-1.5 rounded-md ${isDark ? 'hover:bg-white/10 text-white/80' : 'hover:bg-black/5 text-zinc-700'}`
+              }
+              title="关闭"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="p-5 overflow-auto space-y-3">
+            <div className={`text-[11px] leading-relaxed ${hintCls}`}>
+              勾选表示当前适配器会按该档位透传参数；第三方中转站或具体模型仍可能有额外限制，最终以平台实际返回为准。
+            </div>
+            <div className={`overflow-x-auto border ${tableBorderCls} ${isPixel ? '' : 'rounded-lg'}`}>
+              <table className="w-full min-w-[780px] border-collapse text-xs">
+                <thead className={headCls}>
+                  <tr>
+                    <th className={`border-b ${cellCls} px-3 py-2 text-left font-bold`}>平台</th>
+                    <th className={`border-b ${cellCls} px-3 py-2 text-left font-bold`}>协议</th>
+                    <th className={`border-b ${cellCls} px-3 py-2 text-left font-bold`}>模型 / 工作流</th>
+                    <th className={`border-b ${cellCls} px-3 py-2 text-center font-bold`}>来源</th>
+                    {ADVANCED_IMAGE_SIZE_LEVELS.map((level) => (
+                      <th key={level} className={`border-b ${cellCls} px-3 py-2 text-center font-bold`}>{level}</th>
+                    ))}
+                    <th className={`border-b ${cellCls} px-3 py-2 text-left font-bold`}>说明</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {imageSizeRows.map((row, index) => (
+                    <tr
+                      key={`${row.providerId}-${row.model}-${index}`}
+                      className={
+                        isPixel
+                          ? 'bg-white'
+                          : index % 2 === 0
+                            ? (isDark ? 'bg-white/[0.02]' : 'bg-white')
+                            : (isDark ? 'bg-white/[0.04]' : 'bg-zinc-50')
+                      }
+                    >
+                      <td className={`border-t ${cellCls} px-3 py-2 align-top`}>
+                        <div className={`font-bold ${labelCls}`}>{row.providerLabel || row.providerId}</div>
+                        <div className={`mt-0.5 text-[10px] ${row.enabled ? 'text-emerald-500' : hintCls}`}>
+                          {row.enabled ? '已启用' : '未启用'}
+                        </div>
+                      </td>
+                      <td className={`border-t ${cellCls} px-3 py-2 align-top ${hintCls}`}>
+                        {ADVANCED_PROVIDER_LABELS[row.protocol] || row.protocol}
+                      </td>
+                      <td className={`border-t ${cellCls} px-3 py-2 align-top font-mono ${labelCls}`}>
+                        {row.model}
+                      </td>
+                      <td className={`border-t ${cellCls} px-3 py-2 text-center align-top`}>
+                        <span
+                          className={
+                            isPixel
+                              ? 'inline-flex px-1.5 py-0.5 border border-[var(--px-ink)] bg-white text-[10px] font-bold'
+                              : `inline-flex rounded px-1.5 py-0.5 border text-[10px] ${
+                                  row.source === 'missing'
+                                    ? isDark ? 'border-red-400/30 text-red-300 bg-red-500/10' : 'border-red-200 text-red-700 bg-red-50'
+                                    : isDark ? 'border-white/10 text-white/60 bg-white/5' : 'border-black/10 text-zinc-600 bg-black/5'
+                                }`
+                          }
+                        >
+                          {sourceLabel[row.source]}
+                        </span>
+                      </td>
+                      {ADVANCED_IMAGE_SIZE_LEVELS.map((level) => {
+                        const supported = row.supportedSizes.includes(level);
+                        return (
+                          <td key={level} className={`border-t ${cellCls} px-3 py-2 text-center align-top`}>
+                            <span className={supported ? 'font-black text-emerald-500' : hintCls}>
+                              {supported ? '✓' : '—'}
+                            </span>
+                          </td>
+                        );
+                      })}
+                      <td className={`border-t ${cellCls} px-3 py-2 align-top ${hintCls}`}>
+                        {row.note}
+                      </td>
+                    </tr>
+                  ))}
+                  {imageSizeRows.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className={`px-3 py-8 text-center ${hintCls}`}>
+                        暂无扩展平台配置。
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const makeAdvancedProviderId = (providers: AdvancedProviderConfig[], protocol: AdvancedProviderProtocol) => {
     const used = new Set(providers.map((provider) => provider.id));
@@ -1964,6 +2114,23 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
           />
           <button
             type="button"
+            onClick={() => setImageSizeMatrixOpen(true)}
+            className={
+              isPixel
+                ? 'px-btn flex items-center gap-2'
+                : `px-3 py-2 text-sm rounded-md border flex items-center gap-2 ${
+                    isDark
+                      ? 'border-emerald-400/25 hover:bg-emerald-400/10 text-emerald-100'
+                      : 'border-emerald-300 hover:bg-emerald-50 text-emerald-800'
+                  }`
+            }
+            title="查看第三方平台各图像模型的 1K / 2K / 4K 可用尺寸"
+          >
+            <Ruler size={14} />
+            生图尺寸表
+          </button>
+          <button
+            type="button"
             onClick={() => backupFileInputRef.current?.click()}
             className={
               isPixel
@@ -2027,6 +2194,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
             {!loading && !saved && '保存'}
           </button>
         </div>
+        {imageSizeMatrixOpen && renderImageSizeMatrixModal()}
       </div>
     </div>
   );

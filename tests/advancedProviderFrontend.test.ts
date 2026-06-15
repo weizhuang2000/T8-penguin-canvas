@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  buildAdvancedImageSizeMatrix,
   advancedProviderSummary,
   advancedProvidersForNode,
   advancedProviderModelOptions,
@@ -110,4 +111,27 @@ test('externalImageSizeFor maps T8 ratio and size labels to stable WxH values', 
   assert.equal(externalImageSizeFor('16:9', '1K'), '1344x768');
   assert.equal(externalImageSizeFor('9:16', '2K'), '1536x2688');
   assert.equal(externalImageSizeFor('bad', 'unknown'), '1024x1024');
+});
+
+test('buildAdvancedImageSizeMatrix lists every image provider model with size support', () => {
+  const rows = buildAdvancedImageSizeMatrix([
+    { id: 'openai-compatible', label: 'OpenAI', protocol: 'openai-compatible', enabled: true, imageModels: ['gpt-image-1'] },
+    { id: 'gemini-compatible', label: 'Gemini', protocol: 'gemini-compatible', enabled: true, imageModels: ['nano-banana-2'] },
+    { id: 'volcengine', label: 'Volc', protocol: 'volcengine', enabled: false, imageModels: ['doubao-seedream-4-0-250828'] },
+    { id: 'comfyui', label: 'ComfyUI', protocol: 'comfyui', enabled: true, comfyuiConfig: { workflows: [] } },
+    { id: 'jimeng-cli', label: 'Jimeng', protocol: 'jimeng-cli', enabled: true, imageModels: ['jimeng-image-4k'] },
+  ] as any);
+
+  assert.deepEqual(
+    rows.map((row) => [row.providerId, row.model, row.supportedSizes]),
+    [
+      ['openai-compatible', 'gpt-image-1', ['1K']],
+      ['gemini-compatible', 'nano-banana-2', ['1K', '2K', '4K']],
+      ['volcengine', 'doubao-seedream-4-0-250828', ['1K', '2K', '4K']],
+      ['comfyui', '未配置工作流', []],
+      ['jimeng-cli', 'jimeng-image-4k', ['4K']],
+    ],
+  );
+  assert.equal(rows.find((row) => row.providerId === 'volcengine')?.enabled, false);
+  assert.equal(rows.find((row) => row.providerId === 'comfyui')?.source, 'missing');
 });
