@@ -47,6 +47,12 @@ function shouldRetryAsBanana(model) {
   return text.includes('gemini') && text !== DEFAULT_IMAGE_MODEL;
 }
 
+function isBananaFallbackStatus(status, raw) {
+  if (Number(status) === 400) return true;
+  const message = trimBodyForError(raw).toLowerCase();
+  return Number(status) === 503 && /no available channel/.test(message);
+}
+
 function imageBaseUrl(provider) {
   const defaults = provider?.defaults || {};
   const override = defaults.imageBaseUrl || defaults.image_base_url;
@@ -338,7 +344,7 @@ async function generateImage(provider, input = {}, options = {}) {
   try {
     let res = await submitBananaLikeImage(provider, input, model, options);
     raw = await responseJson(res);
-    if (!res.ok && Number(res.status) === 400 && shouldRetryAsBanana(model)) {
+    if (!res.ok && shouldRetryAsBanana(model) && isBananaFallbackStatus(res.status, raw)) {
       finalModel = DEFAULT_IMAGE_MODEL;
       res = await submitBananaLikeImage(provider, input, finalModel, options);
       raw = await responseJson(res);

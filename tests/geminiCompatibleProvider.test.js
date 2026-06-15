@@ -148,6 +148,42 @@ test('Gemini compatible retries legacy Gemini image model as nano-banana-2 on 40
   assert.equal(calls[1].body.model, 'nano-banana-2');
 });
 
+test('Gemini compatible retries legacy Gemini image model as nano-banana-2 on LinkAPI 503 channel miss', async () => {
+  const calls = [];
+  const provider = {
+    id: 'gemini-compatible',
+    protocol: 'gemini-compatible',
+    baseUrl: 'https://api.linkapi.ai/v1',
+    apiKey: 'linkapi-secret',
+    imageModels: ['gemini-3.1-flash-image-preview'],
+  };
+
+  const result = await geminiCompatible.generateImage(provider, {
+    prompt: 'retry scene',
+    aspect_ratio: '1:1',
+    image_size: '2K',
+  }, {
+    fetchImpl: async (url, init) => {
+      const body = JSON.parse(init.body);
+      calls.push({ url, body });
+      if (calls.length === 1) {
+        return jsonResponse({
+          error: {
+            message: 'No available channel for model gemini-3.1-flash-image-preview under group default (distributor)',
+          },
+        }, 503);
+      }
+      return jsonResponse({ data: [{ b64_json: 'TElOS0FQSQ==' }] });
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.model, 'nano-banana-2');
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].body.model, 'gemini-3.1-flash-image-preview');
+  assert.equal(calls[1].body.model, 'nano-banana-2');
+});
+
 test('Gemini compatible chat normalizes generateContent text', async () => {
   const provider = {
     id: 'gemini-compatible',
