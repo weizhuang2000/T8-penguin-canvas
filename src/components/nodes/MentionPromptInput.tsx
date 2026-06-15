@@ -1,5 +1,6 @@
 import {
   memo,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -103,6 +104,12 @@ const MentionPromptInput = ({
 }: Props) => {
   const localRef = useRef<HTMLTextAreaElement | null>(null);
   const composingRef = useRef(false);
+  const localEditRef = useRef(false);
+  const localEditTimerRef = useRef<number | null>(null);
+  const draftValueRef = useRef(value);
+  const draftMentionsRef = useRef<MediaMention[]>(mentions);
+  const [draftValue, setDraftValue] = useState(value);
+  const [draftMentions, setDraftMentions] = useState<MediaMention[]>(mentions);
   const [queryState, setQueryState] = useState<QueryState>({
     open: false,
     start: 0,
@@ -111,6 +118,37 @@ const MentionPromptInput = ({
     activeIndex: 0,
   });
   const [popupRect, setPopupRect] = useState<{ left: number; top: number; width: number } | null>(null);
+
+  const markLocalEdit = () => {
+    localEditRef.current = true;
+    if (localEditTimerRef.current !== null) {
+      window.clearTimeout(localEditTimerRef.current);
+    }
+    localEditTimerRef.current = window.setTimeout(() => {
+      localEditRef.current = false;
+      localEditTimerRef.current = null;
+    }, 250);
+  };
+
+  useEffect(() => {
+    if (localEditRef.current && value === draftValue && areMentionsSame(mentions, draftMentions)) {
+      localEditRef.current = false;
+      return;
+    }
+    if (localEditRef.current) return;
+    draftValueRef.current = value;
+    draftMentionsRef.current = mentions;
+    setDraftValue(value);
+    setDraftMentions(mentions);
+  }, [draftMentions, draftValue, mentions, value]);
+
+  useEffect(() => {
+    return () => {
+      if (localEditTimerRef.current !== null) {
+        window.clearTimeout(localEditTimerRef.current);
+      }
+    };
+  }, []);
 
   const mentionableMaterials = useMemo(
     () => materials.filter(isMentionableMaterial),
@@ -128,12 +166,12 @@ const MentionPromptInput = ({
   }, [mentionableMaterials, queryState.query]);
 
   const resolvedPreview = useMemo(
-    () => resolveMediaMentions(value, mentions, mentionableMaterials),
-    [value, mentions, mentionableMaterials],
+    () => resolveMediaMentions(draftValue, draftMentions, mentionableMaterials),
+    [draftValue, draftMentions, mentionableMaterials],
   );
   const unresolvedCount = useMemo(
-    () => getUnresolvedMentionCount(mentions, mentionableMaterials),
-    [mentions, mentionableMaterials],
+    () => getUnresolvedMentionCount(draftMentions, mentionableMaterials),
+    [draftMentions, mentionableMaterials],
   );
 
   const setEditorRef = (el: HTMLTextAreaElement | null) => {
@@ -154,7 +192,7 @@ const MentionPromptInput = ({
 
   const closePopup = () => setQueryState((s) => (s.open ? { ...s, open: false } : s));
 
-  const openFromCaret = (text: string, caret: number, nextMentions: MediaMention[] = mentions) => {
+  const openFromCaret = (text: string, caret: number, nextMentions: MediaMention[] = draftMentions) => {
     const query = getAtQuery(text, caret, nextMentions);
     if (!query) {
       closePopup();
@@ -165,26 +203,47 @@ const MentionPromptInput = ({
   };
 
   const emitChange = (nextValue: string, caret: number) => {
-    const nextMentions = updateMentionRanges(value, nextValue, mentions);
+    const nextMentions = updateMentionRanges(draftValueRef.current, nextValue, draftMentionsRef.current);
+    markLocalEdit();
+    draftValueRef.current = nextValue;
+    draftMentionsRef.current = nextMentions;
+    setDraftValue(nextValue);
+    setDraftMentions(nextMentions);
     if (nextValue !== value || !areMentionsSame(nextMentions, mentions)) {
       onChange(nextValue, nextMentions);
     }
     openFromCaret(nextValue, caret, nextMentions);
   };
 
+  const updateDraftOnly = (nextValue: string) => {
+    const nextMentions = updateMentionRanges(draftValueRef.current, nextValue, draftMentionsRef.current);
+    markLocalEdit();
+    draftValueRef.current = nextValue;
+    draftMentionsRef.current = nextMentions;
+    setDraftValue(nextValue);
+    setDraftMentions(nextMentions);
+  };
+
   const selectMaterial = (material: Material) => {
     const el = localRef.current;
     if (!el) return;
-    const start = queryState.open ? queryState.start : el.selectionStart ?? value.length;
+    const currentValue = draftValueRef.current;
+    const currentMentions = draftMentionsRef.current;
+    const start = queryState.open ? queryState.start : el.selectionStart ?? currentValue.length;
     const end = queryState.open ? queryState.end : el.selectionEnd ?? start;
     const result = insertMediaMention(
-      value,
-      mentions,
+      currentValue,
+      currentMentions,
       material,
       mentionableMaterials,
       start,
       end,
     );
+    markLocalEdit();
+    draftValueRef.current = result.text;
+    draftMentionsRef.current = result.mentions;
+    setDraftValue(result.text);
+    setDraftMentions(result.mentions);
     onChange(result.text, result.mentions);
     closePopup();
     window.setTimeout(() => {
@@ -321,11 +380,14 @@ const MentionPromptInput = ({
       <div className="relative">
         <textarea
           ref={setEditorRef}
-          value={value}
+          value={draftValue}
           aria-multiline="true"
           placeholder={placeholder}
           onChange={(e) => {
-            if (composingRef.current) return;
+            if (composingRef.current) {
+              updateDraftOnly(e.currentTarget.value);
+              return;
+            }
             emitChange(e.currentTarget.value, e.currentTarget.selectionStart ?? e.currentTarget.value.length);
           }}
           onCompositionStart={() => {
@@ -371,6 +433,7 @@ const MentionPromptInput = ({
             }
           }}
           onBlur={() => {
+            localEditRef.current = false;
             window.setTimeout(closePopup, 120);
           }}
           className={className}
@@ -386,7 +449,7 @@ const MentionPromptInput = ({
           }}
         />
       </div>
-      {mentions.length > 0 && (
+      {draftMentions.length > 0 && (
         <div
           className="mt-1 rounded px-2 py-1 text-[10px]"
           style={{
