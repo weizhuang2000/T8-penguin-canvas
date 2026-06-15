@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  advancedImageSizesForModel,
   buildAdvancedImageSizeMatrix,
   advancedProviderSummary,
   advancedProvidersForNode,
@@ -137,4 +138,18 @@ test('buildAdvancedImageSizeMatrix lists every image provider model with size su
   assert.equal(rows.find((row) => row.providerId === 'volcengine')?.enabled, false);
   assert.equal(rows.find((row) => row.providerId === 'comfyui')?.source, 'missing');
   assert.equal(rows.find((row) => row.providerId === 'manual-openai')?.configured, true);
+});
+
+test('advancedImageSizesForModel honors manual size table over inferred banana defaults', () => {
+  const provider = {
+    id: 'banana-provider',
+    label: '香蕉听话，只能1K',
+    protocol: 'gemini-compatible',
+    enabled: true,
+    imageModels: ['nano-banana-hd'],
+    imageModelSizes: { ' nano-banana-hd ': ['1K'] },
+  } as any;
+
+  assert.deepEqual(advancedImageSizesForModel(provider, 'nano-banana-hd'), ['1K']);
+  assert.deepEqual(buildAdvancedImageSizeMatrix([provider])[0].supportedSizes, ['1K']);
 });

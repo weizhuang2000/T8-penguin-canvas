@@ -179,6 +179,10 @@ export function imageModelSizeKey(model: string): string {
   return String(model || '').trim();
 }
 
+function comparableModelKey(model: string): string {
+  return imageModelSizeKey(model).toLowerCase();
+}
+
 export function configuredImageSizesForModel(
   provider: AdvancedProviderConfig | null | undefined,
   model: string,
@@ -186,8 +190,10 @@ export function configuredImageSizesForModel(
   const key = imageModelSizeKey(model);
   const table = provider?.imageModelSizes;
   if (!key || !table || typeof table !== 'object' || Array.isArray(table)) return null;
-  if (!Object.prototype.hasOwnProperty.call(table, key)) return null;
-  return normalizeSizeLevels(table[key]);
+  if (Object.prototype.hasOwnProperty.call(table, key)) return normalizeSizeLevels(table[key]);
+  const comparable = comparableModelKey(key);
+  const matchedKey = Object.keys(table).find((item) => comparableModelKey(item) === comparable);
+  return matchedKey ? normalizeSizeLevels(table[matchedKey]) : null;
 }
 
 function inferImageSizeSupport(
@@ -370,7 +376,8 @@ export function advancedImageSizesForModel(
   model: string,
 ): AdvancedImageSizeLevel[] {
   if (!provider || !model) return [];
-  const row = buildAdvancedImageSizeMatrix([provider]).find((item) => item.model === model);
+  const target = comparableModelKey(model);
+  const row = buildAdvancedImageSizeMatrix([provider]).find((item) => comparableModelKey(item.model) === target);
   return row ? row.supportedSizes : [];
 }
 

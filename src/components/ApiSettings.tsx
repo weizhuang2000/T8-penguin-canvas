@@ -926,7 +926,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                               type="checkbox"
                               checked={supported}
                               disabled={disabled}
-                              onChange={(e) => updateAdvancedProviderImageModelSize(row.providerId, row.model, level, e.target.checked)}
+                              onChange={(e) => updateAdvancedProviderImageModelSize(row.providerId, row.model, level, e.target.checked, row.supportedSizes)}
                               className="h-4 w-4 accent-emerald-500 disabled:opacity-30"
                               title={disabled ? '请先配置图像模型或工作流' : `${row.providerLabel} / ${row.model} / ${level}`}
                             />
@@ -1045,6 +1045,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     model: string,
     sizeLevel: string,
     checked: boolean,
+    currentSupportedSizes: string[] = [],
   ) => {
     if (!model || !ADVANCED_IMAGE_SIZE_LEVELS.includes(sizeLevel as any)) return;
     setAdvancedProvidersInput((prev) => prev.map((provider) => {
@@ -1052,7 +1053,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       const currentTable = provider.imageModelSizes && typeof provider.imageModelSizes === 'object'
         ? provider.imageModelSizes
         : {};
-      const currentSizes = Array.isArray(currentTable[model]) ? currentTable[model] : [];
+      const currentSizes = Array.isArray(currentTable[model]) ? currentTable[model] : currentSupportedSizes;
       const nextSizes = checked
         ? [...currentSizes, sizeLevel].filter((value, index, list) => list.indexOf(value) === index)
         : currentSizes.filter((value) => value !== sizeLevel);
