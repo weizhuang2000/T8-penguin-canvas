@@ -1,6 +1,5 @@
 import {
   memo,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -14,9 +13,9 @@ import {
   getUnresolvedMentionCount,
   insertMediaMention,
   isMentionableMaterial,
-  materialMentionKey,
   resolveMediaMentions,
   tokenForMaterial,
+  updateMentionRanges,
   type MediaMention,
 } from './mediaMentions';
 
@@ -30,7 +29,7 @@ interface Props {
   style?: CSSProperties;
   isDark: boolean;
   isPixel: boolean;
-  editorRef?: Ref<HTMLDivElement>;
+  editorRef?: Ref<HTMLTextAreaElement>;
 }
 
 interface QueryState {
@@ -57,7 +56,8 @@ function getAtQuery(text: string, caret: number, mentions: MediaMention[] = []):
   const segment = before.slice(at);
   if (/\s/.test(segment)) return null;
   const afterMention = mentions.some((mention) => mention.end === at);
-  if (!afterMention && at > 0 && !/\s|[\(\[{"'，。！？、:：]/.test(text[at - 1])) return null;
+  const prev = at > 0 ? text[at - 1] : '';
+  if (!afterMention && prev && !/\s/.test(prev) && !'([{ "\''.includes(prev)) return null;
   return { start: at, end: caret, query: segment.slice(1) };
 }
 
@@ -74,153 +74,6 @@ function displayKind(kind: Material['kind']): string {
   if (kind === 'video') return '视频';
   if (kind === 'audio') return '音频';
   return '文本';
-}
-
-function escapeText(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function getCaretPlainOffset(root: HTMLElement): number {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) return 0;
-  const range = selection.getRangeAt(0);
-  if (!root.contains(range.startContainer)) return 0;
-
-  const nodePlainLength = (node: Node): number => {
-    if (node.nodeType === Node.TEXT_NODE) return node.textContent?.length || 0;
-    if (node instanceof HTMLElement && node.dataset.mentionToken) return node.dataset.mentionToken.length;
-    if (node instanceof HTMLElement && node.tagName === 'BR') return 1;
-    let len = 0;
-    node.childNodes.forEach((child) => {
-      len += nodePlainLength(child);
-    });
-    return len;
-  };
-
-  let offset = 0;
-  let found = false;
-  const walk = (node: Node) => {
-    if (found) return;
-    if (node === range.startContainer) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        offset += range.startOffset;
-      } else {
-        for (let i = 0; i < range.startOffset; i += 1) {
-          const child = node.childNodes[i];
-          if (child) offset += nodePlainLength(child);
-        }
-      }
-      found = true;
-      return;
-    }
-    if (node.nodeType === Node.TEXT_NODE) {
-      offset += node.textContent?.length || 0;
-      return;
-    }
-    if (node instanceof HTMLElement && node.dataset.mentionToken) {
-      offset += node.dataset.mentionToken.length;
-      return;
-    }
-    if (node instanceof HTMLElement && node.tagName === 'BR') {
-      offset += 1;
-      return;
-    }
-    node.childNodes.forEach(walk);
-  };
-  root.childNodes.forEach(walk);
-  return offset;
-}
-
-function setCaretPlainOffset(root: HTMLElement, targetOffset: number) {
-  const selection = window.getSelection();
-  if (!selection) return;
-  let offset = 0;
-  let targetNode: Node | null = null;
-  let targetNodeOffset = 0;
-
-  const walk = (node: Node) => {
-    if (targetNode) return;
-    if (node.nodeType === Node.TEXT_NODE) {
-      const len = node.textContent?.length || 0;
-      if (offset + len >= targetOffset) {
-        targetNode = node;
-        targetNodeOffset = Math.max(0, Math.min(len, targetOffset - offset));
-        return;
-      }
-      offset += len;
-      return;
-    }
-    if (node instanceof HTMLElement && node.dataset.mentionToken) {
-      const len = node.dataset.mentionToken.length;
-      if (offset + len >= targetOffset) {
-        targetNode = node.parentNode || root;
-        targetNodeOffset = Array.prototype.indexOf.call((targetNode as Node).childNodes, node) + 1;
-        return;
-      }
-      offset += len;
-      return;
-    }
-    if (node instanceof HTMLElement && node.tagName === 'BR') {
-      const len = 1;
-      if (offset + len >= targetOffset) {
-        targetNode = node.parentNode || root;
-        targetNodeOffset = Array.prototype.indexOf.call((targetNode as Node).childNodes, node) + 1;
-        return;
-      }
-      offset += len;
-      return;
-    }
-    node.childNodes.forEach(walk);
-  };
-
-  root.childNodes.forEach(walk);
-  if (!targetNode) {
-    targetNode = root;
-    targetNodeOffset = root.childNodes.length;
-  }
-  const range = document.createRange();
-  range.setStart(targetNode, targetNodeOffset);
-  range.collapse(true);
-  selection.removeAllRanges();
-  selection.addRange(range);
-}
-
-function readRichEditor(root: HTMLElement, fallbackMentions: MediaMention[]): { text: string; mentions: MediaMention[] } {
-  let text = '';
-  const mentions: MediaMention[] = [];
-  const byId = new Map(fallbackMentions.map((mention) => [mention.id, mention]));
-  const normalizeText = (raw: string) => raw.replace(/\u00a0/g, ' ');
-
-  const walk = (node: Node) => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      text += normalizeText(node.textContent || '');
-      return;
-    }
-    if (!(node instanceof HTMLElement)) return;
-    if (node.dataset.mentionToken) {
-      const token = node.dataset.mentionToken;
-      const id = node.dataset.mentionId || '';
-      const start = text.length;
-      text += token;
-      const prev = byId.get(id);
-      if (prev) {
-        mentions.push({ ...prev, token, start, end: text.length });
-      }
-      return;
-    }
-    if (node.tagName === 'BR') {
-      text += '\n';
-      return;
-    }
-    node.childNodes.forEach(walk);
-  };
-
-  root.childNodes.forEach(walk);
-  return { text, mentions };
 }
 
 function areMentionsSame(a: MediaMention[] = [], b: MediaMention[] = []): boolean {
@@ -248,10 +101,8 @@ const MentionPromptInput = ({
   isPixel,
   editorRef,
 }: Props) => {
-  const localRef = useRef<HTMLDivElement | null>(null);
+  const localRef = useRef<HTMLTextAreaElement | null>(null);
   const composingRef = useRef(false);
-  const pendingCaretRef = useRef<number | null>(null);
-  const [isFocused, setIsFocused] = useState(false);
   const [queryState, setQueryState] = useState<QueryState>({
     open: false,
     start: 0,
@@ -276,26 +127,6 @@ const MentionPromptInput = ({
     });
   }, [mentionableMaterials, queryState.query]);
 
-  const mentionMaterialMap = useMemo(() => {
-    const map = new Map<string, Material>();
-    for (const material of mentionableMaterials) {
-      map.set(materialMentionKey(material), material);
-    }
-    return map;
-  }, [mentionableMaterials]);
-
-  const inlineMentions = useMemo(
-    () =>
-      mentions
-        .filter((mention) => value.slice(mention.start, mention.end) === mention.token)
-        .map((mention) => {
-          const material = mentionMaterialMap.get(mention.materialKey);
-          return material ? { mention, material, token: tokenForMaterial(material, mentionableMaterials) } : null;
-        })
-        .filter((item): item is { mention: MediaMention; material: Material; token: string } => !!item),
-    [mentions, value, mentionMaterialMap, mentionableMaterials],
-  );
-
   const resolvedPreview = useMemo(
     () => resolveMediaMentions(value, mentions, mentionableMaterials),
     [value, mentions, mentionableMaterials],
@@ -305,23 +136,10 @@ const MentionPromptInput = ({
     [mentions, mentionableMaterials],
   );
 
-  const setEditorRef = (el: HTMLDivElement | null) => {
+  const setEditorRef = (el: HTMLTextAreaElement | null) => {
     localRef.current = el;
     assignRef(editorRef, el);
   };
-
-  const editorHtml = useMemo(() => {
-    const validMentions = inlineMentions.map((item) => item.mention).sort((a, b) => a.start - b.start);
-    let html = '';
-    let pos = 0;
-    for (const mention of validMentions) {
-      if (mention.start > pos) html += escapeText(value.slice(pos, mention.start));
-      html += `<span data-mention-id="${escapeText(mention.id)}" data-mention-token="${escapeText(mention.token)}" contenteditable="false"></span>`;
-      pos = mention.end;
-    }
-    html += escapeText(value.slice(pos));
-    return html.replace(/\n/g, '<br>');
-  }, [value, inlineMentions]);
 
   const syncPopupRect = () => {
     const el = localRef.current;
@@ -334,98 +152,46 @@ const MentionPromptInput = ({
     setPopupRect({ left, top, width });
   };
 
-  useLayoutEffect(() => {
-    if (!queryState.open) return;
-    syncPopupRect();
-  }, [queryState.open, queryState.query, value]);
+  const closePopup = () => setQueryState((s) => (s.open ? { ...s, open: false } : s));
 
-  useLayoutEffect(() => {
-    const el = localRef.current;
-    if (!el) return;
-    if (composingRef.current) return;
-    const keepCaret = document.activeElement === el ? getCaretPlainOffset(el) : null;
-    if (el.innerHTML !== editorHtml) el.innerHTML = editorHtml;
-    for (const item of inlineMentions) {
-      const span = Array.from(el.querySelectorAll<HTMLElement>('[data-mention-id]'))
-        .find((candidate) => candidate.dataset.mentionId === item.mention.id);
-      if (!span || span.childNodes.length > 0) continue;
-      span.title = item.token;
-      span.style.cssText = [
-        'display:inline-flex',
-        'width:20px',
-        'height:20px',
-        'vertical-align:-4px',
-        'margin:0 6px 0 2px',
-        'align-items:center',
-        'justify-content:center',
-        'overflow:hidden',
-        `border-radius:${isPixel ? '6px' : '5px'}`,
-        `border:${isPixel ? '1.5px solid var(--px-ink, #1a1410)' : '1px solid rgba(255,255,255,.22)'}`,
-        `background:${item.material.kind === 'audio' ? 'rgba(250,204,21,.18)' : 'rgba(15,23,42,.18)'}`,
-        `box-shadow:${isPixel ? '1px 1px 0 var(--px-ink, #1a1410)' : '0 2px 8px rgba(0,0,0,.16)'}`,
-      ].join(';');
-      if (item.material.kind === 'image') {
-        const img = document.createElement('img');
-        img.src = item.material.url;
-        img.alt = '';
-        img.draggable = false;
-        img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
-        span.appendChild(img);
-      } else {
-        span.textContent = item.material.kind === 'video' ? '▶' : '♪';
-      span.style.fontSize = '12px';
-      span.style.fontWeight = '900';
-      }
-    }
-    if (document.activeElement === el) {
-      const caret = pendingCaretRef.current ?? keepCaret;
-      pendingCaretRef.current = null;
-      if (caret !== null) setCaretPlainOffset(el, caret);
-    }
-  }, [editorHtml, inlineMentions, isDark, isPixel]);
-
-  const openFromCaret = (text: string, caret: number) => {
-    const query = getAtQuery(text, caret, mentions);
+  const openFromCaret = (text: string, caret: number, nextMentions: MediaMention[] = mentions) => {
+    const query = getAtQuery(text, caret, nextMentions);
     if (!query) {
-      setQueryState((s) => ({ ...s, open: false }));
+      closePopup();
       return;
     }
     setQueryState({ ...query, open: true, activeIndex: 0 });
+    window.setTimeout(syncPopupRect, 0);
   };
 
-  const handleEditorInput = () => {
-    const el = localRef.current;
-    if (!el) return;
-    if (composingRef.current) return;
-    const caret = getCaretPlainOffset(el);
-    const { text: nextValue, mentions: nextMentions } = readRichEditor(el, mentions);
-    pendingCaretRef.current = caret;
+  const emitChange = (nextValue: string, caret: number) => {
+    const nextMentions = updateMentionRanges(value, nextValue, mentions);
     if (nextValue !== value || !areMentionsSame(nextMentions, mentions)) {
       onChange(nextValue, nextMentions);
     }
-    if (composingRef.current) return;
-    openFromCaret(nextValue, caret);
+    openFromCaret(nextValue, caret, nextMentions);
   };
 
   const selectMaterial = (material: Material) => {
-    if (!localRef.current) return;
-    const current = readRichEditor(localRef.current, mentions);
+    const el = localRef.current;
+    if (!el) return;
+    const start = queryState.open ? queryState.start : el.selectionStart ?? value.length;
+    const end = queryState.open ? queryState.end : el.selectionEnd ?? start;
     const result = insertMediaMention(
-      current.text,
-      current.mentions,
+      value,
+      mentions,
       material,
       mentionableMaterials,
-      queryState.start,
-      queryState.end,
+      start,
+      end,
     );
-    pendingCaretRef.current = result.caret;
     onChange(result.text, result.mentions);
-    setQueryState((s) => ({ ...s, open: false }));
+    closePopup();
     window.setTimeout(() => {
-      const el = localRef.current;
-      if (!el) return;
-      el.focus();
-      setCaretPlainOffset(el, result.caret);
+      const textarea = localRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      textarea.setSelectionRange(result.caret, result.caret);
     }, 0);
   };
 
@@ -553,55 +319,40 @@ const MentionPromptInput = ({
   return (
     <div className="nodrag nowheel">
       <div className="relative">
-        <div
+        <textarea
           ref={setEditorRef}
-          contentEditable
-          suppressContentEditableWarning
-          role="textbox"
+          value={value}
           aria-multiline="true"
-          tabIndex={0}
-          data-placeholder={placeholder || ''}
-          onInput={handleEditorInput}
+          placeholder={placeholder}
+          onChange={(e) => {
+            if (composingRef.current) return;
+            emitChange(e.currentTarget.value, e.currentTarget.selectionStart ?? e.currentTarget.value.length);
+          }}
           onCompositionStart={() => {
             composingRef.current = true;
-            setQueryState((s) => ({ ...s, open: false }));
+            closePopup();
           }}
-          onCompositionEnd={() => {
-            const el = localRef.current;
-            window.setTimeout(() => {
-              if (!el) return;
-              composingRef.current = false;
-              const caret = getCaretPlainOffset(el);
-              const { text, mentions: nextMentions } = readRichEditor(el, mentions);
-              pendingCaretRef.current = caret;
-              if (text !== value || !areMentionsSame(nextMentions, mentions)) {
-                onChange(text, nextMentions);
-              }
-              openFromCaret(text, caret);
-            }, 0);
+          onCompositionEnd={(e) => {
+            composingRef.current = false;
+            const caret = e.currentTarget.selectionStart ?? e.currentTarget.value.length;
+            emitChange(e.currentTarget.value, caret);
           }}
-          onFocus={() => {
-            setIsFocused(true);
-          }}
-          onClick={() => {
-            const el = localRef.current;
-            if (!el || composingRef.current) return;
-            openFromCaret(value, getCaretPlainOffset(el));
+          onFocus={syncPopupRect}
+          onClick={(e) => {
+            if (composingRef.current) return;
+            openFromCaret(e.currentTarget.value, e.currentTarget.selectionStart ?? e.currentTarget.value.length);
           }}
           onKeyUp={(e) => {
-            const el = localRef.current;
-            if (!el) return;
             if (composingRef.current || e.nativeEvent.isComposing) return;
             if (['Escape', 'Enter', 'Tab', 'ArrowDown', 'ArrowUp'].includes(e.key)) return;
-            const { text } = readRichEditor(el, mentions);
-            openFromCaret(text, getCaretPlainOffset(el));
+            openFromCaret(e.currentTarget.value, e.currentTarget.selectionStart ?? e.currentTarget.value.length);
           }}
           onKeyDown={(e) => {
             if (composingRef.current || e.nativeEvent.isComposing) return;
             if (!queryState.open) return;
             if (e.key === 'Escape') {
               e.preventDefault();
-              setQueryState((s) => ({ ...s, open: false }));
+              closePopup();
               return;
             }
             if (e.key === 'ArrowDown') {
@@ -620,13 +371,7 @@ const MentionPromptInput = ({
             }
           }}
           onBlur={() => {
-            setIsFocused(false);
-            window.setTimeout(() => setQueryState((s) => ({ ...s, open: false })), 120);
-          }}
-          onPaste={(e) => {
-            e.preventDefault();
-            const text = e.clipboardData.getData('text/plain');
-            document.execCommand('insertText', false, text);
+            window.setTimeout(closePopup, 120);
           }}
           className={className}
           style={{
@@ -640,14 +385,6 @@ const MentionPromptInput = ({
             cursor: 'text',
           }}
         />
-        {!value && !isFocused && placeholder && (
-          <div
-            className="pointer-events-none absolute left-2 top-1 text-[11px]"
-            style={{ color: isDark ? 'rgba(255,255,255,.30)' : 'rgba(15,23,42,.38)' }}
-          >
-            {placeholder}
-          </div>
-        )}
       </div>
       {mentions.length > 0 && (
         <div
@@ -662,7 +399,7 @@ const MentionPromptInput = ({
             color: isPixel ? 'var(--px-ink, #1a1410)' : isDark ? 'rgba(255,255,255,.78)' : 'rgba(15,23,42,.76)',
           }}
         >
-          <span style={{ fontWeight: 800 }}>实际发送: </span>
+          <span style={{ fontWeight: 800 }}>实际发送 </span>
           <span className="break-all">{resolvedPreview.length > 120 ? `${resolvedPreview.slice(0, 120)}...` : resolvedPreview}</span>
         </div>
       )}
