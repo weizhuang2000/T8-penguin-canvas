@@ -120,6 +120,7 @@ test('buildAdvancedImageSizeMatrix lists every image provider model with size su
     { id: 'volcengine', label: 'Volc', protocol: 'volcengine', enabled: false, imageModels: ['doubao-seedream-4-0-250828'] },
     { id: 'comfyui', label: 'ComfyUI', protocol: 'comfyui', enabled: true, comfyuiConfig: { workflows: [] } },
     { id: 'jimeng-cli', label: 'Jimeng', protocol: 'jimeng-cli', enabled: true, imageModels: ['jimeng-image-4k'] },
+    { id: 'manual-openai', label: 'Manual', protocol: 'openai-compatible', enabled: true, imageModels: ['custom-image'], imageModelSizes: { 'custom-image': ['2K'] } },
   ] as any);
 
   assert.deepEqual(
@@ -130,8 +131,10 @@ test('buildAdvancedImageSizeMatrix lists every image provider model with size su
       ['volcengine', 'doubao-seedream-4-0-250828', ['1K', '2K', '4K']],
       ['comfyui', '未配置工作流', []],
       ['jimeng-cli', 'jimeng-image-4k', ['4K']],
+      ['manual-openai', 'custom-image', ['2K']],
     ],
   );
   assert.equal(rows.find((row) => row.providerId === 'volcengine')?.enabled, false);
   assert.equal(rows.find((row) => row.providerId === 'comfyui')?.source, 'missing');
+  assert.equal(rows.find((row) => row.providerId === 'manual-openai')?.configured, true);
 });

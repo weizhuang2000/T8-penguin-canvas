@@ -106,6 +106,7 @@ export interface AdvancedProviderConfig {
   apiKey?: string;
   hasApiKey?: boolean;
   imageModels?: string[];
+  imageModelSizes?: Record<string, Array<'1K' | '2K' | '4K'>>;
   videoModels?: string[];
   chatModels?: string[];
   defaults?: Record<string, any>;

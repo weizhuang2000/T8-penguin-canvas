@@ -46,8 +46,10 @@ import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useApiKeysStore } from '../../stores/apiKeys';
 import { useCanvasStore } from '../../stores/canvas';
 import {
+  advancedImageSizesForModel,
   advancedProviderModelOptions,
   advancedProvidersForNode,
+  ADVANCED_IMAGE_SIZE_LEVELS,
   externalImageSizeFor,
   resolveAdvancedProviderSelection,
 } from '../../utils/advancedProviders';
@@ -132,7 +134,23 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
 
   const aspectRatio = d?.aspectRatio || modelDef.defaultAspectRatio;
   const sizeLevel = d?.sizeLevel || modelDef.defaultSize;
+  const externalSizeLevels = isExternalSelected && providerSelection.provider
+    ? advancedImageSizesForModel(providerSelection.provider, externalProviderModel)
+    : [];
+  const availableSizeLevels = isExternalSelected
+    ? externalSizeLevels
+    : modelDef.sizes;
+  const effectiveSizeLevel = availableSizeLevels.includes(sizeLevel)
+    ? sizeLevel
+    : (availableSizeLevels[0] || sizeLevel || ADVANCED_IMAGE_SIZE_LEVELS[0]);
   const seed: number = Math.max(0, Math.floor(Number(d?.seed) || 0));
+
+  useEffect(() => {
+    if (!isExternalSelected) return;
+    if (!availableSizeLevels.length) return;
+    if (availableSizeLevels.includes(sizeLevel)) return;
+    update({ sizeLevel: availableSizeLevels[0] });
+  }, [availableSizeLevels, isExternalSelected, sizeLevel, update]);
   // 子模型变体(对齐 gpt-image-2-web 的 g_model/n_model)
   const apiModel = d?.apiModel || modelDef.apiModel;
 
@@ -362,9 +380,10 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
       if (isExternalSelected && providerSelection.provider) {
         const providerModel = externalProviderModel;
         if (!providerModel) throw new Error('扩展平台未配置可用图像模型');
-        const size = externalImageSizeFor(aspectRatio, sizeLevel);
+        if (!availableSizeLevels.length) throw new Error('当前扩展模型未勾选任何可用生图尺寸，请先在 API Key 设置的“生图尺寸表”中勾选。');
+        const size = externalImageSizeFor(aspectRatio, effectiveSizeLevel);
         const externalSizeDesc = providerSelection.provider.protocol === 'gemini-compatible'
-          ? `aspect_ratio=${aspectRatio} · image_size=${sizeLevel}`
+          ? `aspect_ratio=${aspectRatio} · image_size=${effectiveSizeLevel}`
           : `size=${size}`;
         logBus.info(
           `扩展平台提交: ${providerSelection.provider.label || providerSelection.provider.id} · ${providerModel} · ${externalSizeDesc} · 参考图=${allRefs.length}`,
@@ -377,7 +396,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           prompt: finalPrompt,
           size,
           aspect_ratio: aspectRatio,
-          image_size: sizeLevel,
+          image_size: effectiveSizeLevel,
           images: allRefs,
           outputFormat,
           seed: runSeed,
@@ -827,6 +846,11 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
                 )}
               </div>
             )}
+            {isExternalSelected && !availableSizeLevels.length && (
+              <div className="text-[10px] text-amber-300/90 rounded border border-amber-400/20 bg-amber-500/10 px-2 py-1">
+                当前扩展模型未在“生图尺寸表”勾选可用尺寸
+              </div>
+            )}
           </div>
         )}
 
@@ -879,7 +903,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
 
         {/* 比例 + 尺寸 并排(非 FAL 且非 MJ 模型);Grok Image 只需要比例 */}
         {(!isFal && !isMj || isExternalSelected) && (
-          <div className={`grid gap-2 ${isGrokImage || !modelDef.sizes.length ? 'grid-cols-1' : 'grid-cols-2'}`}>
+          <div className={`grid gap-2 ${isGrokImage || !availableSizeLevels.length ? 'grid-cols-1' : 'grid-cols-2'}`}>
             <div>
               <label className="text-[10px] text-white/50 block mb-1">比例</label>
               <select
@@ -893,16 +917,16 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
                 ))}
               </select>
             </div>
-            {!isGrokImage && modelDef.sizes.length > 0 && (
+            {!isGrokImage && availableSizeLevels.length > 0 && (
               <div>
                 <label className="text-[10px] text-white/50 block mb-1">尺寸</label>
                 <select
-                  value={sizeLevel}
+                  value={effectiveSizeLevel}
                   onChange={(e) => update({ sizeLevel: e.target.value })}
                   style={{ background: '#18181b', color: '#ffffff' }}
                   className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
                 >
-                  {modelDef.sizes.map((s) => (
+                  {availableSizeLevels.map((s) => (
                     <option key={s} value={s} style={{ background: '#18181b', color: '#ffffff' }}>{s}</option>
                   ))}
                 </select>

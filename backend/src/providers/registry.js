@@ -148,6 +148,27 @@ function normalizeModelList(values) {
   return out;
 }
 
+function normalizeImageModelSizes(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const out = {};
+  for (const [key, sizes] of Object.entries(value).slice(0, 200)) {
+    const model = String(key || '').trim();
+    if (!model || model.length > 240 || CONTROL_CHAR_RE.test(model)) continue;
+    const cleanSizes = [];
+    for (const rawSize of Array.isArray(sizes) ? sizes : []) {
+      const size = String(rawSize || '').trim().toUpperCase();
+      if (!['1K', '2K', '4K'].includes(size)) continue;
+      if (!cleanSizes.includes(size)) cleanSizes.push(size);
+    }
+    out[model] = cleanSizes;
+  }
+  return out;
+}
+
+function hasImageModelSizes(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
 function normalizeUrl(value) {
   const text = String(value || '').trim().replace(/\/+$/, '');
   if (!text) return '';
@@ -303,6 +324,9 @@ function normalizeProvider(raw, previous = null) {
     enabled: normalizeBoolean(raw.enabled, false),
     apiKey: cleanSecret(raw.apiKey || raw.api_key, previousConfig.apiKey),
     imageModels: normalizeModelList(raw.imageModels || raw.image_models),
+    imageModelSizes: hasImageModelSizes(raw.imageModelSizes || raw.image_model_sizes)
+      ? normalizeImageModelSizes(raw.imageModelSizes || raw.image_model_sizes)
+      : normalizeImageModelSizes(previousConfig.imageModelSizes),
     videoModels: normalizeModelList(raw.videoModels || raw.video_models),
     chatModels: normalizeModelList(raw.chatModels || raw.chat_models),
     defaults: normalizePlainObject(raw.defaults),

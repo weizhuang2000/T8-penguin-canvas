@@ -44,6 +44,11 @@ test('normalizeAdvancedProviders filters invalid providers and clamps unsafe fie
       protocol: 'openai-compatible',
       baseUrl: 'https://api.example.com/v1/',
       imageModels: ['gpt-image-1', 'bad\nmodel', 'x'.repeat(260), 'gpt-image-1'],
+      imageModelSizes: {
+        'gpt-image-1': ['1K', '4K', 'bad', '1K'],
+        'empty-model': [],
+        'bad\nmodel': ['2K'],
+      },
       videoModels: ['video-model'],
       chatModels: ['gpt-4o-mini'],
       unknownField: 'drop me',
@@ -56,6 +61,7 @@ test('normalizeAdvancedProviders filters invalid providers and clamps unsafe fie
   assert.equal(provider.baseUrl, 'https://api.example.com/v1');
   assert.equal(provider.label.length <= 60, true);
   assert.deepEqual(provider.imageModels, ['gpt-image-1']);
+  assert.deepEqual(provider.imageModelSizes, { 'gpt-image-1': ['1K', '4K'], 'empty-model': [] });
   assert.equal('unknownField' in provider, false);
   assert.equal(providers.some((item: any) => item.id === '../bad'), false);
   assert.equal(providers.some((item: any) => item.id === 'remote-comfy'), false);
@@ -157,6 +163,35 @@ test('normalizeAdvancedProviders preserves stored secrets when incoming values a
   assert.equal(volc?.apiKey, 'ark-secret-abcdef');
   assert.equal(volc?.volcengineConfig?.accessKeyId, 'ak-secret-1111');
   assert.equal(volc?.volcengineConfig?.secretAccessKey, 'sk-secret-2222');
+});
+
+test('normalizeAdvancedProviders preserves image size table when incoming provider omits it', () => {
+  const current = normalizeAdvancedProviders([
+    {
+      id: 'openai-compatible',
+      protocol: 'openai-compatible',
+      enabled: true,
+      imageModels: ['custom-image'],
+      imageModelSizes: { 'custom-image': ['2K'] },
+    },
+  ]);
+
+  const next = normalizeAdvancedProviders(
+    [
+      {
+        id: 'openai-compatible',
+        protocol: 'openai-compatible',
+        enabled: true,
+        imageModels: ['custom-image', 'new-image'],
+      },
+    ],
+    current,
+  );
+
+  assert.deepEqual(
+    next.find((item: any) => item.id === 'openai-compatible')?.imageModelSizes,
+    { 'custom-image': ['2K'] },
+  );
 });
 
 test('maskAdvancedProviders hides secrets while preserving configuration status', () => {

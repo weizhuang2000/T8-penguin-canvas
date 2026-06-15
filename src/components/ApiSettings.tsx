@@ -843,7 +843,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                 模型生图可用尺寸配置表
               </h3>
               <p className={`text-xs mt-0.5 ${hintCls}`}>
-                列出扩展 API 平台当前图像模型的 1K / 2K / 4K 支持情况；未填写模型时显示项目默认兜底模型。
+                勾选扩展 API 平台当前图像模型允许在节点里使用的 1K / 2K / 4K；未填写模型时显示项目默认兜底模型。
               </p>
             </div>
             <button
@@ -862,7 +862,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
 
           <div className="p-5 overflow-auto space-y-3">
             <div className={`text-[11px] leading-relaxed ${hintCls}`}>
-              勾选表示当前适配器会按该档位透传参数；第三方中转站或具体模型仍可能有额外限制，最终以平台实际返回为准。
+              这里只控制节点里可选择的尺寸档位；改完后需要点击底部“保存”生效。第三方中转站或具体模型仍可能有额外限制，最终以平台实际返回为准。
             </div>
             <div className={`overflow-x-auto border ${tableBorderCls} ${isPixel ? '' : 'rounded-lg'}`}>
               <table className="w-full min-w-[780px] border-collapse text-xs">
@@ -919,11 +919,17 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                       </td>
                       {ADVANCED_IMAGE_SIZE_LEVELS.map((level) => {
                         const supported = row.supportedSizes.includes(level);
+                        const disabled = row.source === 'missing';
                         return (
                           <td key={level} className={`border-t ${cellCls} px-3 py-2 text-center align-top`}>
-                            <span className={supported ? 'font-black text-emerald-500' : hintCls}>
-                              {supported ? '✓' : '—'}
-                            </span>
+                            <input
+                              type="checkbox"
+                              checked={supported}
+                              disabled={disabled}
+                              onChange={(e) => updateAdvancedProviderImageModelSize(row.providerId, row.model, level, e.target.checked)}
+                              className="h-4 w-4 accent-emerald-500 disabled:opacity-30"
+                              title={disabled ? '请先配置图像模型或工作流' : `${row.providerLabel} / ${row.model} / ${level}`}
+                            />
                           </td>
                         );
                       })}
@@ -1031,6 +1037,33 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
         ? { ...provider, [key]: { ...(provider as any)[key], ...patch } }
         : provider
     )));
+    setAdvancedDirty(true);
+  };
+
+  const updateAdvancedProviderImageModelSize = (
+    providerId: string,
+    model: string,
+    sizeLevel: string,
+    checked: boolean,
+  ) => {
+    if (!model || !ADVANCED_IMAGE_SIZE_LEVELS.includes(sizeLevel as any)) return;
+    setAdvancedProvidersInput((prev) => prev.map((provider) => {
+      if (provider.id !== providerId) return provider;
+      const currentTable = provider.imageModelSizes && typeof provider.imageModelSizes === 'object'
+        ? provider.imageModelSizes
+        : {};
+      const currentSizes = Array.isArray(currentTable[model]) ? currentTable[model] : [];
+      const nextSizes = checked
+        ? [...currentSizes, sizeLevel].filter((value, index, list) => list.indexOf(value) === index)
+        : currentSizes.filter((value) => value !== sizeLevel);
+      return {
+        ...provider,
+        imageModelSizes: {
+          ...currentTable,
+          [model]: ADVANCED_IMAGE_SIZE_LEVELS.filter((level) => nextSizes.includes(level)),
+        },
+      };
+    }));
     setAdvancedDirty(true);
   };
 

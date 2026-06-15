@@ -57,6 +57,7 @@ export interface AdvancedProviderImageSizeRow {
   model: string;
   source: 'configured' | 'fallback' | 'workflow' | 'missing';
   supportedSizes: AdvancedImageSizeLevel[];
+  configured: boolean;
   note: string;
 }
 
@@ -164,17 +165,54 @@ function sizeOnlyFromModelName(model: string): AdvancedImageSizeLevel[] {
   return [];
 }
 
+function normalizeSizeLevels(values: unknown): AdvancedImageSizeLevel[] {
+  const out: AdvancedImageSizeLevel[] = [];
+  for (const value of Array.isArray(values) ? values : []) {
+    const item = String(value || '').trim().toUpperCase();
+    if (!ADVANCED_IMAGE_SIZE_LEVELS.includes(item as AdvancedImageSizeLevel)) continue;
+    if (!out.includes(item as AdvancedImageSizeLevel)) out.push(item as AdvancedImageSizeLevel);
+  }
+  return out;
+}
+
+export function imageModelSizeKey(model: string): string {
+  return String(model || '').trim();
+}
+
+export function configuredImageSizesForModel(
+  provider: AdvancedProviderConfig | null | undefined,
+  model: string,
+): AdvancedImageSizeLevel[] | null {
+  const key = imageModelSizeKey(model);
+  const table = provider?.imageModelSizes;
+  if (!key || !table || typeof table !== 'object' || Array.isArray(table)) return null;
+  if (!Object.prototype.hasOwnProperty.call(table, key)) return null;
+  return normalizeSizeLevels(table[key]);
+}
+
 function inferImageSizeSupport(
   provider: AdvancedProviderConfig,
   model: string,
-): { supportedSizes: AdvancedImageSizeLevel[]; note: string } {
+): { supportedSizes: AdvancedImageSizeLevel[]; configured: boolean; note: string } {
   const modelName = String(model || '').trim();
   const lower = modelName.toLowerCase();
   const explicitSize = sizeOnlyFromModelName(modelName);
 
+  const configuredSizes = configuredImageSizesForModel(provider, modelName);
+  if (configuredSizes) {
+    return {
+      supportedSizes: configuredSizes,
+      configured: true,
+      note: configuredSizes.length
+        ? '使用尺寸配置表中手动勾选的档位。'
+        : '尺寸配置表中未勾选任何档位, 节点中不会显示尺寸选项。',
+    };
+  }
+
   if (provider.protocol === 'comfyui') {
     return {
       supportedSizes: modelName ? [...ADVANCED_IMAGE_SIZE_LEVELS] : [],
+      configured: false,
       note: modelName
         ? '按工作流 width/height 写入, 需要工作流本身支持对应显存和尺寸。'
         : '未配置工作流, 暂无可用生图尺寸。',
@@ -184,6 +222,7 @@ function inferImageSizeSupport(
   if (provider.protocol === 'jimeng-cli') {
     return {
       supportedSizes: explicitSize.length ? explicitSize : ['2K', '4K'],
+      configured: false,
       note: explicitSize.length
         ? '按即梦 CLI 模型名中的分辨率档位识别。'
         : '即梦 CLI 未标明档位时按常用 2K/4K 模式展示。',
@@ -193,6 +232,7 @@ function inferImageSizeSupport(
   if (lower.includes('gpt-image-1') || lower.includes('dall-e')) {
     return {
       supportedSizes: ['1K'],
+      configured: false,
       note: 'OpenAI 旧式 size 兼容模型通常只按 1K 像素尺寸安全透传。',
     };
   }
@@ -205,6 +245,7 @@ function inferImageSizeSupport(
   ) {
     return {
       supportedSizes: [...ADVANCED_IMAGE_SIZE_LEVELS],
+      configured: false,
       note: provider.protocol === 'gemini-compatible'
         ? '按 aspect_ratio + image_size 传入。'
         : '当前适配器可透传 1K/2K/4K 档位。',
@@ -214,6 +255,7 @@ function inferImageSizeSupport(
   if (lower.includes('seedream-3')) {
     return {
       supportedSizes: ['1K', '2K'],
+      configured: false,
       note: '按 Seedream 3 常用档位展示, 4K 建议切换 Seedream 4 系列。',
     };
   }
@@ -221,6 +263,7 @@ function inferImageSizeSupport(
   if (explicitSize.length) {
     return {
       supportedSizes: explicitSize,
+      configured: false,
       note: '按模型名中的分辨率档位识别。',
     };
   }
@@ -228,6 +271,7 @@ function inferImageSizeSupport(
   if (provider.protocol === 'modelscope') {
     return {
       supportedSizes: ['1K', '2K'],
+      configured: false,
       note: 'ModelScope 适配器传 width/height/size, 具体上限取决于模型卡。',
     };
   }
@@ -235,12 +279,14 @@ function inferImageSizeSupport(
   if (provider.protocol === 'volcengine') {
     return {
       supportedSizes: [...ADVANCED_IMAGE_SIZE_LEVELS],
+      configured: false,
       note: '火山适配器按 size 像素串透传, 具体以接入点能力为准。',
     };
   }
 
   return {
     supportedSizes: [...ADVANCED_IMAGE_SIZE_LEVELS],
+    configured: false,
     note: '兼容适配器按 size 像素串透传, 具体以第三方服务能力为准。',
   };
 }
@@ -266,6 +312,7 @@ export function buildAdvancedImageSizeMatrix(
           model: '未配置工作流',
           source: 'missing',
           supportedSizes: [],
+          configured: false,
           note: '请先在 ComfyUI 平台配置至少一个工作流。',
         });
         continue;
@@ -297,6 +344,7 @@ export function buildAdvancedImageSizeMatrix(
         model: '未配置图像模型',
         source: 'missing',
         supportedSizes: [],
+        configured: false,
         note: '请先填写图像模型列表。',
       });
       continue;
@@ -315,6 +363,15 @@ export function buildAdvancedImageSizeMatrix(
     }
   }
   return rows;
+}
+
+export function advancedImageSizesForModel(
+  provider: AdvancedProviderConfig | null | undefined,
+  model: string,
+): AdvancedImageSizeLevel[] {
+  if (!provider || !model) return [];
+  const row = buildAdvancedImageSizeMatrix([provider]).find((item) => item.model === model);
+  return row ? row.supportedSizes : [];
 }
 
 export function advancedProvidersForNode(
