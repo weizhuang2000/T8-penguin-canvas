@@ -20,7 +20,9 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "three": ["node_modules/three/build/three.module.js"],
+      "three/examples/jsm/*": ["node_modules/three/examples/jsm/*"]
     }
   },
   "include": ["src"],
