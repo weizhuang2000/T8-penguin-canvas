@@ -1739,9 +1739,9 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                       )}
                     </div>
                     <textarea
-                      className={`${FIELD} min-h-[46px] resize-y text-[10px] leading-snug`}
+                      className={`${FIELD} min-h-[46px] resize-y text-[10px] leading-snug${colorMaterialPriorityMode === 'llm' ? ' select-none pointer-events-none' : ''}`}
                       value={colorMaterialReferenceTone}
-                      disabled={isReadonly || busy || hasColorMaterialPreset}
+                      disabled={isReadonly || busy || hasColorMaterialPreset || colorMaterialPriorityMode === 'llm'}
                       placeholder="接入图片后自动识别主色调，可手动修正"
                       onChange={(event) => update({
                         colorMaterialReferenceTone: event.target.value,
