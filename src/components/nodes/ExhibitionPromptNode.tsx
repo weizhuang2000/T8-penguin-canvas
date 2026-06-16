@@ -21,6 +21,7 @@ import {
 } from '../../services/api';
 import { useThemeStore } from '../../stores/theme';
 import { useCanvasStore } from '../../stores/canvas';
+import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useUpstreamMaterials } from './useUpstreamMaterials';
 import { useOrderedMaterials } from './useOrderedMaterials';
@@ -151,6 +152,18 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
     if (d.prompt === prompt && JSON.stringify(d.imageUrls || []) === JSON.stringify(outputImageUrls)) return;
     update({ prompt, outputText: prompt, text: prompt, imageUrls: outputImageUrls, imageUrl: outputImageUrls[0] || '' });
   }, [d.prompt, d.imageUrls, outputImageUrls, prompt, update]);
+
+  useRunTrigger(id, () => {
+    if (isReadonly) return;
+    update({
+      prompt,
+      outputText: prompt,
+      text: prompt,
+      imageUrls: outputImageUrls,
+      imageUrl: outputImageUrls[0] || '',
+      urls: outputImageUrls,
+    });
+  }, 'exhibition-prompt');
 
   const loadLibrary = async () => {
     setLibraryLoading(true);

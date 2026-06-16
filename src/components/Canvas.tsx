@@ -589,9 +589,11 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'loop', 'pick-from-set',
   // v1.4.8: 工具箱文本节点也可点击 RUN 直接外挂 OutputNode
   'cinematic', 'video-motion', 'multi-angle-visual', 'portrait-master', 'pose-master',
+  'exhibition-prompt',
   'elevation-prompt',
   'exhibition-img2img',
   'exhibition-creative-image',
+  'exhibition-outline-split',
   'remove-ai-watermark',
 ]);
 
