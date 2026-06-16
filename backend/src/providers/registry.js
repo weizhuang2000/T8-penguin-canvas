@@ -109,7 +109,7 @@ const CONTROL_CHAR_RE = /[\x00-\x1f\x7f]/;
 const DEFAULT_ADVANCED_PROVIDERS = [
   {
     id: 'openai-compatible',
-    label: 'OpenAI 兼容',
+    label: 'OpenAI',
     protocol: 'openai-compatible',
     baseUrl: '',
     enabled: false,
@@ -120,7 +120,7 @@ const DEFAULT_ADVANCED_PROVIDERS = [
   },
   {
     id: 'gemini-compatible',
-    label: 'Gemini Compatible',
+    label: 'Gemini',
     protocol: 'gemini-compatible',
     baseUrl: DEFAULT_GEMINI_COMPATIBLE_BASE_URL,
     enabled: false,
@@ -465,6 +465,13 @@ function normalizeProvider(raw, previous = null) {
     chatModels: normalizeModelList(raw.chatModels || raw.chat_models),
     defaults: normalizePlainObject(raw.defaults),
   };
+
+  if (id === 'openai-compatible' && protocol === 'openai-compatible' && provider.label === 'OpenAI 兼容') {
+    provider.label = 'OpenAI';
+  }
+  if (id === 'gemini-compatible' && protocol === 'gemini-compatible' && provider.label === 'Gemini Compatible') {
+    provider.label = 'Gemini';
+  }
 
   if (protocol === 'comfyui' && normalizeBoolean(raw.allowRemote, false)) {
     provider.allowRemote = true;

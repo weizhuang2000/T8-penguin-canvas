@@ -89,13 +89,20 @@ const SETTINGS_BACKUP_SCHEMA = 't8-penguin-canvas-settings';
 const SETTINGS_BACKUP_VERSION = 1;
 
 const ADVANCED_PROVIDER_LABELS: Record<AdvancedProviderProtocol, string> = {
-  'openai-compatible': 'OpenAI 兼容',
-  'gemini-compatible': 'Gemini Compatible',
+  'openai-compatible': 'OpenAI',
+  'gemini-compatible': 'Gemini',
   modelscope: 'ModelScope',
   volcengine: '火山引擎',
   comfyui: 'ComfyUI',
   'jimeng-cli': '即梦 CLI',
 };
+
+function displayAdvancedProviderLabel(provider: AdvancedProviderConfig): string {
+  const label = String(provider.label || '').trim();
+  if (provider.id === 'openai-compatible' && label === 'OpenAI 兼容') return 'OpenAI';
+  if (provider.id === 'gemini-compatible' && label === 'Gemini Compatible') return 'Gemini';
+  return label || ADVANCED_PROVIDER_LABELS[provider.protocol] || provider.id;
+}
 
 const ADVANCED_PROVIDER_GUIDES: Record<AdvancedProviderProtocol, {
   subtitle: string;
@@ -835,7 +842,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       const provider: AdvancedProviderConfig = protocol === 'gemini-compatible'
         ? {
             id,
-            label: 'Gemini Compatible',
+            label: 'Gemini',
             protocol,
             baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
             enabled: true,
@@ -850,7 +857,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
           }
         : {
             id,
-            label: 'OpenAI 兼容',
+            label: 'OpenAI',
             protocol,
             baseUrl: '',
             enabled: true,
@@ -2644,7 +2651,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                         >
                           <div className="flex items-center gap-2 min-w-0 w-full">
                             <span className={`w-2 h-2 rounded-full shrink-0 ${provider.enabled ? 'bg-emerald-400' : 'bg-zinc-400'}`} />
-                            <span className="font-bold min-w-0 truncate">{ADVANCED_PROVIDER_LABELS[provider.protocol] || provider.label || provider.id}</span>
+                            <span className="font-bold min-w-0 truncate">{displayAdvancedProviderLabel(provider)}</span>
                             <span className={`ml-auto text-[10px] shrink-0 ${provider.enabled ? 'text-emerald-500' : hintCls}`}>
                               {provider.enabled ? '已启用' : '未启用'}
                             </span>
