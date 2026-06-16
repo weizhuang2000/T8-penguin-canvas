@@ -55,6 +55,8 @@ app.get('/api/status', (_req, res) => {
 
 // ========== 业务路由 ==========
 const canvasRouter = require('./routes/canvas');
+const authRouter = require('./routes/auth');
+const adminRouter = require('./routes/admin');
 const settingsRouter = require('./routes/settings');
 const proxyRouter = require('./routes/proxy');
 const filesRouter = require('./routes/files');
@@ -67,6 +69,9 @@ const externalProvidersRouter = require('./routes/externalProviders');
 const grokOAuthRouter = require('./routes/grokOAuth');
 const codexCliRouter = require('./routes/codexCli');
 const aiWatermarkRouter = require('./routes/aiWatermark');
+const generationHistoryRouter = require('./routes/generationHistory');
+const promptLibraryRouter = require('./routes/promptLibrary');
+const documentsRouter = require('./routes/documents');
 const cloudUploadsRouter = require('./routes/cloudUploads');
 const parseHubRouter = require('./routes/parseHub');
 const achievementsRouter = require('./routes/achievements');
