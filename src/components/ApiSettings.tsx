@@ -164,6 +164,15 @@ const MODELSCOPE_TOKEN_URLS = {
   intl: 'https://www.modelscope.ai/my/access/token',
 } as const;
 
+const BUILT_IN_ADVANCED_PROVIDER_IDS = new Set([
+  'openai-compatible',
+  'gemini-compatible',
+  'modelscope',
+  'volcengine',
+  'comfyui',
+  'jimeng-cli',
+]);
+
 const JIMENG_CLI_INSTALL_COMMAND = 'curl -s https://jimeng.jianying.com/cli | bash';
 
 const CLOUD_UPLOAD_LABELS: Record<CloudUploadProvider, string> = {
@@ -290,6 +299,15 @@ function normalizeAdvancedProviderForms(value: unknown): AdvancedProviderConfig[
 
 function normalizeCloudUploadTargetForms(value: unknown): CloudUploadTargetConfig[] {
   return normalizeApiSettings({ cloudUploadTargets: value as CloudUploadTargetConfig[] }).cloudUploadTargets || [];
+}
+
+function uniqueAdvancedProviderId(providers: AdvancedProviderConfig[], prefix: string): string {
+  const used = new Set(providers.map((provider) => String(provider.id || '')));
+  for (let index = providers.length + 1; index < providers.length + 200; index += 1) {
+    const id = `${prefix}-${index}`;
+    if (!used.has(id)) return id;
+  }
+  return `${prefix}-${Date.now().toString(36)}`;
 }
 
 export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProps) {
@@ -811,6 +829,61 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     setAdvancedDirty(true);
   };
 
+  const addAdvancedProvider = (protocol: 'openai-compatible' | 'gemini-compatible') => {
+    setAdvancedProvidersInput((prev) => {
+      const id = uniqueAdvancedProviderId(prev, protocol === 'gemini-compatible' ? 'gemini-compatible' : 'openai-compatible');
+      const provider: AdvancedProviderConfig = protocol === 'gemini-compatible'
+        ? {
+            id,
+            label: 'Gemini Compatible',
+            protocol,
+            baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+            enabled: true,
+            imageModels: ['gemini-2.5-flash-image-preview', 'nano-banana-2'],
+            videoModels: ['veo-3.1-generate-preview'],
+            chatModels: ['gemini-2.5-flash', 'gemini-2.5-pro'],
+            defaults: {
+              imageModel: 'gemini-2.5-flash-image-preview',
+              videoModel: 'veo-3.1-generate-preview',
+              chatModel: 'gemini-2.5-flash',
+            },
+          }
+        : {
+            id,
+            label: 'OpenAI 兼容',
+            protocol,
+            baseUrl: '',
+            enabled: true,
+            imageModels: ['gpt-image-1'],
+            videoModels: [],
+            chatModels: ['gpt-4o-mini'],
+            defaults: {},
+          };
+      setActiveAdvancedProviderId(id);
+      return [...prev, provider];
+    });
+    setAdvancedDirty(true);
+    setAdvancedOpen(true);
+  };
+
+  const removeAdvancedProvider = (id: string) => {
+    if (BUILT_IN_ADVANCED_PROVIDER_IDS.has(id)) return;
+    setAdvancedProvidersInput((prev) => {
+      const next = prev.filter((provider) => provider.id !== id);
+      if (activeAdvancedProviderId === id) {
+        setActiveAdvancedProviderId(next[0]?.id || '');
+      }
+      return next;
+    });
+    setAdvancedDirty(true);
+    setAdvancedTestStatus((prev) => {
+      if (!prev[id]) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  };
+
   const updateAdvancedProviderNested = (
     id: string,
     key: 'modelscopeConfig' | 'volcengineConfig' | 'comfyuiConfig' | 'jimengConfig',
@@ -1277,6 +1350,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     const isJimeng = provider.protocol === 'jimeng-cli';
     const isVolc = provider.protocol === 'volcengine';
     const isModelScope = provider.protocol === 'modelscope';
+    const canDelete = !BUILT_IN_ADVANCED_PROVIDER_IDS.has(provider.id);
     const sectionCls = isPixel
       ? 't8-api-settings-provider-panel border p-3 space-y-4 min-w-0'
       : 't8-api-settings-provider-panel border rounded-xl p-3 sm:p-4 space-y-4 min-w-0';
@@ -1566,6 +1640,21 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
             <TestTube2 size={12} />
             {advancedTestStatus[provider.id]?.loading ? '测试中...' : '测试连接'}
           </button>
+          {canDelete && (
+            <button
+              type="button"
+              onClick={() => removeAdvancedProvider(provider.id)}
+              className={
+                isPixel
+                  ? 't8-api-settings-secondary-btn px-btn text-[11px] px-2 py-1 shrink-0'
+                  : 't8-api-settings-secondary-btn px-2 py-1 text-[11px] rounded border shrink-0 inline-flex items-center gap-1'
+              }
+              title="删除这个自定义扩展平台"
+            >
+              <Trash2 size={12} />
+              删除
+            </button>
+          )}
         </div>
 
         {advancedTestStatus[provider.id]?.message && (
@@ -2514,6 +2603,32 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                 ) : (
                   <div className="grid grid-cols-1 lg:grid-cols-[250px_minmax(0,1fr)] gap-3 items-start">
                     <div className={`space-y-2 min-w-0 ${isPixel ? '' : 'lg:sticky lg:top-0'}`}>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => addAdvancedProvider('openai-compatible')}
+                          className={
+                            isPixel
+                              ? 't8-api-settings-secondary-btn px-btn text-[11px] px-2 py-1 inline-flex items-center justify-center gap-1'
+                              : 't8-api-settings-secondary-btn rounded border px-2 py-1 text-[11px] inline-flex items-center justify-center gap-1'
+                          }
+                          title="新增一个 OpenAI 兼容扩展平台"
+                        >
+                          <Plus size={12} /> OpenAI
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => addAdvancedProvider('gemini-compatible')}
+                          className={
+                            isPixel
+                              ? 't8-api-settings-secondary-btn px-btn text-[11px] px-2 py-1 inline-flex items-center justify-center gap-1'
+                              : 't8-api-settings-secondary-btn rounded border px-2 py-1 text-[11px] inline-flex items-center justify-center gap-1'
+                          }
+                          title="新增一个 Gemini 兼容扩展平台"
+                        >
+                          <Plus size={12} /> Gemini
+                        </button>
+                      </div>
                       {advancedProvidersInput.map((provider) => (
                         <button
                           key={provider.id}

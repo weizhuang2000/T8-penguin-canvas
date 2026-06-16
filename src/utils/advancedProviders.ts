@@ -217,13 +217,14 @@ export interface AdvancedProviderSelection {
   available: boolean;
 }
 
-const IMAGE_PROTOCOLS = new Set(['openai-compatible', 'modelscope', 'volcengine', 'comfyui', 'jimeng-cli']);
-const VIDEO_PROTOCOLS = new Set(['openai-compatible', 'volcengine', 'jimeng-cli']);
-const LLM_PROTOCOLS = new Set(['openai-compatible', 'modelscope', 'volcengine']);
+const IMAGE_PROTOCOLS = new Set(['openai-compatible', 'gemini-compatible', 'modelscope', 'volcengine', 'comfyui', 'jimeng-cli']);
+const VIDEO_PROTOCOLS = new Set(['openai-compatible', 'gemini-compatible', 'volcengine', 'jimeng-cli']);
+const LLM_PROTOCOLS = new Set(['openai-compatible', 'gemini-compatible', 'modelscope', 'volcengine']);
 
 const FALLBACK_MODELS: Record<AdvancedProviderNodeKind, Partial<Record<string, string[]>>> = {
   image: {
     'openai-compatible': ['gpt-image-1'],
+    'gemini-compatible': ['gemini-2.5-flash-image-preview', 'nano-banana-2'],
     modelscope: [
       'Tongyi-MAI/Z-Image-Turbo',
       'Qwen/Qwen-Image-2512',
@@ -242,6 +243,7 @@ const FALLBACK_MODELS: Record<AdvancedProviderNodeKind, Partial<Record<string, s
   },
   video: {
     'openai-compatible': [],
+    'gemini-compatible': ['veo-3.1-generate-preview'],
     volcengine: [
       'doubao-seedance-2-0-260128',
       'doubao-seedance-2-0-fast-260128',
@@ -261,6 +263,7 @@ const FALLBACK_MODELS: Record<AdvancedProviderNodeKind, Partial<Record<string, s
   },
   llm: {
     'openai-compatible': ['gpt-4o-mini'],
+    'gemini-compatible': ['gemini-2.5-flash', 'gemini-2.5-pro'],
     modelscope: [
       'Qwen/Qwen3-235B-A22B',
       'Qwen/Qwen3-VL-235B-A22B-Instruct',

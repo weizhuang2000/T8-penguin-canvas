@@ -1,5 +1,6 @@
 const DEFAULT_MODELSCOPE_BASE_URL = 'https://api-inference.modelscope.cn/v1';
 const DEFAULT_VOLCENGINE_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3';
+const DEFAULT_GEMINI_COMPATIBLE_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 const { isAllowedComfyuiUrl } = require('./comfyuiAccess');
 
 const DEFAULT_MODELSCOPE_IMAGE_MODELS = [
@@ -61,6 +62,20 @@ const DEFAULT_VOLCENGINE_CHAT_MODELS = [
   'doubao-seed-1-6-250615',
 ];
 
+const DEFAULT_GEMINI_IMAGE_MODELS = [
+  'gemini-2.5-flash-image-preview',
+  'nano-banana-2',
+];
+
+const DEFAULT_GEMINI_VIDEO_MODELS = [
+  'veo-3.1-generate-preview',
+];
+
+const DEFAULT_GEMINI_CHAT_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.5-pro',
+];
+
 const DEFAULT_JIMENG_IMAGE_MODELS = [
   'seedream-4.7',
   'seedream-4.6',
@@ -81,6 +96,7 @@ const DEFAULT_JIMENG_VIDEO_MODELS = [
 
 const SUPPORTED_PROTOCOLS = new Set([
   'openai-compatible',
+  'gemini-compatible',
   'modelscope',
   'volcengine',
   'comfyui',
@@ -101,6 +117,21 @@ const DEFAULT_ADVANCED_PROVIDERS = [
     videoModels: [],
     chatModels: [],
     defaults: {},
+  },
+  {
+    id: 'gemini-compatible',
+    label: 'Gemini Compatible',
+    protocol: 'gemini-compatible',
+    baseUrl: DEFAULT_GEMINI_COMPATIBLE_BASE_URL,
+    enabled: false,
+    imageModels: DEFAULT_GEMINI_IMAGE_MODELS,
+    videoModels: DEFAULT_GEMINI_VIDEO_MODELS,
+    chatModels: DEFAULT_GEMINI_CHAT_MODELS,
+    defaults: {
+      imageModel: DEFAULT_GEMINI_IMAGE_MODELS[0],
+      videoModel: DEFAULT_GEMINI_VIDEO_MODELS[0],
+      chatModel: DEFAULT_GEMINI_CHAT_MODELS[0],
+    },
   },
   {
     id: 'modelscope',
@@ -412,6 +443,7 @@ function normalizeProvider(raw, previous = null) {
   let baseUrl = normalizeUrl(raw.baseUrl || raw.base_url || '');
   if (!baseUrl && protocol === 'modelscope') baseUrl = DEFAULT_MODELSCOPE_BASE_URL;
   if (!baseUrl && protocol === 'volcengine') baseUrl = DEFAULT_VOLCENGINE_BASE_URL;
+  if (!baseUrl && protocol === 'gemini-compatible') baseUrl = DEFAULT_GEMINI_COMPATIBLE_BASE_URL;
   if (protocol === 'jimeng-cli') baseUrl = '';
   if (protocol === 'comfyui') {
     const allowRemote = normalizeBoolean(raw.allowRemote, false);
@@ -457,6 +489,20 @@ function normalizeProvider(raw, previous = null) {
       imageModel: DEFAULT_VOLCENGINE_IMAGE_MODELS[0],
       videoModel: DEFAULT_VOLCENGINE_VIDEO_MODELS[1],
       chatModel: DEFAULT_VOLCENGINE_CHAT_MODELS[0],
+      ...provider.defaults,
+    };
+  }
+
+  if (protocol === 'gemini-compatible') {
+    if (id === 'gemini-compatible') {
+      provider.imageModels = mergeModelLists(DEFAULT_GEMINI_IMAGE_MODELS, provider.imageModels);
+      provider.videoModels = mergeModelLists(DEFAULT_GEMINI_VIDEO_MODELS, provider.videoModels);
+      provider.chatModels = mergeModelLists(DEFAULT_GEMINI_CHAT_MODELS, provider.chatModels);
+    }
+    provider.defaults = {
+      imageModel: provider.imageModels[0] || DEFAULT_GEMINI_IMAGE_MODELS[0],
+      videoModel: provider.videoModels[0] || DEFAULT_GEMINI_VIDEO_MODELS[0],
+      chatModel: provider.chatModels[0] || DEFAULT_GEMINI_CHAT_MODELS[0],
       ...provider.defaults,
     };
   }
@@ -556,6 +602,10 @@ module.exports = {
   DEFAULT_MODELSCOPE_IMAGE_MODELS,
   DEFAULT_MODELSCOPE_LORAS,
   DEFAULT_MODELSCOPE_BASE_URL,
+  DEFAULT_GEMINI_CHAT_MODELS,
+  DEFAULT_GEMINI_IMAGE_MODELS,
+  DEFAULT_GEMINI_VIDEO_MODELS,
+  DEFAULT_GEMINI_COMPATIBLE_BASE_URL,
   DEFAULT_VOLCENGINE_CHAT_MODELS,
   DEFAULT_VOLCENGINE_IMAGE_MODELS,
   DEFAULT_VOLCENGINE_VIDEO_MODELS,
