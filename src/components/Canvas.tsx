@@ -374,6 +374,8 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     projectTheme: '',
     colorMaterialPreset: '',
     colorMaterial: '',
+    colorMaterialPalette: '',
+    colorMaterialTextures: '',
     colorMaterialMarkText: '图2',
     colorMaterialMarkPosition: 'top-left',
     colorMaterialMarkColor: '#ff0000',

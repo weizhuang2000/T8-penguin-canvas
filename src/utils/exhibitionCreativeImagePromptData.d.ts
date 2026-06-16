@@ -31,6 +31,8 @@ export interface ExhibitionCreativeBriefPromptValues {
   spaceType?: ExhibitionCreativeSpaceType;
   projectTheme?: string;
   colorMaterial?: string;
+  colorMaterialPalette?: string;
+  colorMaterialTextures?: string;
   hasColorMaterialReferenceImage?: boolean;
   inspiration?: string;
   documentSummary?: string;
@@ -53,6 +55,7 @@ export interface ExhibitionCreativeImagePromptValues extends ExhibitionCreativeB
   excludeItems?: string[];
   excludeItemOptions?: ExhibitionCreativeExcludeItem[];
   hasSpaceImage?: boolean;
+  hasColorMaterialPreset?: boolean;
   colorMaterialReferenceTone?: string;
   colorMaterialPriorityMode?: 'frontend' | 'llm';
   colorMaterialReferenceMode?: 'abstract-card' | 'marked-image';

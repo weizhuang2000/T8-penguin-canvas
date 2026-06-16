@@ -126,6 +126,7 @@ test('exhibition creative image prompt describes marked reference roles', () => 
     colorMaterial: '手动暖木色和黄铜材质',
     hasSpaceImage: true,
     hasColorMaterialReferenceImage: true,
+    colorMaterialPriorityMode: 'frontend',
     colorMaterialReferenceTone: '主色调：深红、铜褐、黑灰；整体偏暖，明度偏暗，饱和度适中。',
     colorMaterialReferenceMarkText: 'R',
     colorMaterialReferenceMarkPosition: 'top-left',
@@ -149,6 +150,7 @@ test('exhibition creative image prompt describes abstract color material card mo
     colorMaterial: '不应出现的手动色彩材质文本',
     hasSpaceImage: true,
     hasColorMaterialReferenceImage: true,
+    colorMaterialPriorityMode: 'llm',
     colorMaterialReferenceMode: 'abstract-card',
     colorMaterialReferenceMarkText: 'R',
     colorMaterialReferenceMarkPosition: 'top-left',
@@ -161,6 +163,26 @@ test('exhibition creative image prompt describes abstract color material card mo
   assert.match(prompt, /Constraints: .*最终画面必须是高完成度、可落地的展陈空间效果图。/);
   assert.doesNotMatch(prompt, /不应出现的手动色彩材质文本/);
   assert.doesNotMatch(prompt, /【色彩与材质】/);
+});
+
+test('exhibition creative image prompt lets preset override both color recognition modes', () => {
+  const prompt = buildExhibitionCreativeImagePrompt({
+    spaceType: 'intro-hall',
+    hasSpaceImage: true,
+    hasColorMaterialReferenceImage: true,
+    hasColorMaterialPreset: true,
+    colorMaterial: '不应作为优先输出的合并旧字段',
+    colorMaterialPalette: '深红、铜褐、黑金',
+    colorMaterialTextures: '微水泥、拉丝金属、低反射石材',
+    colorMaterialPriorityMode: 'frontend',
+    colorMaterialReferenceTone: '主色调：浅蓝、白灰',
+    creativeBrief: '围绕序厅建立开场仪式感。',
+  });
+  assert.match(prompt, /Color palette: 深红、铜褐、黑金/);
+  assert.match(prompt, /Materials\/textures: 微水泥、拉丝金属、低反射石材/);
+  assert.doesNotMatch(prompt, /不应作为优先输出的合并旧字段/);
+  assert.doesNotMatch(prompt, /从色彩与材质参考图中提取主色、辅助色、金属色、明暗关系、冷暖倾向和局部发光色/);
+  assert.doesNotMatch(prompt, /主色调：浅蓝、白灰/);
 });
 
 test('exhibition creative prompt uses custom mark labels and suppresses color material in brief prompt', () => {

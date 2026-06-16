@@ -609,6 +609,18 @@ function colorMaterialTextFromPreset(preset: ElevationColorMaterialPresetItem): 
   return values.join('，');
 }
 
+function colorPaletteTextFromPreset(preset: ElevationColorMaterialPresetItem): string {
+  return String(preset.core || preset.info || preset.label || '').trim();
+}
+
+function materialTexturesTextFromPreset(preset: ElevationColorMaterialPresetItem): string {
+  return String(preset.features || preset.info || preset.core || preset.label || '').trim();
+}
+
+function combineColorMaterialText(palette: string, textures: string, fallback = ''): string {
+  return [palette, textures].map((item) => String(item || '').trim()).filter(Boolean).join('；') || String(fallback || '').trim();
+}
+
 function parseLabelPresetEditorText(text: string, fallbackId: string) {
   return text
     .split(/\r?\n/)
@@ -745,6 +757,9 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const regenerateEachTime = d.regenerateEachTime !== false;
   const projectTheme = String(d.projectTheme || '').trim();
   const colorMaterial = String(d.colorMaterial || '').trim();
+  const colorMaterialPalette = String(d.colorMaterialPalette || '').trim();
+  const colorMaterialTextures = String(d.colorMaterialTextures || '').trim();
+  const combinedColorMaterial = combineColorMaterialText(colorMaterialPalette, colorMaterialTextures, colorMaterial);
   const hasColorMaterialPreset = !!String(d.colorMaterialPreset || '').trim();
   const colorMaterialPriorityMode = normalizeColorMaterialPriorityMode(d.colorMaterialPriorityMode);
   const inspiration = String(d.inspiration || '').trim();
@@ -762,7 +777,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const exhibitReferenceImage = useInputImageByHandle(id, 'exhibit-reference');
   const hasColorMaterialReference = !!colorMaterialReferenceImage;
   const colorMaterialRecognitionDisabled = hasColorMaterialPreset || !hasColorMaterialReference;
-  const effectiveColorMaterial = hasColorMaterialPreset || !hasColorMaterialReference ? colorMaterial : '';
+  const effectiveColorMaterial = hasColorMaterialPreset || !hasColorMaterialReference ? combinedColorMaterial : '';
   const colorMaterialReferenceTone = String(d.colorMaterialReferenceTone || '').trim();
   const colorMaterialMarkSettings = useMemo(() => normalizeReferenceMarkSettings(d, 'colorMaterial'), [
     d.colorMaterialMarkAutoFontSize,
@@ -787,6 +802,12 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   }, [d.colorMaterialMarkDefaultsVersion, d.colorMaterialMarkFontSize, d.colorMaterialMarkText, update]);
 
   useEffect(() => {
+    if (hasColorMaterialPreset) {
+      if (colorMaterialReferenceTone || d.colorMaterialReferenceToneSource || d.colorMaterialReferenceToneStatus) {
+        update({ colorMaterialReferenceTone: '', colorMaterialReferenceToneSource: '', colorMaterialReferenceToneStatus: '' });
+      }
+      return;
+    }
     const source = colorMaterialReferenceImage || '';
     const savedSource = String(d.colorMaterialReferenceToneSource || '').trim();
     if (!source) {
@@ -818,13 +839,16 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     return () => {
       cancelled = true;
     };
-  }, [colorMaterialReferenceImage, colorMaterialReferenceTone, d.colorMaterialReferenceToneSource, d.colorMaterialReferenceToneStatus, update]);
+  }, [colorMaterialReferenceImage, colorMaterialReferenceTone, d.colorMaterialReferenceToneSource, d.colorMaterialReferenceToneStatus, hasColorMaterialPreset, update]);
 
   const previewPrompt = useMemo(
     () => buildExhibitionCreativeImagePrompt({
       spaceType,
       projectTheme,
       colorMaterial: effectiveColorMaterial,
+      colorMaterialPalette: hasColorMaterialPreset || !hasColorMaterialReference ? (colorMaterialPalette || colorMaterial) : '',
+      colorMaterialTextures: hasColorMaterialPreset || !hasColorMaterialReference ? (colorMaterialTextures || colorMaterial) : '',
+      hasColorMaterialPreset,
       hasColorMaterialReferenceImage: hasColorMaterialReference,
       colorMaterialReferenceTone,
       colorMaterialPriorityMode,
@@ -847,7 +871,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       roundIndex: 1,
       total: generationCount,
     }),
-    [colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPriorityMode, colorMaterialReferenceMode, colorMaterialReferenceTone, creativeBrief, documentSummary, effectiveColorMaterial, exhibitReferenceImage, excludeOptions, generationCount, hasColorMaterialReference, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceType, viewAngleOptions, viewControlEnabled],
+    [colorMaterial, colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPalette, colorMaterialPriorityMode, colorMaterialReferenceMode, colorMaterialReferenceTone, colorMaterialTextures, creativeBrief, documentSummary, effectiveColorMaterial, exhibitReferenceImage, excludeOptions, generationCount, hasColorMaterialPreset, hasColorMaterialReference, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceType, viewAngleOptions, viewControlEnabled],
   );
 
   const renderMarkSettings = (
@@ -1471,6 +1495,9 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           spaceType,
           projectTheme,
           colorMaterial: effectiveColorMaterial,
+          colorMaterialPalette: hasColorMaterialPreset || !hasColorMaterialReference ? (colorMaterialPalette || colorMaterial) : '',
+          colorMaterialTextures: hasColorMaterialPreset || !hasColorMaterialReference ? (colorMaterialTextures || colorMaterial) : '',
+          hasColorMaterialPreset,
           hasColorMaterialReferenceImage: hasColorMaterialReference,
           colorMaterialReferenceTone,
           colorMaterialPriorityMode,
@@ -1551,12 +1578,17 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     hasManualSpaceSize,
     id,
     insertOptions,
+    colorMaterial,
     colorMaterialMarkSettings,
+    colorMaterialPalette,
+    colorMaterialPriorityMode,
     colorMaterialReferenceImage,
     colorMaterialReferenceTone,
+    colorMaterialTextures,
     inspiration,
     effectiveColorMaterial,
     exhibitReferenceImage,
+    hasColorMaterialPreset,
     isReadonly,
     manualSpaceSize,
     projectTheme,
@@ -1765,7 +1797,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-semibold text-cyan-100">色彩与材质预设</span>
               <span className="min-w-0 flex-1 truncate text-[9px] text-white/40">
-                {hasColorMaterialReference ? '已由接入的色彩与材质参考图接管' : '参与 LLM 创意描述和最终生图 Prompt'}
+                {hasColorMaterialPreset ? '预设已接管 Color palette 与 Materials/textures' : '参与 LLM 创意描述和最终生图 Prompt'}
               </span>
               {canManageTeam && (
                 <button
@@ -1781,13 +1813,17 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             <select
               className={FIELD}
               value={d.colorMaterialPreset || ''}
-              disabled={isReadonly || busy || hasColorMaterialReference}
+              disabled={isReadonly || busy}
               onChange={(event) => {
                 const presetId = event.target.value;
                 const preset = colorMaterialPresets.find((item) => item.id === presetId);
                 update({
                   colorMaterialPreset: presetId,
-                  ...(preset ? { colorMaterial: colorMaterialTextFromPreset(preset) } : {}),
+                  ...(preset ? {
+                    colorMaterial: colorMaterialTextFromPreset(preset),
+                    colorMaterialPalette: colorPaletteTextFromPreset(preset),
+                    colorMaterialTextures: materialTexturesTextFromPreset(preset),
+                  } : {}),
                 });
               }}
             >
@@ -1805,12 +1841,12 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             )}
             {hasColorMaterialReference && (
               <div className="rounded border border-rose-300/20 bg-rose-300/10 px-2 py-1 text-[10px] leading-relaxed text-rose-50/75">
-                已由接入的色彩与材质参考图接管
+                {hasColorMaterialPreset ? '色彩与材质预设已接管，参考图识别不参与 Color palette 和 Materials/textures。' : '已由接入的色彩与材质参考图接管'}
               </div>
             )}
             {canManageTeam && colorMaterialEditorOpen && (
               <div className="space-y-1.5 rounded border border-cyan-300/15 bg-cyan-300/5 p-2">
-                <div className="text-[10px] text-white/45">每行一个预设：名称｜核心内容｜特征内容｜适用提示。输入框只写入名称、核心内容和特征内容。</div>
+                <div className="text-[10px] text-white/45">每行一个预设：名称｜Color palette｜Materials/textures｜适用提示。输出提示词会分别写入对应字段。</div>
                 <textarea
                   className={`${FIELD} min-h-[120px] resize-y font-mono`}
                   value={colorMaterialEditorValue}
@@ -1838,13 +1874,28 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                 </div>
               </div>
             )}
-            <textarea
-              className={`${FIELD} min-h-[46px] resize-y`}
-              value={d.colorMaterial || ''}
-              disabled={isReadonly || busy || hasColorMaterialReference}
-              placeholder="色彩与材质体系"
-              onChange={(event) => update({ colorMaterial: event.target.value, colorMaterialPreset: '' })}
-            />
+              <textarea
+                className={`${FIELD} min-h-[46px] resize-y`}
+                value={colorMaterialPalette || d.colorMaterial || ''}
+                disabled={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
+                placeholder="Color palette"
+                onChange={(event) => update({
+                  colorMaterialPalette: event.target.value,
+                  colorMaterial: combineColorMaterialText(event.target.value, colorMaterialTextures, d.colorMaterial || ''),
+                  colorMaterialPreset: '',
+                })}
+              />
+              <textarea
+                className={`${FIELD} min-h-[46px] resize-y`}
+                value={colorMaterialTextures || d.colorMaterial || ''}
+                disabled={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
+                placeholder="Materials/textures"
+                onChange={(event) => update({
+                  colorMaterialTextures: event.target.value,
+                  colorMaterial: combineColorMaterialText(colorMaterialPalette, event.target.value, d.colorMaterial || ''),
+                  colorMaterialPreset: '',
+                })}
+              />
           </div>
           <textarea
             className={`${FIELD} min-h-[78px] resize-y`}
