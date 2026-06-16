@@ -674,8 +674,28 @@ export interface CamOutputImage {
   mtime: number;
 }
 
+const CAM_OUTPUT_ROUTE_MISSING_MESSAGE = '项目白模后端接口未加载：请把最新 backend 部署到服务器并重启 PM2/后端服务，让 /api/files/cam-output/projects 生效。';
+
+async function requestCamOutput<T>(url: string): Promise<T> {
+  const res = await fetch(url, { headers: { 'Content-Type': 'application/json' } });
+  let data: any = null;
+  try {
+    data = await res.json();
+  } catch {
+    /* ignore */
+  }
+  if (!res.ok) {
+    if (res.status === 404) throw new Error(CAM_OUTPUT_ROUTE_MISSING_MESSAGE);
+    throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
+  }
+  if (data?.success === false) {
+    throw new Error(data?.error || data?.message || '读取项目白模失败');
+  }
+  return data;
+}
+
 export async function listCamOutputProjects(): Promise<{ root: string; projects: CamOutputProject[] }> {
-  const res = await request<{
+  const res = await requestCamOutput<{
     success: boolean;
     data: { root: string; projects: CamOutputProject[] };
   }>(`${BASE}/files/cam-output/projects`);
@@ -687,7 +707,7 @@ export async function listCamOutputProjectImages(project: string): Promise<{
   folder: string;
   images: CamOutputImage[];
 }> {
-  const res = await request<{
+  const res = await requestCamOutput<{
     success: boolean;
     data: { project: string; folder: string; images: CamOutputImage[] };
   }>(`${BASE}/files/cam-output/projects/${encodeURIComponent(project)}/images`);

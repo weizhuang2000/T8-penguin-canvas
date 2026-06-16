@@ -66,3 +66,12 @@ test('server exposes a guarded cam-output image endpoint before generic static m
   assert.match(server, /CAM_OUTPUT_IMAGE_RE/);
   assert.match(server, /isPathInside\(folder, file\)/);
 });
+
+test('frontend reports missing cam-output backend route with deployment guidance', () => {
+  const api = readFileSync(new URL('../src/services/api.ts', import.meta.url), 'utf8');
+  assert.match(api, /CAM_OUTPUT_ROUTE_MISSING_MESSAGE/);
+  assert.match(api, /后端接口未加载/);
+  assert.match(api, /重启 PM2\/后端服务/);
+  assert.match(api, /res\.status === 404/);
+  assert.match(api, /requestCamOutput/);
+});
