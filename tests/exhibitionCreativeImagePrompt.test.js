@@ -151,6 +151,7 @@ test('exhibition creative image prompt describes abstract color material card mo
     hasSpaceImage: true,
     hasColorMaterialReferenceImage: true,
     colorMaterialPriorityMode: 'llm',
+    colorMaterialReferenceTone: '主色调：前端识别不应进入大模型识别模式',
     colorMaterialReferenceMode: 'abstract-card',
     colorMaterialReferenceMarkText: 'R',
     colorMaterialReferenceMarkPosition: 'top-left',
@@ -160,7 +161,9 @@ test('exhibition creative image prompt describes abstract color material card mo
   assert.match(prompt, /Input images: 图1=唯一空间结构示意图/);
   assert.match(prompt, /图2=色彩与材质抽象卡片/);
   assert.match(prompt, /只用于提取色彩关系、材质质感、表面肌理、光泽、冷暖倾向和灯光氛围，不作为空间结构依据/);
+  assert.match(prompt, /Color palette: 从色彩与材质参考图中提取主色、辅助色、金属色、明暗关系、冷暖倾向和局部发光色/);
   assert.match(prompt, /Constraints: .*最终画面必须是高完成度、可落地的展陈空间效果图。/);
+  assert.doesNotMatch(prompt, /前端识别不应进入大模型识别模式/);
   assert.doesNotMatch(prompt, /不应出现的手动色彩材质文本/);
   assert.doesNotMatch(prompt, /【色彩与材质】/);
 });

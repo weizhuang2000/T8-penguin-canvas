@@ -1016,7 +1016,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         {busy && <Loader2 size={15} className="animate-spin text-cyan-200" />}
       </div>
 
-      <div className="nodrag nopan grid max-h-[780px] grid-cols-2 items-start gap-2 overflow-y-auto p-2.5" onMouseDown={(event) => event.stopPropagation()}>
+      <div className="nodrag nopan max-h-[780px] space-y-2 overflow-y-auto p-2.5" onMouseDown={(event) => event.stopPropagation()}>
         {isReadonly && (
           <div className="col-span-2 rounded border border-amber-300/30 bg-amber-300/10 px-2 py-1.5 text-[10px] text-amber-100">
             当前画布为只读，仅可查看结果。
@@ -1028,6 +1028,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           </div>
         )}
 
+        <div className="columns-2 gap-2 [&>section]:mb-2 [&>section]:break-inside-avoid">
         <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <ImageSlot handleId="structure" title="空间结构示意图" subtitle="保留结构、动线、分区；标注只作理解参考" url={structureImage} top="24%" />
           <ImageSlot handleId="style" title="空间表现效果图" subtitle="借鉴风格、材质、光影和完成度" url={styleImage} top="39%" />
@@ -1610,9 +1611,11 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           </section>
         )}
 
+        </div>
+
         <button
           type="button"
-          className="col-span-2 flex h-8 w-full items-center justify-center gap-1.5 rounded border border-cyan-300/30 bg-cyan-300/15 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-45"
+          className="flex h-8 w-full items-center justify-center gap-1.5 rounded border border-cyan-300/30 bg-cyan-300/15 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-45"
           disabled={isReadonly || busy || !structureImage || !styleImage}
           onClick={() => void runGenerate()}
         >

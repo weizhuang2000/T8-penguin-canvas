@@ -1631,7 +1631,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
         {busy && <Loader2 size={15} className="animate-spin text-cyan-200" />}
       </div>
 
-      <div className="nodrag nopan grid max-h-[760px] grid-cols-2 items-start gap-2 overflow-y-auto p-2.5" onMouseDown={(event) => event.stopPropagation()}>
+      <div className="nodrag nopan max-h-[760px] space-y-2 overflow-y-auto p-2.5" onMouseDown={(event) => event.stopPropagation()}>
         {isReadonly && (
           <div className="col-span-2 rounded border border-amber-300/30 bg-amber-300/10 px-2 py-1.5 text-[10px] text-amber-100">
             当前画布为只读，仅可查看结果。
@@ -1643,6 +1643,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           </div>
         )}
 
+        <div className="columns-2 gap-2 [&>section]:mb-2 [&>section]:break-inside-avoid">
         <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1 flex items-center gap-1.5">
             <ImageIcon size={13} className="text-cyan-200" />
@@ -2409,9 +2410,11 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           </section>
         )}
 
+        </div>
+
         <button
           type="button"
-          className="col-span-2 flex h-8 w-full items-center justify-center gap-1.5 rounded border border-cyan-300/30 bg-cyan-300/15 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-45"
+          className="flex h-8 w-full items-center justify-center gap-1.5 rounded border border-cyan-300/30 bg-cyan-300/15 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-45"
           disabled={isReadonly || busy || (!spaceImage && !hasManualSpaceSize)}
           onClick={() => void runGenerate()}
         >

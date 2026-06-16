@@ -263,8 +263,7 @@ function exhibitionCreativeColorPaletteText({ colorMaterialPalette, colorMateria
       const tone = cleanExhibitionCreativeText(colorMaterialReferenceTone, 500);
       return tone || '以“主色调识别（像素采样）”文本框中的前端识别结果为准；如为空，请保持专业展陈色彩关系，避免杂乱高饱和配色。';
     }
-    const tone = cleanExhibitionCreativeText(colorMaterialReferenceTone, 500);
-    return `${tone ? `${tone} ` : ''}从色彩与材质参考图中提取主色、辅助色、金属色、明暗关系、冷暖倾向和局部发光色；不得借用该参考图的空间布局或构图。`;
+    return '从色彩与材质参考图中提取主色、辅助色、金属色、明暗关系、冷暖倾向和局部发光色；不得借用该参考图的空间布局或构图。';
   }
   return '结合项目主题与展陈气质组织清晰、克制、可落地的专业展陈色彩体系，避免杂乱高饱和配色。';
 }
