@@ -87,6 +87,9 @@ const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
 const DEFAULT_REFERENCE_MARK_FONT_SIZE = 24;
 const DEFAULT_COLOR_MATERIAL_MARK_TEXT = '图2';
 const AUTO_REFERENCE_MARK_SIZE_RATIO = 0.05;
+const LEGACY_COLOR_MATERIAL_MARK_TEXT = 'R';
+const LEGACY_REFERENCE_MARK_FONT_SIZE = 12;
+const COLOR_MATERIAL_MARK_DEFAULTS_VERSION = 2;
 type ReferenceMarkPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
 interface ReferenceMarkSettings {
@@ -665,6 +668,19 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     d.colorMaterialMarkText,
   ]);
   const inputDocumentText = useInputDocumentText(id);
+
+  useEffect(() => {
+    if (Number(d.colorMaterialMarkDefaultsVersion) >= COLOR_MATERIAL_MARK_DEFAULTS_VERSION) return;
+    const patch: Record<string, any> = {};
+    if (String(d.colorMaterialMarkText || '').trim() === LEGACY_COLOR_MATERIAL_MARK_TEXT) {
+      patch.colorMaterialMarkText = DEFAULT_COLOR_MATERIAL_MARK_TEXT;
+    }
+    if (Number(d.colorMaterialMarkFontSize) === LEGACY_REFERENCE_MARK_FONT_SIZE) {
+      patch.colorMaterialMarkFontSize = DEFAULT_REFERENCE_MARK_FONT_SIZE;
+    }
+    patch.colorMaterialMarkDefaultsVersion = COLOR_MATERIAL_MARK_DEFAULTS_VERSION;
+    if (Object.keys(patch).length > 0) update(patch);
+  }, [d.colorMaterialMarkDefaultsVersion, d.colorMaterialMarkFontSize, d.colorMaterialMarkText, update]);
 
   const previewPrompt = useMemo(
     () => buildExhibitionCreativeImagePrompt({

@@ -379,6 +379,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     colorMaterialMarkColor: '#ff0000',
     colorMaterialMarkFontSize: 24,
     colorMaterialMarkAutoFontSize: false,
+    colorMaterialMarkDefaultsVersion: 2,
     inspiration: '',
     sourceText: '',
     documentMeta: null,
