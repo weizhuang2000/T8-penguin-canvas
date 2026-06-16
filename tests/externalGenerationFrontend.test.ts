@@ -55,6 +55,32 @@ test('generateExternalImage posts to external image route and returns normalized
   }
 });
 
+test('generateExternalImage forwards banana ratio fields for gemini-compatible providers', async () => {
+  const calls: any[] = [];
+  const oldFetch = globalThis.fetch;
+  (globalThis as any).fetch = async (url: string, init: any) => {
+    calls.push({ url, body: JSON.parse(init.body) });
+    return jsonResponse({ success: true, data: { imageUrls: ['https://cdn.example.com/out.png'] } });
+  };
+  try {
+    await generateExternalImage({
+      providerId: 'gemini-compatible',
+      prompt: 'banana ratio',
+      model: 'nano-banana-2',
+      aspect_ratio: '16:9',
+      image_size: '2K',
+      size: '1344x768',
+    } as any);
+
+    assert.equal(calls[0].url, '/api/proxy/external/image');
+    assert.equal(calls[0].body.aspect_ratio, '16:9');
+    assert.equal(calls[0].body.image_size, '2K');
+    assert.equal(calls[0].body.size, '1344x768');
+  } finally {
+    globalThis.fetch = oldFetch;
+  }
+});
+
 test('generateExternalLlm posts to external llm route and maps text to content', async () => {
   const oldFetch = globalThis.fetch;
   (globalThis as any).fetch = async (url: string, init: any) => {

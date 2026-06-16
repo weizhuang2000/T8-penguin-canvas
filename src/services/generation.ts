@@ -72,6 +72,8 @@ export interface GenerateExternalImageRequest {
   size?: string;
   aspect_ratio?: string;
   image_size?: string;
+  aspectRatio?: string;
+  imageSize?: string;
   width?: number;
   height?: number;
   n?: number;
