@@ -36,6 +36,10 @@ test('settings route uploads a custom task completion audio file and can reset t
   const settingsRouter = require('../backend/src/routes/settings.js');
   const app = express();
   app.use(express.json({ limit: '1mb' }));
+  app.use((req: any, _res: any, next: any) => {
+    req.user = { id: 'test-admin', role: 'admin' };
+    next();
+  });
   app.use('/api/settings', settingsRouter);
   const server = await new Promise<any>((resolve) => {
     const s = app.listen(0, '127.0.0.1', () => resolve(s));
