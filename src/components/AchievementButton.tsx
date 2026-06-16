@@ -8,6 +8,7 @@ import { formatAchievementSeconds, normalizeAchievementTheme } from '../data/ach
 interface AchievementButtonProps {
   isPixel: boolean;
   isDark: boolean;
+  userRole?: string;
 }
 
 export default function AchievementButton({ isPixel, isDark }: AchievementButtonProps) {

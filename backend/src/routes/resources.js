@@ -328,20 +328,43 @@ function normalizeDb(raw) {
   const items = Array.isArray(db.items) ? db.items : [];
   const catMap = new Map();
 
-  for (const c of [...defaults, ...categories]) {
+  const normalizeCategory = (c, fallbackOrder = catMap.size) => {
     const kind = normalizeKind(c?.kind);
     const name = safeText(c?.name);
-    if (!kind || !name) continue;
+    if (!kind || !name) return null;
     const id = safeText(c?.id, genId('rescat')).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 96) || genId('rescat');
-    if (catMap.has(id)) continue;
-    catMap.set(id, {
+    return {
       id,
       kind,
       name,
-      order: Number.isFinite(Number(c?.order)) ? Number(c.order) : catMap.size,
+      order: Number.isFinite(Number(c?.order)) ? Number(c.order) : fallbackOrder,
       system: !!c?.system || id.endsWith('_uncategorized'),
       createdAt: Number(c?.createdAt) || now(),
-    });
+    };
+  };
+
+  for (const c of defaults) {
+    const normalized = normalizeCategory(c);
+    if (!normalized || catMap.has(normalized.id)) continue;
+    catMap.set(normalized.id, normalized);
+  }
+
+  for (const c of categories) {
+    const normalized = normalizeCategory(c);
+    if (!normalized) continue;
+    const existing = catMap.get(normalized.id);
+    if (existing) {
+      if (existing.kind !== normalized.kind) continue;
+      catMap.set(normalized.id, {
+        ...existing,
+        name: normalized.name,
+        order: Number.isFinite(Number(c?.order)) ? normalized.order : existing.order,
+        system: existing.system || normalized.system,
+        createdAt: normalized.createdAt || existing.createdAt,
+      });
+      continue;
+    }
+    catMap.set(normalized.id, normalized);
   }
 
   const normalizedCategories = Array.from(catMap.values())
@@ -388,6 +411,8 @@ function normalizeDb(raw) {
       thumbRel: safeText(item?.thumbRel, ''),
       mime: safeText(item?.mime, mimeFromExt(path.extname(fileRel))),
       size: Number(item?.size) || 0,
+      width: Math.max(0, Math.round(Number(item?.width) || 0)),
+      height: Math.max(0, Math.round(Number(item?.height) || 0)),
       sha256: safeText(item?.sha256, ''),
       tags: Array.isArray(item?.tags) ? item.tags.map((t) => safeText(t)).filter(Boolean).slice(0, 20) : [],
       favorite: !!item?.favorite,
@@ -632,6 +657,18 @@ async function makeImageThumb(buffer, root, id) {
   }
 }
 
+async function readImageSize(buffer) {
+  try {
+    const meta = await sharp(buffer, { limitInputPixels: false }).rotate().metadata();
+    return {
+      width: Math.max(0, Math.round(Number(meta.width) || 0)),
+      height: Math.max(0, Math.round(Number(meta.height) || 0)),
+    };
+  } catch {
+    return { width: 0, height: 0 };
+  }
+}
+
 function serveFile(req, res, filePath, mime) {
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({ success: false, error: '文件不存在' });
@@ -783,6 +820,7 @@ router.post('/items/add', express.json({ limit: '4mb' }), async (req, res) => {
     const target = assertInside(root, path.join(root, fileRel));
     fs.writeFileSync(target, src.buffer);
     const thumbRel = kind === 'image' || kind === 'panorama' ? await makeImageThumb(src.buffer, root, id) : '';
+    const imageSize = kind === 'image' || kind === 'panorama' ? await readImageSize(src.buffer) : { width: 0, height: 0 };
     const fallbackCat = `${kind}_uncategorized`;
     const item = {
       id,
@@ -794,6 +832,8 @@ router.post('/items/add', express.json({ limit: '4mb' }), async (req, res) => {
       thumbRel,
       mime: safeText(src.mime, mimeFromExt(ext)),
       size: src.buffer.length,
+      width: imageSize.width,
+      height: imageSize.height,
       sha256,
       tags: Array.isArray(req.body?.tags) ? req.body.tags.map((t) => safeText(t)).filter(Boolean).slice(0, 20) : [],
       favorite: !!req.body?.favorite,

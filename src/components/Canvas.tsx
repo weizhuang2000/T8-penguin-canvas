@@ -651,7 +651,7 @@ function buildSendNodeSpecs(materials: SendableMaterial[], mode: SendTargetMode)
   const buckets = bucketSendableMaterials(materials);
   const specs: SendNodeSpec[] = [];
   const textValues = buckets.text.map((item) => (item.text || '').trim()).filter(Boolean);
-  const mediaKinds: MediaKind[] = ['image', 'video', 'audio'];
+  const mediaKinds = ['image', 'video', 'audio'] as const;
 
   if (mode === 'portrait-master') {
     const seen = new Set<string>();
@@ -987,6 +987,7 @@ const MEDIA_EXTENSIONS: Record<MediaKind, string[]> = {
   image: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif'],
   video: ['mp4', 'webm', 'mov', 'm4v', 'mkv'],
   audio: ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac'],
+  model3d: ['glb', 'gltf', 'obj', 'fbx', 'stl'],
 };
 
 const INTERNAL_NODE_PASTE_DELAY_MS = 120;
@@ -1609,7 +1610,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
         seenFiles.add(key);
         return true;
       });
-      const buckets: Record<MediaKind, File[]> = { image: [], video: [], audio: [] };
+      const buckets: Record<MediaKind, File[]> = { image: [], video: [], audio: [], model3d: [] };
       let skipped = 0;
       dedupedFiles.forEach((file) => {
         const kind = inferCanvasMediaKind(file);
@@ -1620,7 +1621,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
         buckets[kind].push(file);
       });
 
-      const kinds = (['image', 'video', 'audio'] as MediaKind[]).filter((kind) => buckets[kind].length > 0);
+      const kinds = (['image', 'video', 'audio'] as Exclude<MediaKind, 'model3d'>[]).filter((kind) => buckets[kind].length > 0);
       if (kinds.length === 0) return false;
 
       const payloads: Array<{ kind: MediaKind; items: MediaItem[] }> = [];
@@ -1835,11 +1836,11 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
 
     for (const node of nodesRef.current) {
       if (!ids.includes(node.id) || node.type === 'groupBox') continue;
-      for (const kind of ['image', 'video', 'audio'] as MediaKind[]) {
+      for (const kind of ['image', 'video', 'audio'] as Exclude<MediaKind, 'model3d'>[]) {
         getMediaItemsFromData(node.data, kind).forEach(push);
       }
       const buckets = collectMaterialSetBucketsFromData(node.data);
-      for (const kind of ['image', 'video', 'audio'] as MediaKind[]) {
+      for (const kind of ['image', 'video', 'audio'] as Exclude<MediaKind, 'model3d'>[]) {
         buckets[kind].forEach((item) => {
           if (!item.url) return;
           push({
@@ -4912,6 +4913,8 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
         batchDone={batchDone}
         snapEnabled={snapEnabled}
         onToggleSnap={() => setSnapEnabled((v) => !v)}
+        outputMaterialPersistenceEnabled={false}
+        onToggleOutputMaterialPersistence={() => {}}
         onAlignSelection={handleAlignSelection}
       />
       {isReadonlyCanvas && (

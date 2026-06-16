@@ -55,7 +55,7 @@ import {
 
 /**
  * LLM / Vision 节点 —— 完全对齐 gpt-image-2-web Chat (index.html L1600 / L8128~L8400)
- *  - 6 个模型: gemini-3.1-flash-lite-preview(默认) / gemini-3.5-flash / gpt-4o / gemini-3.1-pro-preview / gpt-5 / gpt-image-2-all
+ *  - 6 个模型: gemini-3.1-flash-lite-preview / gemini-3.5-flash(默认) / gpt-4o / gemini-3.1-pro-preview / gpt-5 / gpt-image-2-all
  *  - temperature(0~2) + max_tokens(100~128000)
  *  - 系统提示词 + localStorage 预设保存/加载
  *  - 图像上传(多模态 vision)
@@ -116,6 +116,21 @@ function attachWheelBlock(el: HTMLElement | null) {
 
 const LLM_REPLY_BLOCK_RE = /^\s*(?:#{1,6}\s+|[-*]\s+|>\s*)?(?:\*\*)?(?:宫格|镜头|分镜|场景|画面|提示词|方案|Scene|Shot)\s*(?:第\s*)?(?:\d{1,4}|[一二三四五六七八九十百千万零〇两]+)?\s*(?:[:：、.)）\-—]\s*)?/i;
 const LLM_REPLY_NUMBER_RE = /^\s*(?:\d{1,4}|[一二三四五六七八九十百千万零〇两]+)\s*[.、)）:：\-—]\s+\S/;
+const LLM_TRUNCATION_FINISH_REASONS = new Set(['length', 'max_tokens', 'content_length']);
+
+function isLlmReplyTruncated(result: any): boolean {
+  const finishReason =
+    result?.finishReason ||
+    result?.finish_reason ||
+    result?.raw?.choices?.[0]?.finish_reason ||
+    result?.raw?.choices?.[0]?.finishReason ||
+    '';
+  return result?.truncated === true || LLM_TRUNCATION_FINISH_REASONS.has(String(finishReason || '').toLowerCase());
+}
+
+function llmTokenLimitWarning(maxTokens: number): string {
+  return `回答可能因为 maxTok=${maxTokens} 达到输出上限而被截断，请调大 maxTok 后重试。`;
+}
 
 function splitAssistantReplyForScatter(input: string): string[] {
   const text = String(input || '').replace(/\r\n?/g, '\n').replace(/[\u2028\u2029]/g, '\n').trim();
@@ -153,6 +168,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
   const update = useUpdateNodeData(id);
   const { getEdges, getNodes, getNode, addNodes } = useReactFlow();
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [streamingText, setStreamingText] = useState('');
   const [presetMap, setPresetMap] = useState<Record<string, string>>(() => loadPresets());
   const [pickedFiles, setPickedFiles] = useState<{ name: string; dataUrl: string }[]>([]);
@@ -195,7 +211,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
   const userPromptMentions: MediaMention[] = Array.isArray(d?.userPromptMentions) ? d.userPromptMentions : [];
   const systemPrompt: string = d?.system ?? '你是一个提示词专家，将用户的提示词优化';
   const temperature: number = typeof d?.temperature === 'number' ? d.temperature : 0.7;
-  const maxTokens: number = typeof d?.maxTokens === 'number' ? d.maxTokens : 4096;
+  const maxTokens: number = typeof d?.maxTokens === 'number' ? d.maxTokens : 16384;
   const useStream: boolean = d?.stream !== false; // 默认开
   const llmVideoMode: 'frames' | 'native-base64' | 'url' =
     d?.llmVideoMode === 'url'
@@ -210,6 +226,19 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
   const videoFrameCount: number = typeof d?.videoFrameCount === 'number' ? d.videoFrameCount : 12;
   const history: ChatTurn[] = Array.isArray(d?.history) ? d.history : [];
   const generatedImages: string[] = Array.isArray(d?.generatedImages) ? d.generatedImages : [];
+
+  const syncOutputFromHistory = useCallback((nextHistory: ChatTurn[], keepConsumedTexts = false) => {
+    const lastAssistant = [...nextHistory].reverse().find((t) => t.role === 'assistant');
+    const allAssistantImages = nextHistory.flatMap((t) => (t.role === 'assistant' && Array.isArray(t.images) ? t.images : []));
+    update({
+      history: nextHistory,
+      reply: lastAssistant?.text || '',
+      prompt: lastAssistant?.text || '',
+      generatedImages: allAssistantImages,
+      imageUrls: lastAssistant?.images && lastAssistant.images.length ? lastAssistant.images : [],
+      consumedTexts: lastAssistant && keepConsumedTexts ? d?.consumedTexts || [] : [],
+    });
+  }, [d?.consumedTexts, update]);
 
   const activeModel = isExternalSelected ? externalProviderModel : model;
   const src = `LLM·${activeModel || model}·#${id.slice(-4)}`;
@@ -360,6 +389,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
 
   const handleSend = async () => {
     setError(null);
+    setWarning(null);
     setStreamingText('');
     const upstream = collectUpstream();
     const resolvedLocalPrompt = resolveMediaMentions(localPrompt, userPromptMentions, orderedImages);
@@ -398,7 +428,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
         // ====== 流式 ======
         const ctrl = new AbortController();
         abortRef.current = ctrl;
-        const { content } = await generateLlmStream(
+        const streamResult = await generateLlmStream(
           { model, messages, temperature, max_tokens: maxTokens, ...llmVideoOptions },
           {
             onDelta: (chunk) => setStreamingText((s) => s + chunk),
@@ -406,7 +436,8 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
           }
         );
         abortRef.current = null;
-        const replyText = content || '';
+        const replyText = streamResult.content || '';
+        const truncationWarning = isLlmReplyTruncated(streamResult) ? llmTokenLimitWarning(maxTokens) : '';
         const finalHistory: ChatTurn[] = [...nextHistory, { role: 'assistant', text: replyText }];
         update({
           status: 'success',
@@ -420,6 +451,10 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
         setStreamingText('');
         setPickedFiles([]);
         setPickedVideos([]);
+        if (truncationWarning) {
+          setWarning(truncationWarning);
+          logBus.warn(truncationWarning, src);
+        }
         logBus.success(`完成 · ${replyText.length} 字`, src);
         taskCompletionSound.notifyComplete(id, 'llm');
       } else {
@@ -438,6 +473,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
           : await generateLlm({ model, messages, temperature, max_tokens: maxTokens, ...llmVideoOptions });
         const replyText = res.content || '';
         const imgs = res.imageUrls || [];
+        const truncationWarning = isLlmReplyTruncated(res) ? llmTokenLimitWarning(maxTokens) : '';
         const finalHistory: ChatTurn[] = [
           ...nextHistory,
           { role: 'assistant', text: replyText, images: imgs.length ? imgs : undefined },
@@ -454,6 +490,10 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
         });
         setPickedFiles([]);
         setPickedVideos([]);
+        if (truncationWarning) {
+          setWarning(truncationWarning);
+          logBus.warn(truncationWarning, src);
+        }
         if (imgs.length) logBus.success(`完成 · ${replyText.length} 字 + ${imgs.length} 图`, src);
         else logBus.success(`完成 · ${replyText.length} 字`, src);
         taskCompletionSound.notifyComplete(id, 'llm');
@@ -480,7 +520,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
   };
 
   const handleClear = () => {
-    update({ history: [], reply: '', generatedImages: [], imageUrls: [] });
+    update({ history: [], reply: '', prompt: '', generatedImages: [], imageUrls: [], consumedTexts: [] });
     setStreamingText('');
     setPickedFiles([]);
     setPickedVideos([]);
@@ -531,6 +571,20 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
     if (e.key === 'Escape') {
       setEditingIdx(null);
     }
+  };
+
+  const handleDeleteHistoryTurn = (idx: number) => {
+    const target = history[idx];
+    if (!target) return;
+    const previousLastAssistantIndex = history.map((turn, index) => ({ turn, index })).reverse().find((item) => item.turn.role === 'assistant')?.index ?? -1;
+    const nextHistory = history.filter((_, index) => index !== idx);
+    const nextLastAssistantIndex = nextHistory.map((turn, index) => ({ turn, index })).reverse().find((item) => item.turn.role === 'assistant')?.index ?? -1;
+    syncOutputFromHistory(nextHistory, previousLastAssistantIndex !== idx && nextLastAssistantIndex >= 0);
+    if (editingIdx !== null) {
+      if (editingIdx === idx) setEditingIdx(null);
+      else if (editingIdx > idx) setEditingIdx(editingIdx - 1);
+    }
+    logBus.info(target.role === 'assistant' ? '已删除这条 LLM 结果' : '已删除这条 LLM 消息', src);
   };
 
   const scatterAssistantText = useCallback((text: string, mode: 'smart' | 'single' = 'smart') => {
@@ -777,7 +831,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
               max={128000}
               step={100}
               value={maxTokens}
-              onChange={(e) => update({ maxTokens: Math.max(100, Math.min(128000, Number(e.target.value) || 4096)) })}
+              onChange={(e) => update({ maxTokens: Math.max(100, Math.min(128000, Number(e.target.value) || 16384)) })}
               className="w-full rounded bg-white/5 border border-white/10 px-1.5 py-1 text-[11px] text-white outline-none focus:border-white/30"
             />
           </div>
@@ -1051,6 +1105,12 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
             <span className="break-all">{error}</span>
           </div>
         )}
+        {warning && (
+          <div className="flex items-start gap-1 text-[10px] text-amber-200 bg-amber-500/10 border border-amber-400/25 rounded px-2 py-1">
+            <AlertCircle size={11} className="mt-0.5 flex-shrink-0" />
+            <span className="break-all">{warning}</span>
+          </div>
+        )}
       </div>
 
     </div>
@@ -1089,7 +1149,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
             <div
               onDoubleClick={() => handleDoubleClickMsg(i)}
               className={`llm-chat-message relative whitespace-pre-wrap text-white/80 bg-white/[0.03] rounded p-1.5 ${
-                t.role === 'assistant' ? 'cursor-pointer hover:bg-white/[0.06] transition-colors pr-14' : ''
+                t.role === 'assistant' ? 'cursor-pointer hover:bg-white/[0.06] transition-colors pr-20' : ''
               }`}
             >
               {t.role === 'assistant' && t.text.trim() && (
@@ -1128,6 +1188,23 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
                   >
                     <Scissors size={13} />
                   </button>
+                  <button
+                    type="button"
+                    className="llm-chat-action-button llm-chat-action-button--delete t8-mini-icon-button nodrag nopan"
+                    title="删除这条 LLM 结果"
+                    aria-label="删除这条 LLM 结果"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleDeleteHistoryTurn(i);
+                    }}
+                    onDoubleClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
                 </>
               )}
               {t.text || '[空]'}
@@ -1144,6 +1221,10 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
                     data-drag-url={u}
                     data-drag-preview={u}
                     data-drag-node-id={id}
+                    data-resource-title={u.split('/').pop() || '助手图像'}
+                    data-prompt-template-kind="image"
+                    data-prompt-template-category="image-reference-edit"
+                    data-prompt-template-prompt={t.text || localPrompt}
                     onMouseDown={(e) => beginMaterialDrag(e, { kind: 'image', url: u, sourceNodeId: id, previewUrl: u })}
                     className="w-12 h-12 object-cover rounded border border-white/10 cursor-grab"
                     title="按住 Ctrl 拖拽到其他节点"
@@ -1165,6 +1246,10 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
                     data-drag-url={u}
                     data-drag-preview={u}
                     data-drag-node-id={id}
+                    data-resource-title={u.split('/').pop() || '助手视频'}
+                    data-prompt-template-kind="video"
+                    data-prompt-template-category="video-image-to-video"
+                    data-prompt-template-prompt={t.text || localPrompt}
                     onMouseDown={(e) => beginMaterialDrag(e, { kind: 'video', url: u, sourceNodeId: id, previewUrl: u })}
                     className="w-20 h-12 object-cover rounded border border-white/10 cursor-grab"
                     title="按住 Ctrl 拖拽到其他节点"

@@ -17,13 +17,13 @@ import { resolveMediaMentions, type MediaMention } from './mediaMentions';
 import { useDragMaterialStore, type MaterialPayload } from '../../stores/dragMaterial';
 import { useMaterialDropTarget } from '../../hooks/useMaterialDropTarget';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
-import { useCanvasStore } from '../../stores/canvas';
 import {
   countExcludedMaterials,
   excludeMaterialId,
   filterExcludedMaterials,
   normalizeExcludedMaterialIds,
 } from '../../utils/materialExclusion';
+import { LocalNodeAddonSlot } from 'virtual:t8-local-extensions';
 
 /**
  * AudioNode - Suno (generate / cover / extend) — 完全对齐 gpt-image-2-web
@@ -54,10 +54,9 @@ const AudioNode = ({ id, data, selected }: NodeProps) => {
   const { theme, style: themeStyle } = useThemeStore();
   const isDark = theme === 'dark';
   const isPixel = themeStyle === 'pixel';
-  const activeCanvasId = useCanvasStore((s) => s.activeId);
-  const historyContextRef = useRef<any>(null);
 
   const d = data as any;
+  const providerParams = (d?.providerParams && typeof d.providerParams === 'object') ? d.providerParams : {};
   const mode: AudioMode = d?.mode || 'generate';
   const version: string = d?.version || DEFAULT_SUNO_VERSION;
   const title: string = d?.title || '';
@@ -151,10 +150,10 @@ const AudioNode = ({ id, data, selected }: NodeProps) => {
 
   // 上传本地音频 → 获取 clipId
   const uploadFile = async (file: File): Promise<string> => {
-    setUploading(true);
+      setUploading(true);
     try {
       logBus.info(`上传音频: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`, src);
-      const r = await uploadAudioForSuno(file);
+      const r = await uploadAudioForSuno(file, providerParams);
       update({ uploadedClipId: r.clipId, uploadedFilename: r.filename });
       logBus.success(`上传成功, clipId=${r.clipId}`, src);
       return r.clipId;
@@ -212,7 +211,7 @@ const AudioNode = ({ id, data, selected }: NodeProps) => {
           return;
         }
         try {
-          const r = await queryAudio(clipIds, true, historyContextRef.current || undefined);
+          const r = await queryAudio(clipIds, true);
           if (r.status === 'SUCCESS' && r.tracks.length > 0) {
             stopPoll();
             // 双输出口: audioUrl=轨1, audioUrl_1=轨2
@@ -246,13 +245,6 @@ const AudioNode = ({ id, data, selected }: NodeProps) => {
       setError('请填写歌词 / 提示词');
       return;
     }
-    const historyContext = {
-      canvasId: activeCanvasId,
-      sourceNodeId: id,
-      sourceNodeType: 'audio',
-      nodeTitle: '音频',
-    };
-    historyContextRef.current = historyContext;
     taskCompletionSound.primeAudio();
     update({ status: 'submitting', error: null, tracks: [], audioUrl: undefined });
     try {
@@ -277,7 +269,7 @@ const AudioNode = ({ id, data, selected }: NodeProps) => {
         cover_clip_id: mode === 'cover' ? clipIdForRef : undefined,
         continue_clip_id: mode === 'extend' ? clipIdForRef : undefined,
         continue_at: mode === 'extend' ? continueAt : undefined,
-        historyContext,
+        providerParams,
       });
       logBus.success(`taskId=${r.taskId} clips=${(r.clipIds || []).join(',') || '?'}`, src);
       update({ status: 'polling', taskId: r.taskId, clipIds: r.clipIds, lastPrompt: finalPrompt, progress: '0/?' });
@@ -397,6 +389,19 @@ const AudioNode = ({ id, data, selected }: NodeProps) => {
             </select>
           </div>
         </div>
+
+        <LocalNodeAddonSlot
+          nodeId={id}
+          nodeType="audio"
+          data={d}
+          update={update}
+          context={{
+            providerSource: 'zhenzhen',
+            model: version,
+            apiModel: `suno-${version}`,
+            providerKind: 'suno',
+          }}
+        />
 
         <div>
           <label className="text-[10px] text-white/50 block mb-1">标题</label>
@@ -575,6 +580,10 @@ const AudioNode = ({ id, data, selected }: NodeProps) => {
                 data-drag-url={t.audioUrl}
                 data-drag-preview={t.audioUrl}
                 data-drag-node-id={id}
+                data-resource-title={t.title || t.audioUrl.split('/').pop() || '生成音频'}
+                data-prompt-template-kind="video"
+                data-prompt-template-category="video-music-audio"
+                data-prompt-template-prompt={d?.lastPrompt || localPrompt}
                 onMouseDown={(e) => beginMaterialDrag(e, { kind: 'audio', url: t.audioUrl, sourceNodeId: id, previewUrl: t.audioUrl })}
                 title="按住 Ctrl 拖拽到其他节点"
               />

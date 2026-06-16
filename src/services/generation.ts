@@ -29,6 +29,7 @@ export interface GenerateImageRequest {
   images?: string[];
   quality?: string;
   seed?: number;
+  providerParams?: Record<string, any>;
   // 鍏煎鏃у弬鏁?鑻ヤ紶浜?size(鍍忕礌涓?鍒欎紭鍏堢敤銆乮mage 鍗曞紶涔熶細骞跺叆 images
   size?: string;
   image?: string;
@@ -261,6 +262,7 @@ export interface FalSubmitRequest {
   prompt: string;
   /** 鍙傝€冨浘 URL(鏈湴 /files/* 鎴?base64 dataURI),鍚庣浼氫笂浼犲埌 /v1/files 鍙?URL */
   images?: string[];
+  providerParams?: Record<string, any>;
   /** 鐢熸垚寮犳暟 1-4 */
   n?: number;
   /** 杈撳嚭鏍煎紡 png / jpeg / webp */
@@ -637,6 +639,7 @@ export interface VideoFalSubmitRequest {
   prompt: string;
   /** 鍙傝€冨浘(base64 dataURI 鎴栨湰鍦?/files/* URL) */
   images?: string[];
+  providerParams?: Record<string, any>;
   /** veo-fal: '16:9' | '9:16' */
   aspect_ratio?: string;
   /** veo-fal: '8s' */
@@ -735,6 +738,9 @@ export interface VideoSubmitRequest {
    *  - seedance: base64 dataURL,鏈€澶?3 寮?鍚?veo)
    */
   images?: string[];
+  providerParams?: Record<string, any>;
+  size?: string;
+  private?: boolean;
   historyContext?: GenerationHistoryContext;
 }
 
@@ -801,6 +807,7 @@ export interface SeedanceSubmitRequest {
   videos?: string[];
   /** 鍙傝€冮煶棰?URL 澶氫釜 */
   audios?: string[];
+  providerParams?: Record<string, any>;
   historyContext?: GenerationHistoryContext;
 }
 
@@ -848,6 +855,7 @@ export interface AudioSubmitRequest {
   continue_clip_id?: string;
   continue_at?: number;
   cover_clip_id?: string;
+  providerParams?: Record<string, any>;
   historyContext?: GenerationHistoryContext;
 }
 
@@ -899,9 +907,13 @@ export async function queryAudio(clipIds: string[], saveLocal: boolean = true, h
  * 灏嗘湰鍦伴煶棰戜笂浼犵粰 Suno 骞惰幏鍙?clipId锛堢敤浜?cover/extend 妯″紡锛夈€? * 鍚庣浠ｇ悊 _sunoUploadAudio 鐨?5 姝ユ祦绋嬨€? */
 export async function uploadAudioForSuno(
   file: File,
+  providerParams?: Record<string, any>,
 ): Promise<{ clipId: string; uploadId: string; filename: string; size: number; mime: string }> {
   const fd = new FormData();
   fd.append('file', file, file.name);
+  if (providerParams && Object.keys(providerParams).length > 0) {
+    fd.append('providerParams', JSON.stringify(providerParams));
+  }
   const r = await fetch('/api/proxy/audio/upload', { method: 'POST', body: fd });
   const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
@@ -945,6 +957,16 @@ export async function queryRh(taskId: string, historyContext?: GenerationHistory
   return data.data;
 }
 
+export async function cancelRh(taskId: string): Promise<{ taskId: string; raw?: any }> {
+  const r = await fetch('/api/proxy/runninghub/cancel', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId }),
+  });
+  const data = await parseJsonResponse(r);
+  if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
+  return data.data;
+}
 export async function fetchRhAppInfo(webappId: string): Promise<any> {
   const url = `/api/proxy/runninghub/app-info?webappId=${encodeURIComponent(webappId)}`;
   const r = await fetch(url);

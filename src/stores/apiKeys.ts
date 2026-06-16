@@ -34,6 +34,7 @@ const DEFAULT: ApiSettings = {
   nanoBananaApiKey: '',
   mjApiKey: '',
   veoApiKey: '',
+  soraApiKey: '',
   grokApiKey: '',
   seedanceApiKey: '',
   sunoApiKey: '',
@@ -59,6 +60,7 @@ const DEFAULT: ApiSettings = {
     defaultTargetId: '',
     defaultLabel: '',
   },
+  taskCompletionSound: { mode: 'default', url: '' },
   preferences: { theme: 'dark', language: 'zh-CN' },
 };
 

@@ -8,9 +8,10 @@ import {
   type NodeProps,
   type Node,
 } from '@xyflow/react';
-import { MonitorPlay, Type as TypeIcon, Image as ImageIcon, Video as VideoIcon, Music, Download, Pencil, Check, Edit3, GitCompare } from 'lucide-react';
+import { Box, MonitorPlay, Type as TypeIcon, Image as ImageIcon, Video as VideoIcon, Music, Download, Pencil, Check, Edit3, GitCompare, Trash2 } from 'lucide-react';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useThemeStore } from '../../stores/theme';
+import { logBus } from '../../stores/logs';
 import { PORT_COLOR } from '../../config/portTypes';
 import { resolveThemeTemplate } from '../../theme/defaultTemplates';
 import ImageEditModal, { type ImageEditProduceMeta } from './ImageEditModal';
@@ -18,13 +19,18 @@ import ImageCompareModal from '../ImageCompareModal';
 import CollectionSplitButton from '../CollectionSplitButton';
 import ImageHoverPreview from '../ImageHoverPreview';
 import LoopingVideo from '../LoopingVideo';
+import MediaMetadataBadge from '../MediaMetadataBadge';
+import RhImageCapabilityRail from '../RhImageCapabilityRail';
 import SmartImage from '../SmartImage';
 import { useMaterialDropTarget } from '../../hooks/useMaterialDropTarget';
 import { useDragMaterialStore, type MaterialPayload } from '../../stores/dragMaterial';
 import ResizableCorners from './ResizableCorners';
 import { saveAssetToDisk } from '../../services/api';
 import {
+  createOutputMediaRemovalData,
   createOutputDataFromItem,
+  fileNameFromUrl,
+  isMaterialUrlHidden,
   type MediaItem,
   type MediaKind,
 } from '../../utils/mediaCollection';
@@ -38,11 +44,13 @@ import { collectMaterialSetBucketsFromData, valueOfMaterialSetItem } from '../..
 // v1.2.10.5: 节点落点防重叠 —— 双击编辑产出 N 节点 3 列宫格整组避让
 import { placeBatchNodes, defaultSizeOf, type Rect as PlacementRect } from '../../utils/nodePlacement';
 
+type OutputProduceMeta = ImageEditProduceMeta | { type: 'rh-capability'; label?: string };
+
 /**
  * OutputNode - 通用输出素材节点 (中继展示型)
  *
  * 设计:
- *   1. 输入: 接收上游任意 文本/图像/视频/音频 连入 (target handle, 左侧)
+ *   1. 输入: 接收上游任意 文本/图像/视频/音频/3D模型 连入 (target handle, 左侧)
  *   2. 自动遍历上游节点的 data, 抽取所有可识别的:
  *      - 文本: prompt / reply / text / outputText
  *      - 图像: imageUrl / imageUrls[] / urls[] / generatedImages[]
@@ -51,8 +59,8 @@ import { placeBatchNodes, defaultSizeOf, type Rect as PlacementRect } from '../.
  *   3. 分区显示, 图像/视频按原始宽高比 (object-contain + maxHeight) 不强制裁剪
  *   4. 文本双击进入可编辑状态, 编辑保存到 data.outputText (覆盖上游 live 文本)
  *      置空 outputText 时再次显示上游原文
- *   5. 输出: 收集到的 文本/图像/视频/音频 同时透传到本节点自身 data 的
- *      prompt / imageUrl / imageUrls / urls / videoUrl / audioUrl 字段上,
+ *   5. 输出: 收集到的 文本/图像/视频/音频/3D模型 同时透传到本节点自身 data 的
+ *      prompt / imageUrl / imageUrls / urls / videoUrl / audioUrl / modelUrl 字段上,
  *      下游节点能像读上游一样读到 (source handle, 右侧, any)
  *
  * 渲染联动机制(重要):
@@ -64,6 +72,7 @@ import { placeBatchNodes, defaultSizeOf, type Rect as PlacementRect } from '../.
 
 const isVideoUrl = (u: string) => /\.(mp4|webm|mov|m4v|mkv)(\?|$)/i.test(u);
 const isAudioUrl = (u: string) => /\.(mp3|wav|ogg|m4a|flac)(\?|$)/i.test(u);
+const isModel3DUrl = (u: string) => /\.(glb|gltf|obj|fbx|stl|usdz|zip)(\?|$)/i.test(u) || /^data:model\//i.test(u);
 
 const NODE_INPUT_LABELS: Record<string, string> = {
   upload: '上传图',
@@ -84,6 +93,7 @@ interface Collected {
   images: string[];
   videos: string[];
   audios: string[];
+  models: string[];
 }
 
 const OutputNode = ({ id, data, selected }: NodeProps) => {
@@ -92,6 +102,7 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
   const isDark = theme === 'dark';
   const d = (data as any) || {};
   const rf = useReactFlow();
+  const [rhCapabilityBusy, setRhCapabilityBusy] = useState(false);
   const activeTemplate = useMemo(
     () => resolveThemeTemplate(templateId, customTemplates),
     [templateId, customTemplates],
@@ -152,6 +163,8 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
         const arr5 = Array.isArray(ud.textSegments) ? ud.textSegments.join('\u241F') : '';
         const arr6 = Array.isArray(ud.segments) ? ud.segments.join('\u241F') : '';
         const arr7 = Array.isArray(ud.texts) ? ud.texts.join('\u241F') : '';
+        const arrModel1 = Array.isArray(ud.modelUrls) ? ud.modelUrls.join(',') : '';
+        const arrModel2 = Array.isArray(ud.directModelUrls) ? ud.directModelUrls.join(',') : '';
         const arr8 = Array.isArray(ud.materialSetItems)
           ? JSON.stringify(ud.materialSetItems.map((item: any) => [item?.kind, item?.url, item?.text, item?.name]))
           : '';
@@ -167,6 +180,8 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
           ud.videoUrl || '',
           ud.audioUrl || '',
           ud.audioUrl_1 || '', // Suno 双轨副轨; 漏写会导致只显示第 1 首
+          ud.modelUrl || '',
+          ud.directModelUrl || '',
           ud.firstFrameUrl || '', // v1.2.8.4: FramePair 双端口字段
           ud.lastFrameUrl || '',
           ud.__loopAccumulate ? `LA:${ud.__loopAccumulate}` : '', // v1.2.9.1: 循环累积标记 — 进入/退出循环时需重算 collected
@@ -177,6 +192,8 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
           arr5,
           arr6,
           arr7,
+          arrModel1,
+          arrModel2,
           arr8,
         ].join('§');
       })
@@ -184,7 +201,7 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
   }, [upstreamNodes]);
 
   const collected = useMemo<Collected>(() => {
-    const out: Collected = { texts: [], images: [], videos: [], audios: [] };
+    const out: Collected = { texts: [], images: [], videos: [], audios: [], models: [] };
 
     // 「被 LLM 消化」文本跳过集: 与 useUpstreamMaterials 保持一致。
     // 场景: TextNode 同时连 LLM 和 OutputNode 时, 避免 原始 prompt + LLM reply 同现 2 条。
@@ -225,6 +242,15 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
       if (!s) return;
       if (skipTextSet.has(s)) return;
       arr.push(s);
+    };
+    const pushClassifiedUrl = (value: any) => {
+      if (typeof value !== 'string') return;
+      const url = value.trim();
+      if (!url) return;
+      if (isModel3DUrl(url)) pushUnique(out.models, url);
+      else if (isVideoUrl(url)) pushUnique(out.videos, url);
+      else if (isAudioUrl(url)) pushUnique(out.audios, url);
+      else pushUnique(out.images, url);
     };
 
     const directOnlyOutput = Boolean(d.rhDuckDecoded);
@@ -286,8 +312,14 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
         const arrFields = ['imageUrls', 'urls', 'generatedImages'];
         for (const f of arrFields) {
           const v = ud[f];
-          if (Array.isArray(v)) v.forEach((u) => pushUnique(out.images, u));
+          if (Array.isArray(v)) v.forEach((u) => (f === 'urls' ? pushClassifiedUrl(u) : pushUnique(out.images, u)));
         }
+
+      // 3D 模型
+        pushUnique(out.models, ud.modelUrl);
+        pushUnique(out.models, ud.directModelUrl);
+        if (Array.isArray(ud.modelUrls)) ud.modelUrls.forEach((u: any) => pushUnique(out.models, u));
+        if (Array.isArray(ud.directModelUrls)) ud.directModelUrls.forEach((u: any) => pushUnique(out.models, u));
 
       // 视频
         pushUnique(out.videos, ud.videoUrl);
@@ -336,6 +368,12 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
     if (Array.isArray(d.directAudioUrls)) {
       d.directAudioUrls.forEach((u: any) => pushUnique(out.audios, u));
     }
+    if (typeof d.directModelUrl === 'string' && d.directModelUrl) {
+      pushUnique(out.models, d.directModelUrl);
+    }
+    if (Array.isArray(d.directModelUrls)) {
+      d.directModelUrls.forEach((u: any) => pushUnique(out.models, u));
+    }
     // v1.2.8.5: 循环器跨轮累积的文本联接作为独立一项加入 (已含 —— 分隔符)
     if (typeof d.directOutputText === 'string' && d.directOutputText) {
       pushUniqueText(out.texts, d.directOutputText);
@@ -346,6 +384,10 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
 
     // 兜底: 一些节点把视频/音频塞在 imageUrl, 通过扩展名识别再纠正
     out.images = out.images.filter((u) => {
+      if (isModel3DUrl(u)) {
+        if (out.models.indexOf(u) === -1) out.models.push(u);
+        return false;
+      }
       if (isVideoUrl(u)) {
         if (out.videos.indexOf(u) === -1) out.videos.push(u);
         return false;
@@ -359,7 +401,7 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
 
     // === pickKind / pickIndex 过滤 ===
     // Canvas 自动创建多个 OutputNode 映射上游多项输出时,
-    // 会在 data 里标记 pickKind ('image'/'video'/'audio') + pickIndex,
+    // 会在 data 里标记 pickKind ('text'/'image'/'video'/'audio') + pickIndex,
     // 则本节点只保留对应 kind 的第 pickIndex 项, 避免多图场景下
     // 所有 OutputNode 都重复显示全部输出。
     // 手动连连的 OutputNode 不带 pickKind => 保留原语义 (显示上游全部).
@@ -369,41 +411,122 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
     //         里累积了 N 张, 但 Canvas autoOutput 早在第一轮就把它升级为 pickKind='image', pickIndex=0,
     //         finally 清除 __loopAccumulate 后 collected.images 顺序变成 [fresh_lastRound, direct_r1, direct_r2 dedup],
     //         pickIndex=0 把全集砍成 [fresh_lastRound] → 用户只看到最后一轮 (典型 ImageNode/VideoNode/AudioNode 覆盖症状)。
-    //   修复: 若 OutputNode 自身已有 direct*Urls / directOutputText 累积值 (>0 项),
+    //   修复: 若 OutputNode 自身已有 direct*Urls / directOutputText 累积多项,
     //         说明它是 LoopNode 累积模式的 OutputNode, 跳过 pickKind 切割, 全量展示 fresh+direct 去重结果。
+    //         注意: 输出素材持久化会给每个自动 OutputNode 写入单项 direct* 快照。
+    //         单项快照仍必须保留 pickKind/pickIndex, 否则宫格剪裁等多产物会退回“每个输出节点显示整组”。
     //         与 FramePair 行为对齐 (FramePair 走 autoOutput 专属路径不带 pickKind, 不受此 BUG 影响)。
+    const directTextSegments = Array.isArray(d.directTextSegments) ? d.directTextSegments : [];
+    const directOutputTextSegments =
+      typeof d.directOutputText === 'string' && d.directOutputText.trim()
+        ? d.directOutputText.split('\n\n').map((item: string) => item.trim()).filter(Boolean)
+        : [];
     const hasAnyDirectAccumulated =
-      (Array.isArray(d.directImageUrls) && d.directImageUrls.length > 0) ||
-      (Array.isArray(d.directVideoUrls) && d.directVideoUrls.length > 0) ||
-      (Array.isArray(d.directAudioUrls) && d.directAudioUrls.length > 0) ||
-      (typeof d.directOutputText === 'string' && d.directOutputText.length > 0);
+      (Array.isArray(d.directImageUrls) && d.directImageUrls.length > 1) ||
+      (Array.isArray(d.directVideoUrls) && d.directVideoUrls.length > 1) ||
+      (Array.isArray(d.directAudioUrls) && d.directAudioUrls.length > 1) ||
+      (Array.isArray(d.directModelUrls) && d.directModelUrls.length > 1) ||
+      directTextSegments.length > 1 ||
+      directOutputTextSegments.length > 1;
     const pickKind: string | undefined = hasAnyDirectAccumulated ? undefined : d.pickKind;
     const pickIndex: number | undefined =
       typeof d.pickIndex === 'number' ? d.pickIndex : undefined;
     if (pickKind && typeof pickIndex === 'number') {
-      if (pickKind === 'image') {
+      if (pickKind === 'text') {
+        out.texts = out.texts[pickIndex] ? [out.texts[pickIndex]] : [];
+        out.images = [];
+        out.videos = [];
+        out.audios = [];
+        out.models = [];
+      } else if (pickKind === 'image') {
         out.images = out.images[pickIndex] ? [out.images[pickIndex]] : [];
         out.videos = [];
         out.audios = [];
+        out.models = [];
         // 图像项模式下还保留文本 (提示词) 以便下游可读
       } else if (pickKind === 'video') {
         out.videos = out.videos[pickIndex] ? [out.videos[pickIndex]] : [];
         out.images = [];
         out.audios = [];
+        out.models = [];
       } else if (pickKind === 'audio') {
         out.audios = out.audios[pickIndex] ? [out.audios[pickIndex]] : [];
         out.images = [];
         out.videos = [];
+        out.models = [];
+      } else if (pickKind === 'model3d') {
+        out.models = out.models[pickIndex] ? [out.models[pickIndex]] : [];
+        out.images = [];
+        out.videos = [];
+        out.audios = [];
       }
     }
 
+    out.images = out.images.filter((u) => !isMaterialUrlHidden(d, 'image', u));
+    out.videos = out.videos.filter((u) => !isMaterialUrlHidden(d, 'video', u));
+    out.audios = out.audios.filter((u) => !isMaterialUrlHidden(d, 'audio', u));
+    out.models = out.models.filter((u) => !isMaterialUrlHidden(d, 'model3d', u));
+
     return out;
-  }, [upstreamNodes, upstreamSig, handleMap, d.pickKind, d.pickIndex, d.directImageUrl, d.directImageUrls, d.directVideoUrl, d.directVideoUrls, d.directAudioUrl, d.directAudioUrls, d.directOutputText, d.directTextSegments, d.rhDuckDecoded]);
+  }, [upstreamNodes, upstreamSig, handleMap, d.pickKind, d.pickIndex, d.directImageUrl, d.directImageUrls, d.directVideoUrl, d.directVideoUrls, d.directAudioUrl, d.directAudioUrls, d.directModelUrl, d.directModelUrls, d.modelUrl, d.modelUrls, d.directOutputText, d.directTextSegments, d.hiddenMaterialUrls, d.rhDuckDecoded]);
 
   // 文本编辑
   const overrideText: string = typeof d.outputText === 'string' ? d.outputText : '';
   const liveText = collected.texts.join('\n\n──────\n\n');
   const displayText = overrideText !== '' ? overrideText : liveText;
+  const mediaPromptByUrl = useMemo(() => {
+    const map = new Map<string, { prompt: string; negative: string }>();
+    const clean = (value: any) => (typeof value === 'string' ? value.trim() : '');
+    const readPrompt = (ud: any) => clean(ud?.lastPrompt) || clean(ud?.prompt) || clean(ud?.outputText) || clean(ud?.text) || clean(ud?.reply);
+    const readNegative = (ud: any) => clean(ud?.negativePrompt) || clean(ud?.negative) || clean(ud?.providerParams?.negativePrompt) || clean(ud?.providerParams?.negative);
+    const add = (value: any, prompt: string, negative: string) => {
+      const url = clean(value);
+      if (!url || map.has(url)) return;
+      map.set(url, { prompt, negative });
+    };
+    const addArray = (values: any, prompt: string, negative: string) => {
+      if (Array.isArray(values)) values.forEach((url) => add(url, prompt, negative));
+    };
+
+    const list = Array.isArray(upstreamNodes) ? upstreamNodes : [];
+    for (const node of list) {
+      const ud: any = (node as any)?.data || {};
+      const prompt = readPrompt(ud);
+      const negative = readNegative(ud);
+      if (!prompt) continue;
+      add(ud.imageUrl, prompt, negative);
+      addArray(ud.imageUrls, prompt, negative);
+      addArray(ud.urls, prompt, negative);
+      addArray(ud.generatedImages, prompt, negative);
+      add(ud.firstFrameUrl, prompt, negative);
+      add(ud.lastFrameUrl, prompt, negative);
+      add(ud.videoUrl, prompt, negative);
+      addArray(ud.videoUrls, prompt, negative);
+      add(ud.audioUrl, prompt, negative);
+      add(ud.audioUrl_1, prompt, negative);
+      addArray(ud.audioUrls, prompt, negative);
+      add(ud.modelUrl, prompt, negative);
+      add(ud.directModelUrl, prompt, negative);
+      addArray(ud.modelUrls, prompt, negative);
+      addArray(ud.directModelUrls, prompt, negative);
+    }
+
+    const ownPrompt = clean(d.lastPrompt) || clean(d.prompt) || clean(d.directOutputText) || displayText.trim();
+    const ownNegative = readNegative(d);
+    if (ownPrompt) {
+      add(d.directImageUrl, ownPrompt, ownNegative);
+      addArray(d.directImageUrls, ownPrompt, ownNegative);
+      add(d.directVideoUrl, ownPrompt, ownNegative);
+      addArray(d.directVideoUrls, ownPrompt, ownNegative);
+      add(d.directAudioUrl, ownPrompt, ownNegative);
+      addArray(d.directAudioUrls, ownPrompt, ownNegative);
+      add(d.directModelUrl, ownPrompt, ownNegative);
+      addArray(d.directModelUrls, ownPrompt, ownNegative);
+      add(d.modelUrl, ownPrompt, ownNegative);
+      addArray(d.modelUrls, ownPrompt, ownNegative);
+    }
+    return map;
+  }, [d.directAudioUrl, d.directAudioUrls, d.directImageUrl, d.directImageUrls, d.directModelUrl, d.directModelUrls, d.directOutputText, d.directVideoUrl, d.directVideoUrls, d.lastPrompt, d.modelUrl, d.modelUrls, d.negative, d.negativePrompt, d.prompt, d.providerParams, displayText, upstreamNodes, upstreamSig]);
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -432,7 +555,7 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
   const effectiveAccent = isRhDuckOutput ? '#ff345f' : isYyhPortraitOutput ? '#ff4fd8' : accent;
   const effectiveHandle = isRhDuckOutput ? '#ff345f' : isYyhPortraitOutput ? '#ff4fd8' : HANDLE;
 
-  const total = collected.texts.length + collected.images.length + collected.videos.length + collected.audios.length;
+  const total = collected.texts.length + collected.images.length + collected.videos.length + collected.audios.length + collected.models.length;
 
   // === 双击图片 → 裁剪/宫格弹窗 ===
   // 仅针对 collected.images 中的单张图生效; 产物“不”修改本节点, 而是
@@ -497,6 +620,12 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
     });
   };
 
+  const handleRemoveOutputMaterial = (kind: MediaKind, url: string) => {
+    update(createOutputMediaRemovalData(d, kind, url));
+    if (editingUrl === url) setEditingUrl(null);
+    if (compareState?.resultUrl === url) setCompareState(null);
+  };
+
   const splitOutputCollection = (kind: MediaKind, urls: string[]) => {
     if (!urls || urls.length <= 1) return;
     const me = rf.getNode(id);
@@ -506,9 +635,11 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
     const baseY = me?.position?.y ?? 0;
     const ts = Date.now();
     const COLS = 3;
-    const COL_W = 350;
+    const targetType = kind === 'model3d' ? 'model-3d-preview' : 'output';
+    const targetSize = defaultSizeOf(targetType);
+    const COL_W = targetType === 'model-3d-preview' ? targetSize.w + 40 : 350;
     const ROW_H = Math.max(300, myH);
-    const _sz = defaultSizeOf('output');
+    const _sz = targetSize;
     const items: MediaItem[] = urls.map((url) => ({ kind, url }));
     const _desired: PlacementRect[] = items.map((_, i) => ({
       x: baseX + (i % COLS) * COL_W,
@@ -518,8 +649,8 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
     }));
     const _off = placeBatchNodes(_desired, rf.getNodes(), { source: `placement:split-output:${id}` });
     const newNodes: Node[] = items.map((item, i) => ({
-      id: `output-split-${id}-${ts}-${i}-${Math.random().toString(36).slice(2, 6)}`,
-      type: 'output',
+      id: `${targetType}-split-${id}-${ts}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+      type: targetType,
       position: {
         x: baseX + (i % COLS) * COL_W + _off.dx,
         y: baseY + Math.floor(i / COLS) * ROW_H + _off.dy,
@@ -530,8 +661,14 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
     rf.addNodes(newNodes);
   };
 
-  const handleProduce = (urls: string[], _meta: ImageEditProduceMeta) => {
-    if (!urls || urls.length === 0) return;
+  const handleProduce = (urls: string[], _meta?: OutputProduceMeta) => {
+    const cleanUrls = (Array.isArray(urls) ? urls : []).map((url) => String(url || '').trim()).filter(Boolean);
+    const isRhCapabilityOutput = _meta?.type === 'rh-capability';
+    const logSource = `rh-image-output:${id}`;
+    if (cleanUrls.length === 0) {
+      if (isRhCapabilityOutput) logBus.warn(`${_meta.label || 'RH 图像能力'}完成但没有可创建的图像 URL`, logSource);
+      return;
+    }
     const me = rf.getNode(id);
     const myW = (me as any)?.measured?.width || (me as any)?.width || 320;
     const myH = (me as any)?.measured?.height || (me as any)?.height || 360;
@@ -543,13 +680,16 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
     const ts = Date.now();
     // v1.2.10.5: 整组防重叠 —— 先算期望 3 列宫格, 再求公共偏移
     const _sz = defaultSizeOf('output');
-    const _desired: PlacementRect[] = urls.map((_, i) => ({
+    if (isRhCapabilityOutput) {
+      logBus.info(`${_meta.label || 'RH 图像能力'}准备创建 ${cleanUrls.length} 个输出素材节点`, logSource);
+    }
+    const _desired: PlacementRect[] = cleanUrls.map((_, i) => ({
       x: baseX + (i % COLS) * COL_W,
       y: baseY + Math.floor(i / COLS) * ROW_H,
       w: _sz.w, h: _sz.h,
     }));
     const _off = placeBatchNodes(_desired, rf.getNodes(), { source: `placement:produce:${id}` });
-    const newNodes: Node[] = urls.map((u, i) => {
+    const newNodes: Node[] = cleanUrls.map((u, i) => {
       const newId = `output-auto-edit-${id}-${ts}-${i}-${Math.random()
         .toString(36)
         .slice(2, 6)}`;
@@ -565,9 +705,28 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
           // 便于下游节点从 data 读取 (与现有 effect 透传不冲突)
           imageUrl: u,
         },
+        selected: isRhCapabilityOutput,
       } as Node;
     });
-    rf.addNodes(newNodes);
+    if (isRhCapabilityOutput) {
+      rf.setNodes((prev) => [...prev.map((node) => ({ ...node, selected: false })), ...newNodes]);
+      const first = newNodes[0];
+      if (first) {
+        window.setTimeout(() => {
+          try {
+            rf.setCenter(first.position.x + _sz.w / 2, first.position.y + _sz.h / 2, {
+              zoom: Math.max(0.7, Math.min(1.2, rf.getZoom())),
+              duration: 320,
+            });
+          } catch {
+            /* 视野定位失败不影响节点创建 */
+          }
+        }, 0);
+      }
+      logBus.success(`${_meta.label || 'RH 图像能力'}已创建 ${newNodes.length} 个输出素材节点`, logSource);
+    } else {
+      rf.addNodes(newNodes);
+    }
   };
 
   // === 跨节点拖拽: source (从 collected.* 拖出) ===
@@ -622,7 +781,8 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
     const hasNonText =
       collected.images.length > 0 ||
       collected.videos.length > 0 ||
-      collected.audios.length > 0;
+      collected.audios.length > 0 ||
+      collected.models.length > 0;
     const passText = hasNonText ? '' : (displayText || '');
     const next: any = {
       prompt: passText,
@@ -634,6 +794,8 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
       videoUrl: collected.videos[0] || '',
       audioUrl: collected.audios[0] || '',
       audioUrl_1: collected.audios[1] || '', // 透传 Suno 双轨副轨避免串联丢失
+      modelUrl: collected.models[0] || '',
+      modelUrls: collected.models.slice(),
       textSegments: hasNonText ? [] : collected.texts.slice(),
       segments: hasNonText ? [] : collected.texts.slice(),
     };
@@ -647,6 +809,8 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
       videoUrl: d.videoUrl || '',
       audioUrl: d.audioUrl || '',
       audioUrl_1: d.audioUrl_1 || '',
+      modelUrl: d.modelUrl || '',
+      modelUrls: Array.isArray(d.modelUrls) ? d.modelUrls : [],
       textSegments: Array.isArray(d.textSegments) ? d.textSegments : [],
       segments: Array.isArray(d.segments) ? d.segments : [],
     };
@@ -658,8 +822,10 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
       cur.videoUrl !== next.videoUrl ||
       cur.audioUrl !== next.audioUrl ||
       cur.audioUrl_1 !== next.audioUrl_1 ||
+      cur.modelUrl !== next.modelUrl ||
       JSON.stringify(cur.imageUrls) !== JSON.stringify(next.imageUrls) ||
       JSON.stringify(cur.urls) !== JSON.stringify(next.urls) ||
+      JSON.stringify(cur.modelUrls) !== JSON.stringify(next.modelUrls) ||
       JSON.stringify(cur.textSegments) !== JSON.stringify(next.textSegments) ||
       JSON.stringify(cur.segments) !== JSON.stringify(next.segments);
     if (changed) update(next);
@@ -678,6 +844,7 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
       ...collected.images,
       ...collected.videos,
       ...collected.audios,
+      ...collected.models,
     ].filter(Boolean);
     if (all.length === 0) return;
     const fresh = all.filter((u) => !savedUrlsRef.current.has(u));
@@ -692,7 +859,9 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
   // === 选中节点上方浮动「Edit」按钮 ===
   // 仅当节点被选中且至少存在一张图像时出现，等价于双击图像触发
   // ImageEditModal（裁剪 / 宫格切分），多图时编辑第一张。
-  const canEditImage = selected && collected.images.length > 0;
+  const hasEditableImages = collected.images.length > 0;
+  const canEditImage = selected && hasEditableImages;
+  const showRhCapabilityRail = (selected || rhCapabilityBusy) && hasEditableImages;
   const onClickEditTopBtn = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (collected.images.length > 0) setEditingUrl(collected.images[0]);
@@ -714,37 +883,56 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
         accent={effectiveAccent}
         onResize={(_e, p) => setSize({ w: p.width, h: p.height })}
       />
-      {/* 选中时浮动「Edit」按钮 — 仅图像类型可用，与双击预览图等价 */}
+      {/* 选中时浮动图像操作按钮 — Edit 保持本地编辑，RH 图像能力走左侧轨道 */}
       {canEditImage && (
-        <button
-          type="button"
+        <div
           className="nodrag nopan"
-          onClick={onClickEditTopBtn}
           onMouseDown={(e) => e.stopPropagation()}
-          title="编辑图像（裁剪 / 宫格切分），等同双击预览图"
           style={{
             position: 'absolute',
             top: -34,
             left: 0,
-            display: 'inline-flex',
+            display: 'flex',
             alignItems: 'center',
-            gap: 4,
-            padding: '4px 10px',
-            height: 26,
-            background: isDark ? 'rgba(28,28,32,0.92)' : 'rgba(255,255,255,0.95)',
-            color: effectiveAccent,
-            border: `1px solid ${effectiveAccent}66`,
-            borderRadius: 6,
-            boxShadow: isDark ? '0 6px 24px rgba(0,0,0,0.4)' : '0 6px 24px rgba(0,0,0,0.12)',
-            cursor: 'pointer',
-            fontSize: 12,
-            fontWeight: 600,
+            gap: 6,
             zIndex: 30,
           }}
         >
-          <Edit3 size={12} />
-          <span>Edit</span>
-        </button>
+          <button
+            type="button"
+            className="nodrag nopan"
+            onClick={onClickEditTopBtn}
+            onMouseDown={(e) => e.stopPropagation()}
+            title="编辑图像（裁剪 / 宫格切分），等同双击预览图"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '4px 10px',
+              height: 26,
+              background: isDark ? 'rgba(28,28,32,0.92)' : 'rgba(255,255,255,0.95)',
+              color: effectiveAccent,
+              border: `1px solid ${effectiveAccent}66`,
+              borderRadius: 6,
+              boxShadow: isDark ? '0 6px 24px rgba(0,0,0,0.4)' : '0 6px 24px rgba(0,0,0,0.12)',
+              cursor: 'pointer',
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            <Edit3 size={12} />
+            <span>Edit</span>
+          </button>
+        </div>
+      )}
+      {showRhCapabilityRail && (
+        <RhImageCapabilityRail
+          sourceUrls={collected.images}
+          accent={effectiveAccent}
+          isDark={isDark}
+          onComplete={(result) => handleProduce(result.imageUrls, { type: 'rh-capability', label: result.tool.title })}
+          onRunningChange={setRhCapabilityBusy}
+        />
       )}
       {/* target handle (左侧) - 上游任意类型可连入 */}
       <Handle
@@ -763,7 +951,7 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
           zIndex: 12,
           pointerEvents: 'all',
         }}
-        title="文本 / 图像 / 视频 / 音频 任意类型可连入"
+        title="文本 / 图像 / 视频 / 音频 / 3D模型 任意类型可连入"
       />
       {/* source handle (右侧) - 作为中继节点可继续向下游透传 (any) */}
       <Handle
@@ -782,7 +970,7 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
           zIndex: 12,
           pointerEvents: 'all',
         }}
-        title="透传 文本 / 图像 / 视频 / 音频 到下游"
+        title="透传 文本 / 图像 / 视频 / 音频 / 3D模型 到下游"
       />
 
       {/* 内层裁切容器: 圆角 + 越界裁切, 不影响外层 handle */}
@@ -841,7 +1029,7 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
           >
             {upstreamHasLoop
               ? '循环器不输出素材 · 请在「循环器 → EXEC 节点 → OutputNode」链路中查看累积结果'
-              : '连入上游 文本 / 图像 / 视频 / 音频 节点'}
+              : '连入上游 文本 / 图像 / 视频 / 音频 / 3D模型 节点'}
           </div>
         )}
 
@@ -938,26 +1126,83 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
                 className="opacity-100 transition sm:opacity-0 sm:group-hover/output-images:opacity-100 sm:focus-within:opacity-100"
               />
             </div>
-            {/* 单张：全宽大图预览；多张：3 列网格（一行最多 3 张，超过自动换行） */}
+            {/* 单张：全宽大图预览；多张：2 列原比例预览，操作按钮放在图片上方，避免遮挡下载。 */}
             <div
               className={
                 collected.images.length >= 2
-                  ? 'grid grid-cols-3 gap-1.5'
+                  ? 'grid grid-cols-2 gap-1.5'
                   : 'space-y-1'
               }
             >
               {collected.images.map((u, i) => (
                 <div key={i} className="group group/output-image-card space-y-0.5">
                   <div className="relative">
+                    <div
+                      className={
+                        collected.images.length >= 2
+                          ? 't8-output-image-action-stack t8-output-image-action-stack--compact t8-output-image-action-stack--above z-10 mb-1 flex flex-row justify-end gap-1 opacity-100'
+                          : 't8-output-image-action-stack absolute right-1.5 top-1.5 z-10 flex flex-col gap-1 opacity-100 transition sm:opacity-0 sm:group-hover/output-image-card:opacity-100 sm:focus-within:opacity-100'
+                      }
+                    >
+                      <button
+                        type="button"
+                        className="nodrag nopan t8-btn t8-mini-icon-button t8-image-compare-button t8-material-action-button p-0 shadow-md transition"
+                        title="对比输入图与结果图"
+                        aria-label="对比输入图与结果图"
+                        onPointerDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          openImageCompare(u);
+                        }}
+                      >
+                        <GitCompare size={collected.images.length >= 2 ? 10 : 13} />
+                      </button>
+                      <ImageHoverPreview
+                        src={u}
+                        alt={`图像 ${i + 1}`}
+                        iconSize={collected.images.length >= 2 ? 10 : 14}
+                        buttonClassName="t8-material-action-button p-0 shadow-md transition"
+                      />
+                      <button
+                        type="button"
+                        className="nodrag nopan t8-btn t8-mini-icon-button t8-material-delete-button t8-material-action-button p-0 shadow-md transition"
+                        title={`删除素材 ${i + 1}`}
+                        aria-label={`删除素材 ${i + 1}`}
+                        style={{ color: 'var(--t8-danger, #ef4444)' }}
+                        onPointerDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleRemoveOutputMaterial('image', u);
+                        }}
+                      >
+                        <Trash2 size={collected.images.length >= 2 ? 10 : 13} />
+                      </button>
+                    </div>
                     <SmartImage
                       src={u}
                       alt={`图像 ${i + 1}`}
-                      className="w-full h-auto rounded block cursor-zoom-in"
-                      thumbSize={collected.images.length >= 2 ? 360 : 720}
+                      className={`t8-output-image-media${collected.images.length >= 2 ? ' t8-output-image-media--grid' : ''} w-full rounded block cursor-zoom-in`}
+                      thumbSize={collected.images.length >= 2 ? 420 : 720}
                       style={{
                         background: '#0008',
                         objectFit: 'contain',
-                        maxHeight: collected.images.length >= 2 ? 140 : 480,
+                        maxHeight: collected.images.length >= 2 ? 180 : 480,
                       }}
                       data-drag-source
                       data-drag-kind="image"
@@ -965,6 +1210,10 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
                       data-drag-preview={u}
                       data-drag-node-id={id}
                       data-resource-title={u.split('/').pop()}
+                      data-prompt-template-kind="image"
+                      data-prompt-template-category="image-reference-edit"
+                      data-prompt-template-prompt={mediaPromptByUrl.get(u)?.prompt || displayText}
+                      data-prompt-template-negative={mediaPromptByUrl.get(u)?.negative || ''}
                       onMouseDown={(e) =>
                         beginMaterialDrag(e, { kind: 'image', url: u, sourceNodeId: id, previewUrl: u })
                       }
@@ -974,35 +1223,10 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
                       }}
                       title="双击编辑 (裁剪 / 宫格切分) · Ctrl+拖拽可送到其他节点"
                     />
-                    <button
-                      type="button"
-                      className="nodrag nopan t8-btn t8-mini-icon-button t8-image-compare-button absolute right-1.5 top-1.5 z-10 h-7 w-7 p-0 opacity-100 shadow-md transition sm:opacity-0 sm:group-hover/output-image-card:opacity-100 sm:focus:opacity-100"
-                      title="对比输入图与结果图"
-                      aria-label="对比输入图与结果图"
-                      onPointerDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        openImageCompare(u);
-                      }}
-                    >
-                      <GitCompare size={13} />
-                    </button>
-                    <ImageHoverPreview
-                      src={u}
-                      alt={`图像 ${i + 1}`}
-                      buttonClassName="absolute right-1.5 top-10 z-10 h-7 w-7 p-0 opacity-0 shadow-md transition group-hover/output-image-card:opacity-100 focus:opacity-100"
-                    />
                   </div>
                   <div className={`flex items-center gap-1 text-[10px] ${isDark ? 'text-white/40' : 'text-zinc-400'}`}>
                     <span className="truncate flex-1" title={u}>{u.split('/').pop()}</span>
+                    <MediaMetadataBadge kind="image" url={u} />
                     <a
                       href={u}
                       target="_blank"
@@ -1047,12 +1271,17 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
                   data-drag-preview={u}
                   data-drag-node-id={id}
                   data-resource-title={u.split('/').pop()}
+                  data-prompt-template-kind="video"
+                  data-prompt-template-category="video-image-to-video"
+                  data-prompt-template-prompt={mediaPromptByUrl.get(u)?.prompt || displayText}
+                  data-prompt-template-negative={mediaPromptByUrl.get(u)?.negative || ''}
                   onMouseDown={(e) =>
                     beginMaterialDrag(e, { kind: 'video', url: u, sourceNodeId: id, previewUrl: u })
                   }
                 />
                 <div className={`flex items-center gap-1 text-[10px] ${isDark ? 'text-white/40' : 'text-zinc-400'}`}>
                   <span className="truncate flex-1" title={u}>{u.split('/').pop()}</span>
+                  <MediaMetadataBadge kind="video" url={u} />
                   <a
                     href={u}
                     target="_blank"
@@ -1064,6 +1293,21 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
                   >
                     <Download size={10} /> 下载
                   </a>
+                  <button
+                    type="button"
+                    className={`nodrag nopan p-0.5 rounded ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/10'}`}
+                    title={`删除素材 ${i + 1}`}
+                    aria-label={`删除素材 ${i + 1}`}
+                    style={{ color: 'var(--t8-danger, #ef4444)' }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleRemoveOutputMaterial('video', u);
+                    }}
+                  >
+                    <Trash2 size={11} />
+                  </button>
                 </div>
               </div>
             ))}
@@ -1094,12 +1338,17 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
                   data-drag-url={u}
                   data-drag-node-id={id}
                   data-resource-title={u.split('/').pop()}
+                  data-prompt-template-kind="video"
+                  data-prompt-template-category="video-music-audio"
+                  data-prompt-template-prompt={mediaPromptByUrl.get(u)?.prompt || displayText}
+                  data-prompt-template-negative={mediaPromptByUrl.get(u)?.negative || ''}
                   onMouseDown={(e) =>
                     beginMaterialDrag(e, { kind: 'audio', url: u, sourceNodeId: id })
                   }
                 />
                 <div className={`flex items-center gap-1 text-[10px] ${isDark ? 'text-white/40' : 'text-zinc-400'}`}>
                   <span className="truncate flex-1" title={u}>{u.split('/').pop()}</span>
+                  <MediaMetadataBadge kind="audio" url={u} />
                   <a
                     href={u}
                     target="_blank"
@@ -1111,9 +1360,96 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
                   >
                     <Download size={10} /> 下载
                   </a>
+                  <button
+                    type="button"
+                    className={`nodrag nopan p-0.5 rounded ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/10'}`}
+                    title={`删除素材 ${i + 1}`}
+                    aria-label={`删除素材 ${i + 1}`}
+                    style={{ color: 'var(--t8-danger, #ef4444)' }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleRemoveOutputMaterial('audio', u);
+                    }}
+                  >
+                    <Trash2 size={11} />
+                  </button>
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* 3D 模型区 */}
+        {collected.models.length > 0 && (
+          <div className="group/output-models space-y-1">
+            <div className={`flex items-center gap-1.5 text-[10px] ${isDark ? 'text-white/50' : 'text-zinc-500'}`}>
+              <Box size={11} />
+              <span className="flex-1">3D模型 ({collected.models.length})</span>
+              <CollectionSplitButton
+                count={collected.models.length}
+                kindLabel="3D模型"
+                onSplit={() => splitOutputCollection('model3d', collected.models)}
+                className="opacity-100 transition sm:opacity-0 sm:group-hover/output-models:opacity-100 sm:focus-within:opacity-100"
+              />
+            </div>
+            <div className="space-y-1.5">
+              {collected.models.map((u, i) => (
+                <div
+                  key={i}
+                  className={`rounded border px-2 py-2 ${
+                    isDark ? 'border-white/10 bg-white/[0.04]' : 'border-black/10 bg-black/[0.03]'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded"
+                      style={{ color: PORT_COLOR.model3d, background: `${PORT_COLOR.model3d}22`, boxShadow: `inset 0 0 0 1px ${PORT_COLOR.model3d}66` }}
+                    >
+                      <Box size={18} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className={`truncate text-[11px] font-semibold ${isDark ? 'text-white/80' : 'text-zinc-800'}`} title={u}>
+                        {fileNameFromUrl(u) || `3D模型 ${i + 1}`}
+                      </div>
+                      <div className={`truncate text-[10px] ${isDark ? 'text-white/40' : 'text-zinc-500'}`} title={u}>
+                        连接到 3D模型预览节点查看 · {u}
+                      </div>
+                    </div>
+                    <a
+                      href={u}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download
+                      className={`nodrag nopan inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] ${
+                        isDark ? 'hover:bg-white/10 text-white/60' : 'hover:bg-black/10 text-zinc-600'
+                      }`}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      <Download size={10} /> 下载
+                    </a>
+                    <button
+                      type="button"
+                      className={`nodrag nopan inline-flex items-center justify-center rounded px-1.5 py-0.5 text-[10px] ${
+                        isDark ? 'hover:bg-white/10' : 'hover:bg-black/10'
+                      }`}
+                      title={`删除素材 ${i + 1}`}
+                      aria-label={`删除素材 ${i + 1}`}
+                      style={{ color: 'var(--t8-danger, #ef4444)' }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleRemoveOutputMaterial('model3d', u);
+                      }}
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

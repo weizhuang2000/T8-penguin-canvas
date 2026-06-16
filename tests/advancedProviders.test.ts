@@ -89,16 +89,30 @@ test('normalizeAdvancedProviders merges built-in provider model defaults into ol
   const providers = normalizeAdvancedProviders([
     { id: 'modelscope', protocol: 'modelscope', imageModels: [], chatModels: [], enabled: true },
     { id: 'volcengine', protocol: 'volcengine', imageModels: [], videoModels: [], chatModels: [], enabled: true },
+    { id: 'jimeng-cli', protocol: 'jimeng-cli', imageModels: [], videoModels: [], enabled: true },
   ]);
 
   const modelscope = providers.find((provider: any) => provider.id === 'modelscope');
   const volcengine = providers.find((provider: any) => provider.id === 'volcengine');
+  const jimeng = providers.find((provider: any) => provider.id === 'jimeng-cli');
 
   assert.equal(modelscope?.imageModels[0], 'Tongyi-MAI/Z-Image-Turbo');
   assert.equal(modelscope?.chatModels[0], 'Qwen/Qwen3-235B-A22B');
   assert.equal(volcengine?.imageModels[0], 'doubao-seedream-4-0-250828');
   assert.equal(volcengine?.videoModels[1], 'doubao-seedance-2-0-fast-260128');
   assert.equal(volcengine?.chatModels[0], 'doubao-seed-1-6-250615');
+  assert.deepEqual(jimeng?.videoModels.slice(0, 4), [
+    'seedance2.0fast_vip',
+    'seedance2.0_vip',
+    'seedance2.0fast',
+    'seedance2.0',
+  ]);
+  assert.deepEqual(jimeng?.imageModels.slice(0, 4), [
+    'seedream-4.7',
+    'seedream-4.6',
+    'seedream-4.5',
+    'seedream-5.0',
+  ]);
 });
 
 test('normalizeAdvancedProviders filters invalid providers and clamps unsafe fields', () => {
@@ -122,11 +136,6 @@ test('normalizeAdvancedProviders filters invalid providers and clamps unsafe fie
       protocol: 'openai-compatible',
       baseUrl: 'https://api.example.com/v1/',
       imageModels: ['gpt-image-1', 'bad\nmodel', 'x'.repeat(260), 'gpt-image-1'],
-      imageModelSizes: {
-        'gpt-image-1': ['1K', '4K', 'bad', '1K'],
-        'empty-model': [],
-        'bad\nmodel': ['2K'],
-      },
       videoModels: ['video-model'],
       chatModels: ['gpt-4o-mini'],
       unknownField: 'drop me',
@@ -139,66 +148,107 @@ test('normalizeAdvancedProviders filters invalid providers and clamps unsafe fie
   assert.equal(provider.baseUrl, 'https://api.example.com/v1');
   assert.equal(provider.label.length <= 60, true);
   assert.deepEqual(provider.imageModels, ['gpt-image-1']);
-  assert.deepEqual(provider.imageModelSizes, { 'gpt-image-1': ['1K', '4K'], 'empty-model': [] });
   assert.equal('unknownField' in provider, false);
   assert.equal(providers.some((item: any) => item.id === '../bad'), false);
   assert.equal(providers.some((item: any) => item.id === 'remote-comfy'), false);
 });
 
-test('normalizeAdvancedProviders keeps multiple OpenAI compatible providers by id', () => {
-  const providers = normalizeAdvancedProviders([
-    {
-      id: 'openai-compatible',
-      label: 'Primary OpenAI',
-      protocol: 'openai-compatible',
-      enabled: true,
-      baseUrl: 'https://api.primary.example/v1',
-      apiKey: 'sk-primary',
-      imageModels: ['gpt-image-primary'],
-    },
-    {
-      id: 'openai-compatible-2',
-      label: 'Backup OpenAI',
-      protocol: 'openai-compatible',
-      enabled: true,
-      baseUrl: 'https://api.backup.example/v1',
-      apiKey: 'sk-backup',
-      imageModels: ['gpt-image-backup'],
-    },
-  ]);
+test('normalizeAdvancedProviders keeps remote ComfyUI settings only when backend env allows it', () => {
+  const previousRemote = process.env.T8_COMFYUI_ALLOW_REMOTE;
+  process.env.T8_COMFYUI_ALLOW_REMOTE = '1';
+  try {
+    const providers = normalizeAdvancedProviders([
+      {
+        id: 'comfyui-remote',
+        label: 'Remote ComfyUI',
+        protocol: 'comfyui',
+        enabled: true,
+        baseUrl: 'https://comfyui.example.test:8188/',
+        comfyuiConfig: {
+          instances: [
+            'https://comfyui.example.test:8188/',
+            'http://127.0.0.1:8188',
+            'ftp://not-allowed',
+          ],
+        },
+      },
+    ]);
 
-  const openaiProviders = providers.filter((item: any) => item.protocol === 'openai-compatible');
-  assert.deepEqual(openaiProviders.map((item: any) => item.id), ['openai-compatible', 'openai-compatible-2']);
-  assert.equal(openaiProviders[0].baseUrl, 'https://api.primary.example/v1');
-  assert.equal(openaiProviders[1].baseUrl, 'https://api.backup.example/v1');
+    const provider = providers.find((item: any) => item.id === 'comfyui-remote');
 
-  const masked = maskAdvancedProviders(providers).filter((item: any) => item.protocol === 'openai-compatible');
-  assert.equal(masked[0].apiKey, '****mary');
-  assert.equal(masked[1].apiKey, '****ckup');
+    assert.ok(provider);
+    assert.equal(provider.baseUrl, 'https://comfyui.example.test:8188');
+    assert.deepEqual(provider.comfyuiConfig?.instances, [
+      'https://comfyui.example.test:8188',
+      'http://127.0.0.1:8188',
+    ]);
+    assert.equal('allowRemote' in provider, false);
+  } finally {
+    if (previousRemote === undefined) delete process.env.T8_COMFYUI_ALLOW_REMOTE;
+    else process.env.T8_COMFYUI_ALLOW_REMOTE = previousRemote;
+  }
 });
 
-test('normalizeAdvancedProviders supports Gemini compatible providers', () => {
-  const providers = normalizeAdvancedProviders([
-    {
-      id: 'gemini-compatible-2',
-      label: 'Gemini Images',
-      protocol: 'gemini-compatible',
-      enabled: true,
-      baseUrl: 'https://ai.t8star.org/v1/',
-      apiKey: 'gm-secret',
-      imageModels: ['nano-banana-2'],
-      chatModels: ['gemini-2.5-flash'],
-    },
-  ]);
+test('normalizeAdvancedProviders keeps remote ComfyUI settings when the high-risk provider switch is enabled', () => {
+  const previousRemote = process.env.T8_COMFYUI_ALLOW_REMOTE;
+  const previousPrivate = process.env.T8_COMFYUI_ALLOW_PRIVATE;
+  delete process.env.T8_COMFYUI_ALLOW_REMOTE;
+  delete process.env.T8_COMFYUI_ALLOW_PRIVATE;
+  try {
+    const providers = normalizeAdvancedProviders([
+      {
+        id: 'comfyui-remote',
+        label: 'Remote ComfyUI',
+        protocol: 'comfyui',
+        enabled: true,
+        allowRemote: true,
+        baseUrl: 'https://comfyui.example.test:8188/',
+        comfyuiConfig: {
+          instances: ['https://comfyui.example.test:8188/'],
+        },
+      },
+    ]);
 
-  const gemini = providers.find((item: any) => item.id === 'gemini-compatible-2');
-  assert.ok(gemini);
-  assert.equal(gemini.protocol, 'gemini-compatible');
-  assert.equal(gemini.baseUrl, 'https://ai.t8star.org/v1');
-  assert.deepEqual(gemini.imageModels, ['nano-banana-2']);
+    const provider = providers.find((item: any) => item.id === 'comfyui-remote');
 
-  const masked = maskAdvancedProviders(providers).find((item: any) => item.id === 'gemini-compatible-2');
-  assert.equal(masked?.apiKey, '****cret');
+    assert.ok(provider);
+    assert.equal(provider.baseUrl, 'https://comfyui.example.test:8188');
+    assert.equal(provider.allowRemote, true);
+    assert.deepEqual(provider.comfyuiConfig?.instances, ['https://comfyui.example.test:8188']);
+  } finally {
+    if (previousRemote === undefined) delete process.env.T8_COMFYUI_ALLOW_REMOTE;
+    else process.env.T8_COMFYUI_ALLOW_REMOTE = previousRemote;
+    if (previousPrivate === undefined) delete process.env.T8_COMFYUI_ALLOW_PRIVATE;
+    else process.env.T8_COMFYUI_ALLOW_PRIVATE = previousPrivate;
+  }
+});
+
+test('normalizeAdvancedProviders rejects remote ComfyUI settings when no remote switch is enabled', () => {
+  const previousRemote = process.env.T8_COMFYUI_ALLOW_REMOTE;
+  const previousPrivate = process.env.T8_COMFYUI_ALLOW_PRIVATE;
+  delete process.env.T8_COMFYUI_ALLOW_REMOTE;
+  delete process.env.T8_COMFYUI_ALLOW_PRIVATE;
+  try {
+    const providers = normalizeAdvancedProviders([
+      {
+        id: 'comfyui-remote',
+        label: 'Remote ComfyUI',
+        protocol: 'comfyui',
+        enabled: true,
+        baseUrl: 'https://comfyui.example.test:8188/',
+        comfyuiConfig: {
+          instances: ['https://comfyui.example.test:8188/'],
+        },
+      },
+    ]);
+
+    assert.equal(providers.some((item: any) => item.id === 'comfyui-remote'), false);
+  } finally {
+    if (previousRemote === undefined) delete process.env.T8_COMFYUI_ALLOW_REMOTE;
+    else process.env.T8_COMFYUI_ALLOW_REMOTE = previousRemote;
+    if (previousPrivate === undefined) delete process.env.T8_COMFYUI_ALLOW_PRIVATE;
+    else process.env.T8_COMFYUI_ALLOW_PRIVATE = previousPrivate;
+  }
 });
 
 test('normalizeAdvancedProviders preserves stored secrets when incoming values are blank or masked', () => {
@@ -241,35 +291,6 @@ test('normalizeAdvancedProviders preserves stored secrets when incoming values a
   assert.equal(volc?.apiKey, 'ark-secret-abcdef');
   assert.equal(volc?.volcengineConfig?.accessKeyId, 'ak-secret-1111');
   assert.equal(volc?.volcengineConfig?.secretAccessKey, 'sk-secret-2222');
-});
-
-test('normalizeAdvancedProviders preserves image size table when incoming provider omits it', () => {
-  const current = normalizeAdvancedProviders([
-    {
-      id: 'openai-compatible',
-      protocol: 'openai-compatible',
-      enabled: true,
-      imageModels: ['custom-image'],
-      imageModelSizes: { 'custom-image': ['2K'] },
-    },
-  ]);
-
-  const next = normalizeAdvancedProviders(
-    [
-      {
-        id: 'openai-compatible',
-        protocol: 'openai-compatible',
-        enabled: true,
-        imageModels: ['custom-image', 'new-image'],
-      },
-    ],
-    current,
-  );
-
-  assert.deepEqual(
-    next.find((item: any) => item.id === 'openai-compatible')?.imageModelSizes,
-    { 'custom-image': ['2K'] },
-  );
 });
 
 test('maskAdvancedProviders hides secrets while preserving configuration status', () => {

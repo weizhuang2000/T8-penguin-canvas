@@ -18,6 +18,28 @@ const BASE = '/api';
 export const MAX_DOCUMENT_FILE_SIZE_MB = 100;
 export const MAX_DOCUMENT_FILE_SIZE = MAX_DOCUMENT_FILE_SIZE_MB * 1024 * 1024;
 
+export type TaskCompletionSoundSettings = NonNullable<ApiSettings['taskCompletionSound']>;
+
+export async function getTaskCompletionSoundSettings(): Promise<TaskCompletionSoundSettings> {
+  const res = await request<{ success: boolean; data: TaskCompletionSoundSettings }>(BASE + '/settings/task-completion-sound');
+  if (!res.success) throw new Error('???????????');
+  return res.data;
+}
+
+export async function uploadTaskCompletionSound(file: File): Promise<TaskCompletionSoundSettings> {
+  const form = new FormData();
+  form.append('audio', file, file.name);
+  const res = await fetch(BASE + '/settings/task-completion-sound', { method: 'POST', body: form });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) throw new Error(data?.error || `HTTP ${res.status}`);
+  return data.data;
+}
+
+export async function resetTaskCompletionSound(): Promise<TaskCompletionSoundSettings> {
+  const res = await request<{ success: boolean; data: TaskCompletionSoundSettings }>(BASE + '/settings/task-completion-sound', { method: 'DELETE' });
+  if (!res.success) throw new Error('?????????');
+  return res.data;
+}
 export interface AuthUser {
   id: string;
   username: string;
@@ -822,6 +844,8 @@ export interface ResourceItem {
   thumbUrl?: string;
   mime?: string;
   size: number;
+  width?: number;
+  height?: number;
   sha256?: string;
   tags: string[];
   favorite: boolean;
@@ -1050,7 +1074,20 @@ export type AchievementEventType =
   | 'resource.saved'
   | 'workflow.saved'
   | 'panorama.generated'
-  | 'parsehub.resolved';
+  | 'parsehub.resolved'
+  | 'dragon_ball.set_completed'
+  | 'dragon_ball.collected'
+  | 'saint_seiya.cloth_collected'
+  | 'saint_seiya.battle_won'
+  | 'saint_seiya.cosmo_burst'
+  | 'saint_seiya.gold_completed'
+  | 'tetris.game_started'
+  | 'tetris.chapter_completed'
+  | 'tetris.clean_chapter_completed'
+  | 'tetris.line_clear'
+  | 'tetris.tetris_clear'
+  | 'tetris.level_reached'
+  | 'tetris.game_over';
 
 export interface AchievementEventPayload {
   type: AchievementEventType;
@@ -1059,6 +1096,7 @@ export interface AchievementEventPayload {
   nodeType?: string;
   kind?: string;
   category?: string;
+  mode?: string;
 }
 
 export interface AchievementSummary {
@@ -1071,6 +1109,10 @@ export interface AchievementSummary {
   unlockedFilmCount: number;
   recentUnlocks: AchievementDefinitionData[];
   recentFilms: AchievementUnlockedFilm[];
+  dailyTasks?: AchievementDailyTask[];
+  weeklyPassport?: AchievementWeeklyPassport;
+  creativeReview?: AchievementCreativeReview;
+  themeShowcases?: Record<string, AchievementThemeShowcase>;
 }
 
 export interface AchievementDefinitionData {
@@ -1083,6 +1125,91 @@ export interface AchievementDefinitionData {
   condition: Record<string, any>;
   medal?: boolean;
   hidden?: boolean;
+}
+
+export interface AchievementDailyTask {
+  id: string;
+  title: string;
+  description?: string;
+  progress: number;
+  target: number;
+  completed: boolean;
+  reward?: string;
+  mode?: string;
+  targetKind?: string;
+  theme?: string;
+  accent?: string;
+  themeLabel?: string;
+}
+
+export interface AchievementWeeklyPassport {
+  id: string;
+  title: string;
+  progress: number;
+  target: number;
+  completed: boolean;
+  completedThemeCount?: number;
+  targetThemeCount?: number;
+  weekStart?: string;
+  weekEnd?: string;
+  ratio?: number;
+  themes?: Array<{
+    theme: string;
+    themeLabel?: string;
+    shortLabel?: string;
+    accent?: string;
+    completed?: boolean;
+    progress?: number;
+    target?: number;
+    weeklySeconds?: number;
+    actionCount?: number;
+  }>;
+}
+
+export interface AchievementThemeUsage {
+  theme: string;
+  themeLabel?: string;
+  activeSeconds?: number;
+  todaySeconds?: number;
+}
+
+export interface AchievementTopEntry {
+  key: string;
+  value: number;
+}
+
+export interface AchievementCreativeReview {
+  id: string;
+  title: string;
+  progress: number;
+  target: number;
+  completed: boolean;
+  topTheme?: AchievementThemeUsage | null;
+  todayTopTheme?: AchievementThemeUsage | null;
+  weeklyActiveSeconds?: number;
+  weeklyThemeCount?: number;
+  mostUsedNodeType?: AchievementTopEntry | null;
+  recentCreativeEventCount?: number;
+  hiddenModeActivations?: number;
+  nodesCreated?: number;
+  runsSucceeded?: number;
+  resourcesSaved?: number;
+  workflowsSaved?: number;
+}
+
+export interface AchievementThemeShowcase {
+  id: string;
+  title: string;
+  description?: string;
+  unlocked?: boolean;
+  mediaUrl?: string;
+  hasShowcase?: boolean;
+  resourcesSaved?: number;
+  workflowsSaved?: number;
+  panoramasGenerated?: number;
+  parseHubResolved?: number;
+  topCategory?: string;
+  lastActivityAt?: string;
 }
 
 export interface AchievementUnlocked {
@@ -1105,6 +1232,7 @@ export interface AchievementUnlockedFilm {
   lockedText?: string;
   unavailableText?: string;
   playedSeconds?: number;
+  mediaUrl?: string;
 }
 
 export interface AchievementProfile {
