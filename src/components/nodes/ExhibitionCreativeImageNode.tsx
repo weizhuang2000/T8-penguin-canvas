@@ -101,6 +101,7 @@ interface ReferenceMarkSettings {
 }
 
 type ColorMaterialReferenceMode = 'abstract-card' | 'marked-image';
+type ColorMaterialPriorityMode = 'frontend' | 'llm';
 
 const REFERENCE_MARK_POSITION_OPTIONS: Array<{ value: ReferenceMarkPosition; label: string }> = [
   { value: 'top-left', label: '左上角' },
@@ -198,6 +199,10 @@ function normalizeReferenceMarkColor(value: unknown): string {
 function normalizeReferenceMarkText(value: unknown, fallback: string): string {
   const text = typeof value === 'string' ? value.slice(0, 64) : '';
   return text || fallback;
+}
+
+function normalizeColorMaterialPriorityMode(value: unknown): ColorMaterialPriorityMode {
+  return value === 'llm' ? 'llm' : 'frontend';
 }
 
 function normalizeReferenceMarkSettings(data: any, prefix: 'space' | 'colorMaterial'): ReferenceMarkSettings {
@@ -740,6 +745,8 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const regenerateEachTime = d.regenerateEachTime !== false;
   const projectTheme = String(d.projectTheme || '').trim();
   const colorMaterial = String(d.colorMaterial || '').trim();
+  const hasColorMaterialPreset = !!String(d.colorMaterialPreset || '').trim();
+  const colorMaterialPriorityMode = normalizeColorMaterialPriorityMode(d.colorMaterialPriorityMode);
   const inspiration = String(d.inspiration || '').trim();
   const sourceText = String(d.sourceText || '');
   const documentSummary = String(d.documentSummary || '').trim();
@@ -754,7 +761,8 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const colorMaterialReferenceImage = useInputImageByHandle(id, 'color-material-reference');
   const exhibitReferenceImage = useInputImageByHandle(id, 'exhibit-reference');
   const hasColorMaterialReference = !!colorMaterialReferenceImage;
-  const effectiveColorMaterial = hasColorMaterialReference ? '' : colorMaterial;
+  const colorMaterialRecognitionDisabled = hasColorMaterialPreset || !hasColorMaterialReference;
+  const effectiveColorMaterial = hasColorMaterialPreset || !hasColorMaterialReference ? colorMaterial : '';
   const colorMaterialReferenceTone = String(d.colorMaterialReferenceTone || '').trim();
   const colorMaterialMarkSettings = useMemo(() => normalizeReferenceMarkSettings(d, 'colorMaterial'), [
     d.colorMaterialMarkAutoFontSize,
@@ -819,6 +827,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       colorMaterial: effectiveColorMaterial,
       hasColorMaterialReferenceImage: hasColorMaterialReference,
       colorMaterialReferenceTone,
+      colorMaterialPriorityMode,
       colorMaterialReferenceMode,
       colorMaterialReferenceMarkText: colorMaterialMarkSettings.text,
       colorMaterialReferenceMarkPosition: colorMaterialMarkSettings.position,
@@ -838,7 +847,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       roundIndex: 1,
       total: generationCount,
     }),
-    [colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialReferenceMode, colorMaterialReferenceTone, creativeBrief, documentSummary, effectiveColorMaterial, exhibitReferenceImage, excludeOptions, generationCount, hasColorMaterialReference, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceType, viewAngleOptions, viewControlEnabled],
+    [colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPriorityMode, colorMaterialReferenceMode, colorMaterialReferenceTone, creativeBrief, documentSummary, effectiveColorMaterial, exhibitReferenceImage, excludeOptions, generationCount, hasColorMaterialReference, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceType, viewAngleOptions, viewControlEnabled],
   );
 
   const renderMarkSettings = (
@@ -1464,6 +1473,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           colorMaterial: effectiveColorMaterial,
           hasColorMaterialReferenceImage: hasColorMaterialReference,
           colorMaterialReferenceTone,
+          colorMaterialPriorityMode,
           colorMaterialReferenceMode,
           colorMaterialReferenceMarkText: colorMaterialMarkSettings.text,
           colorMaterialReferenceMarkPosition: colorMaterialMarkSettings.position,
@@ -1665,6 +1675,31 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                   <div className="mt-1 truncate text-[9px] text-white/40" title={colorMaterialReferenceImage}>{colorMaterialReferenceImage.split('/').pop() || colorMaterialReferenceImage}</div>
                   <div className="mt-1.5 space-y-1">
                     <div className="flex items-center justify-between gap-2">
+                      <span className="text-[9px] font-semibold text-rose-100/80">色彩优先</span>
+                      {hasColorMaterialPreset && <span className="truncate text-[8px] text-white/35">预设接管</span>}
+                    </div>
+                    <div className="grid grid-cols-2 rounded border border-white/10 bg-black/20 p-0.5">
+                      {[
+                        { value: 'frontend', label: '前端识别' },
+                        { value: 'llm', label: '大模型识别' },
+                      ].map((option) => {
+                        const active = colorMaterialPriorityMode === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            disabled={isReadonly || busy || colorMaterialRecognitionDisabled}
+                            className={`h-6 rounded px-1 text-[9px] transition ${active ? 'bg-rose-300/20 text-rose-50' : 'text-white/45 hover:bg-white/[0.08]'} disabled:cursor-not-allowed disabled:opacity-45`}
+                            onClick={() => update({ colorMaterialPriorityMode: option.value })}
+                          >
+                            {option.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="mt-1.5 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
                       <span className="text-[9px] font-semibold text-rose-100/80">主色调识别（像素采样）</span>
                       {d.colorMaterialReferenceToneStatus && (
                         <span className="truncate text-[8px] text-amber-200/75" title={d.colorMaterialReferenceToneStatus}>需手动确认</span>
@@ -1673,7 +1708,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                     <textarea
                       className={`${FIELD} min-h-[46px] resize-y text-[10px] leading-snug`}
                       value={colorMaterialReferenceTone}
-                      disabled={isReadonly || busy}
+                      disabled={isReadonly || busy || hasColorMaterialPreset}
                       placeholder="接入图片后自动识别主色调，可手动修正"
                       onChange={(event) => update({
                         colorMaterialReferenceTone: event.target.value,

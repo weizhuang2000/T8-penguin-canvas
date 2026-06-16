@@ -77,6 +77,7 @@ export interface ExhibitionCreativeImagePromptValues extends ExhibitionCreativeB
   hasSpaceImage?: boolean;
   hasColorMaterialReferenceImage?: boolean;
   colorMaterialReferenceTone?: string;
+  colorMaterialPriorityMode?: 'frontend' | 'llm';
   colorMaterialReferenceMode?: 'abstract-card' | 'marked-image';
   colorMaterialReferenceMarkText?: string;
   colorMaterialReferenceMarkPosition?: string;

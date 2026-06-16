@@ -383,6 +383,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     colorMaterialReferenceTone: '',
     colorMaterialReferenceToneSource: '',
     colorMaterialReferenceToneStatus: '',
+    colorMaterialPriorityMode: 'frontend',
     inspiration: '',
     sourceText: '',
     documentMeta: null,
