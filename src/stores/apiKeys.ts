@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ApiSettings } from '../types/canvas';
+import type { AdvancedProviderConfig, ApiSettings, CloudUploadTargetConfig, LlmConfig } from '../types/canvas';
 import * as api from '../services/api';
 import { DEFAULT_LLM_MODEL } from '../providers/models';
 
@@ -64,6 +64,126 @@ const DEFAULT: ApiSettings = {
   preferences: { theme: 'dark', language: 'zh-CN' },
 };
 
+function compactStringList(value: unknown): string[] {
+  return (Array.isArray(value) ? value : [])
+    .map((item) => String(item || '').trim())
+    .filter(Boolean);
+}
+
+function plainObject(value: unknown): Record<string, any> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? { ...(value as Record<string, any>) } : {};
+}
+
+function normalizeLlmConfigs(value: unknown): LlmConfig[] {
+  return (Array.isArray(value) ? value : [])
+    .filter((item): item is Record<string, any> => !!item && typeof item === 'object' && !Array.isArray(item))
+    .map((item, index) => ({
+      id: String(item.id || `llm-${index + 1}`),
+      label: String(item.label || `LLM Key ${index + 1}`),
+      apiKey: typeof item.apiKey === 'string' ? item.apiKey : '',
+      hasApiKey: !!item.hasApiKey,
+      baseUrl: typeof item.baseUrl === 'string' ? item.baseUrl : FIXED_ZHENZHEN_BASE,
+      model: typeof item.model === 'string' ? item.model : DEFAULT_LLM_MODEL,
+      isDefault: item.isDefault === true,
+    }));
+}
+
+function normalizeAdvancedProviders(value: unknown): AdvancedProviderConfig[] {
+  return (Array.isArray(value) ? value : [])
+    .filter((item): item is Record<string, any> => !!item && typeof item === 'object' && !Array.isArray(item))
+    .map((provider) => {
+      const next: AdvancedProviderConfig = {
+        ...(provider as AdvancedProviderConfig),
+        id: String(provider.id || ''),
+        label: String(provider.label || provider.name || provider.id || ''),
+        protocol: provider.protocol,
+        baseUrl: typeof provider.baseUrl === 'string' ? provider.baseUrl : '',
+        imageModels: compactStringList(provider.imageModels),
+        videoModels: compactStringList(provider.videoModels),
+        chatModels: compactStringList(provider.chatModels),
+        defaults: plainObject(provider.defaults),
+      };
+
+      if (provider.modelscopeConfig || provider.protocol === 'modelscope') {
+        const cfg = plainObject(provider.modelscopeConfig);
+        next.modelscopeConfig = {
+          ...cfg,
+          loras: Array.isArray(cfg.loras) ? cfg.loras : [],
+        };
+      }
+      if (provider.volcengineConfig || provider.protocol === 'volcengine') {
+        next.volcengineConfig = plainObject(provider.volcengineConfig);
+      }
+      if (provider.comfyuiConfig || provider.protocol === 'comfyui') {
+        const cfg = plainObject(provider.comfyuiConfig);
+        next.comfyuiConfig = {
+          ...cfg,
+          instances: compactStringList(cfg.instances),
+          workflows: (Array.isArray(cfg.workflows) ? cfg.workflows : []).map((workflow: any, index: number) => ({
+            ...plainObject(workflow),
+            id: String(workflow?.id || workflow?.name || `workflow-${index + 1}`),
+            name: String(workflow?.name || workflow?.id || `Workflow ${index + 1}`),
+            fields: Array.isArray(workflow?.fields) ? workflow.fields : [],
+            excludeRules: compactStringList(workflow?.excludeRules),
+          })),
+        };
+      }
+      if (provider.jimengConfig || provider.protocol === 'jimeng-cli') {
+        next.jimengConfig = plainObject(provider.jimengConfig);
+      }
+      return next;
+    });
+}
+
+function normalizeCloudUploadTargets(value: unknown): CloudUploadTargetConfig[] {
+  return (Array.isArray(value) ? value : [])
+    .filter((item): item is Record<string, any> => !!item && typeof item === 'object' && !Array.isArray(item))
+    .map((target) => ({
+      ...(target as CloudUploadTargetConfig),
+      id: String(target.id || ''),
+      provider: target.provider,
+      label: String(target.label || target.id || ''),
+      tencentCos: plainObject(target.tencentCos),
+      aliyunOss: plainObject(target.aliyunOss),
+      baiduNetdisk: plainObject(target.baiduNetdisk),
+      quarkNetdisk: plainObject(target.quarkNetdisk),
+    }));
+}
+
+export function normalizeApiSettings(data: Partial<ApiSettings>): ApiSettings {
+  const merged = { ...DEFAULT, ...(data || {}) };
+  const llmConfigs = normalizeLlmConfigs(merged.llmConfigs || merged.llmApiKeys);
+  return {
+    ...merged,
+    llmApiKeys: llmConfigs,
+    llmConfigs,
+    advancedProviders: normalizeAdvancedProviders(merged.advancedProviders),
+    cloudUploadTargets: normalizeCloudUploadTargets(merged.cloudUploadTargets),
+    advancedProviderSummary: {
+      enabledCount: Number(merged.advancedProviderSummary?.enabledCount) || 0,
+      configuredKeyCount: Number(merged.advancedProviderSummary?.configuredKeyCount) || 0,
+      comfyuiConfigured: merged.advancedProviderSummary?.comfyuiConfigured === true,
+      jimengConfigured: merged.advancedProviderSummary?.jimengConfigured === true,
+    },
+    cloudUploadSummary: {
+      totalCount: Number(merged.cloudUploadSummary?.totalCount) || 0,
+      enabledCount: Number(merged.cloudUploadSummary?.enabledCount) || 0,
+      configuredCount: Number(merged.cloudUploadSummary?.configuredCount) || 0,
+      supportedUploadCount: Number(merged.cloudUploadSummary?.supportedUploadCount) || 0,
+      defaultTargetId: merged.cloudUploadSummary?.defaultTargetId || '',
+      defaultLabel: merged.cloudUploadSummary?.defaultLabel || '',
+    },
+    taskCompletionSound: {
+      ...DEFAULT.taskCompletionSound,
+      ...(merged.taskCompletionSound || {}),
+    },
+    preferences: {
+      ...DEFAULT.preferences,
+      ...(merged.preferences || {}),
+    },
+  };
+}
+
 export const useApiKeysStore = create<ApiKeysState>((set) => ({
   settings: DEFAULT,
   loading: false,
@@ -75,7 +195,7 @@ export const useApiKeysStore = create<ApiKeysState>((set) => ({
     try {
       const data = await api.getSettings();
       set({
-        settings: { ...DEFAULT, ...data },
+        settings: normalizeApiSettings(data),
         loading: false,
         loaded: true,
       });
@@ -91,7 +211,7 @@ export const useApiKeysStore = create<ApiKeysState>((set) => ({
       // 重新拉取(后端会返回脱敏后的 Key)
       const data = await api.getSettings();
       set({
-        settings: { ...DEFAULT, ...data },
+        settings: normalizeApiSettings(data),
         loading: false,
       });
     } catch (e: any) {

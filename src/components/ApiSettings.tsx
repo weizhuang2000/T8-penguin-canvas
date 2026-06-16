@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight, CloudUpload, Download, ExternalLink, Eye, EyeOff, FileUp, Info, KeyRound, Loader2, Lock, Plus, Save, Settings2, TestTube2, Trash2, X, FolderOpen, ServerCog, Volume2 } from 'lucide-react';
-import { useApiKeysStore, FIXED_ZHENZHEN_BASE, RH_BASE } from '../stores/apiKeys';
+import { useApiKeysStore, FIXED_ZHENZHEN_BASE, RH_BASE, normalizeApiSettings } from '../stores/apiKeys';
 import { taskCompletionSound as taskCompletionSoundController } from '../stores/taskCompletionSound';
 import { useThemeStore } from '../stores/theme';
 import type { AdvancedProviderConfig, AdvancedProviderProtocol, ApiSettings, CloudUploadProvider, CloudUploadTargetConfig } from '../types/canvas';
@@ -284,6 +284,14 @@ function formatCloudError(error: string, data?: any) {
   return parts.join('；');
 }
 
+function normalizeAdvancedProviderForms(value: unknown): AdvancedProviderConfig[] {
+  return normalizeApiSettings({ advancedProviders: value as AdvancedProviderConfig[] }).advancedProviders || [];
+}
+
+function normalizeCloudUploadTargetForms(value: unknown): CloudUploadTargetConfig[] {
+  return normalizeApiSettings({ cloudUploadTargets: value as CloudUploadTargetConfig[] }).cloudUploadTargets || [];
+}
+
 export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProps) {
   const { theme, style } = useThemeStore();
   const { settings, loading, error, load, save, loaded } = useApiKeysStore();
@@ -341,18 +349,14 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       setBackupMessage('');
       setClassifiedOpen(false);
       setAdvancedOpen(false);
-      const providers = Array.isArray((settings as any)?.advancedProviders)
-        ? ((settings as any).advancedProviders as AdvancedProviderConfig[])
-        : [];
+      const providers = normalizeAdvancedProviderForms((settings as any)?.advancedProviders);
       setAdvancedProvidersInput(providers);
       setActiveAdvancedProviderId(providers[0]?.id || '');
       setAdvancedDirty(false);
       setAdvancedTestStatus({});
       setAdvancedComfyDrafts({});
       setCloudUploadOpen(false);
-      const cloudTargets = Array.isArray((settings as any)?.cloudUploadTargets)
-        ? ((settings as any).cloudUploadTargets as CloudUploadTargetConfig[])
-        : [];
+      const cloudTargets = normalizeCloudUploadTargetForms((settings as any)?.cloudUploadTargets);
       setCloudUploadTargetsInput(cloudTargets);
       setActiveCloudTargetId(cloudTargets[0]?.id || '');
       setCloudUploadDirty(false);
@@ -435,10 +439,10 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       next.preferences = { ...(source as any).preferences };
     }
     if (Array.isArray((source as any).advancedProviders)) {
-      next.advancedProviders = (source as any).advancedProviders;
+      next.advancedProviders = normalizeAdvancedProviderForms((source as any).advancedProviders);
     }
     if (Array.isArray((source as any).cloudUploadTargets)) {
-      next.cloudUploadTargets = (source as any).cloudUploadTargets;
+      next.cloudUploadTargets = normalizeCloudUploadTargetForms((source as any).cloudUploadTargets);
     }
     return next;
   };
@@ -507,13 +511,14 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     if (typeof patch.themeTemplatePath === 'string') setThemeTemplatePathInput(patch.themeTemplatePath);
     if (typeof patch.eagleApiBase === 'string') setEagleApiBaseInput(patch.eagleApiBase);
     if (Array.isArray(patch.advancedProviders)) {
-      setAdvancedProvidersInput(patch.advancedProviders);
-      setActiveAdvancedProviderId(patch.advancedProviders[0]?.id || '');
+      const providers = normalizeAdvancedProviderForms(patch.advancedProviders);
+      setAdvancedProvidersInput(providers);
+      setActiveAdvancedProviderId(providers[0]?.id || '');
       setAdvancedDirty(true);
       setAdvancedOpen(true);
     }
     if (Array.isArray((patch as any).cloudUploadTargets)) {
-      const targets = (patch as any).cloudUploadTargets as CloudUploadTargetConfig[];
+      const targets = normalizeCloudUploadTargetForms((patch as any).cloudUploadTargets);
       setCloudUploadTargetsInput(targets);
       setActiveCloudTargetId(targets[0]?.id || '');
       setCloudUploadDirty(true);
