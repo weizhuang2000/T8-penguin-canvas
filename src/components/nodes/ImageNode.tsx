@@ -38,6 +38,7 @@ import {
   type MjSpeed,
 } from '../../services/generation';
 import { useUpdateNodeData } from './useUpdateNodeData';
+import { useCanvasRuntime } from './canvasRuntimeContext';
 import { useHasAutoOutput } from './useHasAutoOutput';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useThemeStore } from '../../stores/theme';
@@ -155,6 +156,7 @@ const comfyImageSourceIndex = (source: string) => {
 
 const ImageNode = ({ id, data, selected }: NodeProps) => {
   const update = useUpdateNodeData(id);
+  const { loadedCanvasId } = useCanvasRuntime();
   const hasAutoOutput = useHasAutoOutput(id);
   const { getEdges, getNodes } = useReactFlow();
   const { style, theme } = useThemeStore();
@@ -568,6 +570,14 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
       : '';
     const finalPrompt = (upstreamPrompt || (isComfyExternal ? resolvedComfyPrompt : resolvedLocalPrompt) || '').trim();
     const src = `image:${id.slice(0, 6)}`;
+    const historySeed = Number(d?.seed || d?.lastSeed || mjSeed || nbSeed || 0) || 0;
+    const historyContext = {
+      canvasId: loadedCanvasId,
+      sourceNodeId: id,
+      sourceNodeType: 'image',
+      nodeTitle: String(d?.label || 'Image'),
+      seed: historySeed,
+    };
     if (!finalPrompt && (!isComfyExternal || comfyHasPromptField)) {
       setError('未连接 text 节点也未填写 prompt');
       logBus.error('生成中止: 缺少 prompt', src);
@@ -631,6 +641,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           negative: externalNegativePrompt || undefined,
           n: Math.max(1, Math.min(4, Number(d?.providerParams?.n || 1))),
           providerParams: externalProviderParams,
+          historyContext,
         });
         const urls = res.imageUrls || [];
         if (!urls.length) throw new Error('扩展平台完成但未返回图片');
@@ -699,6 +710,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           speed: mjSpeed,
           base64Array,
           remix: true,
+          historyContext,
         });
         const taskId = submit.taskId;
         logBus.info(`MJ 任务已提交 taskId=${taskId} fullPrompt="${fullPrompt.slice(0, 120)}${fullPrompt.length > 120 ? '…' : ''}"`, src);
@@ -711,7 +723,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         );
         for (let i = 0; i < maxPoll; i++) {
           await new Promise((r) => setTimeout(r, interval));
-          const q = await queryMjTask(taskId, mjSpeed);
+          const q = await queryMjTask(taskId, mjSpeed, historyContext);
           if (q.status === 'FAILURE') {
             throw new Error(`MJ 失败: ${q.failReason || '未知错误'}`);
           }
@@ -781,6 +793,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           enable_web_search: falKind === 'nbpro-fal' ? nbWebSearch : undefined,
           image_mode: falKind === 'nbpro-fal' ? nbImgMode : undefined,
           providerParams,
+          historyContext,
         });
 
         // 同步完成
@@ -811,7 +824,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         const maxPoll = minPollCountForTimeout(interval);
         for (let i = 0; i < maxPoll; i++) {
           await new Promise((r) => setTimeout(r, interval));
-          const q = await queryImageFal({ responseUrl, endpoint, requestId });
+          const q = await queryImageFal({ responseUrl, endpoint, requestId, historyContext });
           const st = String(q.status || '').toLowerCase();
           if (st === 'completed') {
             const url = q.urls?.[0];
@@ -855,6 +868,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         images: allRefs,
         n: 1,
         providerParams,
+        historyContext,
       });
 
       // 分支一:同步完成
@@ -884,7 +898,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
       let lastProg = '5%';
       for (let i = 0; i < maxPoll; i++) {
         await new Promise((r) => setTimeout(r, interval));
-        const q = await queryImageStatus(taskId, apiModel);
+        const q = await queryImageStatus(taskId, apiModel, undefined, historyContext);
         if (q.progress && q.progress !== lastProg) {
           lastProg = q.progress;
           update({ progress: q.progress });

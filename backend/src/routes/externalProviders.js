@@ -11,6 +11,7 @@ const {
   generateVideoWithProvider,
   testProviderConnection,
 } = require('../providers/adapters');
+const { addHistoryItems } = require('../utils/generationHistory');
 
 const router = express.Router();
 const EXTERNAL_GENERATION_TIMEOUT_MS = 60 * 60 * 1000;
@@ -144,6 +145,38 @@ function resultResponse(res, result, provider, dataPatch = {}) {
   });
 }
 
+function parseHistoryContext(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function rememberExternalOutputs(req, urls, kind, provider, extra = {}) {
+  const list = (Array.isArray(urls) ? urls : [])
+    .filter((url) => typeof url === 'string' && url)
+    .map((url) => ({ url, kind, ...extra }));
+  if (!list.length) return;
+  try {
+    addHistoryItems(list, {
+      ...parseHistoryContext(req.body?.historyContext),
+      prompt: req.body?.prompt,
+      provider: provider?.label || provider?.id || '',
+      model: req.body?.providerModel || req.body?.model || '',
+      taskId: extra.taskId || req.body?.taskId || '',
+      seed: req.body?.seed,
+    }, req.user);
+  } catch (e) {
+    console.warn('[generation-history] external record failed:', e?.message || e);
+  }
+}
+
 router.post('/test-provider', async (req, res) => {
   try {
     const settings = settingsRouter.loadSettings({ persistMigrations: false });
@@ -227,6 +260,7 @@ router.post('/image', async (req, res) => {
     if (!result.ok) return resultResponse(res, result, resolved.provider);
     const remoteImageUrls = Array.isArray(result.imageUrls) ? result.imageUrls : [];
     const imageUrls = await saveImageOutputs(remoteImageUrls);
+    rememberExternalOutputs(req, imageUrls, 'image', resolved.provider, { taskId: result.taskId });
     return resultResponse(res, result, resolved.provider, {
       remoteImageUrls,
       imageUrls,
