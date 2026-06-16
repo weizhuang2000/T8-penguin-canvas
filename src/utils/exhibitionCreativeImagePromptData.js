@@ -255,9 +255,10 @@ function exhibitionCreativeInputImagesText(values) {
   return '无输入图；按手动空间尺寸、项目资料和创意描述生成。';
 }
 
-function exhibitionCreativeColorPaletteText({ colorMaterial, hasColorMaterialReferenceImage }) {
+function exhibitionCreativeColorPaletteText({ colorMaterial, colorMaterialReferenceTone, hasColorMaterialReferenceImage }) {
   if (hasColorMaterialReferenceImage) {
-    return '从色彩与材质参考图中提取主色、辅助色、金属色、明暗关系、冷暖倾向和局部发光色；不得借用该参考图的空间布局或构图。';
+    const tone = cleanExhibitionCreativeText(colorMaterialReferenceTone, 500);
+    return `${tone ? `${tone} ` : ''}从色彩与材质参考图中提取主色、辅助色、金属色、明暗关系、冷暖倾向和局部发光色；不得借用该参考图的空间布局或构图。`;
   }
   return colorMaterial || '结合项目主题与展陈气质组织清晰、克制、可落地的专业展陈色彩体系，避免杂乱高饱和配色。';
 }
@@ -292,6 +293,7 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   const projectTheme = cleanExhibitionCreativeText(values.projectTheme, 500);
   const hasColorMaterialReferenceImage = values.hasColorMaterialReferenceImage === true;
   const colorMaterial = hasColorMaterialReferenceImage ? '' : cleanExhibitionCreativeText(values.colorMaterial, 1000);
+  const colorMaterialReferenceTone = cleanExhibitionCreativeText(values.colorMaterialReferenceTone, 500);
   const inspiration = cleanExhibitionCreativeText(values.inspiration, 2000);
   const documentSummary = cleanExhibitionCreativeText(values.documentSummary, 3000);
   const creativeBrief = normalizeExhibitionCreativeBrief(values.creativeBrief || values.brief);
@@ -336,7 +338,7 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
     'Style/medium: photorealistic interior architectural visualization, high-end exhibition design render',
     `Composition/framing: ${hasSpaceImage ? '延续图1的原始透视、主入口视线、空间开口和尺度关系，主视觉布置在原空间合理视线焦点内，空间完整可读，画面干净，尺度可信' : '使用可信室内建筑摄影视角，完整呈现空间边界、主视觉焦点、参观动线和展陈体块关系，画面干净，尺度可信'}`,
     `Lighting/mood: ${exhibitionCreativeDeepeningRequirement(values.spaceType)} 灯光应纪念性、庄重、温暖或与项目气质一致，层次分明，局部线性灯光勾边，重点展墙、浮雕、装置或展品有洗墙光和重点光，整体像专业展陈施工落地图。`,
-    `Color palette: ${exhibitionCreativeColorPaletteText({ colorMaterial, hasColorMaterialReferenceImage })}`,
+    `Color palette: ${exhibitionCreativeColorPaletteText({ colorMaterial, colorMaterialReferenceTone, hasColorMaterialReferenceImage })}`,
     `Materials/textures: ${exhibitionCreativeMaterialsText({ colorMaterial, hasColorMaterialReferenceImage })}`,
     `Text (verbatim): ${projectTheme ? `仅允许出现大型立体主题字装置“${projectTheme}”或等价主题装置字形；` : '仅允许出现必要的大型立体主题字装置或抽象主题装置字形；'}不要出现任何小字、说明文字、乱码、展板文字、标签文字、Markdown 字段名或参数说明。`,
     `Constraints: ${hasSpaceImage ? '必须保留图1的原始建筑结构，不得改变主要开口、墙体、顶面、地面边界、透视、层高、动线和尺度关系；不把空间改造成另一处建筑；' : '必须保持真实室内空间尺度、墙体边界、开口逻辑、动线和可施工性；'}不增加人物；不出现蒙文；不出现可读错字或乱码；不出现小结构堆砌；不出现石榴造型；${hasExhibitReferenceImage ? '展品参考图只影响展品外观和展示重点，不影响空间结构或色彩材质；' : ''}${excludeItemsText ? `不得出现：${excludeItemsText}；` : ''}最终画面必须是高完成度、可落地的展陈空间效果图。`,

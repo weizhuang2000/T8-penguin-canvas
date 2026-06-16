@@ -221,6 +221,101 @@ function loadReferenceImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+function rgbToHsl(red: number, green: number, blue: number): { h: number; s: number; l: number } {
+  const r = red / 255;
+  const g = green / 255;
+  const b = blue / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return { h: 0, s: 0, l };
+  const delta = max - min;
+  const s = l > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+  let h = 0;
+  if (max === r) h = ((g - b) / delta + (g < b ? 6 : 0)) / 6;
+  else if (max === g) h = ((b - r) / delta + 2) / 6;
+  else h = ((r - g) / delta + 4) / 6;
+  return { h: h * 360, s, l };
+}
+
+function colorToneName(red: number, green: number, blue: number): string {
+  const { h, s, l } = rgbToHsl(red, green, blue);
+  if (l <= 0.12) return '黑色';
+  if (s <= 0.1) {
+    if (l >= 0.86) return '暖白/浅灰';
+    if (l <= 0.32) return '深灰';
+    return '中性灰';
+  }
+  if (h < 12 || h >= 345) return l < 0.45 ? '深红' : '红色';
+  if (h < 28) return l < 0.46 ? '红褐' : '橙红';
+  if (h < 46) return l < 0.55 ? '铜褐/棕色' : '暖橙/铜金';
+  if (h < 66) return l < 0.5 ? '橄榄金' : '金黄';
+  if (h < 90) return '黄绿';
+  if (h < 165) return l < 0.42 ? '深绿' : '绿色';
+  if (h < 195) return '青色';
+  if (h < 245) return l < 0.42 ? '深蓝' : '蓝色';
+  if (h < 285) return '蓝紫';
+  if (h < 325) return '紫色';
+  return '玫红/酒红';
+}
+
+async function analyzeReferenceImageDominantTone(imageUrl: string): Promise<string> {
+  const image = await loadReferenceImage(imageUrl);
+  const sourceWidth = image.naturalWidth || image.width;
+  const sourceHeight = image.naturalHeight || image.height;
+  if (!sourceWidth || !sourceHeight) throw new Error('参考图尺寸无效，无法识别主色调');
+  const maxSide = 96;
+  const scale = Math.min(1, maxSide / Math.max(sourceWidth, sourceHeight));
+  const width = Math.max(1, Math.round(sourceWidth * scale));
+  const height = Math.max(1, Math.round(sourceHeight * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) throw new Error('当前浏览器无法创建主色调识别画布');
+  ctx.drawImage(image, 0, 0, width, height);
+  const pixels = ctx.getImageData(0, 0, width, height).data;
+  const buckets = new Map<string, { name: string; count: number; sat: number; light: number; warm: number; cool: number }>();
+  let total = 0;
+  let satSum = 0;
+  let lightSum = 0;
+  let warm = 0;
+  let cool = 0;
+  for (let index = 0; index < pixels.length; index += 16) {
+    const alpha = pixels[index + 3];
+    if (alpha < 128) continue;
+    const red = pixels[index];
+    const green = pixels[index + 1];
+    const blue = pixels[index + 2];
+    const { h, s, l } = rgbToHsl(red, green, blue);
+    const name = colorToneName(red, green, blue);
+    const bucket = buckets.get(name) || { name, count: 0, sat: 0, light: 0, warm: 0, cool: 0 };
+    const weight = 1 + Math.min(0.8, s);
+    bucket.count += weight;
+    bucket.sat += s * weight;
+    bucket.light += l * weight;
+    if (s > 0.08 && (h < 75 || h >= 325)) bucket.warm += weight;
+    if (s > 0.08 && h >= 165 && h < 285) bucket.cool += weight;
+    buckets.set(name, bucket);
+    total += weight;
+    satSum += s * weight;
+    lightSum += l * weight;
+    if (s > 0.08 && (h < 75 || h >= 325)) warm += weight;
+    if (s > 0.08 && h >= 165 && h < 285) cool += weight;
+  }
+  if (!total || buckets.size === 0) return '主色调：未识别到有效色彩；可手动填写色彩倾向。';
+  const dominant = Array.from(buckets.values())
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 4)
+    .map((item) => item.name);
+  const temperature = warm > cool * 1.25 ? '整体偏暖' : cool > warm * 1.25 ? '整体偏冷' : '冷暖较均衡';
+  const avgLight = lightSum / total;
+  const lightText = avgLight < 0.36 ? '明度偏暗' : avgLight > 0.68 ? '明度偏亮' : '明度中等';
+  const avgSat = satSum / total;
+  const satText = avgSat < 0.18 ? '饱和度克制' : avgSat > 0.46 ? '饱和度较高' : '饱和度适中';
+  return `主色调：${dominant.join('、')}；${temperature}，${lightText}，${satText}。`;
+}
+
 function resolveReferenceMarkFontSize(width: number, height: number, settings: ReferenceMarkSettings): number {
   if (!settings.autoFontSize) return settings.fontSize;
   return Math.max(1, Math.min(512, Math.round(Math.max(width, height) * AUTO_REFERENCE_MARK_SIZE_RATIO)));
@@ -660,6 +755,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const exhibitReferenceImage = useInputImageByHandle(id, 'exhibit-reference');
   const hasColorMaterialReference = !!colorMaterialReferenceImage;
   const effectiveColorMaterial = hasColorMaterialReference ? '' : colorMaterial;
+  const colorMaterialReferenceTone = String(d.colorMaterialReferenceTone || '').trim();
   const colorMaterialMarkSettings = useMemo(() => normalizeReferenceMarkSettings(d, 'colorMaterial'), [
     d.colorMaterialMarkAutoFontSize,
     d.colorMaterialMarkColor,
@@ -682,12 +778,47 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     if (Object.keys(patch).length > 0) update(patch);
   }, [d.colorMaterialMarkDefaultsVersion, d.colorMaterialMarkFontSize, d.colorMaterialMarkText, update]);
 
+  useEffect(() => {
+    const source = colorMaterialReferenceImage || '';
+    const savedSource = String(d.colorMaterialReferenceToneSource || '').trim();
+    if (!source) {
+      if (d.colorMaterialReferenceTone || d.colorMaterialReferenceToneSource || d.colorMaterialReferenceToneStatus) {
+        update({ colorMaterialReferenceTone: '', colorMaterialReferenceToneSource: '', colorMaterialReferenceToneStatus: '' });
+      }
+      return;
+    }
+    if (savedSource === source && colorMaterialReferenceTone) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const tone = await analyzeReferenceImageDominantTone(source);
+        if (cancelled) return;
+        update({
+          colorMaterialReferenceTone: tone,
+          colorMaterialReferenceToneSource: source,
+          colorMaterialReferenceToneStatus: '',
+        });
+      } catch (error: any) {
+        if (cancelled) return;
+        update({
+          colorMaterialReferenceTone: '主色调：识别失败，可手动填写。',
+          colorMaterialReferenceToneSource: source,
+          colorMaterialReferenceToneStatus: error?.message || '主色调识别失败',
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [colorMaterialReferenceImage, colorMaterialReferenceTone, d.colorMaterialReferenceToneSource, d.colorMaterialReferenceToneStatus, update]);
+
   const previewPrompt = useMemo(
     () => buildExhibitionCreativeImagePrompt({
       spaceType,
       projectTheme,
       colorMaterial: effectiveColorMaterial,
       hasColorMaterialReferenceImage: hasColorMaterialReference,
+      colorMaterialReferenceTone,
       colorMaterialReferenceMode,
       colorMaterialReferenceMarkText: colorMaterialMarkSettings.text,
       colorMaterialReferenceMarkPosition: colorMaterialMarkSettings.position,
@@ -707,7 +838,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       roundIndex: 1,
       total: generationCount,
     }),
-    [colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialReferenceMode, creativeBrief, documentSummary, effectiveColorMaterial, exhibitReferenceImage, excludeOptions, generationCount, hasColorMaterialReference, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceType, viewAngleOptions, viewControlEnabled],
+    [colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialReferenceMode, colorMaterialReferenceTone, creativeBrief, documentSummary, effectiveColorMaterial, exhibitReferenceImage, excludeOptions, generationCount, hasColorMaterialReference, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceType, viewAngleOptions, viewControlEnabled],
   );
 
   const renderMarkSettings = (
@@ -1332,6 +1463,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           projectTheme,
           colorMaterial: effectiveColorMaterial,
           hasColorMaterialReferenceImage: hasColorMaterialReference,
+          colorMaterialReferenceTone,
           colorMaterialReferenceMode,
           colorMaterialReferenceMarkText: colorMaterialMarkSettings.text,
           colorMaterialReferenceMarkPosition: colorMaterialMarkSettings.position,
@@ -1411,6 +1543,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     insertOptions,
     colorMaterialMarkSettings,
     colorMaterialReferenceImage,
+    colorMaterialReferenceTone,
     inspiration,
     effectiveColorMaterial,
     exhibitReferenceImage,
@@ -1530,6 +1663,25 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                 <>
                   <img src={colorMaterialReferenceImage} alt="" className="h-24 w-full rounded border border-white/10 object-contain" draggable={false} />
                   <div className="mt-1 truncate text-[9px] text-white/40" title={colorMaterialReferenceImage}>{colorMaterialReferenceImage.split('/').pop() || colorMaterialReferenceImage}</div>
+                  <div className="mt-1.5 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[9px] font-semibold text-rose-100/80">主色调识别（像素采样）</span>
+                      {d.colorMaterialReferenceToneStatus && (
+                        <span className="truncate text-[8px] text-amber-200/75" title={d.colorMaterialReferenceToneStatus}>需手动确认</span>
+                      )}
+                    </div>
+                    <textarea
+                      className={`${FIELD} min-h-[46px] resize-y text-[10px] leading-snug`}
+                      value={colorMaterialReferenceTone}
+                      disabled={isReadonly || busy}
+                      placeholder="接入图片后自动识别主色调，可手动修正"
+                      onChange={(event) => update({
+                        colorMaterialReferenceTone: event.target.value,
+                        colorMaterialReferenceToneSource: colorMaterialReferenceImage,
+                        colorMaterialReferenceToneStatus: '',
+                      })}
+                    />
+                  </div>
                 </>
               ) : (
                 <div className="flex h-24 items-center justify-center rounded border border-dashed border-white/15 px-2 text-center text-[10px] leading-snug text-white/35">

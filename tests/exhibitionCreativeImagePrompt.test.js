@@ -126,6 +126,7 @@ test('exhibition creative image prompt describes marked reference roles', () => 
     colorMaterial: '手动暖木色和黄铜材质',
     hasSpaceImage: true,
     hasColorMaterialReferenceImage: true,
+    colorMaterialReferenceTone: '主色调：深红、铜褐、黑灰；整体偏暖，明度偏暗，饱和度适中。',
     colorMaterialReferenceMarkText: 'R',
     colorMaterialReferenceMarkPosition: 'top-left',
     hasExhibitReferenceImage: true,
@@ -135,6 +136,7 @@ test('exhibition creative image prompt describes marked reference roles', () => 
   assert.match(prompt, /图2=左上角带 R 标识的色彩与材质参考图/);
   assert.match(prompt, /图3=展品参考图/);
   assert.match(prompt, /Primary request: 生成一张真实室内建筑摄影级渲染的重亮点展项空间效果图，第1\/1张。严格遵循图1的空间几何、透视、层高、开口、墙体位置、顶面、地面边界、动线和尺度关系；色彩与材质参考图只用于提取材质语言、表面肌理、光泽、冷暖倾向和灯光氛围。/);
+  assert.match(prompt, /Color palette: 主色调：深红、铜褐、黑灰；整体偏暖，明度偏暗，饱和度适中。/);
   assert.match(prompt, /Constraints: 必须保留图1的原始建筑结构/);
   assert.match(prompt, /展品参考图只影响展品外观和展示重点，不影响空间结构或色彩材质/);
   assert.doesNotMatch(prompt, /手动暖木色和黄铜材质/);
