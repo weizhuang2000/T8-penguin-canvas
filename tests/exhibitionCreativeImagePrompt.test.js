@@ -17,20 +17,17 @@ test('exhibition creative image prompt locks the single input space image', () =
     creativeBrief: '以一条悬浮时间轴串联城市记忆，中央设置可步入式光盒装置。',
     generationCount: 4,
   });
-  assert.match(prompt, /重亮点展项空间/);
-  assert.match(prompt, /【空间结构示意图】/);
-  assert.match(prompt, /纯色素模的参考图是空间结构示意图/);
-  assert.match(prompt, /空间几何、布局和动线的主约束/);
-  assert.match(prompt, /不得把空间改成另一处建筑/);
-  assert.match(prompt, /最终画面必须看得出来自同一张输入室内空间图/);
-  assert.match(prompt, /城市更新/);
-  assert.match(prompt, /【色彩与材质】/);
-  assert.match(prompt, /深色拉丝金属、暖白灯带与低反射微水泥/);
-  assert.match(prompt, /优先于自由创意描述/);
-  assert.match(prompt, /【强制要求】/);
-  assert.match(prompt, /旧厂房钢结构/);
-  assert.ok(prompt.indexOf('【色彩与材质】') < prompt.indexOf('【创意描述】'));
-  assert.ok(prompt.indexOf('【强制要求】') < prompt.indexOf('【创意描述】'));
+  assert.match(prompt, /^Use case: stylized-concept/m);
+  assert.match(prompt, /Asset type: 专业展陈空间效果图 \/ 重亮点展项空间方案比选/);
+  assert.match(prompt, /Primary request: 生成一张真实室内建筑摄影级渲染的重亮点展项空间效果图，第1\/4张。/);
+  assert.match(prompt, /Input images: 图1=唯一空间结构示意图/);
+  assert.match(prompt, /Scene\/backdrop: 重亮点展项空间、核心展品或核心叙事节点/);
+  assert.match(prompt, /Subject: .*主题为“城市更新”。/);
+  assert.match(prompt, /Color palette: 深色拉丝金属、暖白灯带与低反射微水泥/);
+  assert.match(prompt, /Materials\/textures: 深色拉丝金属、暖白灯带与低反射微水泥/);
+  assert.match(prompt, /Text \(verbatim\): 仅允许出现大型立体主题字装置“城市更新”/);
+  assert.match(prompt, /Constraints: 必须保留图1的原始建筑结构/);
+  assert.match(prompt, /Avoid: people, readable small text, broken typography/);
 });
 
 test('exhibition creative brief prompt supports per-run LLM variation', () => {
@@ -69,10 +66,9 @@ test('exhibition creative image prompt places exclusions before LLM brief', () =
     creativeBrief: 'LLM 创意描述里可能提到真实品牌标识，但最终不应生成。',
     excludeItems: ['real-brand-logo', 'readable-wrong-text'],
   });
-  assert.match(prompt, /【排除项优先约束】/);
-  assert.match(prompt, /真实品牌标识和可读错字\/乱码文字/);
-  assert.match(prompt, /优先级高于创意描述/);
-  assert.ok(prompt.indexOf('【排除项优先约束】') < prompt.indexOf('【创意描述】'));
+  assert.match(prompt, /Constraints: .*不得出现：真实品牌标识和可读错字\/乱码文字/);
+  assert.match(prompt, /Avoid: .*真实品牌标识和可读错字\/乱码文字/);
+  assert.ok(prompt.indexOf('Constraints:') < prompt.indexOf('Avoid:'));
 });
 
 test('exhibition creative image prompt adds selected view angles to first sentence', () => {
@@ -81,21 +77,21 @@ test('exhibition creative image prompt adds selected view angles to first senten
     viewControlEnabled: true,
     viewAngles: ['front'],
   });
-  assert.match(single.split('\n')[0], /控制生图视角为正视角/);
+  assert.match(single, /Primary request: .*正视角/);
 
   const quad = buildExhibitionCreativeImagePrompt({
     spaceType: 'intro-hall',
     viewControlEnabled: true,
     viewAngles: ['front', 'left', 'right', 'top'],
   });
-  assert.match(quad.split('\n')[0], /生成四视图，分别包含正视角、左视角、右视角、上视角/);
+  assert.match(quad, /Primary request: .*生成四视图，分别包含正视角、左视角、右视角、上视角/);
 
   const five = buildExhibitionCreativeImagePrompt({
     spaceType: 'intro-hall',
     viewControlEnabled: true,
     viewAngles: ['front', 'left', 'right', 'back', 'top'],
   });
-  assert.match(five.split('\n')[0], /生成5视图，分别包含正视角、左视角、右视角、后视角、上视角/);
+  assert.match(five, /Primary request: .*生成5视图，分别包含正视角、左视角、右视角、后视角、上视角/);
 });
 
 test('exhibition creative image prompt supports manual space size without input image', () => {
@@ -105,12 +101,11 @@ test('exhibition creative image prompt supports manual space size without input 
     spaceSize: { width: 12, depth: 18, height: 4.5 },
     creativeBrief: '围绕核心展品设置自由流线和沉浸光影。',
   });
-  assert.match(prompt, /【手动空间尺寸约束】/);
-  assert.match(prompt, /宽度 12 米、进深 18 米、高度 4.5 米/);
-  assert.match(prompt, /空间结构、开口位置、墙体组织、吊顶形式和参观动线可以自由发挥/);
-  assert.match(prompt, /控制在上述空间体量内/);
-  assert.doesNotMatch(prompt, /没有输入空间图/);
-  assert.doesNotMatch(prompt, /输入图像是唯一的室内建筑空间依据/);
+  assert.match(prompt, /Input images: 无输入图；按手动空间尺寸、项目资料和创意描述生成。/);
+  assert.match(prompt, /Primary request: .*按宽度 12 米、进深 18 米、高度 4.5 米控制空间体量/);
+  assert.match(prompt, /Subject: .*围绕核心展品设置自由流线和沉浸光影。/);
+  assert.match(prompt, /Constraints: 必须保持真实室内空间尺度、墙体边界、开口逻辑、动线和可施工性/);
+  assert.match(prompt, /Avoid: people, readable small text, broken typography/);
   assert.doesNotMatch(prompt, /最终画面必须看得出来自同一张输入室内空间图/);
 });
 
@@ -136,23 +131,12 @@ test('exhibition creative image prompt describes marked reference roles', () => 
     hasExhibitReferenceImage: true,
     creativeBrief: '围绕核心展品组织沉浸式重点空间。',
   });
-  assert.match(prompt, /参考图角色说明：纯色素模的参考图是空间结构示意图/);
-  assert.match(prompt, /必须先从空间结构示意图提取干净的空间骨架/);
-  assert.match(prompt, /不要直接沿用色彩与材质参考图原本的平面布局/);
-  assert.match(prompt, /纯色素模的参考图是空间结构示意图/);
-  assert.match(prompt, /空间几何、布局和动线的主约束/);
-  assert.match(prompt, /最终空间结构必须完全遵循空间结构示意图/);
-  assert.match(prompt, /该图不作为展品参考图起任何作用/);
-  assert.match(prompt, /该图也不作为色彩与材质参考图起任何作用/);
-  assert.match(prompt, /不要在最终效果图中渲染、复写、临摹或生成空间结构示意图中的标注文字/);
-  assert.match(prompt, /左上角带 R 标识的图片为色彩与材质参考图/);
-  assert.match(prompt, /色彩关系、材质质感、表面肌理、光泽和冷暖倾向/);
-  assert.match(prompt, /三类参考图职责互斥/);
-  assert.match(prompt, /不要从该图学习或复制空间布局/);
-  assert.match(prompt, /即使该图看起来像完整室内效果图/);
-  assert.match(prompt, /色彩与材质参考图只决定表面语言，不决定空间结构/);
-  assert.match(prompt, /展品参考图是唯一展品参考来源/);
-  assert.match(prompt, /不作为空间结构或色彩材质体系依据/);
+  assert.match(prompt, /Input images: 图1=唯一空间结构示意图/);
+  assert.match(prompt, /图2=左上角带 R 标识的色彩与材质参考图/);
+  assert.match(prompt, /图3=展品参考图/);
+  assert.match(prompt, /Primary request: 生成一张真实室内建筑摄影级渲染的重亮点展项空间效果图，第1\/1张。严格遵循图1的空间几何、透视、层高、开口、墙体位置、顶面、地面边界、动线和尺度关系；色彩与材质参考图只用于提取材质语言、表面肌理、光泽、冷暖倾向和灯光氛围。/);
+  assert.match(prompt, /Constraints: 必须保留图1的原始建筑结构/);
+  assert.match(prompt, /展品参考图只影响展品外观和展示重点，不影响空间结构或色彩材质/);
   assert.doesNotMatch(prompt, /手动暖木色和黄铜材质/);
   assert.doesNotMatch(prompt, /【色彩与材质】/);
 });
@@ -169,11 +153,10 @@ test('exhibition creative image prompt describes abstract color material card mo
     hasExhibitReferenceImage: true,
     creativeBrief: '围绕核心展品组织沉浸式重点空间。',
   });
-  assert.match(prompt, /图1 \/ 第一张参考图 \/ 纯色素模参考图是唯一空间结构示意图/);
-  assert.match(prompt, /图2是色彩与材质抽象卡片，不是空间结构参考图/);
-  assert.match(prompt, /不包含可采用的空间结构/);
-  assert.match(prompt, /最终空间结构必须完全遵循图1，图2只决定表面语言，不决定空间结构/);
-  assert.match(prompt, /展品参考图是唯一展品参考来源/);
+  assert.match(prompt, /Input images: 图1=唯一空间结构示意图/);
+  assert.match(prompt, /图2=色彩与材质抽象卡片/);
+  assert.match(prompt, /只用于提取色彩关系、材质质感、表面肌理、光泽、冷暖倾向和灯光氛围，不作为空间结构依据/);
+  assert.match(prompt, /Constraints: .*最终画面必须是高完成度、可落地的展陈空间效果图。/);
   assert.doesNotMatch(prompt, /不应出现的手动色彩材质文本/);
   assert.doesNotMatch(prompt, /【色彩与材质】/);
 });
@@ -186,9 +169,8 @@ test('exhibition creative prompt uses custom mark labels and suppresses color ma
     colorMaterialReferenceMarkPosition: 'top-right',
     colorMaterial: '不应出现的手动色彩材质',
   });
-  assert.match(imagePrompt, /空间结构示意图/);
-  assert.doesNotMatch(imagePrompt, /SPACE 标识的图片为空间约束参考图/);
-  assert.match(imagePrompt, /右上角带 CM 标识的图片为色彩与材质参考图/);
+  assert.match(imagePrompt, /Input images: 图1=唯一空间结构示意图/);
+  assert.match(imagePrompt, /图2=右上角带 CM 标识的色彩与材质参考图/);
   assert.doesNotMatch(imagePrompt, /不应出现的手动色彩材质/);
 
   const briefPrompt = buildExhibitionCreativeBriefPrompt({

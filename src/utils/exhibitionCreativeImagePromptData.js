@@ -228,6 +228,65 @@ function exhibitionCreativeDeepeningRequirement(spaceType) {
   return '画面应服务序厅或入口形象区的方案比选：突出开场仪式感、第一视觉记忆点、主题总览、品牌或展览核心精神的瞬间建立，形成明确入口动线、主视觉焦点、可信材料工艺和高品质空间氛围。';
 }
 
+function exhibitionCreativeInputImagesText(values) {
+  const hasSpaceImage = values.hasSpaceImage !== false;
+  const hasColorMaterialReferenceImage = values.hasColorMaterialReferenceImage === true;
+  const hasExhibitReferenceImage = values.hasExhibitReferenceImage === true;
+  const colorMaterialReferenceMode = values.colorMaterialReferenceMode === 'abstract-card' ? 'abstract-card' : 'marked-image';
+  const colorMaterialReferenceMarkText = exhibitionCreativeReferenceMarkText(values.colorMaterialReferenceMarkText, 'R');
+  const colorMaterialReferenceMarkPositionText = exhibitionCreativeMarkPositionText(values.colorMaterialReferenceMarkPosition);
+  const roles = [];
+  let index = 1;
+  if (hasSpaceImage) {
+    roles.push(`图${index}=唯一空间结构示意图，唯一决定空间几何、透视、层高、主要开口、墙体位置、地面边界、顶面关系、动线和尺度关系`);
+    index += 1;
+  }
+  if (hasColorMaterialReferenceImage) {
+    const markText = colorMaterialReferenceMode === 'abstract-card'
+      ? '色彩与材质抽象卡片'
+      : `${colorMaterialReferenceMarkPositionText}带 ${colorMaterialReferenceMarkText} 标识的色彩与材质参考图`;
+    roles.push(`图${index}=${markText}，只用于提取色彩关系、材质质感、表面肌理、光泽、冷暖倾向和灯光氛围，不作为空间结构依据`);
+    index += 1;
+  }
+  if (hasExhibitReferenceImage) {
+    roles.push(`图${index}=展品参考图，只用于提取展品外观、内容主题、体量关系和展示重点，不作为空间结构或色彩材质体系依据`);
+  }
+  if (roles.length > 0) return roles.join('；');
+  return '无输入图；按手动空间尺寸、项目资料和创意描述生成。';
+}
+
+function exhibitionCreativeColorPaletteText({ colorMaterial, hasColorMaterialReferenceImage }) {
+  if (hasColorMaterialReferenceImage) {
+    return '从色彩与材质参考图中提取主色、辅助色、金属色、明暗关系、冷暖倾向和局部发光色；不得借用该参考图的空间布局或构图。';
+  }
+  return colorMaterial || '结合项目主题与展陈气质组织清晰、克制、可落地的专业展陈色彩体系，避免杂乱高饱和配色。';
+}
+
+function exhibitionCreativeMaterialsText({ colorMaterial, hasColorMaterialReferenceImage }) {
+  if (hasColorMaterialReferenceImage) {
+    return '从色彩与材质参考图中提取可落地的墙面、地面、展柜、装置、金属字、发光亚克力、灯带、浮雕肌理和低反射表面工艺语言。';
+  }
+  return colorMaterial || '微水泥、哑光石材、拉丝金属、局部半透发光亚克力、深色木饰面、精细浮雕肌理、低反射地面和可施工的展陈饰面。';
+}
+
+function exhibitionCreativeAvoidText(excludeItemsText) {
+  const defaults = [
+    'people',
+    'readable small text',
+    'broken typography',
+    'posters',
+    'labels',
+    'extra architectural openings',
+    'altered structure',
+    'random props',
+    'graffiti',
+    'ornamental clutter',
+    'stone pomegranate shapes',
+  ];
+  if (excludeItemsText) defaults.push(excludeItemsText);
+  return defaults.join(', ');
+}
+
 export function buildExhibitionCreativeImagePrompt(values = {}) {
   const meta = exhibitionCreativeSpaceTypeMeta(values.spaceType);
   const projectTheme = cleanExhibitionCreativeText(values.projectTheme, 500);
@@ -242,102 +301,46 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   const excludeItemsText = exhibitionCreativeExcludeItemsText(values.excludeItems, values.excludeItemOptions);
   const hasSpaceImage = values.hasSpaceImage !== false;
   const hasExhibitReferenceImage = values.hasExhibitReferenceImage === true;
-  const colorMaterialReferenceMode = values.colorMaterialReferenceMode === 'abstract-card' ? 'abstract-card' : 'marked-image';
-  const colorMaterialReferenceMarkText = exhibitionCreativeReferenceMarkText(values.colorMaterialReferenceMarkText, 'R');
-  const colorMaterialReferenceMarkPositionText = exhibitionCreativeMarkPositionText(values.colorMaterialReferenceMarkPosition);
   const spaceSizeText = exhibitionCreativeSpaceSizeText(values.spaceSize);
   const viewAnglesText = values.viewControlEnabled ? exhibitionCreativeViewAnglesText(values.viewAngles, values.viewAngleOptions) : '';
-  const viewPrefix = viewAnglesText ? `${viewAnglesText}，` : '';
-  const lines = [
-    `生成一张专业${meta.label}展陈空间效果图，第 ${roundIndex}/${total} 张。${viewPrefix}真实室内建筑摄影级渲染，空间尺度可信，材质细节清晰，灯光层次准确，画面干净完整。`,
-    `空间类型：${meta.label}。${meta.prompt}`,
-    '',
+  const viewSentence = viewAnglesText ? `${viewAnglesText}；` : '';
+  const imageTargetName = meta.label.endsWith('空间') ? `${meta.label}效果图` : `${meta.label}展陈空间效果图`;
+  const subjectParts = [
+    hasSpaceImage ? `在原始室内空间内植入${insertItemsText}` : `在室内空间内植入${insertItemsText}`,
+    creativeBrief || '围绕该室内空间生成具有强记忆点的展陈创意：以主题叙事为核心，在入口/核心/收束视线位置组织主视觉装置、沉浸光影、展陈工艺和观众动线，形成可落地的高完成度展陈效果图。',
   ];
-  if (hasSpaceImage || hasColorMaterialReferenceImage || hasExhibitReferenceImage) {
-    lines.push('【参考图读取总规则】');
-    lines.push('参考图角色说明：纯色素模的参考图是空间结构示意图，是空间几何、布局和动线的主约束；带标识的色彩与材质参考图只用于提取色彩关系、材质质感、表面肌理、光泽、冷暖倾向和材质完成度；展品参考图只用于提取展品外观、内容主题、体量关系和展示重点。');
-    if (hasSpaceImage) {
-      lines.push('图1 / 第一张参考图 / 纯色素模参考图是唯一空间结构示意图，是最终空间几何、布局、透视和动线的唯一依据。');
-    }
-    if (hasColorMaterialReferenceImage && colorMaterialReferenceMode === 'abstract-card') {
-      lines.push('图2是色彩与材质抽象卡片，不是空间结构参考图，不包含可采用的空间结构；只能读取颜色、材质、肌理、光泽和冷暖倾向。');
-    }
-    lines.push('生成时必须先从空间结构示意图提取干净的空间骨架，再把色彩与材质参考图的表面语言套用到该骨架上；不要直接沿用色彩与材质参考图原本的平面布局、房间形状、墙体位置、展台位置、入口开口、动线组织、镜头构图或空间比例来替代结构图。');
-    lines.push('如果不同参考图之间出现冲突：空间几何、布局、透视、层高、墙柱、吊顶、地面边界和动线只服从空间结构示意图；色彩关系、材质质感、肌理、光泽和冷暖倾向只服从色彩与材质参考图；展品外观、内容主题、体量关系和展示重点只服从展品参考图。');
-    lines.push('三类参考图职责互斥，不能互相替代、混用或推断对方职责；空间结构不参与色彩材质参考的优先级排序，最终空间结构必须完全遵循空间结构示意图。');
-    lines.push('');
-  }
+  if (projectTheme) subjectParts.push(`主题为“${projectTheme}”。`);
+  if (documentSummary) subjectParts.push(`项目资料摘要：${documentSummary}`);
+  if (inspiration) subjectParts.push(`强制要求：${inspiration}`);
+  const primaryRequestParts = [
+    `生成一张真实室内建筑摄影级渲染的${imageTargetName}，第${roundIndex}/${total}张。`,
+    viewSentence,
+  ];
   if (hasSpaceImage) {
-    lines.push('【空间结构示意图】');
-    lines.push('图1 / 第一张参考图 / 纯色素模参考图是唯一空间结构示意图；其它参考图不得覆盖、改写或补充它的空间结构。');
-    lines.push('纯色素模的参考图是空间结构示意图，是空间几何、布局和动线的主约束；也是空间骨架和布局蓝本。');
-    lines.push('必须把图中的平面关系、动线、分区、展墙/隔断、入口出口、主要体块、墙柱、吊顶、地面边界和开口关系转译为真实透视空间，不能只借鉴风格而改成另一套空间。');
-    lines.push('空间结构不参与表现形式或色彩材质的优先级排序；无论其他参考图如何，最终空间结构必须完全遵循空间结构示意图。');
-    lines.push('该图不作为展品参考图起任何作用，不从该图提取展品造型、展品内容、展品主题或展示重点。');
-    lines.push('该图也不作为色彩与材质参考图起任何作用，不从该图提取色彩风格、材料质感、表面肌理、灯光色温、软装装饰或展陈饰面。');
-    lines.push('不要在最终效果图中渲染、复写、临摹或生成空间结构示意图中的标注文字、箭头编号、尺寸线、图例、说明标签或乱码文本。');
-    lines.push(`需要在该空间内植入${insertItemsText}；不得把空间改成另一处建筑，不得改变主要开口、承重结构和真实尺度关系。`);
+    primaryRequestParts.push('严格遵循图1的空间几何、透视、层高、开口、墙体位置、顶面、地面边界、动线和尺度关系；');
+    primaryRequestParts.push(hasColorMaterialReferenceImage
+      ? '色彩与材质参考图只用于提取材质语言、表面肌理、光泽、冷暖倾向和灯光氛围。'
+      : '不要改变原始建筑结构，只在展陈创意、灯光、材料、装置和叙事氛围上形成新的方案。');
+  } else if (spaceSizeText) {
+    primaryRequestParts.push(`按${spaceSizeText}控制空间体量、人体尺度、开口关系和动线逻辑；不得生成超出尺寸边界的大跨空间、超高空间或不可信尺度。`);
   } else {
-    lines.push('【手动空间尺寸约束】');
-    lines.push(spaceSizeText
-      ? `请在${spaceSizeText}的室内空间体量内生成方案，空间结构、开口位置、墙体组织、吊顶形式和参观动线可以自由发挥，但必须保持真实尺度关系、人体尺度和可落地的建筑室内逻辑。`
-      : '请自由设计室内建筑空间结构，但必须保持真实尺度关系、人体尺度和可落地的建筑室内逻辑。');
-    lines.push(`需要在该空间内植入${insertItemsText}；展陈内容、建筑空间和动线都应控制在上述空间体量内，不要生成明显超出尺寸边界的大跨空间、超高空间或不可信尺度。`);
+    primaryRequestParts.push('保持真实尺度关系、人体尺度和可落地的建筑室内逻辑。');
   }
-  if (excludeItemsText) {
-    lines.push('');
-    lines.push('【排除项优先约束】');
-    lines.push(`以下内容优先级高于创意描述，不得出现在画面中：${excludeItemsText}。即使创意描述、项目资料或个人灵感提到这些内容，也必须忽略并避免生成。`);
-  }
-  if (hasColorMaterialReferenceImage) {
-    lines.push('');
-    lines.push('【色彩与材质参考图】');
-    if (colorMaterialReferenceMode === 'abstract-card') {
-      lines.push(`图2是色彩与材质抽象卡片，${colorMaterialReferenceMarkPositionText}带 ${colorMaterialReferenceMarkText} 标识；它不是空间结构参考图，不包含可采用的空间结构。`);
-    } else {
-      lines.push(`${colorMaterialReferenceMarkPositionText}带 ${colorMaterialReferenceMarkText} 标识的图片为色彩与材质参考图，只用于参考色彩关系、材质质感、表面肌理、光泽和冷暖倾向。`);
-    }
-    lines.push('该图不作为展品参考图起任何作用，不从该图提取展品造型、展品内容、展品主题或展示重点。');
-    lines.push('该图不作为空间结构依据，不改变空间图或手动空间尺寸给出的几何、透视、层高、开口和动线关系。');
-    lines.push('不要从该图学习或复制空间布局、房间形状、墙柱位置、吊顶形式、地面边界、门洞开口、镜头角度、构图比例、展示道具或展品形态；只把它翻译成可用于当前空间的颜色与材质语言。');
-    lines.push('即使该图看起来像完整室内效果图，也只能使用它的表皮、材质、色调、光泽和肌理，不得使用它的空间骨架、墙体组织、展台构成或视角关系。');
-  }
-  if (hasExhibitReferenceImage) {
-    lines.push('');
-    lines.push('【展品参考图】');
-    lines.push('展品参考图是唯一展品参考来源，只用于展品外观、内容主题、体量关系和展示重点，不作为空间结构或色彩材质体系依据。');
-  }
-  if (colorMaterial) {
-    lines.push('');
-    lines.push('【色彩与材质】');
-    lines.push(colorMaterial);
-    lines.push('上述色彩与材质体系优先于自由创意描述，必须转化为可落地的墙面、地面、展柜、装置、灯光和表面工艺表达。');
-  }
-  if (inspiration) {
-    lines.push('');
-    lines.push('【强制要求】');
-    lines.push(inspiration);
-  }
-  lines.push('');
-  lines.push('【创意描述】');
-  lines.push(creativeBrief || '围绕该室内空间生成具有强记忆点的展陈创意：以主题叙事为核心，在入口/核心/收束视线位置组织主视觉装置、沉浸光影、展陈工艺和观众动线，形成可落地的高完成度展陈效果图。');
-  if (projectTheme) lines.push(`项目主题：${projectTheme}`);
-  if (documentSummary) {
-    lines.push('项目资料摘要：');
-    lines.push(documentSummary);
-  }
-  lines.push('');
-  lines.push('【设计深化要求】');
-  lines.push(exhibitionCreativeDeepeningRequirement(values.spaceType));
-  lines.push('不要出现“创意描述”“个人灵感”“空间类型”“输入空间图约束”等字段名，也不要把上述设计说明作为上墙文字。');
-  if (hasSpaceImage && hasColorMaterialReferenceImage) {
-    lines.push('再次强调：色彩与材质参考图只决定表面语言，不决定空间结构；最终画面的空间骨架、布局、墙体、展陈体块、分区、动线和主要开口必须完全遵循空间结构示意图。');
-    if (colorMaterialReferenceMode === 'abstract-card') {
-      lines.push('最终空间结构必须完全遵循图1，图2只决定表面语言，不决定空间结构。');
-    }
-  }
-  lines.push(hasSpaceImage
-    ? '最终画面必须看得出来自同一张输入室内空间图，只是在展陈创意、灯光、材料、装置和叙事氛围上形成新的方案。'
-    : '最终画面不受既有输入图限制，空间结构可以自由发挥，但所有墙体、开口、展陈装置、展柜、媒体设备、观众尺度和拍摄视角都必须落在手动输入的空间尺寸范围内。');
+  const lines = [
+    'Use case: stylized-concept',
+    `Asset type: 专业展陈空间效果图 / ${meta.label}方案比选`,
+    `Primary request: ${primaryRequestParts.join('')}`,
+    `Input images: ${exhibitionCreativeInputImagesText(values)}`,
+    `Scene/backdrop: ${meta.prompt}`,
+    `Subject: ${subjectParts.join(' ')}`,
+    'Style/medium: photorealistic interior architectural visualization, high-end exhibition design render',
+    `Composition/framing: ${hasSpaceImage ? '延续图1的原始透视、主入口视线、空间开口和尺度关系，主视觉布置在原空间合理视线焦点内，空间完整可读，画面干净，尺度可信' : '使用可信室内建筑摄影视角，完整呈现空间边界、主视觉焦点、参观动线和展陈体块关系，画面干净，尺度可信'}`,
+    `Lighting/mood: ${exhibitionCreativeDeepeningRequirement(values.spaceType)} 灯光应纪念性、庄重、温暖或与项目气质一致，层次分明，局部线性灯光勾边，重点展墙、浮雕、装置或展品有洗墙光和重点光，整体像专业展陈施工落地图。`,
+    `Color palette: ${exhibitionCreativeColorPaletteText({ colorMaterial, hasColorMaterialReferenceImage })}`,
+    `Materials/textures: ${exhibitionCreativeMaterialsText({ colorMaterial, hasColorMaterialReferenceImage })}`,
+    `Text (verbatim): ${projectTheme ? `仅允许出现大型立体主题字装置“${projectTheme}”或等价主题装置字形；` : '仅允许出现必要的大型立体主题字装置或抽象主题装置字形；'}不要出现任何小字、说明文字、乱码、展板文字、标签文字、Markdown 字段名或参数说明。`,
+    `Constraints: ${hasSpaceImage ? '必须保留图1的原始建筑结构，不得改变主要开口、墙体、顶面、地面边界、透视、层高、动线和尺度关系；不把空间改造成另一处建筑；' : '必须保持真实室内空间尺度、墙体边界、开口逻辑、动线和可施工性；'}不增加人物；不出现蒙文；不出现可读错字或乱码；不出现小结构堆砌；不出现石榴造型；${hasExhibitReferenceImage ? '展品参考图只影响展品外观和展示重点，不影响空间结构或色彩材质；' : ''}${excludeItemsText ? `不得出现：${excludeItemsText}；` : ''}最终画面必须是高完成度、可落地的展陈空间效果图。`,
+    `Avoid: ${exhibitionCreativeAvoidText(excludeItemsText)}`,
+  ];
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
