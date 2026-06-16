@@ -84,6 +84,9 @@ const MAX_GENERATION_COUNT = 12;
 const EXTERNAL_SIZE_LEVELS = ['1K', '2K', '4K'];
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
+const DEFAULT_REFERENCE_MARK_FONT_SIZE = 24;
+const DEFAULT_COLOR_MATERIAL_MARK_TEXT = '图2';
+const AUTO_REFERENCE_MARK_SIZE_RATIO = 0.05;
 type ReferenceMarkPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
 interface ReferenceMarkSettings {
@@ -180,7 +183,7 @@ function normalizeReferenceMarkPosition(value: unknown): ReferenceMarkPosition {
 
 function clampReferenceMarkFontSize(value: unknown): number {
   const number = Number.parseInt(String(value), 10);
-  if (!Number.isFinite(number)) return 12;
+  if (!Number.isFinite(number)) return DEFAULT_REFERENCE_MARK_FONT_SIZE;
   return Math.max(1, Math.min(512, number));
 }
 
@@ -195,7 +198,7 @@ function normalizeReferenceMarkText(value: unknown, fallback: string): string {
 }
 
 function normalizeReferenceMarkSettings(data: any, prefix: 'space' | 'colorMaterial'): ReferenceMarkSettings {
-  const fallbackText = prefix === 'space' ? 'F' : 'R';
+  const fallbackText = prefix === 'space' ? 'F' : DEFAULT_COLOR_MATERIAL_MARK_TEXT;
   return {
     text: normalizeReferenceMarkText(data?.[`${prefix}MarkText`], fallbackText),
     position: normalizeReferenceMarkPosition(data?.[`${prefix}MarkPosition`]),
@@ -215,20 +218,13 @@ function loadReferenceImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-function resolveReferenceMarkFontSize(ctx: CanvasRenderingContext2D, width: number, height: number, settings: ReferenceMarkSettings): number {
+function resolveReferenceMarkFontSize(width: number, height: number, settings: ReferenceMarkSettings): number {
   if (!settings.autoFontSize) return settings.fontSize;
-  const probeSize = 100;
-  ctx.font = `${probeSize}px Arial, Helvetica, sans-serif`;
-  const metrics = ctx.measureText(settings.text || 'R');
-  const measuredWidth = Math.max(1, metrics.width);
-  const measuredHeight = Math.max(1, (metrics.actualBoundingBoxAscent || probeSize * 0.8) + (metrics.actualBoundingBoxDescent || probeSize * 0.2));
-  const widthSize = (Math.max(1, width * 0.03) / measuredWidth) * probeSize;
-  const heightSize = (Math.max(1, height * 0.03) / measuredHeight) * probeSize;
-  return Math.max(1, Math.min(512, Math.round(Math.max(widthSize, heightSize))));
+  return Math.max(1, Math.min(512, Math.round(Math.max(width, height) * AUTO_REFERENCE_MARK_SIZE_RATIO)));
 }
 
 function drawReferenceMark(ctx: CanvasRenderingContext2D, width: number, height: number, settings: ReferenceMarkSettings) {
-  const fontSize = resolveReferenceMarkFontSize(ctx, width, height, settings);
+  const fontSize = resolveReferenceMarkFontSize(width, height, settings);
   const margin = Math.max(2, Math.ceil(fontSize * 0.25));
   const isRight = settings.position.endsWith('right');
   const isBottom = settings.position.startsWith('bottom');
@@ -236,7 +232,7 @@ function drawReferenceMark(ctx: CanvasRenderingContext2D, width: number, height:
   ctx.fillStyle = settings.color;
   ctx.textAlign = isRight ? 'right' : 'left';
   ctx.textBaseline = isBottom ? 'alphabetic' : 'top';
-  ctx.fillText(settings.text || 'R', isRight ? Math.max(0, width - margin) : margin, isBottom ? Math.max(fontSize, height - margin) : margin);
+  ctx.fillText(settings.text || DEFAULT_COLOR_MATERIAL_MARK_TEXT, isRight ? Math.max(0, width - margin) : margin, isBottom ? Math.max(fontSize, height - margin) : margin);
 }
 
 async function markImageDataUrl(imageUrl: string, settings: ReferenceMarkSettings): Promise<string> {
@@ -250,7 +246,7 @@ async function markImageDataUrl(imageUrl: string, settings: ReferenceMarkSetting
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('当前浏览器无法创建标识画布');
   ctx.drawImage(image, 0, 0, width, height);
-  const fontSize = resolveReferenceMarkFontSize(ctx, width, height, settings);
+  const fontSize = resolveReferenceMarkFontSize(width, height, settings);
   const margin = Math.max(2, Math.ceil(fontSize * 0.25));
   const isRight = settings.position.endsWith('right');
   const isBottom = settings.position.startsWith('bottom');
@@ -258,7 +254,7 @@ async function markImageDataUrl(imageUrl: string, settings: ReferenceMarkSetting
   ctx.fillStyle = settings.color;
   ctx.textAlign = isRight ? 'right' : 'left';
   ctx.textBaseline = isBottom ? 'alphabetic' : 'top';
-  ctx.fillText(settings.text || 'R', isRight ? Math.max(0, width - margin) : margin, isBottom ? Math.max(fontSize, height - margin) : margin);
+  ctx.fillText(settings.text || DEFAULT_COLOR_MATERIAL_MARK_TEXT, isRight ? Math.max(0, width - margin) : margin, isBottom ? Math.max(fontSize, height - margin) : margin);
   return canvas.toDataURL('image/png');
 }
 

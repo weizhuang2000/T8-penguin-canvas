@@ -233,7 +233,7 @@ function exhibitionCreativeInputImagesText(values) {
   const hasColorMaterialReferenceImage = values.hasColorMaterialReferenceImage === true;
   const hasExhibitReferenceImage = values.hasExhibitReferenceImage === true;
   const colorMaterialReferenceMode = values.colorMaterialReferenceMode === 'abstract-card' ? 'abstract-card' : 'marked-image';
-  const colorMaterialReferenceMarkText = exhibitionCreativeReferenceMarkText(values.colorMaterialReferenceMarkText, 'R');
+  const colorMaterialReferenceMarkText = exhibitionCreativeReferenceMarkText(values.colorMaterialReferenceMarkText, '图2');
   const colorMaterialReferenceMarkPositionText = exhibitionCreativeMarkPositionText(values.colorMaterialReferenceMarkPosition);
   const roles = [];
   let index = 1;
