@@ -2,6 +2,28 @@ import type { AdvancedProviderConfig, AdvancedProviderSummary, CanvasProviderSou
 
 const MASKED_RE = /^\*{2,}/;
 
+export interface ModelscopeLoraOption {
+  id: string;
+  name: string;
+  targetModel: string;
+  strength: number;
+  enabled: boolean;
+  note?: string;
+}
+
+export const MAX_MODELSCOPE_NODE_LORAS = 5;
+export const MODELSCOPE_LORA_TOTAL_WEIGHT = 1;
+const MODELSCOPE_LORA_WEIGHT_DECIMALS = 4;
+
+export interface ModelscopeSelectedLora {
+  id: string;
+  strength: number;
+}
+
+function roundModelscopeLoraWeight(value: number): number {
+  return Number(value.toFixed(MODELSCOPE_LORA_WEIGHT_DECIMALS));
+}
+
 export function parseAdvancedProviderModelText(value: string): string[] {
   const out: string[] = [];
   for (const raw of String(value || '').split(/[\n,]/)) {
@@ -17,6 +39,145 @@ export function stringifyAdvancedProviderModels(values?: string[]): string {
     .map((item) => String(item || '').trim())
     .filter(Boolean)
     .join('\n');
+}
+
+export function normalizeModelscopeLoraStrength(value: unknown, fallback = 0.8): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.min(MODELSCOPE_LORA_TOTAL_WEIGHT, n));
+}
+
+export function modelscopeLoraWeightTotal(values: ModelscopeSelectedLora[] = []): number {
+  return roundModelscopeLoraWeight(values.reduce((sum, item) => (
+    sum + normalizeModelscopeLoraStrength(item?.strength, 0)
+  ), 0));
+}
+
+export function normalizeModelscopeLoraWeightsTotal(
+  values: ModelscopeSelectedLora[] = [],
+): ModelscopeSelectedLora[] {
+  const normalized = values.map((item) => ({
+    ...item,
+    strength: normalizeModelscopeLoraStrength(item?.strength, 0),
+  }));
+  const total = modelscopeLoraWeightTotal(normalized);
+  if (total <= MODELSCOPE_LORA_TOTAL_WEIGHT || total <= 0) return normalized;
+
+  const positiveCount = normalized.filter((item) => item.strength > 0).length;
+  let positiveIndex = 0;
+  let used = 0;
+  return normalized.map((item) => {
+    if (item.strength <= 0) return item;
+    positiveIndex += 1;
+    const strength = positiveIndex === positiveCount
+      ? Math.max(0, roundModelscopeLoraWeight(MODELSCOPE_LORA_TOTAL_WEIGHT - used))
+      : roundModelscopeLoraWeight(item.strength / total);
+    used = roundModelscopeLoraWeight(used + strength);
+    return { ...item, strength };
+  });
+}
+
+export function distributeModelscopeLoraWeights(
+  values: ModelscopeSelectedLora[] = [],
+): ModelscopeSelectedLora[] {
+  const count = values.length;
+  if (!count) return [];
+  const base = roundModelscopeLoraWeight(MODELSCOPE_LORA_TOTAL_WEIGHT / count);
+  let used = 0;
+  return values.map((item, index) => {
+    const strength = index === count - 1
+      ? Math.max(0, roundModelscopeLoraWeight(MODELSCOPE_LORA_TOTAL_WEIGHT - used))
+      : base;
+    used = roundModelscopeLoraWeight(used + strength);
+    return { ...item, strength };
+  });
+}
+
+export function normalizeModelscopeLoras(values?: unknown[]): ModelscopeLoraOption[] {
+  const out: ModelscopeLoraOption[] = [];
+  const seen = new Set<string>();
+  for (const raw of Array.isArray(values) ? values : []) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const item = raw as Record<string, any>;
+    const id = String(item.id || item.loraId || '').trim();
+    const targetModel = String(item.targetModel || item.target_model || item.model || '').trim();
+    if (!id || !targetModel) continue;
+    const key = `${targetModel}\n${id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      id: id.slice(0, 180),
+      name: String(item.name || id).trim().replace(/\s+/g, ' ').slice(0, 80) || id,
+      targetModel: targetModel.slice(0, 180),
+      strength: normalizeModelscopeLoraStrength(item.strength ?? item.default_strength ?? item.defaultStrength, 0.8),
+      enabled: item.enabled !== false,
+      note: String(item.note || '').trim().slice(0, 300),
+    });
+  }
+  return out;
+}
+
+export function modelscopeLorasForModel(
+  provider: AdvancedProviderConfig | null | undefined,
+  modelId?: string,
+): ModelscopeLoraOption[] {
+  const target = String(modelId || '').trim();
+  if (!provider || provider.protocol !== 'modelscope' || !target) return [];
+  const raw = [
+    ...(Array.isArray(provider.modelscopeConfig?.loras) ? provider.modelscopeConfig.loras : []),
+    ...(Array.isArray((provider as any).ms_loras) ? (provider as any).ms_loras : []),
+  ];
+  return normalizeModelscopeLoras(raw).filter((lora) => (
+    lora.enabled !== false &&
+    lora.id &&
+    lora.targetModel === target
+  ));
+}
+
+export function normalizeModelscopeSelectedLoras(
+  value: unknown,
+  availableOptions: ModelscopeLoraOption[] = [],
+  legacy?: { enabled?: unknown; id?: unknown; strength?: unknown },
+): ModelscopeSelectedLora[] {
+  const out: ModelscopeSelectedLora[] = [];
+  const seen = new Set<string>();
+  const availableById = new Map(availableOptions.map((option) => [option.id, option]));
+  const allowAny = availableOptions.length === 0;
+  const add = (rawId: unknown, rawStrength: unknown) => {
+    if (out.length >= MAX_MODELSCOPE_NODE_LORAS) return;
+    const id = String(rawId || '').trim();
+    if (!id || seen.has(id)) return;
+    const option = availableById.get(id);
+    if (!allowAny && !option) return;
+    seen.add(id);
+    out.push({
+      id,
+      strength: normalizeModelscopeLoraStrength(rawStrength, option?.strength ?? 0.8),
+    });
+  };
+
+  if (Array.isArray(value)) {
+    for (const raw of value) {
+      if (out.length >= MAX_MODELSCOPE_NODE_LORAS) break;
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+      const item = raw as Record<string, any>;
+      if (item.enabled === false) continue;
+      add(
+        item.id || item.loraId,
+        item.strength ?? item.loraStrength ?? item.default_strength ?? item.defaultStrength ?? item.weight ?? item.scale,
+      );
+    }
+  } else if (value && typeof value === 'object') {
+    for (const [id, strength] of Object.entries(value as Record<string, any>)) {
+      if (out.length >= MAX_MODELSCOPE_NODE_LORAS) break;
+      add(id, strength);
+    }
+  }
+
+  if (!out.length && legacy?.enabled === true) {
+    add(legacy.id, legacy.strength);
+  }
+  return normalizeModelscopeLoraWeightsTotal(out);
 }
 
 export function hasAdvancedProviderSecret(value?: string): boolean {
@@ -47,19 +208,6 @@ export function advancedProviderSummary(providers?: AdvancedProviderConfig[]): A
 }
 
 export type AdvancedProviderNodeKind = 'image' | 'video' | 'llm';
-export type AdvancedImageSizeLevel = '1K' | '2K' | '4K';
-
-export interface AdvancedProviderImageSizeRow {
-  providerId: string;
-  providerLabel: string;
-  protocol: AdvancedProviderConfig['protocol'];
-  enabled: boolean;
-  model: string;
-  source: 'configured' | 'fallback' | 'workflow' | 'missing';
-  supportedSizes: AdvancedImageSizeLevel[];
-  configured: boolean;
-  note: string;
-}
 
 export interface AdvancedProviderSelection {
   providerSource: CanvasProviderSource;
@@ -69,32 +217,44 @@ export interface AdvancedProviderSelection {
   available: boolean;
 }
 
-const IMAGE_PROTOCOLS = new Set(['openai-compatible', 'gemini-compatible', 'modelscope', 'volcengine', 'comfyui', 'jimeng-cli']);
+const IMAGE_PROTOCOLS = new Set(['openai-compatible', 'modelscope', 'volcengine', 'comfyui', 'jimeng-cli']);
 const VIDEO_PROTOCOLS = new Set(['openai-compatible', 'volcengine', 'jimeng-cli']);
-const LLM_PROTOCOLS = new Set(['openai-compatible', 'gemini-compatible', 'modelscope', 'volcengine']);
+const LLM_PROTOCOLS = new Set(['openai-compatible', 'modelscope', 'volcengine']);
 
 const FALLBACK_MODELS: Record<AdvancedProviderNodeKind, Partial<Record<string, string[]>>> = {
   image: {
     'openai-compatible': ['gpt-image-1'],
-    'gemini-compatible': ['nano-banana-2'],
-    modelscope: ['MusePublic/489_ckpt_FLUX_1'],
+    modelscope: [
+      'Tongyi-MAI/Z-Image-Turbo',
+      'Qwen/Qwen-Image-2512',
+      'Qwen/Qwen-Image-Edit-2511',
+      'black-forest-labs/FLUX.2-klein-9B',
+    ],
     volcengine: ['doubao-seedream-4-0-250828'],
     'jimeng-cli': ['jimeng-image-2k'],
   },
   video: {
     'openai-compatible': [],
-    volcengine: ['doubao-seedance-2-0-pro-250528'],
+    volcengine: [
+      'doubao-seedance-2-0-260128',
+      'doubao-seedance-2-0-fast-260128',
+      'doubao-seedance-1-5-pro-251215',
+      'doubao-seedance-1-0-pro-250528',
+      'doubao-seedance-1-0-lite-t2v-250428',
+      'doubao-seedance-1-0-lite-i2v-250428',
+    ],
     'jimeng-cli': ['seedance2.0fast_vip'],
   },
   llm: {
     'openai-compatible': ['gpt-4o-mini'],
-    'gemini-compatible': ['gemini-2.5-flash'],
-    modelscope: ['Qwen/Qwen3-Coder-480B-A35B-Instruct'],
+    modelscope: [
+      'Qwen/Qwen3-235B-A22B',
+      'Qwen/Qwen3-VL-235B-A22B-Instruct',
+      'MiniMax/MiniMax-M2.7:MiniMax',
+    ],
     volcengine: ['doubao-seed-1-6-250615'],
   },
 };
-
-export const ADVANCED_IMAGE_SIZE_LEVELS: AdvancedImageSizeLevel[] = ['1K', '2K', '4K'];
 
 function uniqueCompact(values: unknown[]): string[] {
   const out: string[] = [];
@@ -144,241 +304,6 @@ export function advancedProviderModelOptions(
     defaultModelForKind(provider, kind),
     ...(FALLBACK_MODELS[kind][provider.protocol] || []),
   ]);
-}
-
-function explicitModelListForKind(provider: AdvancedProviderConfig, kind: AdvancedProviderNodeKind): string[] {
-  return uniqueCompact(listForKind(provider, kind));
-}
-
-function fallbackModelsForKind(provider: AdvancedProviderConfig, kind: AdvancedProviderNodeKind): string[] {
-  return uniqueCompact([
-    defaultModelForKind(provider, kind),
-    ...(FALLBACK_MODELS[kind][provider.protocol] || []),
-  ]);
-}
-
-function sizeOnlyFromModelName(model: string): AdvancedImageSizeLevel[] {
-  const text = model.toLowerCase();
-  if (/(^|[^a-z0-9])4k([^a-z0-9]|$)/i.test(text)) return ['4K'];
-  if (/(^|[^a-z0-9])2k([^a-z0-9]|$)/i.test(text)) return ['2K'];
-  if (/(^|[^a-z0-9])1k([^a-z0-9]|$)/i.test(text)) return ['1K'];
-  return [];
-}
-
-function normalizeSizeLevels(values: unknown): AdvancedImageSizeLevel[] {
-  const out: AdvancedImageSizeLevel[] = [];
-  for (const value of Array.isArray(values) ? values : []) {
-    const item = String(value || '').trim().toUpperCase();
-    if (!ADVANCED_IMAGE_SIZE_LEVELS.includes(item as AdvancedImageSizeLevel)) continue;
-    if (!out.includes(item as AdvancedImageSizeLevel)) out.push(item as AdvancedImageSizeLevel);
-  }
-  return out;
-}
-
-export function imageModelSizeKey(model: string): string {
-  return String(model || '').trim();
-}
-
-function comparableModelKey(model: string): string {
-  return imageModelSizeKey(model).toLowerCase();
-}
-
-export function configuredImageSizesForModel(
-  provider: AdvancedProviderConfig | null | undefined,
-  model: string,
-): AdvancedImageSizeLevel[] | null {
-  const key = imageModelSizeKey(model);
-  const table = provider?.imageModelSizes;
-  if (!key || !table || typeof table !== 'object' || Array.isArray(table)) return null;
-  if (Object.prototype.hasOwnProperty.call(table, key)) return normalizeSizeLevels(table[key]);
-  const comparable = comparableModelKey(key);
-  const matchedKey = Object.keys(table).find((item) => comparableModelKey(item) === comparable);
-  return matchedKey ? normalizeSizeLevels(table[matchedKey]) : null;
-}
-
-function inferImageSizeSupport(
-  provider: AdvancedProviderConfig,
-  model: string,
-): { supportedSizes: AdvancedImageSizeLevel[]; configured: boolean; note: string } {
-  const modelName = String(model || '').trim();
-  const lower = modelName.toLowerCase();
-  const explicitSize = sizeOnlyFromModelName(modelName);
-
-  const configuredSizes = configuredImageSizesForModel(provider, modelName);
-  if (configuredSizes) {
-    return {
-      supportedSizes: configuredSizes,
-      configured: true,
-      note: configuredSizes.length
-        ? '使用尺寸配置表中手动勾选的档位。'
-        : '尺寸配置表中未勾选任何档位, 节点中不会显示尺寸选项。',
-    };
-  }
-
-  if (provider.protocol === 'comfyui') {
-    return {
-      supportedSizes: modelName ? [...ADVANCED_IMAGE_SIZE_LEVELS] : [],
-      configured: false,
-      note: modelName
-        ? '按工作流 width/height 写入, 需要工作流本身支持对应显存和尺寸。'
-        : '未配置工作流, 暂无可用生图尺寸。',
-    };
-  }
-
-  if (provider.protocol === 'jimeng-cli') {
-    return {
-      supportedSizes: explicitSize.length ? explicitSize : ['2K', '4K'],
-      configured: false,
-      note: explicitSize.length
-        ? '按即梦 CLI 模型名中的分辨率档位识别。'
-        : '即梦 CLI 未标明档位时按常用 2K/4K 模式展示。',
-    };
-  }
-
-  if (lower.includes('gpt-image-1') || lower.includes('dall-e')) {
-    return {
-      supportedSizes: ['1K'],
-      configured: false,
-      note: 'OpenAI 旧式 size 兼容模型通常只按 1K 像素尺寸安全透传。',
-    };
-  }
-
-  if (
-    lower.includes('gpt-image-2')
-    || lower.includes('nano-banana')
-    || lower.includes('banana')
-    || lower.includes('seedream-4')
-  ) {
-    return {
-      supportedSizes: [...ADVANCED_IMAGE_SIZE_LEVELS],
-      configured: false,
-      note: provider.protocol === 'gemini-compatible'
-        ? '按 aspect_ratio + image_size 传入。'
-        : '当前适配器可透传 1K/2K/4K 档位。',
-    };
-  }
-
-  if (lower.includes('seedream-3')) {
-    return {
-      supportedSizes: ['1K', '2K'],
-      configured: false,
-      note: '按 Seedream 3 常用档位展示, 4K 建议切换 Seedream 4 系列。',
-    };
-  }
-
-  if (explicitSize.length) {
-    return {
-      supportedSizes: explicitSize,
-      configured: false,
-      note: '按模型名中的分辨率档位识别。',
-    };
-  }
-
-  if (provider.protocol === 'modelscope') {
-    return {
-      supportedSizes: ['1K', '2K'],
-      configured: false,
-      note: 'ModelScope 适配器传 width/height/size, 具体上限取决于模型卡。',
-    };
-  }
-
-  if (provider.protocol === 'volcengine') {
-    return {
-      supportedSizes: [...ADVANCED_IMAGE_SIZE_LEVELS],
-      configured: false,
-      note: '火山适配器按 size 像素串透传, 具体以接入点能力为准。',
-    };
-  }
-
-  return {
-    supportedSizes: [...ADVANCED_IMAGE_SIZE_LEVELS],
-    configured: false,
-    note: '兼容适配器按 size 像素串透传, 具体以第三方服务能力为准。',
-  };
-}
-
-export function buildAdvancedImageSizeMatrix(
-  providers?: AdvancedProviderConfig[],
-): AdvancedProviderImageSizeRow[] {
-  const rows: AdvancedProviderImageSizeRow[] = [];
-  for (const provider of Array.isArray(providers) ? providers : []) {
-    if (!provider) continue;
-    const providerId = String(provider.id || '').trim();
-    const providerLabel = String(provider.label || provider.id || provider.protocol || '').trim();
-    if (!providerId && !providerLabel) continue;
-
-    if (provider.protocol === 'comfyui') {
-      const workflows = Array.isArray(provider.comfyuiConfig?.workflows) ? provider.comfyuiConfig?.workflows || [] : [];
-      if (!workflows.length) {
-        rows.push({
-          providerId,
-          providerLabel,
-          protocol: provider.protocol,
-          enabled: provider.enabled === true,
-          model: '未配置工作流',
-          source: 'missing',
-          supportedSizes: [],
-          configured: false,
-          note: '请先在 ComfyUI 平台配置至少一个工作流。',
-        });
-        continue;
-      }
-      for (const workflow of workflows) {
-        const model = String(workflow.id || workflow.name || 'workflow').trim();
-        const inferred = inferImageSizeSupport(provider, model);
-        rows.push({
-          providerId,
-          providerLabel,
-          protocol: provider.protocol,
-          enabled: provider.enabled === true,
-          model,
-          source: 'workflow',
-          ...inferred,
-        });
-      }
-      continue;
-    }
-
-    const explicit = explicitModelListForKind(provider, 'image');
-    const models = explicit.length ? explicit : fallbackModelsForKind(provider, 'image');
-    if (!models.length) {
-      rows.push({
-        providerId,
-        providerLabel,
-        protocol: provider.protocol,
-        enabled: provider.enabled === true,
-        model: '未配置图像模型',
-        source: 'missing',
-        supportedSizes: [],
-        configured: false,
-        note: '请先填写图像模型列表。',
-      });
-      continue;
-    }
-    for (const model of models) {
-      const inferred = inferImageSizeSupport(provider, model);
-      rows.push({
-        providerId,
-        providerLabel,
-        protocol: provider.protocol,
-        enabled: provider.enabled === true,
-        model,
-        source: explicit.length ? 'configured' : 'fallback',
-        ...inferred,
-      });
-    }
-  }
-  return rows;
-}
-
-export function advancedImageSizesForModel(
-  provider: AdvancedProviderConfig | null | undefined,
-  model: string,
-): AdvancedImageSizeLevel[] {
-  if (!provider || !model) return [];
-  const target = comparableModelKey(model);
-  const row = buildAdvancedImageSizeMatrix([provider]).find((item) => comparableModelKey(item.model) === target);
-  return row ? row.supportedSizes : [];
 }
 
 export function advancedProvidersForNode(

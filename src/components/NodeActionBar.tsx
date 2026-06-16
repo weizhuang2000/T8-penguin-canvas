@@ -17,7 +17,7 @@ import { useNodes, useViewport, useReactFlow, type Node } from '@xyflow/react';
 import { Play, Square, X } from 'lucide-react';
 import { useThemeStore } from '../stores/theme';
 import { useRunBusStore } from '../stores/runBus';
-import { useCanvasStore } from '../stores/canvas';
+import { trackAchievementEvent } from '../stores/achievements';
 import { useHiddenFeatureStore, isRhDuckUploadEnabled, isYyhPortraitEnabled } from '../stores/hiddenFeatures';
 import { resolveThemeTemplate } from '../theme/defaultTemplates';
 import { getMediaItemsFromData } from '../utils/mediaCollection';
@@ -28,18 +28,17 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'multi-angle-3d', 'panorama-720', 'penguin-portrait',
   'video', 'seedance', 'audio', 'llm', 'runninghub', 'runninghub-wallet',
     // v1.2.10.1: RH 工具节点
-    'rh-tools',
-  'resize', 'upscale', 'grid-crop', 'remove-bg', 'combine', 'image-compare', 'drawing-board',
+    'rh-tools', 'rh-toolbox', 'comfyui-store',
+  'resize', 'upscale', 'grid-crop', 'grid-editor', 'remove-bg', 'combine', 'image-compare', 'drawing-board',
+  'panorama-3d',
   'frame-extractor', 'frame-pair',
   'upload',
   // v1.2.8 循环器 / 从合集获取
   'loop', 'pick-from-set',
   // v1.4.6: 工具箱文本节点也可点击 RUN 直接外挂 OutputNode
   'cinematic', 'video-motion',
-  'elevation-prompt',
-  'exhibition-img2img',
-  'exhibition-creative-image',
-  'portrait-master', 'pose-master',
+  'portrait-master', 'pose-master', 'aggregate-parser',
+  'topaz-image-upscale', 'topaz-video-upscale',
   'remove-ai-watermark',
 ]);
 
@@ -53,6 +52,8 @@ const ACTION_COLORS: Record<string, { run: string; stop: string; close: string }
   naruto: { run: '#f4511e', stop: '#f59e0b', close: '#d11d1d' },
   eva: { run: '#78ff4d', stop: '#ff9d00', close: '#ff3046' },
   yyh: { run: '#52ff9a', stop: '#ffb84d', close: '#ff4f7b' },
+  'soccer-hero': { run: '#1f9f4a', stop: '#f5d550', close: '#d64242' },
+  'dragon-ball': { run: '#ffb000', stop: '#38bdf8', close: '#dc2626' },
 };
 
 const NodeActionBar = () => {
@@ -85,8 +86,6 @@ const NodeActionBar = () => {
   const holdTimerRef = useRef<number | null>(null);
   const suppressClickRef = useRef(false);
   const [holdArmed, setHoldArmed] = useState(false);
-  const activeCanvas = useCanvasStore((s) => s.canvases.find((canvas) => canvas.id === s.activeId) || null);
-  const canEditActiveCanvas = activeCanvas?.access?.canEdit !== false;
 
   // 找选中的可执行节点 (只取第一个; 多选时仅最后选中的那个显示)
   const selectedExe = useMemo<Node | null>(() => {
@@ -172,13 +171,12 @@ const NodeActionBar = () => {
       suppressClickRef.current = false;
       return;
     }
-    if (!canEditActiveCanvas) return;
     if (isRunning) return;
     triggerRun(selectedExe.id, 'single');
   };
   const onRunPointerDown = (e: React.PointerEvent) => {
     e.stopPropagation();
-    if (e.button !== 0 || isRunning || !hiddenHoldEligible || !selectedExe || !canEditActiveCanvas) return;
+    if (e.button !== 0 || isRunning || !hiddenHoldEligible || !selectedExe) return;
     try {
       (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
     } catch {
@@ -187,8 +185,13 @@ const NodeActionBar = () => {
     clearHoldTimer();
     setHoldArmed(true);
     holdTimerRef.current = window.setTimeout(() => {
-      if (rhDuckEligible) toggleRhDuckUpload(selectedExe.id);
-      else if (yyhPortraitEligible) toggleYyhPortrait(selectedExe.id);
+      if (rhDuckEligible) {
+        const enabled = toggleRhDuckUpload(selectedExe.id);
+        if (enabled) trackAchievementEvent({ type: 'hidden_mode.enabled', theme: visualStyle, kind: 'rh-duck', nodeType: 'upload' });
+      } else if (yyhPortraitEligible) {
+        const enabled = toggleYyhPortrait(selectedExe.id);
+        if (enabled) trackAchievementEvent({ type: 'hidden_mode.enabled', theme: visualStyle, kind: 'yyh-portrait', nodeType: 'portrait-master' });
+      }
       suppressClickRef.current = true;
       holdTimerRef.current = null;
       setHoldArmed(false);

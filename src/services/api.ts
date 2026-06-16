@@ -2,7 +2,15 @@
  * T8-penguin-canvas 后端 API 封装
  * 所有请求走 Vite proxy → http://127.0.0.1:18766
  */
-import type { AdvancedProviderConfig, ApiSettings, CanvasData, CanvasListItem, CanvasShareEntry } from '../types/canvas';
+import type {
+  AdvancedProviderConfig,
+  ApiSettings,
+  CanvasData,
+  CanvasListItem,
+  CanvasShareEntry,
+  CloudUploadSummary,
+  CloudUploadTargetConfig,
+} from '../types/canvas';
 import type { ThemeTemplate } from '../theme/types';
 import type { MediaKind } from '../utils/mediaCollection';
 
@@ -790,8 +798,9 @@ export function importRHToolsBackup(payload: RHToolsBackup, mode: 'replace' | 'm
 }
 
 // ========== 资源库 (v1.3.4) ==========
-export type ResourceKind = 'image' | 'video' | 'audio' | 'set' | 'pose' | 'workflow';
+export type ResourceKind = 'image' | 'video' | 'audio' | 'panorama' | 'set' | 'pose' | 'workflow';
 export type ResourceMediaKind = 'image' | 'video' | 'audio';
+export type ResourceAddKind = ResourceMediaKind | 'panorama';
 export type ResourceMaterialSetKind = 'text' | 'image' | 'video' | 'audio';
 
 export interface ResourceCategory {
@@ -863,7 +872,7 @@ export interface AddResourceSetPayload {
 
 export interface AddResourcePayload {
   url: string;
-  kind: ResourceMediaKind;
+  kind: ResourceAddKind;
   categoryId?: string;
   title?: string;
   tags?: string[];
@@ -970,6 +979,191 @@ export function updateResourceItem(id: string, patch: Partial<Pick<ResourceItem,
 export function deleteResourceItem(id: string) {
   return safeRequest<void>(`${BASE}/resources/items/${encodeURIComponent(id)}`, {
     method: 'DELETE',
+  });
+}
+
+// ========== 云端上传 ==========
+export interface CloudUploadStatus {
+  targets: CloudUploadTargetConfig[];
+  summary: CloudUploadSummary;
+}
+
+export interface CloudUploadTestResult {
+  ok: boolean;
+  supported?: boolean;
+  message?: string;
+  error?: string;
+  target?: CloudUploadTargetConfig;
+}
+
+export interface CloudUploadAssetResult {
+  provider: string;
+  targetId: string;
+  label: string;
+  objectKey?: string;
+  path?: string;
+  url?: string;
+  filename?: string;
+  size?: number;
+  mime?: string;
+  kind?: string;
+  uploadedAt?: string;
+}
+
+export function getCloudUploadStatus() {
+  return safeRequest<CloudUploadStatus>(`${BASE}/cloud-uploads/status`);
+}
+
+export function testCloudUploadTarget(payload: {
+  targetId?: string;
+  target?: CloudUploadTargetConfig;
+}) {
+  return safeRequest<CloudUploadTestResult>(`${BASE}/cloud-uploads/test`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function uploadCloudAsset(payload: {
+  targetId: string;
+  url: string;
+  kind?: ResourceMediaKind | string;
+  filename?: string;
+  title?: string;
+  sourceNodeId?: string;
+  sourceCanvasId?: string;
+}) {
+  return safeRequest<CloudUploadAssetResult>(`${BASE}/cloud-uploads/upload`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+// ========== 主题成就 / 时长 ==========
+export type AchievementEventType =
+  | 'theme.active_tick'
+  | 'theme.switched'
+  | 'hidden_mode.enabled'
+  | 'hidden_mode.used'
+  | 'node.created'
+  | 'node.run_success'
+  | 'resource.saved'
+  | 'workflow.saved'
+  | 'panorama.generated'
+  | 'parsehub.resolved';
+
+export interface AchievementEventPayload {
+  type: AchievementEventType;
+  theme?: string;
+  amountSeconds?: number;
+  nodeType?: string;
+  kind?: string;
+  category?: string;
+}
+
+export interface AchievementSummary {
+  today: string;
+  todaySeconds: number;
+  totalActiveSeconds: number;
+  achievementCount: number;
+  unlockedCount: number;
+  filmCount: number;
+  unlockedFilmCount: number;
+  recentUnlocks: AchievementDefinitionData[];
+  recentFilms: AchievementUnlockedFilm[];
+}
+
+export interface AchievementDefinitionData {
+  id: string;
+  theme: string;
+  themeLabel: string;
+  title: string;
+  description: string;
+  rarity: string;
+  condition: Record<string, any>;
+  medal?: boolean;
+  hidden?: boolean;
+}
+
+export interface AchievementUnlocked {
+  id: string;
+  theme: string;
+  title: string;
+  rarity: string;
+  unlockedAt: string;
+  eventType?: string;
+}
+
+export interface AchievementUnlockedFilm {
+  id: string;
+  theme: string;
+  title: string;
+  unlockedAt: string;
+  sourceAchievementId: string;
+  hasMedia: boolean;
+  status: 'awaiting-media' | string;
+  lockedText?: string;
+  unavailableText?: string;
+  playedSeconds?: number;
+}
+
+export interface AchievementProfile {
+  schema: 't8-achievements';
+  version: number;
+  profileId: string;
+  createdAt: string;
+  updatedAt: string;
+  themeStats: Record<string, any>;
+  events: Array<Record<string, any>>;
+  unlockedAchievements: Record<string, AchievementUnlocked>;
+  claimedMedals: Record<string, any>;
+  unlockedFilms: Record<string, AchievementUnlockedFilm>;
+  preferences: {
+    enabled: boolean;
+    showToast: boolean;
+    showTopBadge: boolean;
+  };
+}
+
+export interface AchievementProfileData {
+  profile: AchievementProfile;
+  manifest: Record<string, any>;
+  definitions: AchievementDefinitionData[];
+  summary: AchievementSummary;
+  event?: Record<string, any>;
+  ignored?: boolean;
+}
+
+export function getAchievementProfile() {
+  return safeRequest<AchievementProfileData>(`${BASE}/achievements/profile`);
+}
+
+export function recordAchievementEvent(payload: AchievementEventPayload) {
+  return safeRequest<AchievementProfileData>(`${BASE}/achievements/event`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateAchievementPreferences(payload: Partial<AchievementProfile['preferences']>) {
+  return safeRequest<AchievementProfileData>(`${BASE}/achievements/preferences`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function resetAchievements() {
+  return safeRequest<AchievementProfileData>(`${BASE}/achievements/reset`, { method: 'POST' });
+}
+
+export function exportAchievements() {
+  return safeRequest<AchievementProfile>(`${BASE}/achievements/export`);
+}
+
+export function importAchievements(data: AchievementProfile | Record<string, any>) {
+  return safeRequest<AchievementProfileData>(`${BASE}/achievements/import`, {
+    method: 'POST',
+    body: JSON.stringify({ data }),
   });
 }
 

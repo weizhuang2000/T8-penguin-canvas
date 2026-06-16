@@ -10,6 +10,11 @@ const {
   summarizeAdvancedProviders,
 } = require('../providers/registry');
 const { normalizeLlmBaseUrl, normalizeLlmModelName } = require('../utils/llmBaseUrl');
+const {
+  maskCloudUploadTargets,
+  normalizeCloudUploadTargets,
+  summarizeCloudUploadTargets,
+} = require('../cloudUploads/settings');
 
 const router = express.Router();
 
@@ -45,6 +50,8 @@ const DEFAULT_SETTINGS = {
   eagleApiBase: config.DEFAULT_EAGLE_API_BASE,
   // v1.8.0: 扩展 API 平台（高级可选）。默认只提供禁用的配置卡片，不影响主流程。
   advancedProviders: normalizeAdvancedProviders(),
+  // v1.9.x: 云端上传目标（可选）。默认禁用，不影响资源库/自动保存主流程。
+  cloudUploadTargets: normalizeCloudUploadTargets(),
   // 其他偏好
   preferences: {
     theme: 'dark',
@@ -200,6 +207,7 @@ function loadSettings({ persistMigrations = true } = {}) {
     };
     Object.assign(merged, syncLegacyLlmConfig(merged));
     merged.advancedProviders = normalizeAdvancedProviders(data.advancedProviders);
+    merged.cloudUploadTargets = normalizeCloudUploadTargets(data.cloudUploadTargets);
     const migrated = migrateLegacyDefaultPaths(merged);
     if (persistMigrations && migrated.changed) {
       saveSettings(migrated.settings);
@@ -250,6 +258,8 @@ router.get('/', (_req, res) => {
     llmApiKeys: maskLlmConfigs(settings.llmConfigs),
     advancedProviders: maskAdvancedProviders(settings.advancedProviders),
     advancedProviderSummary: summarizeAdvancedProviders(settings.advancedProviders),
+    cloudUploadTargets: maskCloudUploadTargets(settings.cloudUploadTargets),
+    cloudUploadSummary: summarizeCloudUploadTargets(settings.cloudUploadTargets),
   };
   for (const f of CLASSIFIED_KEY_FIELDS) {
     masked[f] = maskKey(settings[f]);
@@ -267,6 +277,7 @@ router.post('/', requireAdmin, (req, res) => {
   const current = loadSettings();
   const incoming = req.body || {};
   const hasAdvancedProviders = Object.prototype.hasOwnProperty.call(incoming, 'advancedProviders');
+  const hasCloudUploadTargets = Object.prototype.hasOwnProperty.call(incoming, 'cloudUploadTargets');
   const hasLlmConfigs = Object.prototype.hasOwnProperty.call(incoming, 'llmConfigs');
   const hasLlmApiKeys = Object.prototype.hasOwnProperty.call(incoming, 'llmApiKeys');
   const hasZhenzhenBaseUrl = Object.prototype.hasOwnProperty.call(incoming, 'zhenzhenBaseUrl');
@@ -325,6 +336,9 @@ router.post('/', requireAdmin, (req, res) => {
   merged.advancedProviders = hasAdvancedProviders
     ? normalizeAdvancedProviders(incoming.advancedProviders, current.advancedProviders)
     : normalizeAdvancedProviders(current.advancedProviders);
+  merged.cloudUploadTargets = hasCloudUploadTargets
+    ? normalizeCloudUploadTargets(incoming.cloudUploadTargets, current.cloudUploadTargets)
+    : normalizeCloudUploadTargets(current.cloudUploadTargets);
   saveSettings(merged);
   // v1.2.10.2/v1.3.1/v1.3.4: 保存后重新确保本地保存路径存在
   for (const field of ['fileSavePath', 'canvasAutoSavePath', 'resourceLibraryPath', 'themeTemplatePath']) {

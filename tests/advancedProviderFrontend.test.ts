@@ -1,14 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
 import {
-  advancedImageSizesForModel,
-  buildAdvancedImageSizeMatrix,
   advancedProviderSummary,
   advancedProvidersForNode,
   advancedProviderModelOptions,
   resolveAdvancedProviderSelection,
   externalImageSizeFor,
+  distributeModelscopeLoraWeights,
+  MAX_MODELSCOPE_NODE_LORAS,
+  MODELSCOPE_LORA_TOTAL_WEIGHT,
+  modelscopeLoraWeightTotal,
+  modelscopeLorasForModel,
+  normalizeModelscopeLoraStrength,
+  normalizeModelscopeSelectedLoras,
   parseAdvancedProviderModelText,
   stringifyAdvancedProviderModels,
 } from '../src/utils/advancedProviders.ts';
@@ -43,7 +49,6 @@ test('advancedProviderSummary mirrors settings folded header counts', () => {
 test('advancedProvidersForNode only exposes enabled providers supported by each node kind', () => {
   const providers = [
     { id: 'openai-compatible', label: 'OpenAI', protocol: 'openai-compatible', enabled: true, imageModels: ['gpt-image-1'], chatModels: ['gpt-4o-mini'] },
-    { id: 'gemini-compatible', label: 'Gemini', protocol: 'gemini-compatible', enabled: true, imageModels: ['nano-banana-2'], chatModels: ['gemini-2.5-flash'] },
     { id: 'modelscope', label: 'ModelScope', protocol: 'modelscope', enabled: true, imageModels: ['MusePublic/489_ckpt_FLUX_1'], chatModels: ['Qwen/Qwen3-Coder'] },
     { id: 'volcengine', label: 'Volc', protocol: 'volcengine', enabled: false, imageModels: ['seedream'], videoModels: ['seedance'], chatModels: ['doubao'] },
     { id: 'comfyui', label: 'ComfyUI', protocol: 'comfyui', enabled: true, comfyuiConfig: { workflows: [] } },
@@ -52,13 +57,11 @@ test('advancedProvidersForNode only exposes enabled providers supported by each 
 
   assert.deepEqual(advancedProvidersForNode(providers, 'image').map((p) => p.id), [
     'openai-compatible',
-    'gemini-compatible',
     'modelscope',
     'jimeng-cli',
   ]);
   assert.deepEqual(advancedProvidersForNode(providers, 'llm').map((p) => p.id), [
     'openai-compatible',
-    'gemini-compatible',
     'modelscope',
   ]);
   assert.deepEqual(advancedProvidersForNode(providers, 'video').map((p) => p.id), [
@@ -103,7 +106,22 @@ test('advancedProviderModelOptions uses explicit lists before safe provider defa
   );
   assert.deepEqual(
     advancedProviderModelOptions({ id: 'modelscope', protocol: 'modelscope' } as any, 'llm'),
-    ['Qwen/Qwen3-Coder-480B-A35B-Instruct'],
+    [
+      'Qwen/Qwen3-235B-A22B',
+      'Qwen/Qwen3-VL-235B-A22B-Instruct',
+      'MiniMax/MiniMax-M2.7:MiniMax',
+    ],
+  );
+  assert.deepEqual(
+    advancedProviderModelOptions({ id: 'volcengine', protocol: 'volcengine' } as any, 'video'),
+    [
+      'doubao-seedance-2-0-260128',
+      'doubao-seedance-2-0-fast-260128',
+      'doubao-seedance-1-5-pro-251215',
+      'doubao-seedance-1-0-pro-250528',
+      'doubao-seedance-1-0-lite-t2v-250428',
+      'doubao-seedance-1-0-lite-i2v-250428',
+    ],
   );
 });
 
@@ -114,42 +132,104 @@ test('externalImageSizeFor maps T8 ratio and size labels to stable WxH values', 
   assert.equal(externalImageSizeFor('bad', 'unknown'), '1024x1024');
 });
 
-test('buildAdvancedImageSizeMatrix lists every image provider model with size support', () => {
-  const rows = buildAdvancedImageSizeMatrix([
-    { id: 'openai-compatible', label: 'OpenAI', protocol: 'openai-compatible', enabled: true, imageModels: ['gpt-image-1'] },
-    { id: 'gemini-compatible', label: 'Gemini', protocol: 'gemini-compatible', enabled: true, imageModels: ['nano-banana-2'] },
-    { id: 'volcengine', label: 'Volc', protocol: 'volcengine', enabled: false, imageModels: ['doubao-seedream-4-0-250828'] },
-    { id: 'comfyui', label: 'ComfyUI', protocol: 'comfyui', enabled: true, comfyuiConfig: { workflows: [] } },
-    { id: 'jimeng-cli', label: 'Jimeng', protocol: 'jimeng-cli', enabled: true, imageModels: ['jimeng-image-4k'] },
-    { id: 'manual-openai', label: 'Manual', protocol: 'openai-compatible', enabled: true, imageModels: ['custom-image'], imageModelSizes: { 'custom-image': ['2K'] } },
-  ] as any);
-
-  assert.deepEqual(
-    rows.map((row) => [row.providerId, row.model, row.supportedSizes]),
-    [
-      ['openai-compatible', 'gpt-image-1', ['1K']],
-      ['gemini-compatible', 'nano-banana-2', ['1K', '2K', '4K']],
-      ['volcengine', 'doubao-seedream-4-0-250828', ['1K', '2K', '4K']],
-      ['comfyui', '未配置工作流', []],
-      ['jimeng-cli', 'jimeng-image-4k', ['4K']],
-      ['manual-openai', 'custom-image', ['2K']],
-    ],
-  );
-  assert.equal(rows.find((row) => row.providerId === 'volcengine')?.enabled, false);
-  assert.equal(rows.find((row) => row.providerId === 'comfyui')?.source, 'missing');
-  assert.equal(rows.find((row) => row.providerId === 'manual-openai')?.configured, true);
-});
-
-test('advancedImageSizesForModel honors manual size table over inferred banana defaults', () => {
+test('modelscopeLorasForModel filters enabled LoRA entries for selected image model', () => {
   const provider = {
-    id: 'banana-provider',
-    label: '香蕉听话，只能1K',
-    protocol: 'gemini-compatible',
-    enabled: true,
-    imageModels: ['nano-banana-hd'],
-    imageModelSizes: { ' nano-banana-hd ': ['1K'] },
+    id: 'modelscope',
+    protocol: 'modelscope',
+    modelscopeConfig: {
+      loras: [
+        { id: 'a/lora', name: 'A', targetModel: 'model-a', strength: 0.75, enabled: true },
+        { id: 'b/lora', name: 'B', targetModel: 'model-b', strength: 0.8, enabled: true },
+        { id: 'off/lora', name: 'Off', targetModel: 'model-a', strength: 0.8, enabled: false },
+      ],
+    },
   } as any;
 
-  assert.deepEqual(advancedImageSizesForModel(provider, 'nano-banana-hd'), ['1K']);
-  assert.deepEqual(buildAdvancedImageSizeMatrix([provider])[0].supportedSizes, ['1K']);
+  const loras = modelscopeLorasForModel(provider, 'model-a');
+
+  assert.deepEqual(loras.map((lora) => lora.id), ['a/lora']);
+  assert.equal(loras[0].strength, 0.75);
+  assert.equal(normalizeModelscopeLoraStrength(8), 1);
+  assert.equal(normalizeModelscopeLoraStrength(-1), 0);
+});
+
+test('normalizeModelscopeSelectedLoras caps image node LoRA selection at five and keeps total weight within one', () => {
+  const available = Array.from({ length: 7 }, (_, index) => ({
+    id: `lora/${index + 1}`,
+    name: `LoRA ${index + 1}`,
+    targetModel: 'model-a',
+    strength: 0.8,
+    enabled: true,
+  }));
+
+  const selected = normalizeModelscopeSelectedLoras([
+    { id: 'lora/1', strength: 0.2 },
+    { id: 'lora/2', weight: 0.4 },
+    { id: 'lora/off', strength: 1, enabled: false },
+    { id: 'lora/3', scale: 1.4 },
+    { id: 'lora/4', loraStrength: 3 },
+    { id: 'lora/5', strength: -1 },
+    { id: 'lora/6', strength: 0.9 },
+  ], available as any);
+
+  assert.equal(MAX_MODELSCOPE_NODE_LORAS, 5);
+  assert.deepEqual(selected.map((item) => `${item.id}:${item.strength}`), [
+    'lora/1:0.0769',
+    'lora/2:0.1538',
+    'lora/3:0.3846',
+    'lora/4:0.3847',
+    'lora/5:0',
+  ]);
+  assert.equal(modelscopeLoraWeightTotal(selected), MODELSCOPE_LORA_TOTAL_WEIGHT);
+
+  const migrated = normalizeModelscopeSelectedLoras([], available as any, {
+    enabled: true,
+    id: 'lora/2',
+    strength: 1.25,
+  });
+  assert.deepEqual(migrated, [{ id: 'lora/2', strength: 1 }]);
+
+  assert.deepEqual(distributeModelscopeLoraWeights([
+    { id: 'a', strength: 0.1 },
+    { id: 'b', strength: 0.1 },
+    { id: 'c', strength: 0.1 },
+  ]), [
+    { id: 'a', strength: 0.3333 },
+    { id: 'b', strength: 0.3333 },
+    { id: 'c', strength: 0.3334 },
+  ]);
+});
+
+test('ImageNode makes ModelScope multi-LoRA total weight visible and bounded', () => {
+  const source = fs.readFileSync(new URL('../src/components/nodes/ImageNode.tsx', import.meta.url), 'utf8');
+
+  assert.match(source, /官方总权重/);
+  assert.match(source, /多个 LoRA 权重总和必须为 1\.00/);
+  assert.match(source, /还可分配/);
+  assert.match(source, /均分到 1\.00/);
+  assert.match(source, /总权重已满/);
+  assert.match(source, /max=\{rowMax\}/);
+});
+
+test('VideoNode keeps Jimeng Seedance media limits separate from Grok FAL controls', () => {
+  const source = fs.readFileSync(new URL('../src/components/nodes/VideoNode.tsx', import.meta.url), 'utf8');
+  const ports = fs.readFileSync(new URL('../src/config/portTypes.ts', import.meta.url), 'utf8');
+
+  assert.match(source, /JIMENG_SEEDANCE_LIMITS = \{ images: 9, videos: 3, audios: 3 \}/);
+  assert.match(source, /showBuiltinFalControls = !isExternalSelected && isFal/);
+  assert.match(source, /isJimengSeedanceSelected \? \['image', 'video', 'audio', 'text'\]/);
+  assert.match(source, /videos: videoRefs/);
+  assert.match(source, /audios: audioRefs/);
+  assert.match(source, /图\$\{refs\.length\}\/视\$\{videoRefs\.length\}\/音\$\{audioRefs\.length\}/);
+  assert.match(ports, /video:\s*\{\s*inputs:\s*\['text', 'image', 'video', 'audio'\],\s*outputs:\s*\['video'\]\s*\}/);
+});
+
+test('SeedanceNode exposes explicit Jimeng intelligent multiframe mode only for Jimeng CLI', () => {
+  const source = fs.readFileSync(new URL('../src/components/nodes/SeedanceNode.tsx', import.meta.url), 'utf8');
+
+  assert.match(source, /type SeedanceFrameMode = 'auto' \| 'first' \| 'firstlast' \| 'multiframe'/);
+  assert.match(source, /const activeFrameMode: SeedanceFrameMode = !isJimengCliSelected && frameMode === 'multiframe' \? 'auto' : frameMode/);
+  assert.match(source, /frameMode: activeFrameMode/);
+  assert.match(source, /isJimengCliSelected && \(\s*<option value="multiframe"/);
+  assert.match(source, /智能多帧\(multiframe\)/);
 });

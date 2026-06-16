@@ -71,6 +71,7 @@ import {
 } from '../utils/nodeSerialIds';
 import { resolveConnectionByNodeSerialId } from '../utils/connectByNodeSerialId';
 import { formatShortcutList, matchesAnyShortcut } from '../utils/keyboardShortcuts';
+import { applyNodeAlignment, type NodeAlignAction } from '../utils/nodeAlign';
 import {
   collectMaterialSetBucketsFromData,
   isMaterialSetKind,
@@ -2470,6 +2471,16 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
     });
     setEdges((prev) => prev.filter((e) => !e.selected));
   }, [markManualNodeDeletion, canEditActiveCanvas]);
+
+  const handleAlignSelection = useCallback((action: NodeAlignAction) => {
+    if (!canEditActiveCanvas) return;
+    setNodes((prev) => {
+      const selectedIds = prev.filter((node) => node.selected).map((node) => node.id);
+      if (selectedIds.length === 0) return prev;
+      const result = applyNodeAlignment(prev, selectedIds, action);
+      return result.changed ? result.nodes : prev;
+    });
+  }, [canEditActiveCanvas]);
 
   // ===== 导入 / 导出 =====
   const handleExport = useCallback(() => {
@@ -4901,6 +4912,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
         batchDone={batchDone}
         snapEnabled={snapEnabled}
         onToggleSnap={() => setSnapEnabled((v) => !v)}
+        onAlignSelection={handleAlignSelection}
       />
       {isReadonlyCanvas && (
         <div

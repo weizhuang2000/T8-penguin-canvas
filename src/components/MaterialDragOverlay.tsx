@@ -22,6 +22,7 @@ import {
   type MaterialKind,
 } from '../stores/dragMaterial';
 import { useThemeStore } from '../stores/theme';
+import SmartImage from './SmartImage';
 
 const PREVIEW_SIZE = 96;
 
@@ -216,8 +217,8 @@ const MaterialDragOverlay = () => {
   let content: React.ReactNode = null;
   if (payload.kind === 'image' && payload.url) {
     content = (
-      <img
-        src={payload.url}
+      <SmartImage
+        src={payload.previewUrl || payload.url}
         alt="dragging"
         style={{
           width: PREVIEW_SIZE,
@@ -227,6 +228,7 @@ const MaterialDragOverlay = () => {
           imageRendering: isPixel ? 'pixelated' : 'auto',
         }}
         draggable={false}
+        thumbSize={160}
       />
     );
   } else if (payload.kind === 'video') {

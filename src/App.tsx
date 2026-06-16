@@ -1,18 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { LogOut, Moon, Settings, Sun, Wifi, WifiOff, Sparkles, Cloud, Globe, Library, Palette, Skull, Sailboat, Clock3, UserCog } from 'lucide-react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { LogOut, Moon, Settings, Sun, Wifi, WifiOff, Sparkles, Cloud, ExternalLink, Copy, Check, Gift, Heart, Youtube, PlayCircle, Bell, Wand2, Globe, MessageCircle, CalendarDays, Rocket, Key, Library, Palette, Skull, Sailboat, Clock3, UserCog } from 'lucide-react';
 import { useThemeStore } from './stores/theme';
 import { useApiKeysStore } from './stores/apiKeys';
 import { useShortcutStore } from './stores/shortcuts';
 import Sidebar from './components/Sidebar';
-import Canvas, { type AddNodeFn, type InsertWorkflowFn } from './components/Canvas';
-import ApiSettingsModal from './components/ApiSettings';
-import ResourceLibraryDrawer from './components/ResourceLibraryDrawer';
 import GenerationHistoryDrawer from './components/GenerationHistoryDrawer';
 import MaterialContextMenu from './components/MaterialContextMenu';
-import ThemeTemplateManager from './components/ThemeTemplateManager';
 import UserManagementModal from './components/UserManagementModal';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoginScreen from './components/LoginScreen';
+import type { AddNodeFn, InsertWorkflowFn } from './components/Canvas';
+import AppUpdaterButton from './components/AppUpdaterButton';
+import AchievementButton from './components/AchievementButton';
+import AchievementDrawer from './components/AchievementDrawer';
+import AchievementToast from './components/AchievementToast';
+import AchievementTracker from './components/AchievementTracker';
 import { RHToolsProvider } from './providers/RHToolsProvider';
 import * as api from './services/api';
 import type { AuthUser } from './services/api';
@@ -23,16 +25,12 @@ import { resolveThemeTemplate } from './theme/defaultTemplates';
 import { materialSetItemsToData, type MaterialSetKind, type MaterialSetItem } from './utils/materialSet';
 import { workflowManifestToFragment } from './utils/workflowResource';
 import { matchesAnyShortcut } from './utils/keyboardShortcuts';
-import {
-  buildPortraitPrompt,
-  normalizePortraitLocks,
-  normalizePortraitSelection,
-  normalizePortraitWeights,
-  portraitSelectionStats,
-  resolvePortraitPreview,
-  summarizePortraitSelection,
-  type PortraitLanguage,
-} from './data/portraitMasterOptions';
+import { portraitResourceToNodeData } from './utils/portraitResource';
+
+const Canvas = lazy(() => import('./components/Canvas'));
+const ApiSettingsModal = lazy(() => import('./components/ApiSettings'));
+const ResourceLibraryDrawer = lazy(() => import('./components/ResourceLibraryDrawer'));
+const ThemeTemplateManager = lazy(() => import('./components/ThemeTemplateManager'));
 
 // vite.config 注入的编译期常量（与 package.json 同步），勿硬编码 v1.x.x
 declare const __APP_VERSION__: string;
@@ -47,54 +45,6 @@ function isShortcutTypingTarget(target: EventTarget | null): boolean {
     target.isContentEditable ||
     Boolean(target.closest('[contenteditable="true"]'))
   );
-}
-
-function safePortraitLanguage(value: unknown): PortraitLanguage {
-  return value === 'zh' ? 'zh' : 'en';
-}
-
-function portraitResourceToNodeData(item: ResourceItem): Record<string, any> | null {
-  if (item.kind !== 'set' || item.materialSetKind !== 'text' || !Array.isArray(item.materialSetItems)) return null;
-  const rawText = item.materialSetItems
-    .map((entry) => String(entry.text || '').trim())
-    .find((text) => text.includes('"t8-portrait-master"'));
-  if (!rawText) return null;
-  try {
-    const parsed = JSON.parse(rawText);
-    if (!parsed || parsed.schema !== 't8-portrait-master') return null;
-    const selection = normalizePortraitSelection(parsed.selection);
-    const locks = normalizePortraitLocks(parsed.locks);
-    const weights = normalizePortraitWeights(parsed.weights);
-    const customText = typeof parsed.customText === 'string' ? parsed.customText : '';
-    const language = safePortraitLanguage(parsed.language);
-    const prompt = buildPortraitPrompt({ selection, weights, customText, language });
-    return {
-      portraitLanguage: language,
-      portraitSelection: selection,
-      portraitLocks: locks,
-      portraitWeights: weights,
-      portraitCustomText: customText,
-      prompt,
-      text: prompt,
-      outputText: prompt,
-      portraitMetadata: {
-        schema: 't8-portrait-master',
-        version: 1,
-        selection,
-        locks,
-        weights,
-        customText,
-        language,
-        prompt,
-        preview: resolvePortraitPreview(selection),
-      },
-      portraitSummary: summarizePortraitSelection(selection, 'zh'),
-      portraitStats: portraitSelectionStats(selection),
-      portraitSchemaVersion: 1,
-    };
-  } catch {
-    return null;
-  }
 }
 
 function poseBackupToNodeData(value: unknown): Record<string, any> | null {
@@ -151,6 +101,22 @@ async function workflowResourceToFragment(item: ResourceItem) {
   const res = await fetch(item.fileUrl);
   if (!res.ok) throw new Error(`读取工作流资源失败: HTTP ${res.status}`);
   return workflowManifestToFragment(await res.json());
+}
+
+function InfiniteCanvasBootLoading() {
+  return (
+    <div className="t8-boot-screen" role="status" aria-label="正在打开画布工作台">
+      <img className="t8-boot-art" src="/infinite-canvas-loading.png" alt="" aria-hidden="true" />
+      <div className="t8-boot-progress-shell" aria-hidden="true">
+        <span className="t8-boot-progress-label">正在启动...</span>
+        <div className="t8-boot-progress-track">
+          <span className="t8-boot-progress-fill" />
+          <span className="t8-boot-progress-spark" />
+        </div>
+        <span className="t8-boot-progress-percent">Loading</span>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -309,6 +275,8 @@ function App() {
   const isEva = currentTemplate.visuals?.style === 'eva';
   const isYyh = currentTemplate.visuals?.style === 'yyh';
   const isSlamdunk = currentTemplate.visuals?.style === 'slamdunk';
+  const isSoccer = currentTemplate.visuals?.style === 'soccer-hero';
+  const isDragonBall = currentTemplate.visuals?.style === 'dragon-ball';
   const canManageSettings = authUser?.role === 'admin' || authUser?.role === 'manager';
   const visibleNodeTypes = authUser?.permissions?.visibleNodeTypes;
   const allowedNodeTypes = authUser?.permissions?.allowedNodeTypes;
@@ -357,17 +325,18 @@ function App() {
       });
       return;
     }
+    const mediaKind = item.kind === 'panorama' ? 'image' : item.kind;
     const data: Record<string, any> = {
-      uploadType: item.kind,
+      uploadType: mediaKind,
       fileName: item.title || item.originalName || '资源库素材',
       fileSize: item.size || 0,
       mime: item.mime || '',
     };
-    if (item.kind === 'image') {
+    if (mediaKind === 'image') {
       data.imageUrl = item.fileUrl;
-    } else if (item.kind === 'video') {
+    } else if (mediaKind === 'video') {
       data.videoUrl = item.fileUrl;
-    } else if (item.kind === 'audio') {
+    } else if (mediaKind === 'audio') {
       data.audioUrl = item.fileUrl;
     }
     addNodeRef.current?.('upload', { data });
@@ -387,10 +356,11 @@ function App() {
 
   return (
     <RHToolsProvider>
+    <AchievementTracker />
     <div
       className={`t8-app-shell h-screen flex flex-col overflow-hidden ${
         isPixel ? '' : isDark ? 'bg-zinc-950 text-white' : 'bg-zinc-50 text-zinc-900'
-      } ${isOp ? 't8-app-shell--op' : ''} ${isRh ? 't8-app-shell--rh' : ''} ${isNaruto ? 't8-app-shell--naruto' : ''} ${isEva ? 't8-app-shell--eva' : ''} ${isYyh ? 't8-app-shell--yyh' : ''} ${isSlamdunk ? 't8-app-shell--slamdunk' : ''}`}
+      } ${isOp ? 't8-app-shell--op' : ''} ${isRh ? 't8-app-shell--rh' : ''} ${isNaruto ? 't8-app-shell--naruto' : ''} ${isEva ? 't8-app-shell--eva' : ''} ${isYyh ? 't8-app-shell--yyh' : ''} ${isSlamdunk ? 't8-app-shell--slamdunk' : ''} ${isSoccer ? 't8-app-shell--soccer' : ''} ${isDragonBall ? 't8-app-shell--dragon-ball' : ''}`}
       style={{ background: 'var(--t8-bg-app)', color: 'var(--t8-text-main)' }}
     >
       {/* 头部状态栏 */}
@@ -492,6 +462,44 @@ function App() {
               </div>
               <span className="t8-slamdunk-brand__score" aria-hidden="true">T8 10 : 08 AI</span>
             </div>
+          ) : isSoccer ? (
+            <div className="t8-soccer-brand flex items-center gap-2">
+              <span className="t8-soccer-brand__mark" aria-hidden="true">
+                <span className="t8-soccer-brand__jersey" />
+              </span>
+              <div className="min-w-0">
+                <h1 className="t8-soccer-brand__title text-[14px] font-black leading-none">
+                  足球小将 · 贞贞的无限画布
+                </h1>
+                <div className="t8-soccer-brand__sub text-[9px] font-bold tracking-wide leading-none mt-0.5">
+                  CAPTAIN TSUBASA CANVAS / GOLDEN GOAL READY
+                </div>
+              </div>
+              <span className="t8-soccer-brand__score" aria-hidden="true">Japan 3:2 Brazil</span>
+            </div>
+          ) : isDragonBall ? (
+            <div className="t8-dragonball-brand flex items-center gap-2">
+              <span className="t8-dragonball-brand__mark" aria-hidden="true">
+                <span className="t8-dragonball-brand__orb" />
+              </span>
+              <div className="min-w-0">
+                <h1 className="t8-dragonball-brand__title text-[14px] font-black leading-none">
+                  七龙珠 · 贞贞的无限画布
+                </h1>
+                <div className="t8-dragonball-brand__sub text-[9px] font-bold tracking-wide leading-none mt-0.5">
+                  CAPSULE CORP CANVAS / DRAGON RADAR ONLINE
+                </div>
+              </div>
+              <span className="t8-dragonball-brand__stars" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+                <span />
+                <span />
+                <span />
+                <span />
+              </span>
+            </div>
           ) : isPixel ? (
             <>
               <h1 className="px-title text-[14px] font-bold tracking-wide leading-none">
@@ -563,6 +571,7 @@ function App() {
             <Palette size={14} />
             <span className="text-[11px] truncate">{currentTemplate.name}</span>
           </button>
+          <AchievementButton isPixel={isPixel} isDark={isDark} />
           <button
             onClick={() => setResourceOpen(true)}
             className={
@@ -579,6 +588,7 @@ function App() {
             <Library size={14} />
             <span className="text-[11px]">资源库</span>
           </button>
+          <AppUpdaterButton isPixel={isPixel} isDark={isDark} />
           <button
             onClick={() => setHistoryOpen(true)}
             className={
@@ -663,7 +673,9 @@ function App() {
       <div className="flex-1 flex overflow-hidden">
         <Sidebar onAddNode={handleAddNode} visibleNodeTypes={visibleNodeTypes} />
         <ErrorBoundary fallbackTitle="画布渲染出错了，已被错误边界捕获">
-          <Canvas onAddNodeRef={addNodeRef} onInsertWorkflowRef={insertWorkflowRef} allowedNodeTypes={allowedNodeTypes} />
+          <Suspense fallback={<InfiniteCanvasBootLoading />}>
+            <Canvas onAddNodeRef={addNodeRef} onInsertWorkflowRef={insertWorkflowRef} allowedNodeTypes={allowedNodeTypes} />
+          </Suspense>
         </ErrorBoundary>
       </div>
 
@@ -675,20 +687,30 @@ function App() {
           onPermissionsChanged={refreshAuthUser}
         />
       )}
-      {canManageSettings && <ApiSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />}
-      <ThemeTemplateManager open={themeManagerOpen} onClose={() => setThemeManagerOpen(false)} />
-      <ResourceLibraryDrawer
-        open={resourceOpen}
-        onClose={() => setResourceOpen(false)}
-        onInsertMaterial={handleInsertResource}
-        userRole={authUser.role}
-      />
-      <GenerationHistoryDrawer
-        open={historyOpen}
-        onClose={() => setHistoryOpen(false)}
-        userRole={authUser.role}
-      />
+      <Suspense fallback={null}>
+        {canManageSettings && settingsOpen && <ApiSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />}
+        {themeManagerOpen && (
+          <ThemeTemplateManager open={themeManagerOpen} onClose={() => setThemeManagerOpen(false)} />
+        )}
+        {resourceOpen && (
+          <ResourceLibraryDrawer
+            open={resourceOpen}
+            onClose={() => setResourceOpen(false)}
+            onInsertMaterial={handleInsertResource}
+            userRole={authUser.role}
+          />
+        )}
+        {historyOpen && (
+          <GenerationHistoryDrawer
+            open={historyOpen}
+            onClose={() => setHistoryOpen(false)}
+            userRole={authUser.role}
+          />
+        )}
+      </Suspense>
       <MaterialContextMenu userRole={authUser.role} />
+      <AchievementDrawer />
+      <AchievementToast />
     </div>
     </RHToolsProvider>
   );

@@ -60,7 +60,6 @@ const settingsRouter = require('./routes/settings');
 const proxyRouter = require('./routes/proxy');
 const filesRouter = require('./routes/files');
 const imageOpsRouter = require('./routes/imageOps');
-const rechargeRouter = require('./routes/recharge');
 const resourcesRouter = require('./routes/resources');
 const themesRouter = require('./routes/themes');
 const eagleRouter = require('./routes/eagle');
@@ -69,6 +68,10 @@ const aiWatermarkRouter = require('./routes/aiWatermark');
 const generationHistoryRouter = require('./routes/generationHistory');
 const promptLibraryRouter = require('./routes/promptLibrary');
 const documentsRouter = require('./routes/documents');
+const cloudUploadsRouter = require('./routes/cloudUploads');
+const parseHubRouter = require('./routes/parseHub');
+const achievementsRouter = require('./routes/achievements');
+const topazRouter = require('./routes/topaz');
 
 app.use('/api/auth', authRouter);
 app.use('/api', (req, res, next) => {
@@ -84,7 +87,6 @@ app.use('/api/proxy/external', externalProvidersRouter);
 app.use('/api/files', filesRouter);
 app.use('/files', filesRouter);
 app.use('/api/image', imageOpsRouter);
-app.use('/api/recharge', rechargeRouter.apiRouter);
 app.use('/api/resources', resourcesRouter);
 app.use('/api/themes', themesRouter);
 app.use('/api/eagle', eagleRouter);
@@ -92,7 +94,10 @@ app.use('/api/ai-watermark', aiWatermarkRouter);
 app.use('/api/generation-history', generationHistoryRouter);
 app.use('/api/prompt-library', promptLibraryRouter);
 app.use('/api/documents', documentsRouter);
-app.use('/pay', rechargeRouter.payRouter);
+app.use('/api/cloud-uploads', cloudUploadsRouter);
+app.use('/api/parsehub', parseHubRouter);
+app.use('/api/achievements', achievementsRouter);
+app.use('/api/topaz', topazRouter);
 
 // ========== 前端静态资源(仅打包模式) ==========
 // 开发模式下不启用,避免与 Vite dev server 打架。

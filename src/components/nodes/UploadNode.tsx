@@ -12,16 +12,17 @@ import {
 } from 'lucide-react';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useThemeStore } from '../../stores/theme';
+import { trackAchievementEvent } from '../../stores/achievements';
 import { useHiddenFeatureStore, isRhDuckUploadEnabled } from '../../stores/hiddenFeatures';
 import { PORT_COLOR } from '../../config/portTypes';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useDragMaterialStore, type MaterialPayload } from '../../stores/dragMaterial';
 import ImageEditModal, { type ImageEditProduceMeta } from './ImageEditModal';
-import ImageLoadFallback from './ImageLoadFallback';
 import ResizableCorners from './ResizableCorners';
 import CollectionSplitButton from '../CollectionSplitButton';
 import ImageHoverPreview from '../ImageHoverPreview';
 import LoopingVideo from '../LoopingVideo';
+import SmartImage from '../SmartImage';
 import { decodeDuckFiles, type DuckDecodeFileItem } from '../../services/api';
 import { resolveThemeTemplate } from '../../theme/defaultTemplates';
 import {
@@ -258,6 +259,9 @@ const UploadNode = ({ id, data, selected }: NodeProps) => {
     } as Edge));
     rf.addNodes(newNodes);
     rf.setEdges((eds) => [...eds, ...newEdges]);
+    if (outputFromRhDuckDecode) {
+      trackAchievementEvent({ type: 'hidden_mode.used', theme: 'rh', kind: 'rh-duck', nodeType: 'upload' });
+    }
   };
 
   // 接入运行总线, 供 NodeActionBar / 批量运行 调起
@@ -459,6 +463,7 @@ const UploadNode = ({ id, data, selected }: NodeProps) => {
 
   return (
     <div
+      data-upload-node-id={id}
       data-rh-duck-mode={rhDuckMode ? 'true' : undefined}
       data-yyh-portrait-hidden-upload={yyhPortraitUploadMode ? 'true' : undefined}
       className="relative rounded-xl border-2 transition-colors flex flex-col"
@@ -623,43 +628,32 @@ const UploadNode = ({ id, data, selected }: NodeProps) => {
                 {mediaItems.map((item, i) => (
                   <div key={`${item.url}-${i}`} className="group/upload-image space-y-0.5">
                     <div className="relative">
-                      <ImageLoadFallback
+                      <SmartImage
                         src={item.url}
-                        isDark={isDark}
-                        className="w-full rounded"
-                        style={{ maxHeight: mediaItems.length >= 2 ? 120 : 480 }}
-                      >
-                        {(onError) => (
-                          <>
-                            <img
-                              src={item.url}
-                              alt={item.name || `图像 ${i + 1}`}
-                              className="w-full h-auto rounded block cursor-zoom-in"
-                              style={{ background: '#0008', objectFit: 'contain', maxHeight: mediaItems.length >= 2 ? 120 : 480 }}
-                              data-drag-source
-                              data-drag-kind="image"
-                              data-drag-url={item.url}
-                              data-drag-preview={item.url}
-                              data-drag-node-id={id}
-                              data-resource-title={item.name}
-                              onError={onError}
-                              onMouseDown={(e) =>
-                                beginMaterialDrag(e, { kind: 'image', url: item.url, sourceNodeId: id, previewUrl: item.url })
-                              }
-                              onDoubleClick={(e) => {
-                                e.stopPropagation();
-                                setEditingUrl(item.url);
-                              }}
-                              title="双击编辑（裁剪 / 宫格切分） · Ctrl+拖拽可送到其他节点"
-                            />
-                            <ImageHoverPreview
-                              src={item.url}
-                              alt={item.name || `图像 ${i + 1}`}
-                              buttonClassName="absolute right-1.5 top-1.5 z-10 h-7 w-7 p-0 opacity-0 shadow-md transition group-hover/upload-image:opacity-100 focus:opacity-100"
-                            />
-                          </>
-                        )}
-                      </ImageLoadFallback>
+                        alt={item.name || `图像 ${i + 1}`}
+                        className="w-full h-auto rounded block cursor-zoom-in"
+                        thumbSize={mediaItems.length >= 2 ? 320 : 720}
+                        style={{ background: '#0008', objectFit: 'contain', maxHeight: mediaItems.length >= 2 ? 120 : 480 }}
+                        data-drag-source
+                        data-drag-kind="image"
+                        data-drag-url={item.url}
+                        data-drag-preview={item.url}
+                        data-drag-node-id={id}
+                        data-resource-title={item.name}
+                        onMouseDown={(e) =>
+                          beginMaterialDrag(e, { kind: 'image', url: item.url, sourceNodeId: id, previewUrl: item.url })
+                        }
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          setEditingUrl(item.url);
+                        }}
+                        title="双击编辑（裁剪 / 宫格切分） · Ctrl+拖拽可送到其他节点"
+                      />
+                      <ImageHoverPreview
+                        src={item.url}
+                        alt={item.name || `图像 ${i + 1}`}
+                        buttonClassName="absolute right-1.5 top-1.5 z-10 h-7 w-7 p-0 opacity-0 shadow-md transition group-hover/upload-image:opacity-100 focus:opacity-100"
+                      />
                     </div>
                     <div className={`flex items-center gap-1 text-[10px] ${isDark ? 'text-white/45' : 'text-zinc-500'}`}>
                       <span className="truncate flex-1" title={item.name}>{item.name || `图像 ${i + 1}`}</span>

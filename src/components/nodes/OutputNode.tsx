@@ -14,11 +14,11 @@ import { useThemeStore } from '../../stores/theme';
 import { PORT_COLOR } from '../../config/portTypes';
 import { resolveThemeTemplate } from '../../theme/defaultTemplates';
 import ImageEditModal, { type ImageEditProduceMeta } from './ImageEditModal';
-import ImageLoadFallback from './ImageLoadFallback';
 import ImageCompareModal from '../ImageCompareModal';
 import CollectionSplitButton from '../CollectionSplitButton';
 import ImageHoverPreview from '../ImageHoverPreview';
 import LoopingVideo from '../LoopingVideo';
+import SmartImage from '../SmartImage';
 import { useMaterialDropTarget } from '../../hooks/useMaterialDropTarget';
 import { useDragMaterialStore, type MaterialPayload } from '../../stores/dragMaterial';
 import ResizableCorners from './ResizableCorners';
@@ -73,6 +73,7 @@ const NODE_INPUT_LABELS: Record<string, string> = {
   resize: '尺寸调整图',
   combine: '合成图',
   'grid-crop': '宫格切图',
+  'grid-editor': '宫格拼图',
   'remove-bg': '抠图结果',
   upscale: '放大结果',
   relay: '中继图',
@@ -235,17 +236,6 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
         const handles = handleMap.get(sid) || new Set<string | null>([null]);
 
         // 显式素材集: 按内部顺序透传；跳过旧字段读取，避免素材集同步字段造成重复。
-        if ((n as any)?.type === 'exhibition-outline-split') {
-          const wantText = handles.has('outline-text') || handles.has(null);
-          const wantImages = handles.has('outline-image') || handles.has(null);
-          if (wantText) pushUniqueText(out.texts, ud.outputText || ud.text || ud.prompt);
-          if (wantImages) {
-            const arr = Array.isArray(ud.imageUrls) ? ud.imageUrls : [];
-            arr.forEach((url: any) => pushUnique(out.images, url));
-          }
-          continue;
-        }
-
         if ((n as any)?.type === 'material-set' && Array.isArray(ud.materialSetItems)) {
           const buckets = collectMaterialSetBucketsFromData(ud);
           buckets.text.forEach((item) => pushTextSegment(out.texts, valueOfMaterialSetItem(item)));
@@ -959,40 +949,31 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
               {collected.images.map((u, i) => (
                 <div key={i} className="group group/output-image-card space-y-0.5">
                   <div className="relative">
-                    <ImageLoadFallback
+                    <SmartImage
                       src={u}
-                      isDark={isDark}
-                      className="w-full rounded"
-                      style={{ maxHeight: collected.images.length >= 2 ? 140 : 480 }}
-                    >
-                      {(onError) => (
-                        <img
-                          src={u}
-                          alt={`图像 ${i + 1}`}
-                          className="w-full h-auto rounded block cursor-zoom-in"
-                          style={{
-                            background: '#0008',
-                            objectFit: 'contain',
-                            maxHeight: collected.images.length >= 2 ? 140 : 480,
-                          }}
-                          data-drag-source
-                          data-drag-kind="image"
-                          data-drag-url={u}
-                          data-drag-preview={u}
-                          data-drag-node-id={id}
-                          data-resource-title={u.split('/').pop()}
-                          onError={onError}
-                          onMouseDown={(e) =>
-                            beginMaterialDrag(e, { kind: 'image', url: u, sourceNodeId: id, previewUrl: u })
-                          }
-                          onDoubleClick={(e) => {
-                            e.stopPropagation();
-                            setEditingUrl(u);
-                          }}
-                          title="双击编辑 (裁剪 / 宫格切分) · Ctrl+拖拽可送到其他节点"
-                        />
-                      )}
-                    </ImageLoadFallback>
+                      alt={`图像 ${i + 1}`}
+                      className="w-full h-auto rounded block cursor-zoom-in"
+                      thumbSize={collected.images.length >= 2 ? 360 : 720}
+                      style={{
+                        background: '#0008',
+                        objectFit: 'contain',
+                        maxHeight: collected.images.length >= 2 ? 140 : 480,
+                      }}
+                      data-drag-source
+                      data-drag-kind="image"
+                      data-drag-url={u}
+                      data-drag-preview={u}
+                      data-drag-node-id={id}
+                      data-resource-title={u.split('/').pop()}
+                      onMouseDown={(e) =>
+                        beginMaterialDrag(e, { kind: 'image', url: u, sourceNodeId: id, previewUrl: u })
+                      }
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        setEditingUrl(u);
+                      }}
+                      title="双击编辑 (裁剪 / 宫格切分) · Ctrl+拖拽可送到其他节点"
+                    />
                     <button
                       type="button"
                       className="nodrag nopan t8-btn t8-mini-icon-button t8-image-compare-button absolute right-1.5 top-1.5 z-10 h-7 w-7 p-0 opacity-100 shadow-md transition sm:opacity-0 sm:group-hover/output-image-card:opacity-100 sm:focus:opacity-100"

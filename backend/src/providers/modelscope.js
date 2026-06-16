@@ -2,7 +2,40 @@ const openaiCompatible = require('./openaiCompatible');
 const { resolveMediaRef } = require('./mediaResolver');
 
 const DEFAULT_MODEL = 'Tongyi-MAI/Z-Image-Turbo';
+const DEFAULT_CHAT_MODEL = 'Qwen/Qwen3-235B-A22B';
+const DEFAULT_CHAT_TIMEOUT_MS = 30 * 60 * 1000;
+const DEFAULT_IMAGE_TIMEOUT_MS = 60 * 60 * 1000;
 const DEFAULT_POLL_INTERVAL_MS = 1500;
+const MAX_LORAS_PER_REQUEST = 5;
+
+function generationTimeoutMs(value, fallback = DEFAULT_IMAGE_TIMEOUT_MS) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.max(DEFAULT_IMAGE_TIMEOUT_MS, Math.round(n));
+}
+
+function stripBearer(value) {
+  return String(value || '').trim().replace(/^Bearer\s+/i, '');
+}
+
+function modelscopeApiRoot(value) {
+  const base = String(value || 'https://api-inference.modelscope.cn/v1').trim().replace(/\/+$/, '');
+  if (!base) return 'https://api-inference.modelscope.cn/v1';
+  return base.endsWith('/v1') ? base : `${base}/v1`;
+}
+
+function chatProvider(provider) {
+  return {
+    ...provider,
+    protocol: 'modelscope',
+    baseUrl: modelscopeApiRoot(provider?.baseUrl),
+    apiKey: stripBearer(provider?.apiKey),
+    defaults: {
+      chatModel: DEFAULT_CHAT_MODEL,
+      ...(provider?.defaults || {}),
+    },
+  };
+}
 
 function parseSize(size) {
   const text = String(size || '1024x1024').trim().toLowerCase().replace('*', 'x');
@@ -31,6 +64,92 @@ function taskFailureDetail(raw) {
   return raw?.error_info || raw?.error || raw?.message || raw?.detail || raw?.data?.error_info || raw?.data?.message || JSON.stringify(raw);
 }
 
+function cleanLoraId(value) {
+  const text = String(value || '').trim();
+  if (!text || text.length > 180 || /[\x00-\x1f\x7f]/.test(text)) return '';
+  return text;
+}
+
+function normalizeLoraStrength(value, fallback = 0.8) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.min(1, n));
+}
+
+function normalizeLoraItems(value) {
+  const out = [];
+  const seen = new Set();
+  const add = (rawId, rawStrength) => {
+    if (out.length >= 24) return;
+    const id = cleanLoraId(rawId);
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    out.push({ id, strength: normalizeLoraStrength(rawStrength, 0.8) });
+  };
+  if (!value) return out;
+  if (typeof value === 'string') {
+    add(value, 1);
+    return out;
+  }
+  if (Array.isArray(value)) {
+    for (const raw of value) {
+      if (out.length >= 24) break;
+      if (typeof raw === 'string') {
+        add(raw, 1);
+        continue;
+      }
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+      if (raw.enabled === false) continue;
+      add(
+        raw.id || raw.loraId,
+        raw.strength ?? raw.loraStrength ?? raw.default_strength ?? raw.defaultStrength ?? raw.weight ?? raw.scale,
+      );
+    }
+    return out;
+  }
+  if (typeof value !== 'object') return out;
+  for (const [rawId, rawStrength] of Object.entries(value)) {
+    if (out.length >= 24) break;
+    if (rawStrength && typeof rawStrength === 'object' && !Array.isArray(rawStrength)) {
+      add(rawId, rawStrength.strength ?? rawStrength.weight ?? rawStrength.scale ?? rawStrength.loraStrength);
+    } else {
+      add(rawId, rawStrength);
+    }
+  }
+  return out;
+}
+
+function normalizeLorasPayload(value) {
+  const weighted = normalizeLoraItems(value).filter((item) => item.strength > 0).slice(0, MAX_LORAS_PER_REQUEST);
+  if (!weighted.length) return null;
+  if (weighted.length === 1) return weighted[0].id;
+
+  const total = weighted.reduce((sum, item) => sum + item.strength, 0);
+  if (!(total > 0)) return null;
+
+  const out = {};
+  let used = 0;
+  weighted.forEach((item, index) => {
+    const weight = index === weighted.length - 1
+      ? Math.max(0, Number((1 - used).toFixed(4)))
+      : Number((item.strength / total).toFixed(4));
+    out[item.id] = weight;
+    used += weight;
+  });
+  return out;
+}
+
+function normalizeInputLoras(input = {}) {
+  const params = input.providerParams && typeof input.providerParams === 'object' ? input.providerParams : {};
+  const direct = normalizeLorasPayload(input.loras || params.loras || params.modelscopeLoras);
+  if (direct) return direct;
+  if (params.modelscopeLoraEnabled === true) {
+    const id = cleanLoraId(params.modelscopeLoraId);
+    if (id) return normalizeLorasPayload([{ id, strength: params.modelscopeLoraStrength }]);
+  }
+  return null;
+}
+
 async function responseJson(res) {
   const text = await res.text();
   if (!text) return {};
@@ -42,7 +161,7 @@ async function responseJson(res) {
 }
 
 async function testProvider(provider, options = {}) {
-  const result = await openaiCompatible.testProvider(provider, options);
+  const result = await openaiCompatible.testProvider(chatProvider(provider), options);
   return {
     ...result,
     providerId: provider.id,
@@ -52,9 +171,9 @@ async function testProvider(provider, options = {}) {
 
 async function generateChat(provider, input = {}, options = {}) {
   const result = await openaiCompatible.generateChat(
-    { ...provider, protocol: 'modelscope' },
+    chatProvider(provider),
     input,
-    options,
+    { ...options, timeoutMs: Number(options.timeoutMs) || DEFAULT_CHAT_TIMEOUT_MS },
   );
   return {
     ...result,
@@ -78,7 +197,12 @@ async function resolveReferenceImages(refs, options = {}) {
 }
 
 async function generateImage(provider, input = {}, options = {}) {
-  const validation = openaiCompatible.validateProvider(provider, { apiKeyRequired: true });
+  const cleanProvider = {
+    ...provider,
+    baseUrl: modelscopeApiRoot(provider?.baseUrl),
+    apiKey: stripBearer(provider?.apiKey),
+  };
+  const validation = openaiCompatible.validateProvider(cleanProvider, { apiKeyRequired: true });
   if (!validation.ok) return { ...validation, providerId: provider?.id, protocol: 'modelscope' };
 
   const prompt = String(input.prompt || '').trim();
@@ -107,14 +231,17 @@ async function generateImage(provider, input = {}, options = {}) {
     return { ok: false, code: 'invalid_reference', providerId: provider.id, protocol: 'modelscope', error: e?.message || '参考图解析失败。' };
   }
 
+  const loras = normalizeInputLoras(input);
+  if (loras) payload.loras = loras;
+
   const headers = {
-    Authorization: `Bearer ${provider.apiKey}`,
+    Authorization: `Bearer ${cleanProvider.apiKey}`,
     'Content-Type': 'application/json',
     'X-ModelScope-Async-Mode': 'true',
   };
   const apiRoot = validation.baseUrl;
   const fetchImpl = options.fetchImpl || fetch;
-  const timeoutMs = Number(options.timeoutMs) || 120000;
+  const timeoutMs = generationTimeoutMs(options.timeoutMs);
   const pollIntervalMs = Math.max(1, Number(options.pollIntervalMs) || DEFAULT_POLL_INTERVAL_MS);
   const deadline = Date.now() + timeoutMs;
   let activeTaskId = '';
@@ -124,7 +251,7 @@ async function generateImage(provider, input = {}, options = {}) {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
-      timeoutMs: options.submitTimeoutMs || options.timeoutMs,
+      timeoutMs: options.submitTimeoutMs || timeoutMs,
       fetchImpl,
     });
     const raw = await responseJson(submit);
@@ -155,7 +282,7 @@ async function generateImage(provider, input = {}, options = {}) {
       const poll = await openaiCompatible.fetchWithTimeout(`${apiRoot}/tasks/${encodeURIComponent(taskId)}`, {
         method: 'GET',
         headers: { ...headers, 'X-ModelScope-Task-Type': 'image_generation' },
-        timeoutMs: options.pollTimeoutMs || options.timeoutMs,
+        timeoutMs: options.pollTimeoutMs || timeoutMs,
         fetchImpl,
       });
       const data = await responseJson(poll);

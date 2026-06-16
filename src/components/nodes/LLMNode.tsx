@@ -14,9 +14,10 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { DEFAULT_LLM_MODEL, isImageOutputLlm } from '../../providers/models';
+import { LLM_MODELS, DEFAULT_LLM_MODEL, isImageOutputLlm } from '../../providers/models';
 import {
   fileToDataUrl,
+  generateExternalLlm,
   generateLlm,
   generateLlmStream,
   type LlmContentPart,
@@ -33,11 +34,18 @@ import { useOrderedMaterials } from './useOrderedMaterials';
 import MaterialPreviewSection from './MaterialPreviewSection';
 import { useThemeStore } from '../../stores/theme';
 import MentionPromptInput from './MentionPromptInput';
+import SmartImage from '../SmartImage';
+import PromptTextarea from '../PromptTextarea';
 import { resolveMediaMentions, type MediaMention } from './mediaMentions';
 import { splitText } from '../../utils/textSplit';
 import { defaultSizeOf, placeBatchNodes, type Rect as PlacementRect } from '../../utils/nodePlacement';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useApiKeysStore } from '../../stores/apiKeys';
+import {
+  advancedProviderModelOptions,
+  advancedProvidersForNode,
+  resolveAdvancedProviderSelection,
+} from '../../utils/advancedProviders';
 import {
   countExcludedMaterials,
   excludeMaterialId,
@@ -63,6 +71,7 @@ interface ChatTurn {
   role: 'user' | 'assistant';
   text: string;
   images?: string[];
+  videos?: string[];
 }
 
 const PRESET_KEY = 't8-llm-sys-presets';
@@ -147,6 +156,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
   const [streamingText, setStreamingText] = useState('');
   const [presetMap, setPresetMap] = useState<Record<string, string>>(() => loadPresets());
   const [pickedFiles, setPickedFiles] = useState<{ name: string; dataUrl: string }[]>([]);
+  const [pickedVideos, setPickedVideos] = useState<{ name: string; url: string }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
@@ -157,17 +167,26 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
   const chatRef = useCallback((el: HTMLDivElement | null) => attachWheelBlock(el), []);
 
   const d = data as any;
-  const configuredLlmModel = useApiKeysStore((s) => s.settings.llmModel)?.trim() || DEFAULT_LLM_MODEL;
-  const llmConfigs = useApiKeysStore((s) => s.settings.llmConfigs || s.settings.llmApiKeys) || [];
-  const llmConfigOptions = useMemo(() => {
-    const saved = llmConfigs.filter((item) => item && (item.hasApiKey || item.apiKey || item.baseUrl || item.model));
-    return saved.length > 0 ? saved : [{ id: 'default', label: '默认 LLM', model: configuredLlmModel }];
-  }, [configuredLlmModel, llmConfigs]);
-  const selectedLlmKeyId = String(d?.llmKeyId || '').trim();
-  const activeLlmConfig = llmConfigOptions.find((item) => item.id === selectedLlmKeyId)
-    || llmConfigOptions.find((item) => item.isDefault)
-    || llmConfigOptions[0];
-  const model: string = activeLlmConfig?.model || configuredLlmModel;
+  const model: string = d?.model || DEFAULT_LLM_MODEL;
+  const advancedProviders = useApiKeysStore((s) => s.settings.advancedProviders);
+  const llmAdvancedProviders = useMemo(
+    () => advancedProvidersForNode(advancedProviders, 'llm'),
+    [advancedProviders],
+  );
+  const providerSelection = useMemo(
+    () => resolveAdvancedProviderSelection(advancedProviders, 'llm', {
+      providerSource: d?.providerSource,
+      providerId: d?.providerId,
+      providerModel: d?.providerModel,
+    }),
+    [advancedProviders, d?.providerSource, d?.providerId, d?.providerModel],
+  );
+  const isExternalSelected = providerSelection.available && providerSelection.providerSource !== 'zhenzhen';
+  const savedExternalMissing = !!d?.providerSource && d.providerSource !== 'zhenzhen' && !providerSelection.available;
+  const externalModelOptions = providerSelection.provider
+    ? advancedProviderModelOptions(providerSelection.provider, 'llm')
+    : [];
+  const externalProviderModel = providerSelection.providerModel || externalModelOptions[0] || '';
   const status: 'idle' | 'generating' | 'success' | 'error' = d?.status || 'idle';
     // 用户输入框值: 改用 d.userPrompt 私有字段（避免与对下游开放的 d.prompt=助手回复 冲突，
     // 否则下游 useUpstreamMaterials 会同时 pushText(d.prompt) + pushText(d.reply) 出现两条文本）
@@ -178,11 +197,23 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
   const temperature: number = typeof d?.temperature === 'number' ? d.temperature : 0.7;
   const maxTokens: number = typeof d?.maxTokens === 'number' ? d.maxTokens : 4096;
   const useStream: boolean = d?.stream !== false; // 默认开
+  const llmVideoMode: 'frames' | 'native-base64' | 'url' =
+    d?.llmVideoMode === 'url'
+      ? 'url'
+      : d?.llmVideoMode === 'native-base64' || d?.llmVideoMode === 'video-base64' || d?.llmVideoMode === 'compressed-base64'
+        ? 'native-base64'
+        : 'frames';
+  const videoMaxWidth: number = typeof d?.videoMaxWidth === 'number' ? d.videoMaxWidth : 720;
+  const videoMaxHeight: number = typeof d?.videoMaxHeight === 'number' ? d.videoMaxHeight : 720;
+  const videoMaxBase64Mb: number = typeof d?.videoMaxBase64Mb === 'number' ? d.videoMaxBase64Mb : 8;
+  const videoCrf: number = typeof d?.videoCrf === 'number' ? d.videoCrf : 32;
+  const videoFrameCount: number = typeof d?.videoFrameCount === 'number' ? d.videoFrameCount : 12;
   const history: ChatTurn[] = Array.isArray(d?.history) ? d.history : [];
   const generatedImages: string[] = Array.isArray(d?.generatedImages) ? d.generatedImages : [];
 
-  const src = `LLM·${model}·#${id.slice(-4)}`;
-  const isImgOut = isImageOutputLlm(model);
+  const activeModel = isExternalSelected ? externalProviderModel : model;
+  const src = `LLM·${activeModel || model}·#${id.slice(-4)}`;
+  const isImgOut = !isExternalSelected && isImageOutputLlm(model);
 
   // 上游素材实时订阅(跟随上游 data 变化重渲染) —— 用于节点内预览。
   // 跟 ImageNode / SeedanceNode 同一套机制(useNodeConnections + useNodesData),
@@ -200,11 +231,14 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
     () => filterExcludedMaterials(upstreamMats.texts, excludedMaterialIds),
     [upstreamMats.texts, excludedMaterialIds],
   );
-  const excludedUpstreamCount = useMemo(
-    () => countExcludedMaterials(excludedMaterialIds, [...upstreamMats.images, ...upstreamMats.texts]),
-    [excludedMaterialIds, upstreamMats.images, upstreamMats.texts],
+  const visibleUpstreamVideos = useMemo(
+    () => filterExcludedMaterials(upstreamMats.videos, excludedMaterialIds),
+    [upstreamMats.videos, excludedMaterialIds],
   );
-  const upstreamImages = visibleUpstreamImages;
+  const excludedUpstreamCount = useMemo(
+    () => countExcludedMaterials(excludedMaterialIds, [...upstreamMats.images, ...upstreamMats.texts, ...upstreamMats.videos]),
+    [excludedMaterialIds, upstreamMats.images, upstreamMats.texts, upstreamMats.videos],
+  );
 
   // === 主题适配 (dark / pixel) ===
   const { theme, style } = useThemeStore();
@@ -224,17 +258,35 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
       })),
     [pickedFiles, id],
   );
+  const localVideoMaterials: Material[] = useMemo(
+    () =>
+      pickedVideos.map((f, i) => ({
+        id: `local::video:${i}:${f.name}`,
+        kind: 'video' as const,
+        url: f.url,
+        sourceNodeId: id,
+        origin: 'local' as const,
+        label: f.name || `本地视频${i + 1}`,
+      })),
+    [pickedVideos, id],
+  );
   const allImagesUnordered = useMemo(
     () => [...localImageMaterials, ...visibleUpstreamImages],
     [localImageMaterials, visibleUpstreamImages],
   );
+  const allVideosUnordered = useMemo(
+    () => [...localVideoMaterials, ...visibleUpstreamVideos],
+    [localVideoMaterials, visibleUpstreamVideos],
+  );
   const materialOrder: string[] = Array.isArray(d?.materialOrder) ? d.materialOrder : [];
   const orderedImages = useOrderedMaterials(allImagesUnordered, materialOrder);
+  const orderedVideos = useOrderedMaterials(allVideosUnordered, materialOrder);
   const orderedTexts = useOrderedMaterials(visibleUpstreamTexts, materialOrder);
   const setMaterialOrder = (newOrder: string[]) => update({ materialOrder: newOrder });
   const handleRemoveLocalMaterial = (m: Material) => {
     if (m.origin !== 'local') return;
-    setPickedFiles((s) => s.filter((f) => f.dataUrl !== m.url));
+    if (m.kind === 'image') setPickedFiles((s) => s.filter((f) => f.dataUrl !== m.url));
+    if (m.kind === 'video') setPickedVideos((s) => s.filter((f) => f.url !== m.url));
   };
   const handleExcludeUpstreamMaterial = (m: Material) => {
     if (m.origin !== 'upstream') return;
@@ -245,14 +297,15 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
   };
   const handleRestoreExcludedMaterials = () => update({ excludedMaterialIds: [] });
 
-  // 上游: 收集 text + image (使用按用户拖拽顺序排好的 ordered 列表，与预览区呈现一致)
-  const collectUpstream = (): { text: string; images: string[] } => {
+  // 上游: 收集 text + image + video (使用按用户拖拽顺序排好的 ordered 列表，与预览区呈现一致)
+  const collectUpstream = (): { text: string; images: string[]; videos: string[] } => {
     const texts = orderedTexts.map((t) => t.url).filter((s) => !!s);
-    // orderedImages 已包含上游与本地拾取，不需额外 concat pickedFiles
+    // orderedImages / orderedVideos 已包含上游与本地拾取，不需额外 concat
     const images = orderedImages.map((m) => m.url).filter((s) => !!s);
+    const videos = orderedVideos.map((m) => m.url).filter((s) => !!s);
     void getEdges; // 保留引用避免 unused警告
     void getNodes;
-    return { text: texts.join('\n').trim(), images };
+    return { text: texts.join('\n').trim(), images, videos };
   };
 
   // 选本地图片
@@ -275,27 +328,29 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
   const removePickedAt = (i: number) => setPickedFiles((s) => s.filter((_, idx) => idx !== i));
 
   // 构造 messages 数组(对齐主项目 _doSendChat)
-  const buildMessages = (userText: string, userImages: string[]): LlmMessage[] => {
+  const buildMessages = (userText: string, userImages: string[], userVideos: string[]): LlmMessage[] => {
     const msgs: LlmMessage[] = [];
     if (systemPrompt.trim()) {
       msgs.push({ role: 'system', content: systemPrompt.trim() });
     }
     // 注入历史
     history.forEach((t) => {
-      if (t.role === 'user' && t.images && t.images.length) {
+      if (t.role === 'user' && ((t.images && t.images.length) || (t.videos && t.videos.length))) {
         const parts: LlmContentPart[] = [];
         if (t.text) parts.push({ type: 'text', text: t.text });
-        t.images.forEach((u) => parts.push({ type: 'image_url', image_url: { url: u } }));
+        (t.images || []).forEach((u) => parts.push({ type: 'image_url', image_url: { url: u } }));
+        (t.videos || []).forEach((u) => parts.push({ type: 'video_url', video_url: { url: u } }));
         msgs.push({ role: 'user', content: parts });
       } else {
         msgs.push({ role: t.role, content: t.text });
       }
     });
     // 当前用户消息
-    if (userImages.length) {
+    if (userImages.length || userVideos.length) {
       const parts: LlmContentPart[] = [];
       if (userText) parts.push({ type: 'text', text: userText });
       userImages.forEach((u) => parts.push({ type: 'image_url', image_url: { url: u } }));
+      userVideos.forEach((u) => parts.push({ type: 'video_url', video_url: { url: u } }));
       msgs.push({ role: 'user', content: parts });
     } else {
       msgs.push({ role: 'user', content: userText });
@@ -311,33 +366,40 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
     const userText = (upstream.text || resolvedLocalPrompt || '').trim();
     // 注: orderedImages 已包含本地 pickedFiles + 上游，不再重复拼接
     const userImages = upstream.images;
-    if (!userText && userImages.length === 0) {
-      setError('未提供用户输入(无上游 prompt / 本地输入 / 图片)');
+    const userVideos = upstream.videos;
+    if (!userText && userImages.length === 0 && userVideos.length === 0) {
+      setError('未提供用户输入(无上游 prompt / 本地输入 / 图片 / 视频)');
       logBus.error('缺少用户输入', src);
       return;
     }
+    const llmVideoOptions = { llmVideoMode, videoMaxWidth, videoMaxHeight, videoMaxBase64Mb, videoCrf, videoFrameCount };
 
     taskCompletionSound.primeAudio();
     update({ status: 'generating', error: null });
     logBus.info(
-      `发送到 ${model} · ${
-        useStream && !isImgOut ? 'SSE' : '非流式'
-      } · imgs=${userImages.length}`,
+      `发送到 ${isExternalSelected && providerSelection.provider ? providerSelection.provider.label : model} · ${
+        !isExternalSelected && useStream && !isImgOut && userVideos.length === 0 ? 'SSE' : '非流式'
+      } · imgs=${userImages.length} · videos=${userVideos.length}${userVideos.length ? ` · ${llmVideoMode}` : ''}`,
       src,
     );
 
-    const messages = buildMessages(userText, userImages);
+    const messages = buildMessages(userText, userImages, userVideos);
     // 立即把当前轮加入历史(回复占位)
-    const userTurn: ChatTurn = { role: 'user', text: userText, images: userImages };
+    const userTurn: ChatTurn = {
+      role: 'user',
+      text: userText,
+      images: userImages.length ? userImages : undefined,
+      videos: userVideos.length ? userVideos : undefined,
+    };
     const nextHistory: ChatTurn[] = [...history, userTurn];
 
     try {
-      if (useStream && !isImgOut) {
+      if (!isExternalSelected && useStream && !isImgOut && userVideos.length === 0) {
         // ====== 流式 ======
         const ctrl = new AbortController();
         abortRef.current = ctrl;
         const { content } = await generateLlmStream(
-          { model, messages, llmKeyId: activeLlmConfig?.id, temperature, max_tokens: maxTokens },
+          { model, messages, temperature, max_tokens: maxTokens, ...llmVideoOptions },
           {
             onDelta: (chunk) => setStreamingText((s) => s + chunk),
             signal: ctrl.signal,
@@ -357,11 +419,23 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
         });
         setStreamingText('');
         setPickedFiles([]);
+        setPickedVideos([]);
         logBus.success(`完成 · ${replyText.length} 字`, src);
         taskCompletionSound.notifyComplete(id, 'llm');
       } else {
         // ====== 非流式(出图模型 或 关流式) ======
-        const res = await generateLlm({ model, messages, llmKeyId: activeLlmConfig?.id, temperature, max_tokens: maxTokens });
+        const res = isExternalSelected && providerSelection.provider
+          ? await generateExternalLlm({
+              providerId: providerSelection.provider.id,
+              providerModel: externalProviderModel,
+              model: externalProviderModel,
+              messages,
+              temperature,
+              max_tokens: maxTokens,
+              ...llmVideoOptions,
+              providerParams: d?.providerParams || {},
+            })
+          : await generateLlm({ model, messages, temperature, max_tokens: maxTokens, ...llmVideoOptions });
         const replyText = res.content || '';
         const imgs = res.imageUrls || [];
         const finalHistory: ChatTurn[] = [
@@ -379,6 +453,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
           consumedTexts: orderedTexts.map((t) => t.url).filter((s) => !!s),
         });
         setPickedFiles([]);
+        setPickedVideos([]);
         if (imgs.length) logBus.success(`完成 · ${replyText.length} 字 + ${imgs.length} 图`, src);
         else logBus.success(`完成 · ${replyText.length} 字`, src);
         taskCompletionSound.notifyComplete(id, 'llm');
@@ -408,6 +483,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
     update({ history: [], reply: '', generatedImages: [], imageUrls: [] });
     setStreamingText('');
     setPickedFiles([]);
+    setPickedVideos([]);
   };
 
   // 预设
@@ -508,23 +584,27 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
     startDrag(payload, e.clientX, e.clientY);
   };
 
-  // === 跨节点拖拽: target (接收 image → pickedFiles, text → prompt) ===
+  // === 跨节点拖拽: target (接收 image/video → 本地素材, text → prompt) ===
   const handleDrop = (payload: MaterialPayload) => {
     if (payload.kind === 'image' && payload.url) {
       const url = payload.url;
       setPickedFiles((s) => (s.some((f) => f.dataUrl === url) ? s : [...s, { name: url.split('/').pop() || 'dropped', dataUrl: url }]));
       logBus.info(`已接受拖入图像 · ${url.slice(-40)}`, src);
+    } else if (payload.kind === 'video' && payload.url) {
+      const url = payload.url;
+      setPickedVideos((s) => (s.some((f) => f.url === url) ? s : [...s, { name: url.split('/').pop() || 'dropped-video', url }]));
+      logBus.info(`已接受拖入视频 · ${url.slice(-40)}`, src);
     } else if (payload.kind === 'text' && typeof payload.text === 'string') {
       update({ userPrompt: payload.text });
     }
   };
   const { dropProps, isAccepting } = useMaterialDropTarget({
     id,
-    accepts: ['image', 'text'],
+    accepts: ['image', 'video', 'text'],
     onDrop: handleDrop,
   });
 
-  const handleColor = PORT_COLOR.text; // 输出 text;输入兼容 text+image(由 portTypes.llm 决定)
+  const handleColor = PORT_COLOR.text; // 输出 text;输入兼容 text+image+video(由 portTypes.llm 决定)
 
   const mainRef = useRef<HTMLDivElement>(null);
   const hasChat = history.length > 0 || !!streamingText;
@@ -574,7 +654,9 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold text-white truncate">LLM / Vision</div>
           <div className="text-[10px] text-white/40 truncate">
-            {`${activeLlmConfig?.label || '默认 LLM'} · ${model || '未选模型'}`}
+            {isExternalSelected && providerSelection.provider
+              ? `${providerSelection.provider.label || providerSelection.provider.id} · ${externalProviderModel || '未选模型'}`
+              : '独立 Key · 5 模型 · 多模态 · 流式'}
           </div>
         </div>
         {history.length > 0 && (
@@ -589,42 +671,89 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
       </div>
 
       <div className="p-2.5 space-y-2" onMouseDown={(e) => e.stopPropagation()}>
-        {llmConfigOptions.length > 0 && (
+        {llmAdvancedProviders.length > 0 && (
           <div className="rounded border border-white/10 bg-white/[0.03] p-2 space-y-2">
             <button
               type="button"
               onClick={() => update({ advancedProviderOpen: !d?.advancedProviderOpen })}
               className="w-full flex items-center justify-between text-[10px] font-semibold text-white/70 hover:text-white"
             >
-              <span>LLM 配置</span>
-              <span>{activeLlmConfig?.label || '默认 LLM'}</span>
+              <span>高级来源</span>
+              <span>{isExternalSelected && providerSelection.provider ? providerSelection.provider.label : '默认 LLM Key'}</span>
             </button>
             {d?.advancedProviderOpen && (
               <div className="space-y-2">
                 <div>
-                  <label className="text-[10px] text-white/50 block mb-1">来源</label>
+                  <label className="text-[10px] text-white/50 block mb-1">平台</label>
                   <select
-                    value={`llm-key:${activeLlmConfig?.id || 'default'}`}
+                    value={isExternalSelected ? providerSelection.providerId : 'zhenzhen'}
                     onChange={(e) => {
                       const nextId = e.target.value;
-                      if (nextId.startsWith('llm-key:')) {
-                        update({ providerSource: 'zhenzhen', providerId: '', providerModel: '', llmKeyId: nextId.slice(8) });
+                      if (nextId === 'zhenzhen') {
+                        update({ providerSource: 'zhenzhen', providerId: '', providerModel: '' });
+                        return;
                       }
+                      const provider = llmAdvancedProviders.find((item) => item.id === nextId);
+                      if (!provider) return;
+                      const nextModels = advancedProviderModelOptions(provider, 'llm');
+                      update({
+                        providerSource: provider.protocol,
+                        providerId: provider.id,
+                        providerModel: nextModels[0] || '',
+                        stream: false,
+                      });
                     }}
                     style={{ background: '#18181b', color: '#ffffff' }}
                     className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
                   >
-                    {llmConfigOptions.map((item) => (
-                      <option key={item.id} value={`llm-key:${item.id}`} style={{ background: '#18181b', color: '#ffffff' }}>
-                        {item.label || item.id}{item.model ? ` · ${item.model}` : ''}
+                    <option value="zhenzhen" style={{ background: '#18181b', color: '#ffffff' }}>LLM 独立 Key（默认）</option>
+                    {llmAdvancedProviders.map((provider) => (
+                      <option key={provider.id} value={provider.id} style={{ background: '#18181b', color: '#ffffff' }}>
+                        {provider.label || provider.id}
                       </option>
                     ))}
                   </select>
                 </div>
+                {isExternalSelected && providerSelection.provider && (
+                  <div>
+                    <label className="text-[10px] text-white/50 block mb-1">外部模型</label>
+                    <select
+                      value={externalProviderModel}
+                      onChange={(e) => update({ providerModel: e.target.value })}
+                      style={{ background: '#18181b', color: '#ffffff' }}
+                      className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
+                    >
+                      {externalModelOptions.map((m) => (
+                        <option key={m} value={m} style={{ background: '#18181b', color: '#ffffff' }}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {savedExternalMissing && (
+                  <div className="text-[10px] text-amber-200 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1">
+                    当前画布记录的扩展平台未启用或不存在，已临时回到默认来源。
+                  </div>
+                )}
               </div>
             )}
           </div>
         )}
+
+        {/* 模型 */}
+        {!isExternalSelected && <div>
+          <label className="text-[10px] text-white/50 block mb-1">模型</label>
+          <select
+            value={model}
+            onChange={(e) => update({ model: e.target.value })}
+            className="w-full rounded bg-white/5 border border-white/10 px-2 py-1 text-xs text-white outline-none focus:border-white/30"
+          >
+            {LLM_MODELS.map((m) => (
+              <option key={m.id} value={m.id} className="bg-zinc-900">
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </div>}
 
         {/* 温度 / max_tokens / 流式 */}
         <div className="grid grid-cols-3 gap-1.5">
@@ -656,19 +785,19 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
             <label className="text-[9px] text-white/40 block mb-0.5">流式</label>
             <label
               className={`flex items-center justify-center gap-1 rounded px-1.5 py-1 text-[10px] cursor-pointer ${
-                useStream && !isImgOut
+                useStream && !isImgOut && !isExternalSelected
                   ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                   : 'bg-white/5 text-white/40 border border-white/10'
-              } ${isImgOut ? 'opacity-50 cursor-not-allowed' : ''}`}
+              } ${isImgOut || isExternalSelected ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <input
                 type="checkbox"
-                disabled={isImgOut}
-                checked={useStream && !isImgOut}
+                disabled={isImgOut || isExternalSelected}
+                checked={useStream && !isImgOut && !isExternalSelected}
                 onChange={(e) => update({ stream: e.target.checked })}
                 className="hidden"
               />
-              {isImgOut ? '关(出图)' : useStream ? 'SSE' : '关'}
+              {isExternalSelected ? '关(扩展)' : isImgOut ? '关(出图)' : useStream ? 'SSE' : '关'}
             </label>
           </div>
         </div>
@@ -716,12 +845,16 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
               )}
             </div>
           </div>
-          <textarea
+          <PromptTextarea
             ref={sysRef}
+            title="LLM 系统提示词"
             value={systemPrompt}
-            onChange={(e) => update({ system: e.target.value })}
+            onValueChange={(value) => update({ system: value })}
             placeholder="设定AI角色和行为..."
             className="w-full h-36 resize-none rounded bg-white/5 border border-white/10 px-2 py-1 text-[11px] text-white outline-none focus:border-white/30 placeholder:text-white/30 overflow-y-auto"
+            isDark={isDark}
+            isPixel={isPixel}
+            promptTemplateKind="image"
           />
         </div>
 
@@ -730,6 +863,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
           <label className="text-[10px] text-white/50 block mb-1">用户输入(优先取上游)</label>
           <MentionPromptInput
             editorRef={userRef}
+            title="LLM 用户输入"
             value={localPrompt}
             mentions={userPromptMentions}
             materials={orderedImages}
@@ -737,14 +871,124 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
             placeholder="备用:无上游连接时使用"
             isDark={isDark}
             isPixel={isPixel}
+            promptTemplateKind="image"
             className="w-full h-60 resize-none rounded bg-white/5 border border-white/10 px-2 py-1 text-[11px] text-white outline-none focus:border-white/30 placeholder:text-white/30 overflow-y-auto"
           />
         </div>
+
+        {orderedVideos.length > 0 && (
+          <div className="rounded border border-sky-400/20 bg-sky-500/[0.06] p-2 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-[10px] text-sky-200/80">视频传入</label>
+              <select
+                value={llmVideoMode}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  update({ llmVideoMode: value === 'url' ? 'url' : value === 'native-base64' ? 'native-base64' : 'frames' });
+                }}
+                className="rounded bg-white/5 border border-white/10 px-1.5 py-0.5 text-[10px] text-white outline-none"
+                title="LLM 视频传入方式"
+              >
+                <option value="frames" className="bg-zinc-900">关键帧优先</option>
+                <option value="native-base64" className="bg-zinc-900">原视频 Base64</option>
+                <option value="url" className="bg-zinc-900">URL</option>
+              </select>
+            </div>
+            {llmVideoMode === 'frames' ? (
+              <div className="space-y-1.5">
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div>
+                    <label className="text-[9px] text-white/40 block mb-0.5">关键帧数量</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={60}
+                      step={1}
+                      value={videoFrameCount}
+                      onChange={(e) => update({ videoFrameCount: Math.max(1, Math.min(60, Number(e.target.value) || 12)) })}
+                      className="w-full rounded bg-white/5 border border-white/10 px-1.5 py-1 text-[11px] text-white outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-white/40 block mb-0.5">关键帧边长</label>
+                    <input
+                      type="number"
+                      min={256}
+                      max={1600}
+                      step={64}
+                      value={videoMaxWidth}
+                      onChange={(e) => {
+                        const next = Math.max(256, Math.min(1600, Number(e.target.value) || 720));
+                        update({ videoMaxWidth: next, videoMaxHeight: next });
+                      }}
+                      className="w-full rounded bg-white/5 border border-white/10 px-1.5 py-1 text-[11px] text-white outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="text-[10px] text-white/45 leading-snug">
+                  按整段视频均匀抽取关键帧发送给 LLM；长视频可调到 24/48/60 张。有视频时会自动使用非流式。
+                </div>
+              </div>
+            ) : llmVideoMode === 'native-base64' ? (
+              <div className="space-y-1.5">
+                <div className="grid grid-cols-3 gap-1.5">
+                  <div>
+                    <label className="text-[9px] text-white/40 block mb-0.5">边长</label>
+                    <input
+                      type="number"
+                      min={256}
+                      max={1920}
+                      step={64}
+                      value={videoMaxWidth}
+                      onChange={(e) => {
+                        const next = Math.max(256, Math.min(1920, Number(e.target.value) || 720));
+                        update({ videoMaxWidth: next, videoMaxHeight: next });
+                      }}
+                      className="w-full rounded bg-white/5 border border-white/10 px-1.5 py-1 text-[11px] text-white outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-white/40 block mb-0.5">上限MB</label>
+                    <input
+                      type="number"
+                      min={2}
+                      max={64}
+                      step={1}
+                      value={videoMaxBase64Mb}
+                      onChange={(e) => update({ videoMaxBase64Mb: Math.max(2, Math.min(64, Number(e.target.value) || 8)) })}
+                      className="w-full rounded bg-white/5 border border-white/10 px-1.5 py-1 text-[11px] text-white outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-white/40 block mb-0.5">CRF</label>
+                    <input
+                      type="number"
+                      min={18}
+                      max={40}
+                      step={1}
+                      value={videoCrf}
+                      onChange={(e) => update({ videoCrf: Math.max(18, Math.min(40, Number(e.target.value) || 32)) })}
+                      className="w-full rounded bg-white/5 border border-white/10 px-1.5 py-1 text-[11px] text-white outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="text-[10px] text-white/45 leading-snug">
+                  以原生 video_url Base64 发送，不会抽关键帧；若所选模型网关不支持原生视频，可切回关键帧模式。
+                </div>
+              </div>
+            ) : (
+              <div className="text-[10px] text-white/45 leading-snug">
+                本地视频会转为后端绝对 URL；外网 URL 保持原样。
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 上游素材聚合预览区 (与 ImageNode / VideoNode / SeedanceNode 使用同一个组件，保证双主题下尺寸/样式一致) */}
         <MaterialPreviewSection
           texts={orderedTexts}
           images={orderedImages}
+          videos={orderedVideos}
           order={materialOrder}
           onReorder={setMaterialOrder}
           onRemoveLocal={handleRemoveLocalMaterial}
@@ -754,8 +998,8 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
           selected={!!selected}
           isDark={isDark}
           isPixel={isPixel}
-          groups={['text', 'image']}
-          title="上游素材 + 本地图片"
+          groups={['text', 'image', 'video']}
+          title="上游素材 + 本地图片/视频"
           imageUploadAction={{
             onClick: () => fileInputRef.current?.click(),
             title: '上传本地图片(多模态)',
@@ -790,7 +1034,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
               </>
             )}
           </button>
-          {status === 'generating' && useStream && !isImgOut && (
+          {status === 'generating' && useStream && !isImgOut && !isExternalSelected && (
             <button
               onClick={handleStop}
               className="px-2 py-1.5 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs"
@@ -891,7 +1135,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
             {t.images && t.images.length > 0 && (
               <div className="flex gap-1 flex-wrap mt-1">
                 {t.images.map((u, j) => (
-                  <img
+                  <SmartImage
                     key={j}
                     src={u}
                     alt=""
@@ -902,6 +1146,27 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
                     data-drag-node-id={id}
                     onMouseDown={(e) => beginMaterialDrag(e, { kind: 'image', url: u, sourceNodeId: id, previewUrl: u })}
                     className="w-12 h-12 object-cover rounded border border-white/10 cursor-grab"
+                    title="按住 Ctrl 拖拽到其他节点"
+                    thumbSize={160}
+                  />
+                ))}
+              </div>
+            )}
+            {t.videos && t.videos.length > 0 && (
+              <div className="flex gap-1 flex-wrap mt-1">
+                {t.videos.map((u, j) => (
+                  <video
+                    key={j}
+                    src={u}
+                    muted
+                    controls
+                    data-drag-source
+                    data-drag-kind="video"
+                    data-drag-url={u}
+                    data-drag-preview={u}
+                    data-drag-node-id={id}
+                    onMouseDown={(e) => beginMaterialDrag(e, { kind: 'video', url: u, sourceNodeId: id, previewUrl: u })}
+                    className="w-20 h-12 object-cover rounded border border-white/10 cursor-grab"
                     title="按住 Ctrl 拖拽到其他节点"
                   />
                 ))}

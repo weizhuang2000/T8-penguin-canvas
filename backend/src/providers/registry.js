@@ -1,10 +1,67 @@
 const DEFAULT_MODELSCOPE_BASE_URL = 'https://api-inference.modelscope.cn/v1';
 const DEFAULT_VOLCENGINE_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3';
-const DEFAULT_GEMINI_BASE_URL = 'https://ai.t8star.org/v1';
+
+const DEFAULT_MODELSCOPE_IMAGE_MODELS = [
+  'Tongyi-MAI/Z-Image-Turbo',
+  'Qwen/Qwen-Image-2512',
+  'Qwen/Qwen-Image-Edit-2511',
+  'black-forest-labs/FLUX.2-klein-9B',
+];
+
+const DEFAULT_MODELSCOPE_LORAS_VERSION = 1;
+
+const DEFAULT_MODELSCOPE_LORAS = [
+  {
+    id: 'Daniel8152/film',
+    name: 'Z-Image Film',
+    targetModel: 'Tongyi-MAI/Z-Image-Turbo',
+    strength: 0.8,
+    enabled: true,
+    note: '',
+  },
+  {
+    id: 'Daniel8152/Qwen-Image-2512-Film',
+    name: 'Qwen Image 2512 Film',
+    targetModel: 'Qwen/Qwen-Image-2512',
+    strength: 0.8,
+    enabled: true,
+    note: '',
+  },
+  {
+    id: 'Daniel8152/Klein-enhance',
+    name: 'Klein enhance',
+    targetModel: 'black-forest-labs/FLUX.2-klein-9B',
+    strength: 0.8,
+    enabled: true,
+    note: '',
+  },
+];
+
+const DEFAULT_MODELSCOPE_CHAT_MODELS = [
+  'Qwen/Qwen3-235B-A22B',
+  'Qwen/Qwen3-VL-235B-A22B-Instruct',
+  'MiniMax/MiniMax-M2.7:MiniMax',
+];
+
+const DEFAULT_VOLCENGINE_IMAGE_MODELS = [
+  'doubao-seedream-4-0-250828',
+];
+
+const DEFAULT_VOLCENGINE_VIDEO_MODELS = [
+  'doubao-seedance-2-0-260128',
+  'doubao-seedance-2-0-fast-260128',
+  'doubao-seedance-1-5-pro-251215',
+  'doubao-seedance-1-0-pro-250528',
+  'doubao-seedance-1-0-lite-t2v-250428',
+  'doubao-seedance-1-0-lite-i2v-250428',
+];
+
+const DEFAULT_VOLCENGINE_CHAT_MODELS = [
+  'doubao-seed-1-6-250615',
+];
 
 const SUPPORTED_PROTOCOLS = new Set([
   'openai-compatible',
-  'gemini-compatible',
   'modelscope',
   'volcengine',
   'comfyui',
@@ -27,26 +84,22 @@ const DEFAULT_ADVANCED_PROVIDERS = [
     defaults: {},
   },
   {
-    id: 'gemini-compatible',
-    label: 'Gemini 兼容',
-    protocol: 'gemini-compatible',
-    baseUrl: DEFAULT_GEMINI_BASE_URL,
-    enabled: false,
-    imageModels: ['nano-banana-2'],
-    videoModels: [],
-    chatModels: ['gemini-2.5-flash'],
-    defaults: {},
-  },
-  {
     id: 'modelscope',
     label: 'ModelScope',
     protocol: 'modelscope',
     baseUrl: DEFAULT_MODELSCOPE_BASE_URL,
     enabled: false,
-    imageModels: [],
+    imageModels: DEFAULT_MODELSCOPE_IMAGE_MODELS,
     videoModels: [],
-    chatModels: [],
-    defaults: {},
+    chatModels: DEFAULT_MODELSCOPE_CHAT_MODELS,
+    defaults: {
+      imageModel: DEFAULT_MODELSCOPE_IMAGE_MODELS[0],
+      chatModel: DEFAULT_MODELSCOPE_CHAT_MODELS[0],
+    },
+    modelscopeConfig: {
+      defaultsVersion: DEFAULT_MODELSCOPE_LORAS_VERSION,
+      loras: DEFAULT_MODELSCOPE_LORAS,
+    },
   },
   {
     id: 'volcengine',
@@ -54,10 +107,14 @@ const DEFAULT_ADVANCED_PROVIDERS = [
     protocol: 'volcengine',
     baseUrl: DEFAULT_VOLCENGINE_BASE_URL,
     enabled: false,
-    imageModels: [],
-    videoModels: [],
-    chatModels: [],
-    defaults: {},
+    imageModels: DEFAULT_VOLCENGINE_IMAGE_MODELS,
+    videoModels: DEFAULT_VOLCENGINE_VIDEO_MODELS,
+    chatModels: DEFAULT_VOLCENGINE_CHAT_MODELS,
+    defaults: {
+      imageModel: DEFAULT_VOLCENGINE_IMAGE_MODELS[0],
+      videoModel: DEFAULT_VOLCENGINE_VIDEO_MODELS[1],
+      chatModel: DEFAULT_VOLCENGINE_CHAT_MODELS[0],
+    },
     volcengineConfig: {
       project: 'default',
       region: 'cn-beijing',
@@ -92,7 +149,7 @@ const DEFAULT_ADVANCED_PROVIDERS = [
       executablePath: '',
       useWsl: false,
       wslDistro: '',
-      pollSeconds: 900,
+      pollSeconds: 3600,
     },
   },
 ];
@@ -148,25 +205,50 @@ function normalizeModelList(values) {
   return out;
 }
 
-function normalizeImageModelSizes(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  const out = {};
-  for (const [key, sizes] of Object.entries(value).slice(0, 200)) {
-    const model = String(key || '').trim();
-    if (!model || model.length > 240 || CONTROL_CHAR_RE.test(model)) continue;
-    const cleanSizes = [];
-    for (const rawSize of Array.isArray(sizes) ? sizes : []) {
-      const size = String(rawSize || '').trim().toUpperCase();
-      if (!['1K', '2K', '4K'].includes(size)) continue;
-      if (!cleanSizes.includes(size)) cleanSizes.push(size);
-    }
-    out[model] = cleanSizes;
-  }
-  return out;
+function normalizeModelscopeLoraStrength(value, fallback = 0.8) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.min(2, n));
 }
 
-function hasImageModelSizes(value) {
-  return !!value && typeof value === 'object' && !Array.isArray(value);
+function normalizeModelscopeLoras(values) {
+  const out = [];
+  const seen = new Set();
+  for (const raw of Array.isArray(values) ? values : []) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const id = cleanText(raw.id || raw.loraId || '', 180);
+    const targetModel = cleanText(raw.targetModel || raw.target_model || raw.model || '', 180);
+    if (!id || !targetModel) continue;
+    const key = `${targetModel}\n${id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      id,
+      name: cleanText(raw.name || id, 80) || id,
+      targetModel,
+      strength: normalizeModelscopeLoraStrength(raw.strength ?? raw.default_strength ?? raw.defaultStrength, 0.8),
+      enabled: normalizeBoolean(raw.enabled, true),
+      note: cleanText(raw.note || '', 300),
+    });
+  }
+  return out.slice(0, 120);
+}
+
+function normalizeModelscopeConfig(value, raw = {}) {
+  const config = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return {
+    defaultsVersion: DEFAULT_MODELSCOPE_LORAS_VERSION,
+    loras: normalizeModelscopeLoras([
+      ...DEFAULT_MODELSCOPE_LORAS,
+      ...(Array.isArray(config.loras) ? config.loras : []),
+      ...(Array.isArray(raw.ms_loras) ? raw.ms_loras : []),
+      ...(Array.isArray(raw.msLoras) ? raw.msLoras : []),
+    ]),
+  };
+}
+
+function mergeModelLists(defaults, values) {
+  return normalizeModelList([...(Array.isArray(defaults) ? defaults : []), ...(Array.isArray(values) ? values : [])]);
 }
 
 function normalizeUrl(value) {
@@ -238,12 +320,25 @@ function normalizeComfyFields(value) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
     const nodeId = cleanText(raw.nodeId || raw.node || '', 80);
     const fieldName = cleanText(raw.fieldName || raw.input || raw.name || '', 80);
-    const source = cleanText(raw.source || fieldName, 80);
+    const fixedValue = cloneJsonValue(raw.value, 64 * 1024);
+    const source = cleanText(raw.source || (fixedValue !== undefined ? 'fixed' : fieldName), 80);
     if (!nodeId || !fieldName) continue;
     const field = { nodeId, fieldName, source };
-    const fixedValue = cloneJsonValue(raw.value, 64 * 1024);
-    if (fixedValue !== undefined) field.value = fixedValue;
+    if (source === 'fixed' && fixedValue !== undefined) field.value = fixedValue;
     out.push(field);
+  }
+  return out.slice(0, 200);
+}
+
+function normalizeComfyExcludeRules(value) {
+  const rawItems = Array.isArray(value)
+    ? value
+    : String(value || '').split(/[\n,;，；]+/);
+  const out = [];
+  for (const raw of rawItems) {
+    const item = cleanText(raw, 120);
+    if (!item || out.includes(item)) continue;
+    out.push(item);
   }
   return out.slice(0, 200);
 }
@@ -278,6 +373,8 @@ function normalizeComfyuiConfig(value) {
           if (workflowJson !== undefined) workflow.workflowJson = workflowJson;
           const fields = normalizeComfyFields(item.fields);
           if (fields.length) workflow.fields = fields;
+          const excludeRules = normalizeComfyExcludeRules(item.excludeRules || item.exclude_rules || item.excludedFields || item.excluded_fields);
+          if (excludeRules.length) workflow.excludeRules = excludeRules;
           return workflow;
         })
         .filter((item) => item && item.id && item.name)
@@ -292,7 +389,7 @@ function normalizeJimengConfig(value) {
     executablePath: cleanText(raw.executablePath || raw.binPath || '', 260),
     useWsl: normalizeBoolean(raw.useWsl, false),
     wslDistro: cleanText(raw.wslDistro || '', 80),
-    pollSeconds: normalizeNumber(raw.pollSeconds, 900, 1, 3600),
+    pollSeconds: normalizeNumber(raw.pollSeconds, 3600, 0, 3600),
   };
 }
 
@@ -307,7 +404,6 @@ function normalizeProvider(raw, previous = null) {
   let baseUrl = normalizeUrl(raw.baseUrl || raw.base_url || '');
   if (!baseUrl && protocol === 'modelscope') baseUrl = DEFAULT_MODELSCOPE_BASE_URL;
   if (!baseUrl && protocol === 'volcengine') baseUrl = DEFAULT_VOLCENGINE_BASE_URL;
-  if (!baseUrl && protocol === 'gemini-compatible') baseUrl = DEFAULT_GEMINI_BASE_URL;
   if (protocol === 'jimeng-cli') baseUrl = '';
   if (protocol === 'comfyui') {
     if (!baseUrl) baseUrl = 'http://127.0.0.1:8188';
@@ -324,13 +420,33 @@ function normalizeProvider(raw, previous = null) {
     enabled: normalizeBoolean(raw.enabled, false),
     apiKey: cleanSecret(raw.apiKey || raw.api_key, previousConfig.apiKey),
     imageModels: normalizeModelList(raw.imageModels || raw.image_models),
-    imageModelSizes: hasImageModelSizes(raw.imageModelSizes || raw.image_model_sizes)
-      ? normalizeImageModelSizes(raw.imageModelSizes || raw.image_model_sizes)
-      : normalizeImageModelSizes(previousConfig.imageModelSizes),
     videoModels: normalizeModelList(raw.videoModels || raw.video_models),
     chatModels: normalizeModelList(raw.chatModels || raw.chat_models),
     defaults: normalizePlainObject(raw.defaults),
   };
+
+  if (id === 'modelscope' && protocol === 'modelscope') {
+    provider.imageModels = mergeModelLists(DEFAULT_MODELSCOPE_IMAGE_MODELS, provider.imageModels);
+    provider.chatModels = mergeModelLists(DEFAULT_MODELSCOPE_CHAT_MODELS, provider.chatModels);
+    provider.defaults = {
+      imageModel: DEFAULT_MODELSCOPE_IMAGE_MODELS[0],
+      chatModel: DEFAULT_MODELSCOPE_CHAT_MODELS[0],
+      ...provider.defaults,
+    };
+    provider.modelscopeConfig = normalizeModelscopeConfig(raw.modelscopeConfig || raw.modelscope_config, raw);
+  }
+
+  if (id === 'volcengine' && protocol === 'volcengine') {
+    provider.imageModels = mergeModelLists(DEFAULT_VOLCENGINE_IMAGE_MODELS, provider.imageModels);
+    provider.videoModels = mergeModelLists(DEFAULT_VOLCENGINE_VIDEO_MODELS, provider.videoModels);
+    provider.chatModels = mergeModelLists(DEFAULT_VOLCENGINE_CHAT_MODELS, provider.chatModels);
+    provider.defaults = {
+      imageModel: DEFAULT_VOLCENGINE_IMAGE_MODELS[0],
+      videoModel: DEFAULT_VOLCENGINE_VIDEO_MODELS[1],
+      chatModel: DEFAULT_VOLCENGINE_CHAT_MODELS[0],
+      ...provider.defaults,
+    };
+  }
 
   if (protocol === 'volcengine') {
     provider.volcengineConfig = normalizeVolcengineConfig(raw.volcengineConfig || raw.volcengine_config, previousConfig.volcengineConfig);
@@ -419,11 +535,18 @@ function getEnabledAdvancedProviders(providers) {
 module.exports = {
   DEFAULT_ADVANCED_PROVIDERS,
   DEFAULT_ADVANCED_PROVIDER_IDS,
+  DEFAULT_MODELSCOPE_CHAT_MODELS,
+  DEFAULT_MODELSCOPE_IMAGE_MODELS,
+  DEFAULT_MODELSCOPE_LORAS,
   DEFAULT_MODELSCOPE_BASE_URL,
+  DEFAULT_VOLCENGINE_CHAT_MODELS,
+  DEFAULT_VOLCENGINE_IMAGE_MODELS,
+  DEFAULT_VOLCENGINE_VIDEO_MODELS,
   DEFAULT_VOLCENGINE_BASE_URL,
   SUPPORTED_PROTOCOLS,
   getEnabledAdvancedProviders,
   maskAdvancedProviders,
   normalizeAdvancedProviders,
+  normalizeModelscopeLoras,
   summarizeAdvancedProviders,
 };

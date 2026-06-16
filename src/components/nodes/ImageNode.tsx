@@ -1,10 +1,12 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react';
 import { AlertCircle, Image as ImageIcon, Loader2, Plus, Sparkles, X } from 'lucide-react';
 import { useUpstreamMaterials, type Material } from './useUpstreamMaterials';
 import { useOrderedMaterials } from './useOrderedMaterials';
 import MaterialPreviewSection from './MaterialPreviewSection';
 import MentionPromptInput from './MentionPromptInput';
+import SmartImage from '../SmartImage';
+import PromptTextarea from '../PromptTextarea';
 import { resolveMediaMentions, type MediaMention } from './mediaMentions';
 import {
   IMAGE_MODELS,
@@ -32,7 +34,6 @@ import {
   uploadMjImage,
   buildMjPrompt,
   generateExternalImage,
-  queryExternalImageStatus,
   type MjSpeed,
 } from '../../services/generation';
 import { useUpdateNodeData } from './useUpdateNodeData';
@@ -44,14 +45,20 @@ import { useDragMaterialStore, type MaterialPayload } from '../../stores/dragMat
 import { useMaterialDropTarget } from '../../hooks/useMaterialDropTarget';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useApiKeysStore } from '../../stores/apiKeys';
-import { useCanvasStore } from '../../stores/canvas';
 import {
-  advancedImageSizesForModel,
   advancedProviderModelOptions,
   advancedProvidersForNode,
-  ADVANCED_IMAGE_SIZE_LEVELS,
+  distributeModelscopeLoraWeights,
   externalImageSizeFor,
+  MAX_MODELSCOPE_NODE_LORAS,
+  MODELSCOPE_LORA_TOTAL_WEIGHT,
+  modelscopeLoraWeightTotal,
+  modelscopeLorasForModel,
+  normalizeModelscopeLoraStrength,
+  normalizeModelscopeLoraWeightsTotal,
+  normalizeModelscopeSelectedLoras,
   resolveAdvancedProviderSelection,
+  type ModelscopeSelectedLora,
 } from '../../utils/advancedProviders';
 import {
   countExcludedMaterials,
@@ -59,6 +66,8 @@ import {
   filterExcludedMaterials,
   normalizeExcludedMaterialIds,
 } from '../../utils/materialExclusion';
+import { COMFY_APP_SOURCE_LABELS } from '../../utils/comfyuiApps';
+import { canonicalizeComfyFieldsByWorkflow } from '../../utils/comfyuiWorkflow';
 
 /**
  * ImageNode - 图像生成(ZhenzhenMagic)
@@ -66,25 +75,58 @@ import {
  * 参数:模型 TAB / 比例 / 尺寸 / 多张参考图 / 本地 prompt
  * 上游 text 节点 → prompt(优先);上游 image 节点 → 参考图(并入 references)
  */
-const MAX_IMAGE_SEED = 2147483647;
-const EXTERNAL_IMAGE_MAX_POLLS = 300;
-const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
-
-function randomImageSeed(): number {
-  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
-    const values = new Uint32Array(1);
-    crypto.getRandomValues(values);
-    return (values[0] % MAX_IMAGE_SEED) + 1;
-  }
-  return Math.floor(Math.random() * MAX_IMAGE_SEED) + 1;
-}
+const IMAGE_POLL_TIMEOUT_SECONDS = 3600;
+const minPollCountForTimeout = (intervalMs: number) =>
+  Math.ceil((IMAGE_POLL_TIMEOUT_SECONDS * 1000) / Math.max(1, intervalMs));
+const COMFY_NUMERIC_FIELD_SOURCES = new Set([
+  'width',
+  'height',
+  'batch_size',
+  'seed',
+  'steps',
+  'cfg',
+  'denoise',
+  'strength_model',
+  'strength_clip',
+]);
+const COMFY_NODE_FIELD_SOURCES = new Set([
+  'prompt',
+  'positive',
+  'negative',
+  'width',
+  'height',
+  'batch_size',
+  'seed',
+  'steps',
+  'cfg',
+  'sampler_name',
+  'scheduler',
+  'denoise',
+  'model_name',
+  'ckpt_name',
+  'clip_name',
+  'vae_name',
+  'lora_name',
+  'strength_model',
+  'strength_clip',
+  'image1',
+  'image2',
+  'image3',
+  'video1',
+  'audio1',
+]);
+const COMFY_IMAGE_SOURCE_RE = /^image(?:_|-)?(\d+)$/i;
+const comfyFieldSource = (field: any) => String(field?.source || field?.fieldName || '').trim();
+const comfyImageSourceIndex = (source: string) => {
+  const match = source.match(COMFY_IMAGE_SOURCE_RE);
+  return match ? Math.max(1, Number(match[1]) || 1) : 0;
+};
 
 const ImageNode = ({ id, data, selected }: NodeProps) => {
   const update = useUpdateNodeData(id);
   const hasAutoOutput = useHasAutoOutput(id);
   const { getEdges, getNodes } = useReactFlow();
   const { style, theme } = useThemeStore();
-  const activeCanvasId = useCanvasStore((s) => s.activeId);
   const isPixel = style === 'pixel';
   const isDark = theme === 'dark';
   // 主参考图(referenceImages)上传入口 - 与下面 MJ sref/oref 上传隔离
@@ -98,7 +140,6 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
   const model = d?.model || IMAGE_MODELS[0].id;
   const modelDef = useMemo(() => IMAGE_MODELS.find((m) => m.id === model) || IMAGE_MODELS[0], [model]);
   const advancedProviders = useApiKeysStore((s) => s.settings.advancedProviders);
-  const allowZhenzhenFallback = useApiKeysStore((s) => s.settings.enableZhenzhenFallback !== false);
   const imageAdvancedProviders = useMemo(
     () => advancedProvidersForNode(advancedProviders, 'image'),
     [advancedProviders],
@@ -117,40 +158,170 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
     ? advancedProviderModelOptions(providerSelection.provider, 'image')
     : [];
   const externalProviderModel = providerSelection.providerModel || externalModelOptions[0] || '';
-  const firstImageAdvancedProvider = imageAdvancedProviders[0] || null;
-  const providerSelectValue = isExternalSelected
-    ? providerSelection.providerId
-    : (allowZhenzhenFallback ? 'zhenzhen' : (firstImageAdvancedProvider?.id || ''));
-
-  useEffect(() => {
-    if (allowZhenzhenFallback || isExternalSelected || !firstImageAdvancedProvider) return;
-    const nextModels = advancedProviderModelOptions(firstImageAdvancedProvider, 'image');
-    update({
-      providerSource: firstImageAdvancedProvider.protocol,
-      providerId: firstImageAdvancedProvider.id,
-      providerModel: nextModels[0] || '',
+  const providerParams = (d?.providerParams && typeof d.providerParams === 'object') ? d.providerParams : {};
+  const isModelScopeExternal = isExternalSelected && providerSelection.provider?.protocol === 'modelscope';
+  const isComfyExternal = isExternalSelected && providerSelection.provider?.protocol === 'comfyui';
+  const comfyWorkflow = isComfyExternal
+    ? providerSelection.provider?.comfyuiConfig?.workflows?.find((workflow) => workflow.id === externalProviderModel || workflow.name === externalProviderModel)
+    : undefined;
+  const comfyWorkflowFields = useMemo(() => {
+    if (!isComfyExternal || !comfyWorkflow) return [];
+    return canonicalizeComfyFieldsByWorkflow(comfyWorkflow.workflowJson, comfyWorkflow.fields || []);
+  }, [isComfyExternal, comfyWorkflow]);
+  const comfyRequiredImageCount = isComfyExternal
+    ? comfyWorkflowFields.filter((field: any) => COMFY_IMAGE_SOURCE_RE.test(String(field?.source || ''))).length
+    : 0;
+  const comfyParamFields = useMemo(() => {
+    if (!isComfyExternal || !comfyWorkflow) return [];
+    const seen = new Set<string>();
+    return comfyWorkflowFields.filter((field: any) => {
+      const source = comfyFieldSource(field);
+      const key = `${field?.nodeId || ''}:${field?.fieldName || ''}:${source}`;
+      if (!COMFY_NODE_FIELD_SOURCES.has(source) || seen.has(key)) return false;
+      seen.add(key);
+      return true;
     });
-  }, [allowZhenzhenFallback, firstImageAdvancedProvider, isExternalSelected, update]);
+  }, [isComfyExternal, comfyWorkflow, comfyWorkflowFields]);
+  const comfyHasPromptField = useMemo(
+    () => comfyParamFields.some((field: any) => ['prompt', 'positive'].includes(comfyFieldSource(field))),
+    [comfyParamFields],
+  );
+  const comfyImageInputFields = useMemo(
+    () => comfyParamFields.filter((field: any) => COMFY_IMAGE_SOURCE_RE.test(comfyFieldSource(field))),
+    [comfyParamFields],
+  );
+  const modelscopeLoras = useMemo(
+    () => modelscopeLorasForModel(providerSelection.provider, externalProviderModel),
+    [providerSelection.provider, externalProviderModel],
+  );
+  const modelscopeLoraEnabled = providerParams?.modelscopeLoraEnabled === true;
+  const selectedModelscopeLoras = useMemo(() => {
+    if (!modelscopeLoraEnabled) return [];
+    const normalized = normalizeModelscopeSelectedLoras(
+      providerParams?.modelscopeLoras ?? providerParams?.loras,
+      modelscopeLoras,
+      {
+        enabled: providerParams?.modelscopeLoraEnabled,
+        id: providerParams?.modelscopeLoraId,
+        strength: providerParams?.modelscopeLoraStrength,
+      },
+    );
+    if (normalized.length) return normalized;
+    const first = modelscopeLoras[0];
+    return first
+      ? [{ id: first.id, strength: normalizeModelscopeLoraStrength(first.strength, 0.8) }]
+      : [];
+  }, [
+    modelscopeLoraEnabled,
+    modelscopeLoras,
+    providerParams?.loras,
+    providerParams?.modelscopeLoraId,
+    providerParams?.modelscopeLoraStrength,
+    providerParams?.modelscopeLoras,
+  ]);
+  const selectedModelscopeLoraIds = useMemo(
+    () => new Set(selectedModelscopeLoras.map((lora) => lora.id)),
+    [selectedModelscopeLoras],
+  );
+  const unselectedModelscopeLoras = useMemo(
+    () => modelscopeLoras.filter((lora) => !selectedModelscopeLoraIds.has(lora.id)),
+    [modelscopeLoras, selectedModelscopeLoraIds],
+  );
+  const selectedModelscopeLoraTotal = useMemo(
+    () => modelscopeLoraWeightTotal(selectedModelscopeLoras),
+    [selectedModelscopeLoras],
+  );
+  const selectedModelscopeLoraRemaining = Math.max(
+    0,
+    Number((MODELSCOPE_LORA_TOTAL_WEIGHT - selectedModelscopeLoraTotal).toFixed(4)),
+  );
+  const patchProviderParams = (patch: Record<string, any>) => {
+    update({ providerParams: { ...providerParams, ...patch } });
+  };
+  const applyModelscopeLoraSelection = (nextSelection: ModelscopeSelectedLora[], enabled = true) => {
+    const normalized = normalizeModelscopeLoraWeightsTotal(
+      normalizeModelscopeSelectedLoras(nextSelection, modelscopeLoras),
+    );
+    const first = normalized[0];
+    update({
+      providerParams: {
+        ...providerParams,
+        modelscopeLoraEnabled: enabled && normalized.length > 0,
+        modelscopeLoras: normalized,
+        loras: undefined,
+        modelscopeLoraId: first?.id || '',
+        modelscopeLoraStrength: first?.strength,
+      },
+    });
+  };
+  const addModelscopeLoraSelection = () => {
+    if (selectedModelscopeLoras.length >= MAX_MODELSCOPE_NODE_LORAS) return;
+    if (selectedModelscopeLoras.length > 0 && selectedModelscopeLoraRemaining <= 0.0001) return;
+    const next = unselectedModelscopeLoras[0];
+    if (!next) return;
+    const defaultWeight = normalizeModelscopeLoraStrength(next.strength, 0.8);
+    const nextWeight = selectedModelscopeLoras.length > 0
+      ? Math.min(defaultWeight, selectedModelscopeLoraRemaining)
+      : defaultWeight;
+    applyModelscopeLoraSelection([
+      ...selectedModelscopeLoras,
+      { id: next.id, strength: nextWeight },
+    ]);
+  };
+  const updateModelscopeLoraSelection = (index: number, patch: Partial<ModelscopeSelectedLora>) => {
+    const otherTotal = modelscopeLoraWeightTotal(selectedModelscopeLoras.filter((_, i) => i !== index));
+    const maxForRow = Math.max(0, Number((MODELSCOPE_LORA_TOTAL_WEIGHT - otherTotal).toFixed(4)));
+    const nextSelection = selectedModelscopeLoras.map((item, i) => {
+      if (i !== index) return item;
+      const nextId = String(patch.id ?? item.id).trim();
+      const nextOption = modelscopeLoras.find((lora) => lora.id === nextId);
+      const hasStrengthPatch = Object.prototype.hasOwnProperty.call(patch, 'strength');
+      return {
+        id: nextId,
+        strength: Math.min(
+          normalizeModelscopeLoraStrength(
+            hasStrengthPatch ? patch.strength : item.strength,
+            nextOption?.strength ?? 0.8,
+          ),
+          maxForRow,
+        ),
+      };
+    });
+    applyModelscopeLoraSelection(nextSelection);
+  };
+  const removeModelscopeLoraSelection = (index: number) => {
+    applyModelscopeLoraSelection(selectedModelscopeLoras.filter((_, i) => i !== index));
+  };
+  const distributeSelectedModelscopeLoraWeights = () => {
+    applyModelscopeLoraSelection(distributeModelscopeLoraWeights(selectedModelscopeLoras));
+  };
+  const comfyFieldDefault = (field: any) => {
+    if (!comfyWorkflow?.workflowJson || !field?.nodeId || !field?.fieldName) return '';
+    const value = (comfyWorkflow.workflowJson as any)?.[field.nodeId]?.inputs?.[field.fieldName];
+    if (Array.isArray(value) || (value && typeof value === 'object')) return '';
+    return value ?? '';
+  };
+  const comfyValueForSource = (source: string) => {
+    const field = comfyParamFields.find((item: any) => comfyFieldSource(item) === source);
+    return providerParams[source] ?? (field ? comfyFieldDefault(field) : '');
+  };
+  const comfyNumberForSource = (source: string, fallback = 0) => {
+    const n = Number(comfyValueForSource(source));
+    return Number.isFinite(n) ? n : fallback;
+  };
+  const clearModelscopeLoraParams = () => ({
+    providerParams: {
+      ...providerParams,
+      modelscopeLoraEnabled: false,
+      modelscopeLoraId: '',
+      modelscopeLoraStrength: undefined,
+      modelscopeLoras: [],
+      loras: undefined,
+    },
+  });
 
   const aspectRatio = d?.aspectRatio || modelDef.defaultAspectRatio;
   const sizeLevel = d?.sizeLevel || modelDef.defaultSize;
-  const externalSizeLevels = isExternalSelected && providerSelection.provider
-    ? advancedImageSizesForModel(providerSelection.provider, externalProviderModel)
-    : [];
-  const availableSizeLevels = isExternalSelected
-    ? externalSizeLevels
-    : modelDef.sizes;
-  const effectiveSizeLevel = availableSizeLevels.includes(sizeLevel)
-    ? sizeLevel
-    : (availableSizeLevels[0] || sizeLevel || ADVANCED_IMAGE_SIZE_LEVELS[0]);
-  const seed: number = Math.max(0, Math.floor(Number(d?.seed) || 0));
-
-  useEffect(() => {
-    if (!isExternalSelected) return;
-    if (!availableSizeLevels.length) return;
-    if (availableSizeLevels.includes(sizeLevel)) return;
-    update({ sizeLevel: availableSizeLevels[0] });
-  }, [availableSizeLevels, isExternalSelected, sizeLevel, update]);
   // 子模型变体(对齐 gpt-image-2-web 的 g_model/n_model)
   const apiModel = d?.apiModel || modelDef.apiModel;
 
@@ -190,10 +361,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
   const mjSv: string = d?.mjSv || '1';
   const mjNo: string = d?.mjNo || '';
   const mjSeed: number = d?.mjSeed ?? 0;
-  const effectiveSeed = isMj
-    ? (mjSeed > 0 ? mjSeed : seed)
-    : (falKind === 'nbpro-fal' ? (nbSeed > 0 ? nbSeed : seed) : seed);
-  const mjMaxPoll: number = d?.mjMaxPoll ?? 300;
+  const mjMaxPoll: number = d?.mjMaxPoll ?? 1200;
   const mjPollInt: number = d?.mjPollInt ?? 3;
   const mjSrefImages: string[] = Array.isArray(d?.mjSrefImages) ? d.mjSrefImages : [];
   const mjOrefImages: string[] = Array.isArray(d?.mjOrefImages) ? d.mjOrefImages : [];
@@ -203,9 +371,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
   const maxRefs = isExternalSelected ? Math.max(8, modelDef.maxReferenceImages || 0) : (falDef?.maxRefs ?? modelDef.maxReferenceImages);
   const status: 'idle' | 'generating' | 'success' | 'error' = d?.status || 'idle';
   const imageUrl = d?.imageUrl as string | undefined;
-  const lastSeed: number = Math.max(0, Math.floor(Number(d?.lastSeed) || 0));
   const localPrompt = d?.prompt || '';
-  const outputFormat: 'jpg' | 'png' = d?.outputFormat === 'png' ? 'png' : 'jpg';
   const promptMentions: MediaMention[] = Array.isArray(d?.promptMentions) ? d.promptMentions : [];
   // 节点内本地上传的参考图(除了上游接入的,这里是手动上传)
   const refImages: string[] = Array.isArray(d?.referenceImages) ? d.referenceImages : [];
@@ -355,23 +521,21 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
     setError(null);
     const { prompt: upstreamPrompt, images: upstreamImages } = collectUpstream();
     const resolvedLocalPrompt = resolveMediaMentions(localPrompt, promptMentions, mentionMaterials);
-    const finalPrompt = (upstreamPrompt || resolvedLocalPrompt || '').trim();
+    const comfyProviderPrompt = isComfyExternal
+      ? String(providerParams.prompt ?? providerParams.positive ?? '').trim()
+      : '';
+    const resolvedComfyPrompt = isComfyExternal
+      ? resolveMediaMentions(comfyProviderPrompt || localPrompt, promptMentions, mentionMaterials)
+      : '';
+    const finalPrompt = (upstreamPrompt || (isComfyExternal ? resolvedComfyPrompt : resolvedLocalPrompt) || '').trim();
     const src = `image:${id.slice(0, 6)}`;
-    const runSeed = effectiveSeed > 0 ? effectiveSeed : randomImageSeed();
-    const historyContext = {
-      canvasId: activeCanvasId,
-      sourceNodeId: id,
-      sourceNodeType: 'image',
-      seed: runSeed,
-      nodeTitle: '图像',
-    };
-    if (!finalPrompt) {
+    if (!finalPrompt && (!isComfyExternal || comfyHasPromptField)) {
       setError('未连接 text 节点也未填写 prompt');
       logBus.error('生成中止: 缺少 prompt', src);
       return;
     }
     taskCompletionSound.primeAudio();
-    update({ status: 'generating', progress: '0%', error: null, lastSeed: runSeed });
+    update({ status: 'generating', progress: '0%', error: null });
     try {
       // collectUpstream 已返回「本地上传 + 上游接入」按用户拖拽顺序合并后的列表,
       // 这里不再二次叠加 refImages, 避免本地参考图重复传递。
@@ -380,48 +544,55 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
       if (isExternalSelected && providerSelection.provider) {
         const providerModel = externalProviderModel;
         if (!providerModel) throw new Error('扩展平台未配置可用图像模型');
-        if (!availableSizeLevels.length) throw new Error('当前扩展模型未勾选任何可用生图尺寸，请先在 API Key 设置的“生图尺寸表”中勾选。');
-        const size = externalImageSizeFor(aspectRatio, effectiveSizeLevel);
-        const externalSizeDesc = providerSelection.provider.protocol === 'gemini-compatible'
-          ? `aspect_ratio=${aspectRatio} · image_size=${effectiveSizeLevel}`
-          : `size=${size}`;
+        let size = externalImageSizeFor(aspectRatio, sizeLevel);
+        if (isComfyExternal && comfyWorkflow) {
+          const width = comfyNumberForSource('width', 1024);
+          const height = comfyNumberForSource('height', 1024);
+          if (width > 0 && height > 0) size = `${Math.round(width)}x${Math.round(height)}`;
+        }
+        const externalProviderParams = { ...(d?.providerParams || {}) };
+        let loraLog = '';
+        if (isModelScopeExternal && modelscopeLoraEnabled) {
+          if (!selectedModelscopeLoras.length) throw new Error('当前 ModelScope 模型没有可用 LoRA，请先在 API 设置中绑定。');
+          const loraPayload: Record<string, number> = {};
+          selectedModelscopeLoras.forEach((item) => {
+            loraPayload[item.id] = item.strength;
+          });
+          externalProviderParams.loras = loraPayload;
+          externalProviderParams.modelscopeLoras = selectedModelscopeLoras;
+          externalProviderParams.modelscopeLoraId = selectedModelscopeLoras[0]?.id || '';
+          externalProviderParams.modelscopeLoraStrength = selectedModelscopeLoras[0]?.strength;
+          loraLog = ` · LoRA=${selectedModelscopeLoras.map((item) => {
+            const option = modelscopeLoras.find((lora) => lora.id === item.id);
+            return `${option?.name || item.id}@${item.strength.toFixed(2)}`;
+          }).join('+')}`;
+        } else {
+          delete externalProviderParams.loras;
+          delete externalProviderParams.modelscopeLoras;
+        }
+        const externalNegativePrompt = isComfyExternal
+          ? String(
+              externalProviderParams.negativePrompt
+              ?? externalProviderParams.negative
+              ?? '',
+            ).trim()
+          : '';
         logBus.info(
-          `扩展平台提交: ${providerSelection.provider.label || providerSelection.provider.id} · ${providerModel} · ${externalSizeDesc} · 参考图=${allRefs.length}`,
+          `扩展平台提交: ${providerSelection.provider.label || providerSelection.provider.id} · ${providerModel}${loraLog} · size=${size} · 参考图=${allRefs.length}`,
           src,
         );
-        let res = await generateExternalImage({
+        const res = await generateExternalImage({
           providerId: providerSelection.provider.id,
           providerModel,
           model: providerModel,
           prompt: finalPrompt,
           size,
-          aspect_ratio: aspectRatio,
-          image_size: effectiveSizeLevel,
           images: allRefs,
-          outputFormat,
-          seed: runSeed,
+          negativePrompt: externalNegativePrompt || undefined,
+          negative: externalNegativePrompt || undefined,
           n: Math.max(1, Math.min(4, Number(d?.providerParams?.n || 1))),
-          providerParams: d?.providerParams || {},
-          historyContext,
-          async: true,
+          providerParams: externalProviderParams,
         });
-        if ((!res.imageUrls?.length) && res.taskId && (res.code === 'running' || res.status === 'running')) {
-          let pollingTaskId = res.taskId;
-          update({ progress: '生成中', taskId: pollingTaskId });
-          logBus.info(`扩展平台任务继续轮询: ${pollingTaskId}`, src);
-          for (let i = 0; i < EXTERNAL_IMAGE_MAX_POLLS; i += 1) {
-            await new Promise((resolve) => setTimeout(resolve, EXTERNAL_IMAGE_POLL_INTERVAL_MS));
-            res = await queryExternalImageStatus({
-              providerId: providerSelection.provider.id,
-              providerModel,
-              taskId: pollingTaskId,
-              outputFormat,
-            });
-            pollingTaskId = res.taskId || pollingTaskId;
-            update({ progress: `${Math.min(99, Math.round(((i + 1) / EXTERNAL_IMAGE_MAX_POLLS) * 100))}%`, taskId: pollingTaskId });
-            if (res.imageUrls?.length || (res.code && res.code !== 'running')) break;
-          }
-        }
         const urls = res.imageUrls || [];
         if (!urls.length) throw new Error('扩展平台完成但未返回图片');
         update({
@@ -431,7 +602,6 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           imageUrls: urls,
           remoteImageUrls: res.remoteImageUrls,
           lastPrompt: finalPrompt,
-          lastSeed: runSeed,
           usedI2I: allRefs.length > 0,
           taskId: res.taskId || d?.taskId,
         });
@@ -486,20 +656,23 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           sw: mjSw || undefined,
           sv: mjSv || undefined,
           no: mjNo || undefined,
-          seed: runSeed,
+          seed: mjSeed || undefined,
           speed: mjSpeed,
           base64Array,
           remix: true,
-          historyContext,
         });
         const taskId = submit.taskId;
         logBus.info(`MJ 任务已提交 taskId=${taskId} fullPrompt="${fullPrompt.slice(0, 120)}${fullPrompt.length > 120 ? '…' : ''}"`, src);
         update({ progress: '15%', taskId });
-        const maxPoll = Math.max(10, Math.min(2000, mjMaxPoll || 300));
         const interval = Math.max(1, Math.min(30, mjPollInt || 3)) * 1000;
+        const maxPoll = Math.max(
+          10,
+          minPollCountForTimeout(interval),
+          Math.min(3600, mjMaxPoll || 1200),
+        );
         for (let i = 0; i < maxPoll; i++) {
           await new Promise((r) => setTimeout(r, interval));
-          const q = await queryMjTask(taskId, mjSpeed, historyContext);
+          const q = await queryMjTask(taskId, mjSpeed);
           if (q.status === 'FAILURE') {
             throw new Error(`MJ 失败: ${q.failReason || '未知错误'}`);
           }
@@ -529,7 +702,6 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
               imageUrl: final,
               imageUrls: all,
               lastPrompt: finalPrompt,
-              lastSeed: runSeed,
               usedI2I: allRefs.length > 0 || mjSrefImages.length > 0 || mjOrefImages.length > 0,
             });
             taskCompletionSound.notifyComplete(id, 'image');
@@ -565,12 +737,10 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           aspect_ratio: falKind === 'nbpro-fal' ? nbAspect : undefined,
           resolution: falKind === 'nbpro-fal' ? nbResolution : undefined,
           safety_tolerance: falKind === 'nbpro-fal' ? nbSafety : undefined,
-          seed: falKind === 'nbpro-fal' ? runSeed : undefined,
+          seed: falKind === 'nbpro-fal' && nbSeed > 0 ? nbSeed : undefined,
           system_prompt: falKind === 'nbpro-fal' ? nbSysPrompt : undefined,
           enable_web_search: falKind === 'nbpro-fal' ? nbWebSearch : undefined,
           image_mode: falKind === 'nbpro-fal' ? nbImgMode : undefined,
-          outputFormat,
-          historyContext,
         });
 
         // 同步完成
@@ -581,14 +751,13 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
             progress: '100%',
             imageUrl: submit.urls[0],
             lastPrompt: finalPrompt,
-            lastSeed: runSeed,
             usedI2I: allRefs.length > 0,
           });
           taskCompletionSound.notifyComplete(id, 'image');
           return;
         }
 
-        // 异步轮询(主项目默认 maxPoll=1200, pollInt=3s; 这里按 2h 上限会太长,采用 600×3s=30min)
+        // 异步轮询: 1200×3s = 3600s，避免 FAL 图像长队列 30min 提前超时。
         const { requestId, responseUrl, endpoint } = submit;
         if (!requestId || !responseUrl) throw new Error('FAL 提交后未获得 request_id/response_url');
         logBus.info(`FAL异步任务已提交 requestId=${requestId}`, src);
@@ -598,11 +767,11 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           falResponseUrl: responseUrl,
           falEndpoint: endpoint,
         });
-        const maxPoll = 600;
         const interval = 3000;
+        const maxPoll = minPollCountForTimeout(interval);
         for (let i = 0; i < maxPoll; i++) {
           await new Promise((r) => setTimeout(r, interval));
-          const q = await queryImageFal({ responseUrl, endpoint, requestId, outputFormat, historyContext });
+          const q = await queryImageFal({ responseUrl, endpoint, requestId });
           const st = String(q.status || '').toLowerCase();
           if (st === 'completed') {
             const url = q.urls?.[0];
@@ -613,7 +782,6 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
               progress: '100%',
               imageUrl: url,
               lastPrompt: finalPrompt,
-              lastSeed: runSeed,
               usedI2I: allRefs.length > 0,
             });
             taskCompletionSound.notifyComplete(id, 'image');
@@ -646,9 +814,6 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         image_size: sizeLevel,
         images: allRefs,
         n: 1,
-        outputFormat,
-        seed: runSeed,
-        historyContext,
       });
 
       // 分支一:同步完成
@@ -660,7 +825,6 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           imageUrl: submit.urls[0],
           imageUrls: submit.urls,
           lastPrompt: finalPrompt,
-          lastSeed: runSeed,
           usedI2I: allRefs.length > 0,
         });
         taskCompletionSound.notifyComplete(id, 'image');
@@ -679,7 +843,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
       let lastProg = '5%';
       for (let i = 0; i < maxPoll; i++) {
         await new Promise((r) => setTimeout(r, interval));
-        const q = await queryImageStatus(taskId, apiModel, outputFormat, historyContext);
+        const q = await queryImageStatus(taskId, apiModel);
         if (q.progress && q.progress !== lastProg) {
           lastProg = q.progress;
           update({ progress: q.progress });
@@ -696,7 +860,6 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
             imageUrl: url,
             imageUrls: q.urls,
             lastPrompt: finalPrompt,
-            lastSeed: runSeed,
             usedI2I: allRefs.length > 0,
           });
           taskCompletionSound.notifyComplete(id, 'image');
@@ -788,18 +951,18 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
               className="w-full flex items-center justify-between text-[10px] font-semibold text-white/70 hover:text-white"
             >
               <span>高级来源</span>
-              <span>{isExternalSelected && providerSelection.provider ? providerSelection.provider.label : (allowZhenzhenFallback ? '默认百达工坊' : '请选择扩展平台')}</span>
+              <span>{isExternalSelected && providerSelection.provider ? providerSelection.provider.label : '默认贞贞工坊'}</span>
             </button>
             {d?.advancedProviderOpen && (
               <div className="space-y-2">
                 <div>
                   <label className="text-[10px] text-white/50 block mb-1">平台</label>
                   <select
-                    value={providerSelectValue}
+                    value={isExternalSelected ? providerSelection.providerId : 'zhenzhen'}
                     onChange={(e) => {
                       const nextId = e.target.value;
                       if (nextId === 'zhenzhen') {
-                        update({ providerSource: 'zhenzhen', providerId: '', providerModel: '' });
+                        update({ providerSource: 'zhenzhen', providerId: '', providerModel: '', ...clearModelscopeLoraParams() });
                         return;
                       }
                       const provider = imageAdvancedProviders.find((item) => item.id === nextId);
@@ -809,14 +972,13 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
                         providerSource: provider.protocol,
                         providerId: provider.id,
                         providerModel: nextModels[0] || '',
+                        ...clearModelscopeLoraParams(),
                       });
                     }}
                     style={{ background: '#18181b', color: '#ffffff' }}
                     className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
                   >
-                    {allowZhenzhenFallback && (
-                      <option value="zhenzhen" style={{ background: '#18181b', color: '#ffffff' }}>百达工坊（默认）</option>
-                    )}
+                    <option value="zhenzhen" style={{ background: '#18181b', color: '#ffffff' }}>贞贞工坊（默认）</option>
                     {imageAdvancedProviders.map((provider) => (
                       <option key={provider.id} value={provider.id} style={{ background: '#18181b', color: '#ffffff' }}>
                         {provider.label || provider.id}
@@ -829,7 +991,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
                     <label className="text-[10px] text-white/50 block mb-1">外部模型</label>
                     <select
                       value={externalProviderModel}
-                      onChange={(e) => update({ providerModel: e.target.value })}
+                      onChange={(e) => update({ providerModel: e.target.value, ...clearModelscopeLoraParams() })}
                       style={{ background: '#18181b', color: '#ffffff' }}
                       className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
                     >
@@ -839,16 +1001,323 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
                     </select>
                   </div>
                 )}
+                {isModelScopeExternal && (
+                  <div className="rounded border border-white/10 bg-white/[0.03] p-2 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="flex items-center gap-1.5 text-[10px] font-semibold text-white/70">
+                        <input
+                          type="checkbox"
+                          checked={modelscopeLoraEnabled}
+                          disabled={!modelscopeLoras.length}
+                          onChange={(e) => {
+                            const nextEnabled = e.target.checked;
+                            if (!nextEnabled) {
+                              applyModelscopeLoraSelection([], false);
+                              return;
+                            }
+                            const next = selectedModelscopeLoras[0] || modelscopeLoras[0];
+                            applyModelscopeLoraSelection(next ? [{
+                              id: next.id,
+                              strength: normalizeModelscopeLoraStrength(next.strength, 0.8),
+                            }] : []);
+                          }}
+                        />
+                        <span>LoRA</span>
+                      </label>
+                      <span className="text-[10px] text-white/40">
+                        {modelscopeLoras.length
+                          ? `${selectedModelscopeLoras.length}/${Math.min(MAX_MODELSCOPE_NODE_LORAS, modelscopeLoras.length)} 已选 · 权重 ${selectedModelscopeLoraTotal.toFixed(2)}/1.00`
+                          : '当前模型无绑定'}
+                      </span>
+                    </div>
+                    {modelscopeLoras.length > 0 && modelscopeLoraEnabled && (
+                      <div className="space-y-2">
+                        <div className="rounded border border-amber-300/20 bg-amber-400/[0.06] p-2 space-y-1.5">
+                          <div className="flex items-center justify-between gap-2 text-[10px]">
+                            <span className="font-semibold text-amber-100">官方总权重</span>
+                            <span className={selectedModelscopeLoraTotal >= MODELSCOPE_LORA_TOTAL_WEIGHT - 0.0001 ? 'text-amber-100' : 'text-white/65'}>
+                              {selectedModelscopeLoraTotal.toFixed(2)} / 1.00
+                            </span>
+                          </div>
+                          <div className="h-1.5 overflow-hidden rounded-full bg-black/30">
+                            <div
+                              className="h-full rounded-full bg-amber-300 transition-all"
+                              style={{ width: `${Math.min(100, selectedModelscopeLoraTotal * 100)}%` }}
+                            />
+                          </div>
+                          <div className="flex flex-wrap items-center justify-between gap-1.5 text-[10px] text-white/45">
+                            <span>
+                              {selectedModelscopeLoras.length > 1
+                                ? selectedModelscopeLoraRemaining > 0.0001
+                                  ? `多个 LoRA 权重总和必须为 1.00；还可分配 ${selectedModelscopeLoraRemaining.toFixed(2)}。`
+                                  : '多个 LoRA 权重总和已到 1.00；要添加或提高某项，请先降低其他 LoRA。'
+                                : '单个 LoRA 可直接提交；多个 LoRA 时官方要求总和为 1.00。'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={distributeSelectedModelscopeLoraWeights}
+                              disabled={selectedModelscopeLoras.length < 2}
+                              className="rounded border border-white/15 px-2 py-0.5 font-semibold text-white/65 disabled:opacity-40 disabled:cursor-not-allowed hover:text-white"
+                              title="把当前选择的 LoRA 权重平均分配到总和 1.00"
+                            >
+                              均分到 1.00
+                            </button>
+                          </div>
+                        </div>
+                        {selectedModelscopeLoras.map((selectedLora, index) => {
+                          const currentOption = modelscopeLoras.find((lora) => lora.id === selectedLora.id) || modelscopeLoras[0];
+                          const rowOptions = modelscopeLoras.filter((lora) => (
+                            lora.id === selectedLora.id || !selectedModelscopeLoraIds.has(lora.id)
+                          ));
+                          const rowOtherTotal = modelscopeLoraWeightTotal(selectedModelscopeLoras.filter((_, i) => i !== index));
+                          const rowMax = Math.max(0, Number((MODELSCOPE_LORA_TOTAL_WEIGHT - rowOtherTotal).toFixed(4)));
+                          const strength = normalizeModelscopeLoraStrength(selectedLora.strength, currentOption?.strength ?? 0.8);
+                          return (
+                            <div key={`${selectedLora.id}-${index}`} className="rounded border border-white/10 bg-black/10 p-2 space-y-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <select
+                                  value={selectedLora.id}
+                                  onChange={(e) => {
+                                    const next = modelscopeLoras.find((lora) => lora.id === e.target.value) || currentOption;
+                                    updateModelscopeLoraSelection(index, {
+                                      id: next?.id || '',
+                                      strength: next?.strength ?? 0.8,
+                                    });
+                                  }}
+                                  style={{ background: '#18181b', color: '#ffffff' }}
+                                  className="min-w-0 flex-1 rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
+                                >
+                                  {rowOptions.map((lora) => (
+                                    <option key={lora.id} value={lora.id} style={{ background: '#18181b', color: '#ffffff' }}>
+                                      {lora.name || lora.id}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => removeModelscopeLoraSelection(index)}
+                                  className="h-7 w-7 shrink-0 rounded border border-white/15 inline-flex items-center justify-center text-white/60 hover:text-white"
+                                  title="移除这组 LoRA"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+                              <label className="block space-y-1">
+                                <div className="flex items-center justify-between text-[10px] text-white/50">
+                                  <span title="ModelScope 多 LoRA 官方权重总和必须为 1.00；本行最大值会随其他 LoRA 权重自动变化。">官方权重</span>
+                                  <span>{strength.toFixed(2)} · 最多 {rowMax.toFixed(2)}</span>
+                                </div>
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={rowMax}
+                                  step={0.01}
+                                  value={strength}
+                                  onChange={(e) => updateModelscopeLoraSelection(index, { strength: Number(e.target.value) })}
+                                  className="w-full accent-amber-400"
+                                />
+                              </label>
+                            </div>
+                          );
+                        })}
+                        <button
+                          type="button"
+                          onClick={addModelscopeLoraSelection}
+                          disabled={
+                            selectedModelscopeLoras.length >= MAX_MODELSCOPE_NODE_LORAS ||
+                            !unselectedModelscopeLoras.length ||
+                            (selectedModelscopeLoras.length > 0 && selectedModelscopeLoraRemaining <= 0.0001)
+                          }
+                          className="w-full rounded border border-white/15 px-2 py-1 text-[11px] font-semibold text-white/70 disabled:opacity-40 disabled:cursor-not-allowed hover:text-white"
+                          title={selectedModelscopeLoraRemaining <= 0.0001 ? '总权重已满，请先降低其他 LoRA 权重' : '添加一组 LoRA'}
+                        >
+                          <Plus size={12} className="inline mr-1" />
+                          {selectedModelscopeLoraRemaining <= 0.0001 && selectedModelscopeLoras.length > 0
+                            ? '总权重已满'
+                            : `添加 LoRA（最多 ${MAX_MODELSCOPE_NODE_LORAS} 个）`}
+                        </button>
+                      </div>
+                    )}
+                    {!modelscopeLoras.length && (
+                      <div className="text-[10px] leading-relaxed text-white/45">
+                        到 API 设置的 ModelScope LoRA 区，为当前外部模型绑定 LoRA 后即可在这里选择。
+                      </div>
+                    )}
+                  </div>
+                )}
+                {isComfyExternal && (
+                  <div className="rounded border border-cyan-300/25 bg-cyan-400/[0.06] p-2 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[10px] font-semibold text-white/80">ComfyUI 工作流参数</div>
+                      <span className="text-[10px] text-cyan-200/80">{comfyParamFields.length} 项</span>
+                    </div>
+                    <div className="text-[10px] leading-relaxed text-white/45">
+                      {[
+                        comfyHasPromptField ? 'Prompt 会按此处字段注入到 workflow' : '此工作流未声明 Prompt 字段',
+                        comfyRequiredImageCount > 0
+                          ? `需要 ${comfyRequiredImageCount} 张图片；当前 ${orderedImages.length} 张`
+                          : '未声明图片输入',
+                      ].join('；')}
+                    </div>
+                    {comfyRequiredImageCount > orderedImages.length && (
+                      <div className="text-[10px] text-amber-200">
+                        请连接上传素材或在 ComfyUI 输入素材区添加图片，否则对应 LoadImage 字段会缺失。
+                      </div>
+                    )}
+                    {comfyParamFields.length > 0 ? (
+                      <div className="grid grid-cols-2 gap-2">
+                        {comfyParamFields.map((field: any) => {
+                          const source = comfyFieldSource(field);
+                          const label = COMFY_APP_SOURCE_LABELS[source] || source;
+                          const target = field?.nodeId && field?.fieldName ? `#${field.nodeId}.${field.fieldName}` : '';
+                          const value = providerParams[source] ?? comfyFieldDefault(field);
+                          const isNumber = COMFY_NUMERIC_FIELD_SOURCES.has(source);
+                          if (source === 'prompt' || source === 'positive') {
+                            const promptValue = localPrompt || String(providerParams[source] ?? providerParams.prompt ?? '');
+                            return (
+                              <label key={`${field.nodeId}-${field.fieldName}-${source}`} className="space-y-1 col-span-2">
+                                <span className="flex items-center justify-between gap-2 text-[10px] text-white/55">
+                                  <span>{label}</span>
+                                  {target && <span className="text-cyan-200/50">{target}</span>}
+                                </span>
+                                <MentionPromptInput
+                                  title="ComfyUI 正向 Prompt"
+                                  value={promptValue}
+                                  mentions={promptMentions}
+                                  materials={mentionMaterials}
+                                  onChange={(nextValue, mentions) => {
+                                    const nextParams = {
+                                      ...providerParams,
+                                      [source]: nextValue,
+                                      prompt: nextValue,
+                                    };
+                                    update({ prompt: nextValue, promptMentions: mentions, providerParams: nextParams });
+                                  }}
+                                  placeholder={String(comfyFieldDefault(field) || '填写 ComfyUI 正向 Prompt')}
+                                  isDark={isDark}
+                                  isPixel={isPixel}
+                                  promptTemplateKind="image"
+                                  className="w-full min-h-[68px] resize-y rounded bg-white/5 border border-white/10 px-2 py-1 text-[11px] text-white outline-none focus:border-cyan-300/60 placeholder:text-white/30"
+                                />
+                                {orderedTexts.length > 0 && (
+                                  <span className="block text-[10px] text-amber-200/80">
+                                    已连接 {orderedTexts.length} 条上游文本，运行时会优先使用上游文本。
+                                  </span>
+                                )}
+                              </label>
+                            );
+                          }
+                          if (source === 'negative') {
+                            const negativeValue = String(providerParams.negative ?? providerParams.negativePrompt ?? '');
+                            return (
+                              <label key={`${field.nodeId}-${field.fieldName}-${source}`} className="space-y-1 col-span-2">
+                                <span className="flex items-center justify-between gap-2 text-[10px] text-white/55">
+                                  <span>{label}</span>
+                                  {target && <span className="text-cyan-200/50">{target}</span>}
+                                </span>
+                                <PromptTextarea
+                                  title="ComfyUI 负向 Prompt"
+                                  value={negativeValue}
+                                  onValueChange={(value) => patchProviderParams({ negative: value, negativePrompt: value })}
+                                  placeholder={String(comfyFieldDefault(field) || '填写 ComfyUI 负向 Prompt')}
+                                  rows={3}
+                                  promptTemplateKind="image"
+                                  style={{ background: '#18181b', color: '#ffffff' }}
+                                  className="w-full rounded border border-white/10 px-2 py-1 text-[11px] outline-none focus:border-cyan-300/60 placeholder:text-white/30"
+                                />
+                              </label>
+                            );
+                          }
+                          const imageSlot = comfyImageSourceIndex(source);
+                          if (imageSlot > 0) {
+                            const imageMaterial = orderedImages[imageSlot - 1];
+                            return (
+                              <div key={`${field.nodeId}-${field.fieldName}-${source}`} className="col-span-2 rounded border border-white/10 bg-black/10 p-2">
+                                <div className="flex items-center justify-between gap-2 text-[10px] text-white/55">
+                                  <span>{label}</span>
+                                  {target && <span className="text-cyan-200/50">{target}</span>}
+                                </div>
+                                <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-white/60">
+                                  <span>{imageMaterial ? `使用第 ${imageSlot} 张图片：${imageMaterial.label || imageMaterial.url}` : `等待第 ${imageSlot} 张图片`}</span>
+                                  <button
+                                    type="button"
+                                    onClick={handlePickFile}
+                                    className="nodrag rounded border border-cyan-300/30 px-2 py-1 text-cyan-100 hover:bg-cyan-300/10"
+                                  >
+                                    添加图片
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          }
+                          if (source === 'video1' || source === 'audio1') {
+                            return (
+                              <div key={`${field.nodeId}-${field.fieldName}-${source}`} className="col-span-2 rounded border border-amber-300/20 bg-amber-400/10 p-2 text-[10px] text-amber-100">
+                                {label} {target ? `(${target})` : ''} 已映射，但图像节点当前仅提交文本和图片输入；如需视频/音频工作流，后续应放到对应节点入口。
+                              </div>
+                            );
+                          }
+                          return (
+                            <label key={`${field.nodeId}-${field.fieldName}-${source}`} className="space-y-1">
+                              <span className="flex items-center justify-between gap-2 text-[10px] text-white/55">
+                                <span>{label}</span>
+                                {target && <span className="text-cyan-200/50">{target}</span>}
+                              </span>
+                              <input
+                                type={isNumber ? 'number' : 'text'}
+                                value={String(value ?? '')}
+                                step={source === 'cfg' || source === 'denoise' || source.startsWith('strength_') ? 0.1 : 1}
+                                min={source === 'width' || source === 'height' ? 64 : source === 'batch_size' ? 1 : undefined}
+                                onChange={(e) => {
+                                  const raw = e.target.value;
+                                  patchProviderParams({ [source]: isNumber && raw !== '' ? Number(raw) : raw });
+                                }}
+                                placeholder={String(comfyFieldDefault(field) ?? '')}
+                                style={{ background: '#18181b', color: '#ffffff' }}
+                                className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-cyan-300/60"
+                              />
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-[10px] text-amber-200">
+                        当前工作流没有保存字段映射，请到 API 设置中点“自动映射”，或使用 ComfyUI应用制作工具重新导入 workflow。
+                      </div>
+                    )}
+                    {(comfyImageInputFields.length > 0 || orderedTexts.length > 0 || excludedUpstreamCount > 0) && (
+                      <MaterialPreviewSection
+                        texts={orderedTexts}
+                        images={orderedImages}
+                        order={materialOrder}
+                        onReorder={setMaterialOrder}
+                        onRemoveLocal={handleRemoveLocalMaterial}
+                        onExcludeUpstream={handleExcludeUpstreamMaterial}
+                        excludedCount={excludedUpstreamCount}
+                        onRestoreExcluded={handleRestoreExcludedMaterials}
+                        selected={!!selected}
+                        isDark={isDark}
+                        isPixel={isPixel}
+                        groups={comfyImageInputFields.length > 0 ? ['text', 'image'] : ['text']}
+                        title="ComfyUI 输入素材 · 上游+本地"
+                        imageUploadAction={
+                          comfyImageInputFields.length > 0 && refImages.length < maxRefs
+                            ? {
+                                onClick: handlePickFile,
+                                title: '上传 ComfyUI 输入图',
+                                remaining: maxRefs - refImages.length,
+                              }
+                            : undefined
+                        }
+                      />
+                    )}
+                  </div>
+                )}
                 {savedExternalMissing && (
                   <div className="text-[10px] text-amber-200 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1">
                     当前画布记录的扩展平台未启用或不存在，已临时回到默认来源。
                   </div>
                 )}
-              </div>
-            )}
-            {isExternalSelected && !availableSizeLevels.length && (
-              <div className="text-[10px] text-amber-300/90 rounded border border-amber-400/20 bg-amber-500/10 px-2 py-1">
-                当前扩展模型未在“生图尺寸表”勾选可用尺寸
               </div>
             )}
           </div>
@@ -902,8 +1371,8 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         )}
 
         {/* 比例 + 尺寸 并排(非 FAL 且非 MJ 模型);Grok Image 只需要比例 */}
-        {(!isFal && !isMj || isExternalSelected) && (
-          <div className={`grid gap-2 ${isGrokImage || !availableSizeLevels.length ? 'grid-cols-1' : 'grid-cols-2'}`}>
+        {(!isFal && !isMj && !isComfyExternal) && (
+          <div className={`grid gap-2 ${isGrokImage || !modelDef.sizes.length ? 'grid-cols-1' : 'grid-cols-2'}`}>
             <div>
               <label className="text-[10px] text-white/50 block mb-1">比例</label>
               <select
@@ -917,16 +1386,16 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
                 ))}
               </select>
             </div>
-            {!isGrokImage && availableSizeLevels.length > 0 && (
+            {!isGrokImage && modelDef.sizes.length > 0 && (
               <div>
                 <label className="text-[10px] text-white/50 block mb-1">尺寸</label>
                 <select
-                  value={effectiveSizeLevel}
+                  value={sizeLevel}
                   onChange={(e) => update({ sizeLevel: e.target.value })}
                   style={{ background: '#18181b', color: '#ffffff' }}
                   className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
                 >
-                  {availableSizeLevels.map((s) => (
+                  {modelDef.sizes.map((s) => (
                     <option key={s} value={s} style={{ background: '#18181b', color: '#ffffff' }}>{s}</option>
                   ))}
                 </select>
@@ -936,54 +1405,6 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         )}
 
         {/* ========== FAL 专属参数面板(完全对齐 gpt-image-2-web gf_panel / nano_fal_panel) ========== */}
-        <div>
-          <label className="text-[10px] text-white/50 block mb-1">输出格式</label>
-          <div
-            className={`grid grid-cols-2 gap-0.5 p-0.5 rounded ${isPixel ? '' : 'bg-white/5'}`}
-            style={isPixel ? { background: 'var(--px-muted)', border: '1.5px solid var(--px-ink)' } : undefined}
-          >
-            {(['jpg', 'png'] as const).map((fmt) => {
-              const active = outputFormat === fmt;
-              return (
-                <button
-                  key={fmt}
-                  type="button"
-                  onClick={() => update({ outputFormat: fmt })}
-                  title={fmt === 'png' ? '保留透明区域，文件更大' : '高质量 JPG，文件更小'}
-                  className={`py-1 text-[10px] font-semibold rounded transition-all ${
-                    active ? 'bg-amber-500/30 text-amber-200' : 'text-zinc-400 hover:text-zinc-200'
-                  }`}
-                  style={
-                    isPixel && active
-                      ? { background: 'var(--px-yellow)', color: 'var(--px-ink)', border: '1.5px solid var(--px-ink)', boxShadow: '1px 1px 0 var(--px-ink)' }
-                      : isPixel ? { color: 'var(--px-ink-soft)' } : undefined
-                  }
-                >
-                  {fmt.toUpperCase()}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div>
-          <label className="text-[10px] text-white/50 block mb-1" title="0 = 自动生成并记录随机 seed">Seed (0=random)</label>
-          <input
-            type="number"
-            min={0}
-            step={1}
-            value={seed}
-            onChange={(e) => update({ seed: Math.max(0, Math.floor(Number(e.target.value) || 0)) })}
-            style={{ background: '#18181b', color: '#ffffff' }}
-            className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
-          />
-          {(isMj || falKind === 'nbpro-fal') && seed > 0 && effectiveSeed !== seed && (
-            <div className="mt-1 text-[10px] text-amber-200/80">
-              当前模型优先使用专属 seed: {effectiveSeed}
-            </div>
-          )}
-        </div>
-
         {!isExternalSelected && isFal && falKind === 'gpt-fal' && (
           <div className="space-y-2 rounded border border-blue-400/30 bg-blue-500/5 p-2">
             <div className="text-[10px] text-blue-300 font-semibold tracking-wide">
@@ -1198,11 +1619,13 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
             </div>
             <div>
               <label className="text-[10px] text-white/50 block mb-1">System Prompt (可选)</label>
-              <input
-                type="text"
+              <PromptTextarea
+                title="图像扩展模型 System Prompt"
                 value={nbSysPrompt}
-                onChange={(e) => update({ nbSysPrompt: e.target.value })}
+                onValueChange={(value) => update({ nbSysPrompt: value })}
                 placeholder="可选系统指令"
+                rows={2}
+                promptTemplateKind="image"
                 style={{ background: '#18181b', color: '#ffffff' }}
                 className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
               />
@@ -1339,9 +1762,9 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
               <div>
                 <label className="text-[10px] text-white/50 block mb-1" title="轮询最大次数">maxPoll</label>
                 <input
-                  type="number" min={10} max={2000}
+                  type="number" min={10} max={3600}
                   value={mjMaxPoll}
-                  onChange={(e) => update({ mjMaxPoll: Math.max(10, Math.min(2000, parseInt(e.target.value) || 300)) })}
+                  onChange={(e) => update({ mjMaxPoll: Math.max(10, Math.min(3600, parseInt(e.target.value) || 1200)) })}
                   style={{ background: '#18181b', color: '#ffffff' }}
                   className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
                 />
@@ -1363,7 +1786,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
               <div className="flex flex-wrap gap-1.5">
                 {mjSrefImages.map((url, i) => (
                   <div key={i} className="relative w-12 h-12 rounded overflow-hidden border border-purple-300/30">
-                    <img src={url} alt={`sref-${i}`} className="w-full h-full object-cover" />
+                    <SmartImage src={url} alt={`sref-${i}`} className="w-full h-full object-cover" thumbSize={160} />
                     <button
                       onClick={() => removeMjRef('sref', i)}
                       className="absolute top-0 right-0 w-4 h-4 bg-red-500/80 hover:bg-red-500 flex items-center justify-center rounded-bl"
@@ -1390,7 +1813,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
               <div className="flex flex-wrap gap-1.5">
                 {mjOrefImages.map((url, i) => (
                   <div key={i} className="relative w-12 h-12 rounded overflow-hidden border border-purple-300/30">
-                    <img src={url} alt={`oref-${i}`} className="w-full h-full object-cover" />
+                    <SmartImage src={url} alt={`oref-${i}`} className="w-full h-full object-cover" thumbSize={160} />
                     <button
                       onClick={() => removeMjRef('oref', i)}
                       className="absolute top-0 right-0 w-4 h-4 bg-red-500/80 hover:bg-red-500 flex items-center justify-center rounded-bl"
@@ -1415,7 +1838,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         )}
 
         {/* 上游素材聚合预览区 (新机制) - 本地上传 + 上游接入统一呈现, 可拖动排序 */}
-        {(isExternalSelected || modelDef.supportsReference) && (
+        {(!isComfyExternal && (isExternalSelected || modelDef.supportsReference)) && (
           <MaterialPreviewSection
             texts={orderedTexts}
             images={orderedImages}
@@ -1461,9 +1884,10 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         />
 
         {/* 本地 prompt(优先取上游) */}
-        <div>
+        {!isComfyExternal && <div>
           <label className="text-[10px] text-white/50 block mb-1">本地 Prompt(可选,优先取上游 text)</label>
           <MentionPromptInput
+            title="图像 Prompt"
             value={localPrompt}
             mentions={promptMentions}
             materials={mentionMaterials}
@@ -1471,9 +1895,10 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
             placeholder="备用:无上游连接时使用此提示词"
             isDark={isDark}
             isPixel={isPixel}
+            promptTemplateKind="image"
             className="w-full h-14 resize-none rounded bg-white/5 border border-white/10 px-2 py-1 text-[11px] text-white outline-none focus:border-white/30 placeholder:text-white/30"
           />
-        </div>
+        </div>}
 
         {/* 生成按钮(包含异步进度) */}
         <button
@@ -1503,23 +1928,11 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
       {/* 结果展示：仅在未外挂 OutputNode 时在节点内预览，避免与下游 OutputNode 重复 */}
       {imageUrl && !hasAutoOutput && (
         <div className="border-t border-white/10 p-2">
-          {lastSeed > 0 && (
-            <div className="mb-1.5 flex items-center justify-between gap-2 rounded border border-amber-400/20 bg-amber-400/10 px-2 py-1 text-[10px] text-amber-200">
-              <span className="truncate">Seed: {lastSeed}</span>
-              <button
-                type="button"
-                className="shrink-0 rounded border border-amber-300/25 px-1.5 py-0.5 hover:bg-amber-300/15"
-                onClick={() => navigator.clipboard?.writeText(String(lastSeed)).catch(() => undefined)}
-                title="复制 seed"
-              >
-                复制
-              </button>
-            </div>
-          )}
-          <img
+          <SmartImage
             src={imageUrl}
             alt="生成结果"
             className="w-full rounded object-cover"
+            thumbSize={720}
             data-drag-source
             data-drag-kind="image"
             data-drag-url={imageUrl}

@@ -50,12 +50,14 @@ const OP_ICON_BY_TYPE: Record<string, string> = {
   runninghub: 'Waypoints',
   'runninghub-wallet': 'WalletCards',
   'rh-tools': 'ShipWheel',
+  'rh-toolbox': 'Wrench',
   'frame-pair': 'Telescope',
   loop: 'Repeat',
   'pick-from-set': 'Map',
   resize: 'Maximize2',
   combine: 'Boxes',
   'grid-crop': 'Grid3x3',
+  'grid-editor': 'LayoutGrid',
   idea: 'Lightbulb',
   bp: 'Map',
   relay: 'ArrowRightLeft',
@@ -67,6 +69,7 @@ const OP_ICON_BY_TYPE: Record<string, string> = {
   'exhibition-img2img': 'Boxes',
   'exhibition-creative-image': 'Layers3',
   'pose-master': 'PersonStanding',
+  'panorama-3d': 'Globe2',
 };
 
 const NARUTO_ICON_BY_TYPE: Record<string, string> = {
@@ -81,12 +84,14 @@ const NARUTO_ICON_BY_TYPE: Record<string, string> = {
   runninghub: 'Network',
   'runninghub-wallet': 'BadgeDollarSign',
   'rh-tools': 'Boxes',
+  'rh-toolbox': 'Wrench',
   'frame-pair': 'ScanEye',
   loop: 'Repeat2',
   'pick-from-set': 'PackageOpen',
   resize: 'MoveDiagonal',
   combine: 'Layers3',
   'grid-crop': 'Grid3x3',
+  'grid-editor': 'LayoutGrid',
   idea: 'Lightbulb',
   bp: 'BookOpen',
   relay: 'ArrowRightLeft',
@@ -102,6 +107,7 @@ const NARUTO_ICON_BY_TYPE: Record<string, string> = {
   'image-compare': 'ScanSearch',
   'material-set': 'Package',
   'pose-master': 'PersonStanding',
+  'panorama-3d': 'Globe2',
 };
 
 const EVA_ICON_BY_TYPE: Record<string, string> = {
@@ -116,12 +122,14 @@ const EVA_ICON_BY_TYPE: Record<string, string> = {
   runninghub: 'Network',
   'runninghub-wallet': 'KeyRound',
   'rh-tools': 'Boxes',
+  'rh-toolbox': 'Wrench',
   'frame-pair': 'ScanEye',
   loop: 'Repeat2',
   'pick-from-set': 'PackageOpen',
   resize: 'MoveDiagonal',
   combine: 'Layers3',
   'grid-crop': 'Grid3x3',
+  'grid-editor': 'LayoutGrid',
   idea: 'Lightbulb',
   bp: 'BookOpen',
   relay: 'Cable',
@@ -137,6 +145,7 @@ const EVA_ICON_BY_TYPE: Record<string, string> = {
   'image-compare': 'ScanSearch',
   'material-set': 'Package',
   'pose-master': 'PersonStanding',
+  'panorama-3d': 'Globe2',
 };
 
 const YYH_ICON_BY_TYPE: Record<string, string> = {
@@ -151,12 +160,14 @@ const YYH_ICON_BY_TYPE: Record<string, string> = {
   runninghub: 'Network',
   'runninghub-wallet': 'KeyRound',
   'rh-tools': 'Boxes',
+  'rh-toolbox': 'Wrench',
   'frame-pair': 'ScanEye',
   loop: 'Repeat2',
   'pick-from-set': 'PackageOpen',
   resize: 'MoveDiagonal',
   combine: 'Layers3',
   'grid-crop': 'Grid3x3',
+  'grid-editor': 'LayoutGrid',
   idea: 'Lightbulb',
   bp: 'BookOpen',
   relay: 'Cable',
@@ -174,6 +185,7 @@ const YYH_ICON_BY_TYPE: Record<string, string> = {
   'drawing-board': 'PenTool',
   'portrait-master': 'UserRoundCog',
   'pose-master': 'PersonStanding',
+  'panorama-3d': 'Globe2',
 };
 
 const SLAMDUNK_ICON_BY_TYPE: Record<string, string> = {
@@ -188,12 +200,14 @@ const SLAMDUNK_ICON_BY_TYPE: Record<string, string> = {
   runninghub: 'Network',
   'runninghub-wallet': 'BadgeDollarSign',
   'rh-tools': 'Boxes',
+  'rh-toolbox': 'Wrench',
   'frame-pair': 'ScanEye',
   loop: 'Repeat2',
   'pick-from-set': 'PackageOpen',
   resize: 'MoveDiagonal',
   combine: 'Layers3',
   'grid-crop': 'Grid3x3',
+  'grid-editor': 'LayoutGrid',
   idea: 'Lightbulb',
   bp: 'NotebookTabs',
   relay: 'ArrowRightLeft',
@@ -211,6 +225,77 @@ const SLAMDUNK_ICON_BY_TYPE: Record<string, string> = {
   'drawing-board': 'PenTool',
   'portrait-master': 'UserRoundCog',
   'pose-master': 'PersonStanding',
+  'panorama-3d': 'Globe2',
+};
+
+const SOCCER_ICON_BY_TYPE: Record<string, string> = {
+  upload: 'FileUp',
+  output: 'Trophy',
+  text: 'ClipboardList',
+  image: 'Image',
+  video: 'Clapperboard',
+  seedance: 'Film',
+  audio: 'Radio',
+  llm: 'BrainCircuit',
+  runninghub: 'Network',
+  'runninghub-wallet': 'BadgeDollarSign',
+  'rh-tools': 'Boxes',
+  'rh-toolbox': 'Wrench',
+  'frame-pair': 'ScanEye',
+  loop: 'Repeat2',
+  'pick-from-set': 'PackageOpen',
+  resize: 'MoveDiagonal',
+  combine: 'Layers3',
+  'grid-crop': 'Grid3x3',
+  'grid-editor': 'LayoutGrid',
+  idea: 'Lightbulb',
+  bp: 'NotebookTabs',
+  relay: 'ArrowRightLeft',
+  cinematic: 'Clapperboard',
+  'video-motion': 'Route',
+  'multi-angle-visual': 'Orbit',
+  'text-split': 'Scissors',
+  'image-compare': 'ScanSearch',
+  'material-set': 'Package',
+  'drawing-board': 'PenTool',
+  'portrait-master': 'UserRoundCog',
+  'pose-master': 'PersonStanding',
+  'panorama-3d': 'Globe2',
+};
+
+const DRAGON_BALL_ICON_BY_TYPE: Record<string, string> = {
+  upload: 'PackagePlus',
+  output: 'Sparkles',
+  text: 'ScrollText',
+  image: 'Sun',
+  video: 'Clapperboard',
+  seedance: 'Film',
+  audio: 'Radio',
+  llm: 'BrainCircuit',
+  runninghub: 'Network',
+  'runninghub-wallet': 'BadgeDollarSign',
+  'rh-tools': 'Boxes',
+  'rh-toolbox': 'Wrench',
+  'frame-pair': 'ScanEye',
+  loop: 'Repeat2',
+  'pick-from-set': 'PackageOpen',
+  resize: 'MoveDiagonal',
+  combine: 'Layers3',
+  'grid-crop': 'Grid3x3',
+  'grid-editor': 'LayoutGrid',
+  idea: 'Lightbulb',
+  bp: 'NotebookTabs',
+  relay: 'ArrowRightLeft',
+  cinematic: 'Clapperboard',
+  'video-motion': 'Route',
+  'multi-angle-visual': 'Orbit',
+  'text-split': 'Scissors',
+  'image-compare': 'ScanSearch',
+  'material-set': 'Package',
+  'drawing-board': 'PenTool',
+  'portrait-master': 'UserRoundCog',
+  'pose-master': 'PersonStanding',
+  'panorama-3d': 'Radar',
 };
 
 interface SidebarProps {
@@ -308,6 +393,10 @@ export default function Sidebar({ onAddNode, visibleNodeTypes }: SidebarProps) {
         ? YYH_ICON_BY_TYPE[n.type] || n.icon
       : visualStyle === 'slamdunk'
         ? SLAMDUNK_ICON_BY_TYPE[n.type] || n.icon
+      : visualStyle === 'soccer-hero'
+        ? SOCCER_ICON_BY_TYPE[n.type] || n.icon
+      : visualStyle === 'dragon-ball'
+        ? DRAGON_BALL_ICON_BY_TYPE[n.type] || n.icon
         : n.icon;
     const Icon = (Icons as any)[themedIcon] || Icons.Box;
     const colorHex = COLOR_HEX[n.color] || COLOR_HEX.slate;
