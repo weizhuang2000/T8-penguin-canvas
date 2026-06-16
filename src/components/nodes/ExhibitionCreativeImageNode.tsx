@@ -864,6 +864,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       excludeItemOptions: excludeOptions,
       hasSpaceImage: !!spaceImage,
       hasExhibitReferenceImage: !!exhibitReferenceImage,
+      annotationTextEffective: d.annotationTextEffective === true,
       spaceSize: manualSpaceSize,
       viewControlEnabled,
       viewAngles: selectedViewAngleIds,
@@ -871,7 +872,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       roundIndex: 1,
       total: generationCount,
     }),
-    [colorMaterial, colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPalette, colorMaterialPriorityMode, colorMaterialReferenceMode, colorMaterialReferenceTone, colorMaterialTextures, creativeBrief, documentSummary, effectiveColorMaterial, exhibitReferenceImage, excludeOptions, generationCount, hasColorMaterialPreset, hasColorMaterialReference, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceType, viewAngleOptions, viewControlEnabled],
+    [colorMaterial, colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPalette, colorMaterialPriorityMode, colorMaterialReferenceMode, colorMaterialReferenceTone, colorMaterialTextures, creativeBrief, d.annotationTextEffective, documentSummary, effectiveColorMaterial, exhibitReferenceImage, excludeOptions, generationCount, hasColorMaterialPreset, hasColorMaterialReference, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceType, viewAngleOptions, viewControlEnabled],
   );
 
   const renderMarkSettings = (
@@ -1513,6 +1514,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           excludeItemOptions: excludeOptions,
           hasSpaceImage: !!spaceImage,
           hasExhibitReferenceImage: !!exhibitReferenceImage,
+          annotationTextEffective: d.annotationTextEffective === true,
           spaceSize: manualSpaceSize,
           viewControlEnabled,
           viewAngles: selectedViewAngleIds,
@@ -1648,6 +1650,18 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           <div className="mb-1 flex items-center gap-1.5">
             <ImageIcon size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">室内建筑空间输入</span>
+            {spaceImage && (
+              <label className="ml-auto flex items-center gap-1 text-[10px] text-white/60">
+                <input
+                  type="checkbox"
+                  className="h-3 w-3 accent-cyan-300"
+                  checked={d.annotationTextEffective === true}
+                  disabled={isReadonly || busy}
+                  onChange={(event) => update({ annotationTextEffective: event.target.checked })}
+                />
+                标注文字有效
+              </label>
+            )}
           </div>
           {spaceImage ? (
             <div className="rounded border border-white/10 bg-black/20 p-2">

@@ -315,6 +315,7 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   const total = normalizeExhibitionCreativeCount(values.total || values.generationCount || 1);
   const insertItemsText = exhibitionCreativeInsertItemsText(values.insertItems, values.insertItemOptions);
   const excludeItemsText = exhibitionCreativeExcludeItemsText(values.excludeItems, values.excludeItemOptions);
+  const annotationTextEffective = values.annotationTextEffective === true;
   const hasSpaceImage = values.hasSpaceImage !== false;
   const hasExhibitReferenceImage = values.hasExhibitReferenceImage === true;
   const spaceSizeText = exhibitionCreativeSpaceSizeText(values.spaceSize);
@@ -333,7 +334,12 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
     viewSentence,
   ];
   if (hasSpaceImage) {
-    primaryRequestParts.push('严格遵循图1的空间几何、透视、层高、开口、墙体位置、顶面、地面边界、动线和尺度关系；');
+    primaryRequestParts.push('严格遵循图1的空间几何、透视、层高、开口、墙体位置、顶面、地面边界、动线和尺度关系');
+    if (annotationTextEffective) {
+      primaryRequestParts.push('，按照图上标注的文字做为该文字所在部分的工艺说明来生图；');
+    } else {
+      primaryRequestParts.push('；');
+    }
     primaryRequestParts.push(hasColorMaterialReferenceImage
       ? '色彩与材质参考图只用于提取材质语言、表面肌理、光泽、冷暖倾向和灯光氛围。'
       : '不要改变原始建筑结构，只在展陈创意、灯光、材料、装置和叙事氛围上形成新的方案。');
