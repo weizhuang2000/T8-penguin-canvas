@@ -7,6 +7,7 @@ const { requireAuth } = require('./auth/middleware');
 const { startFigmaBridgeOnAppStart } = require('./utils/figmaBridge');
 
 const app = express();
+const CAM_OUTPUT_IMAGE_RE = /\.(png|jpe?g|webp|gif|bmp|avif|tiff?)$/i;
 
 // ========== 中间件 ==========
 const LOCAL_ORIGIN_RE = /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?$/;
@@ -36,6 +37,38 @@ app.use((req, _res, next) => {
 });
 
 // ========== 静态资源托管 ==========
+function isPathInside(root, target) {
+  const base = path.resolve(root);
+  const resolved = path.resolve(target);
+  return resolved === base || resolved.startsWith(base + path.sep);
+}
+
+function cleanCamPathPart(value) {
+  const text = String(value || '').trim();
+  if (!text || text === '.' || text === '..') return '';
+  if (text.includes('/') || text.includes('\\') || text.includes('\0')) return '';
+  return text;
+}
+
+app.get('/files/cam-output/:project/:filename', requireAuth, (req, res) => {
+  const project = cleanCamPathPart(req.params.project);
+  const filename = cleanCamPathPart(req.params.filename);
+  if (!project || !filename || !CAM_OUTPUT_IMAGE_RE.test(filename)) {
+    return res.status(400).json({ success: false, error: 'Invalid cam-output path' });
+  }
+  const root = path.resolve(config.CAM_OUTPUT_ROOT);
+  const projectDir = path.resolve(root, project);
+  const folder = path.resolve(projectDir, 'camoutput');
+  const file = path.resolve(folder, filename);
+  if (!isPathInside(root, projectDir) || !isPathInside(projectDir, folder) || !isPathInside(folder, file)) {
+    return res.status(400).json({ success: false, error: 'Invalid cam-output path' });
+  }
+  if (!fs.existsSync(file)) {
+    return res.status(404).json({ success: false, error: 'Cam output image not found' });
+  }
+  return res.sendFile(file);
+});
+
 app.use('/files/output', requireAuth, express.static(config.OUTPUT_DIR));
 app.use('/files/input', requireAuth, express.static(config.INPUT_DIR));
 app.use('/files/thumbnails', requireAuth, express.static(config.THUMBNAILS_DIR));

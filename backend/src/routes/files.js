@@ -14,6 +14,7 @@ const { tryDecodeDuckPayload } = require('../utils/duckPayload');
 
 const router = express.Router();
 const THUMBNAIL_IMAGE_RE = /\.(png|jpe?g|webp|gif|bmp|avif|tiff?)(?:$|\?)/i;
+const CAM_OUTPUT_IMAGE_RE = /\.(png|jpe?g|webp|gif|bmp|avif|tiff?)$/i;
 const MAX_THUMBNAIL_JOBS = Math.max(1, Math.min(4, Number.parseInt(process.env.T8PC_THUMBNAIL_CONCURRENCY || '2', 10) || 2));
 const thumbnailInflight = new Map();
 const thumbnailQueue = [];
@@ -106,6 +107,59 @@ router.get('/list', (_req, res) => {
 
 // POST /api/files/upload-base64 — 从 base64 dataURL 保存 PNG/JPG 到 OUTPUT_DIR
 // 供手绘画板 / 抽帧等前端产生的图像使用
+// GET /api/files/cam-output/projects - list projects under C:\cam-output/<project>/camoutput
+router.get('/cam-output/projects', (_req, res) => {
+  try {
+    const root = path.resolve(config.CAM_OUTPUT_ROOT);
+    if (!fs.existsSync(root)) {
+      return res.json({ success: true, data: { root, projects: [] } });
+    }
+    const projects = fs.readdirSync(root, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && cleanCamPathPart(entry.name))
+      .map((entry) => {
+        const { resolved, images } = listCamOutputImages(entry.name);
+        if (!resolved) return null;
+        const statTarget = fs.existsSync(resolved.camoutputDir) ? resolved.camoutputDir : resolved.projectDir;
+        let mtime = 0;
+        try { mtime = fs.statSync(statTarget).mtimeMs; } catch { /* ignore */ }
+        return {
+          name: resolved.project,
+          imageCount: images.length,
+          mtime,
+        };
+      })
+      .filter(Boolean)
+      .filter((project) => project.imageCount > 0)
+      .sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
+    return res.json({ success: true, data: { root, projects } });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e?.message || String(e) });
+  }
+});
+
+// GET /api/files/cam-output/projects/:project/images - list images inside a project's camoutput folder
+router.get('/cam-output/projects/:project/images', (req, res) => {
+  try {
+    const { resolved, images } = listCamOutputImages(req.params.project);
+    if (!resolved) {
+      return res.status(400).json({ success: false, error: '项目名称不合法' });
+    }
+    if (!fs.existsSync(resolved.camoutputDir)) {
+      return res.status(404).json({ success: false, error: '项目 camoutput 文件夹不存在' });
+    }
+    return res.json({
+      success: true,
+      data: {
+        project: resolved.project,
+        folder: resolved.camoutputDir,
+        images,
+      },
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e?.message || String(e) });
+  }
+});
+
 router.post('/upload-base64', express.json({ limit: '20mb' }), (req, res) => {
   try {
     const { dataUrl, prefix } = req.body || {};
@@ -183,6 +237,49 @@ function resolveOutputSubdir(subdir) {
     return null;
   }
   return { safeSubdir, targetDir };
+}
+
+function isPathInside(root, target) {
+  const base = path.resolve(root);
+  const resolved = path.resolve(target);
+  return resolved === base || resolved.startsWith(base + path.sep);
+}
+
+function cleanCamPathPart(value) {
+  const text = String(value || '').trim();
+  if (!text || text === '.' || text === '..') return '';
+  if (text.includes('/') || text.includes('\\') || text.includes('\0')) return '';
+  return text;
+}
+
+function resolveCamOutputProject(projectName) {
+  const project = cleanCamPathPart(projectName);
+  if (!project) return null;
+  const root = path.resolve(config.CAM_OUTPUT_ROOT);
+  const projectDir = path.resolve(root, project);
+  if (!isPathInside(root, projectDir)) return null;
+  const camoutputDir = path.resolve(projectDir, 'camoutput');
+  if (!isPathInside(projectDir, camoutputDir)) return null;
+  return { project, projectDir, camoutputDir };
+}
+
+function listCamOutputImages(projectName) {
+  const resolved = resolveCamOutputProject(projectName);
+  if (!resolved || !fs.existsSync(resolved.camoutputDir)) return { resolved, images: [] };
+  const images = fs.readdirSync(resolved.camoutputDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && CAM_OUTPUT_IMAGE_RE.test(entry.name))
+    .map((entry) => {
+      const file = path.join(resolved.camoutputDir, entry.name);
+      const stat = fs.statSync(file);
+      return {
+        filename: entry.name,
+        url: `/files/cam-output/${encodeURIComponent(resolved.project)}/${encodeURIComponent(entry.name)}`,
+        size: stat.size,
+        mtime: stat.mtimeMs,
+      };
+    })
+    .sort((a, b) => a.filename.localeCompare(b.filename, 'zh-CN', { numeric: true, sensitivity: 'base' }));
+  return { resolved, images };
 }
 
 function spawnOpenFolder(targetDir) {
