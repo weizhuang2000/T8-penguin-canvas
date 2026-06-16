@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, ChevronRight, CloudUpload, Download, ExternalLink, Eye, EyeOff, FileUp, Info, KeyRound, Loader2, Lock, Plus, Save, Settings2, TestTube2, Trash2, X, FolderOpen, ServerCog, Volume2 } from 'lucide-react';
+import { Brain, ChevronDown, ChevronRight, CloudUpload, Download, ExternalLink, Eye, EyeOff, FileUp, Info, KeyRound, Loader2, Lock, Plus, Save, Settings2, TestTube2, Trash2, X, FolderOpen, ServerCog, Volume2 } from 'lucide-react';
 import { useApiKeysStore, FIXED_ZHENZHEN_BASE, RH_BASE, normalizeApiSettings } from '../stores/apiKeys';
 import { taskCompletionSound as taskCompletionSoundController } from '../stores/taskCompletionSound';
 import { useThemeStore } from '../stores/theme';
-import type { AdvancedProviderConfig, AdvancedProviderProtocol, ApiSettings, CloudUploadProvider, CloudUploadTargetConfig } from '../types/canvas';
+import type { AdvancedProviderConfig, AdvancedProviderProtocol, ApiSettings, CloudUploadProvider, CloudUploadTargetConfig, LlmConfig } from '../types/canvas';
 import { getRawSettings, resetTaskCompletionSound, testAdvancedProvider, testCloudUploadTarget, uploadTaskCompletionSound } from '../services/api';
 import { playTaskCompletionSound } from '../utils/taskCompletionSound';
+import { DEFAULT_LLM_MODEL } from '../providers/models';
 import {
   advancedProviderSummary as summarizeAdvancedProviderForm,
   normalizeModelscopeLoraStrength,
@@ -308,6 +309,43 @@ function normalizeCloudUploadTargetForms(value: unknown): CloudUploadTargetConfi
   return normalizeApiSettings({ cloudUploadTargets: value as CloudUploadTargetConfig[] }).cloudUploadTargets || [];
 }
 
+function normalizeLlmConfigForms(value: unknown, settings?: Partial<ApiSettings>): LlmConfig[] {
+  const source = Array.isArray(value) ? value : [];
+  const normalized = normalizeApiSettings({ ...(settings || {}), llmConfigs: source as LlmConfig[] }).llmConfigs || [];
+  if (normalized.length > 0) return normalized;
+  const legacyKey = typeof settings?.llmApiKey === 'string' ? settings.llmApiKey : '';
+  const legacyBaseUrl = typeof settings?.llmBaseUrl === 'string' && settings.llmBaseUrl.trim()
+    ? settings.llmBaseUrl
+    : FIXED_ZHENZHEN_BASE;
+  const legacyModel = typeof settings?.llmModel === 'string' && settings.llmModel.trim()
+    ? settings.llmModel
+    : DEFAULT_LLM_MODEL;
+  return [{
+    id: 'default',
+    label: '默认 LLM',
+    apiKey: legacyKey,
+    hasApiKey: !!legacyKey,
+    baseUrl: legacyBaseUrl,
+    model: legacyModel,
+    isDefault: true,
+  }];
+}
+
+function getLlmConfigSource(settings?: Partial<ApiSettings>): unknown {
+  if (Array.isArray(settings?.llmConfigs) && settings.llmConfigs.length > 0) return settings.llmConfigs;
+  if (Array.isArray(settings?.llmApiKeys) && settings.llmApiKeys.length > 0) return settings.llmApiKeys;
+  return settings?.llmConfigs || settings?.llmApiKeys;
+}
+
+function uniqueLlmConfigId(configs: LlmConfig[]): string {
+  const used = new Set(configs.map((item) => String(item.id || '')));
+  for (let index = configs.length + 1; index < configs.length + 200; index += 1) {
+    const id = `llm-${index}`;
+    if (!used.has(id)) return id;
+  }
+  return `llm-${Date.now().toString(36)}`;
+}
+
 function uniqueAdvancedProviderId(providers: AdvancedProviderConfig[], prefix: string): string {
   const used = new Set(providers.map((provider) => String(provider.id || '')));
   for (let index = providers.length + 1; index < providers.length + 200; index += 1) {
@@ -339,6 +377,9 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   const [eagleApiBaseInput, setEagleApiBaseInput] = useState<string>('');
   // 分类独立 Key 区块折叠状态（新手友好：默认折叠，点击展开）
   const [classifiedOpen, setClassifiedOpen] = useState(false);
+  const [llmConfigsOpen, setLlmConfigsOpen] = useState(true);
+  const [llmConfigsInput, setLlmConfigsInput] = useState<LlmConfig[]>([]);
+  const [llmConfigsDirty, setLlmConfigsDirty] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [advancedProvidersInput, setAdvancedProvidersInput] = useState<AdvancedProviderConfig[]>([]);
   const [activeAdvancedProviderId, setActiveAdvancedProviderId] = useState<string>('');
@@ -373,6 +414,9 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       setSaved(false);
       setBackupMessage('');
       setClassifiedOpen(false);
+      setLlmConfigsOpen(true);
+      setLlmConfigsInput(normalizeLlmConfigForms(getLlmConfigSource(settings), settings));
+      setLlmConfigsDirty(false);
       setAdvancedOpen(false);
       const providers = normalizeAdvancedProviderForms((settings as any)?.advancedProviders);
       setAdvancedProvidersInput(providers);
@@ -429,6 +473,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     resourceLibraryPath: resourceLibraryPathInput.trim(),
     themeTemplatePath: themeTemplatePathInput.trim(),
     eagleApiBase: eagleApiBaseInput.trim(),
+    ...(llmConfigsDirty ? { llmConfigs: llmConfigsInput } : {}),
     ...(advancedDirty ? { advancedProviders: advancedProvidersInput } : {}),
     ...(cloudUploadDirty ? { cloudUploadTargets: cloudUploadTargetsInput } : {}),
   });
@@ -462,6 +507,9 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     }
     if ((source as any).preferences && typeof (source as any).preferences === 'object') {
       next.preferences = { ...(source as any).preferences };
+    }
+    if (Array.isArray((source as any).llmConfigs) || Array.isArray((source as any).llmApiKeys)) {
+      next.llmConfigs = normalizeLlmConfigForms(getLlmConfigSource(source as Partial<ApiSettings>), source as Partial<ApiSettings>);
     }
     if (Array.isArray((source as any).advancedProviders)) {
       next.advancedProviders = normalizeAdvancedProviderForms((source as any).advancedProviders);
@@ -535,6 +583,11 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     if (typeof patch.resourceLibraryPath === 'string') setResourceLibraryPathInput(patch.resourceLibraryPath);
     if (typeof patch.themeTemplatePath === 'string') setThemeTemplatePathInput(patch.themeTemplatePath);
     if (typeof patch.eagleApiBase === 'string') setEagleApiBaseInput(patch.eagleApiBase);
+    if (Array.isArray(patch.llmConfigs)) {
+      setLlmConfigsInput(normalizeLlmConfigForms(patch.llmConfigs, patch));
+      setLlmConfigsDirty(true);
+      setLlmConfigsOpen(true);
+    }
     if (Array.isArray(patch.advancedProviders)) {
       const providers = normalizeAdvancedProviderForms(patch.advancedProviders);
       setAdvancedProvidersInput(providers);
@@ -656,6 +709,9 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     const oldEagleApiBase = (settings as any)?.eagleApiBase || '';
     if (newEagleApiBase && newEagleApiBase !== oldEagleApiBase) {
       (patch as any).eagleApiBase = newEagleApiBase;
+    }
+    if (llmConfigsDirty) {
+      (patch as any).llmConfigs = llmConfigsInput;
     }
     if (advancedDirty) {
       (patch as any).advancedProviders = advancedProvidersInput;
@@ -2377,6 +2433,188 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   };
 
   // 渲染单个 Key 表项
+  const updateLlmConfig = (id: string, patch: Partial<LlmConfig>) => {
+    setLlmConfigsInput((prev) => prev.map((item) => (
+      item.id === id ? { ...item, ...patch } : item
+    )));
+    setLlmConfigsDirty(true);
+  };
+
+  const markDefaultLlmConfig = (id: string) => {
+    setLlmConfigsInput((prev) => prev.map((item) => ({ ...item, isDefault: item.id === id })));
+    setLlmConfigsDirty(true);
+  };
+
+  const addLlmConfig = () => {
+    setLlmConfigsInput((prev) => {
+      const id = uniqueLlmConfigId(prev);
+      return [
+        ...prev,
+        {
+          id,
+          label: `LLM Key ${prev.length + 1}`,
+          apiKey: '',
+          hasApiKey: false,
+          baseUrl: FIXED_ZHENZHEN_BASE,
+          model: DEFAULT_LLM_MODEL,
+          isDefault: prev.length === 0,
+        },
+      ];
+    });
+    setLlmConfigsDirty(true);
+    setLlmConfigsOpen(true);
+  };
+
+  const removeLlmConfig = (id: string) => {
+    setLlmConfigsInput((prev) => {
+      if (prev.length <= 1) return prev;
+      const removed = prev.find((item) => item.id === id);
+      const next = prev.filter((item) => item.id !== id);
+      if (removed?.isDefault || !next.some((item) => item.isDefault)) {
+        return next.map((item, index) => ({ ...item, isDefault: index === 0 }));
+      }
+      return next;
+    });
+    setLlmConfigsDirty(true);
+  };
+
+  const renderLlmConfigs = () => {
+    const items = llmConfigsInput.length > 0
+      ? llmConfigsInput
+      : normalizeLlmConfigForms(getLlmConfigSource(settings), settings);
+    const configuredCount = items.filter((item) => item.hasApiKey || item.apiKey).length;
+    const panelCls = isPixel
+      ? 't8-api-settings-provider-panel border p-3 space-y-3 min-w-0'
+      : 't8-api-settings-provider-panel border rounded-xl p-3 sm:p-4 space-y-3 min-w-0';
+    const fieldInputCls = `${inputCls.replace('flex-1 ', '')} w-full min-w-0`;
+    return (
+      <div className="t8-api-settings-divider pt-3 border-t">
+        <button
+          type="button"
+          onClick={() => setLlmConfigsOpen((v) => !v)}
+          aria-expanded={llmConfigsOpen}
+          data-open={llmConfigsOpen}
+          className={
+            isPixel
+              ? 't8-api-settings-toggle w-full flex items-center gap-2 px-3 py-2 px-btn'
+              : 't8-api-settings-toggle w-full flex items-center gap-2 px-3 py-2 rounded-lg border transition'
+          }
+        >
+          <Brain size={14} className="t8-api-settings-icon" />
+          <span className="text-xs font-bold shrink-0">LLM 独立配置</span>
+          <span
+            className="t8-api-settings-badge ml-1 px-1.5 py-0.5 text-[10px] rounded border"
+            data-tone={configuredCount > 0 ? 'success' : 'muted'}
+          >
+            已配置 {configuredCount}/{items.length}
+          </span>
+          <span className={`hidden sm:inline text-[11px] ${hintCls}`}>每个模型可单独设置名称、Base URL 和 API Key</span>
+          <span className={`ml-auto flex items-center gap-1 text-[11px] ${hintCls}`}>
+            {llmConfigsOpen ? '收起' : '展开'}
+            {llmConfigsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </span>
+        </button>
+        {!llmConfigsOpen && (
+          <div className={`text-[11px] mt-2 ${hintCls}`}>
+            这些配置会出现在支持 LLM Key 选择的画布节点里，默认项会同步到旧版 LLM Key 字段以兼容已有调用。
+          </div>
+        )}
+        {llmConfigsOpen && (
+          <div className="mt-3 space-y-3">
+            {items.map((item, index) => {
+              const hasSaved = !!(item.hasApiKey || item.apiKey);
+              return (
+                <div key={item.id || index} className={panelCls}>
+                  <div className="flex items-start gap-2 flex-wrap">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-sm font-black ${labelCls}`}>{item.label || `LLM Key ${index + 1}`}</span>
+                        {item.isDefault && (
+                          <span className="t8-api-settings-badge text-[10px] font-bold px-1.5 py-0.5 rounded border" data-tone="success">默认</span>
+                        )}
+                        {hasSaved && (
+                          <span className="t8-api-settings-badge text-[10px] font-bold px-1.5 py-0.5 rounded border" data-tone="success">
+                            已保存 {toMaskedDisplay(item.apiKey || '****')}
+                          </span>
+                        )}
+                      </div>
+                      <p className={`mt-1 text-[11px] ${hintCls}`}>{item.model || DEFAULT_LLM_MODEL} · {item.baseUrl || FIXED_ZHENZHEN_BASE}</p>
+                    </div>
+                    <label className={`flex items-center gap-2 text-xs font-bold shrink-0 ${labelCls}`}>
+                      <input type="radio" checked={!!item.isDefault} onChange={() => markDefaultLlmConfig(item.id)} />
+                      默认
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => removeLlmConfig(item.id)}
+                      disabled={items.length <= 1}
+                      className={`${eyeBtnCls} disabled:opacity-40 disabled:cursor-not-allowed`}
+                      title={items.length <= 1 ? '至少保留一个 LLM 配置' : '删除此 LLM 配置'}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <label className="space-y-1 min-w-0">
+                      <span className={`text-[11px] ${labelCls}`}>名称</span>
+                      <input
+                        value={item.label || ''}
+                        onChange={(e) => updateLlmConfig(item.id, { label: e.target.value })}
+                        className={fieldInputCls}
+                        placeholder="例如 gpt5.5-pixel"
+                      />
+                    </label>
+                    <label className="space-y-1 min-w-0">
+                      <span className={`text-[11px] ${labelCls}`}>模型</span>
+                      <input
+                        value={item.model || ''}
+                        onChange={(e) => updateLlmConfig(item.id, { model: e.target.value })}
+                        className={fieldInputCls}
+                        placeholder={DEFAULT_LLM_MODEL}
+                      />
+                    </label>
+                    <label className="space-y-1 min-w-0 lg:col-span-2">
+                      <span className={`text-[11px] ${labelCls}`}>Base URL</span>
+                      <input
+                        value={item.baseUrl || ''}
+                        onChange={(e) => updateLlmConfig(item.id, { baseUrl: e.target.value })}
+                        className={fieldInputCls}
+                        placeholder={FIXED_ZHENZHEN_BASE}
+                      />
+                    </label>
+                    <label className="space-y-1 min-w-0 lg:col-span-2">
+                      <span className={`text-[11px] ${labelCls}`}>API Key</span>
+                      <input
+                        type="password"
+                        value={item.apiKey || ''}
+                        onChange={(e) => updateLlmConfig(item.id, { apiKey: e.target.value, hasApiKey: !!e.target.value.trim() || item.hasApiKey })}
+                        className={fieldInputCls}
+                        placeholder={hasSaved ? '留空或保留脱敏值表示不修改 / 输入新值覆盖' : 'sk-...'}
+                        autoComplete="off"
+                      />
+                    </label>
+                  </div>
+                </div>
+              );
+            })}
+            <button
+              type="button"
+              onClick={addLlmConfig}
+              className={
+                isPixel
+                  ? 't8-api-settings-secondary-btn px-btn inline-flex items-center gap-1 px-3 py-2 text-xs'
+                  : 't8-api-settings-secondary-btn inline-flex items-center gap-1 px-3 py-2 text-xs rounded border'
+              }
+            >
+              <Plus size={14} />
+              添加 LLM 配置
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderKey = (spec: KeySpec, opts: { fallbackHint?: boolean; baseUrlNote?: string }) => {
     const f = spec.field;
     const rawVal = (settings as any)[f] as string | undefined;
@@ -2463,8 +2701,8 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       <div
         className={
           isPixel
-            ? `t8-api-settings-modal w-full ${advancedOpen || cloudUploadOpen ? 'max-w-4xl' : 'max-w-2xl'} mx-4 px-card overflow-hidden flex flex-col max-h-[90vh]`
-            : `t8-api-settings-modal w-full ${advancedOpen || cloudUploadOpen ? 'max-w-4xl' : 'max-w-2xl'} mx-4 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border`
+            ? `t8-api-settings-modal w-full ${llmConfigsOpen || advancedOpen || cloudUploadOpen ? 'max-w-4xl' : 'max-w-2xl'} mx-4 px-card overflow-hidden flex flex-col max-h-[90vh]`
+            : `t8-api-settings-modal w-full ${llmConfigsOpen || advancedOpen || cloudUploadOpen ? 'max-w-4xl' : 'max-w-2xl'} mx-4 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border`
         }
       >
         {/* 头部 */}
@@ -2510,7 +2748,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
             onSaved={load}
           />
           {renderKey(COMMON_KEYS[1], { baseUrlNote: `Base URL: ${RH_BASE}` })}
-          {renderKey(COMMON_KEYS[2], { baseUrlNote: `Base URL 锁定: ${FIXED_ZHENZHEN_BASE} (与贞贞同地址, Key 独立)` })}
+          {renderLlmConfigs()}
 
           {/* 分类独立 Key（默认折叠，点击展开 —— 新手友好） */}
           <div className="t8-api-settings-divider pt-3 border-t">

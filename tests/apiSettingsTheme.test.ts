@@ -96,6 +96,16 @@ test('ApiSettings classified API keys expose explicit clear actions', () => {
   assert.match(apiSettingsSource, /aria-label=\{`\$\{spec\.label\}\$\{pendingClear \? '取消清空' : '清空'\}`\}/);
 });
 
+test('ApiSettings exposes multi LLM key config editor', () => {
+  assert.match(apiSettingsSource, /llmConfigsInput/);
+  assert.match(apiSettingsSource, /normalizeLlmConfigForms/);
+  assert.match(apiSettingsSource, /renderLlmConfigs/);
+  assert.match(apiSettingsSource, /LLM 独立配置/);
+  assert.match(apiSettingsSource, /每个模型可单独设置名称、Base URL 和 API Key/);
+  assert.match(apiSettingsSource, /添加 LLM 配置/);
+  assert.match(apiSettingsSource, /\(patch as any\)\.llmConfigs = llmConfigsInput/);
+});
+
 test('ApiSettings cloud upload panels link to vendor consoles and secret key reminders', () => {
   assert.match(apiSettingsSource, /https:\/\/console\.cloud\.tencent\.com\/cam\/capi/);
   assert.match(apiSettingsSource, /https:\/\/console\.cloud\.tencent\.com\/lighthouse\/cos\/index\?rid=5/);

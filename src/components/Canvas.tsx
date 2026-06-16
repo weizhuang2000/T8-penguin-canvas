@@ -3179,6 +3179,9 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
         .map((c) => (c as any).id as string);
       if (removedIds.length > 0) {
         markManualNodeDeletion(removedIds, nodesRef.current);
+        // 同步清理关联边，避免孤儿边导致 React Flow 内部报错
+        const removeSet = new Set(removedIds);
+        setEdges((eds) => eds.filter((e) => !removeSet.has(e.source) && !removeSet.has(e.target)));
       }
       // 检测拖拽状态,避免拖拽中频繁压栈
       for (const c of changes) {
@@ -3207,6 +3210,25 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
     },
     [canEditActiveCanvas]
   );
+
+  // React Flow 内部错误处理：防止 handleBounds 为 undefined 时崩溃
+  const handleFlowError = useCallback((id: string, message: string) => {
+    // 008 = 边找不到 handle（常见于节点尚未测量完成或孤儿边）
+    // 003 = 节点类型未注册（PlaceholderNode 兜底）
+    // 011 = 边类型未注册
+    if (id === '008' || id === '003' || id === '011') return;
+    console.warn(`[ReactFlow ${id}] ${message}`);
+  }, []);
+
+  // 清理孤儿边：source/target 节点不存在的边会导致 React Flow 内部报错
+  useEffect(() => {
+    const nodeIds = new Set(nodes.map((n) => n.id));
+    const orphans = edges.filter((e) => !nodeIds.has(e.source) || !nodeIds.has(e.target));
+    if (orphans.length > 0) {
+      const orphanIds = new Set(orphans.map((e) => e.id));
+      setEdges((eds) => eds.filter((e) => !orphanIds.has(e.id)));
+    }
+  }, [nodes]);
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -4962,6 +4984,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
         onDrop={onCanvasFileDrop}
         onSelectionChange={onSelectionChange}
         onSelectionEnd={onSelectionEnd}
+        onError={handleFlowError}
         nodesDraggable={canEditActiveCanvas}
         nodesConnectable={canEditActiveCanvas}
         elementsSelectable
