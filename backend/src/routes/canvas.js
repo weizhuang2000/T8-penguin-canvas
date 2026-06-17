@@ -200,6 +200,14 @@ function rejectUnauthorizedNewNodes(req, res, incomingNodes) {
   return true;
 }
 
+function canvasExtensionFields(source) {
+  const out = {};
+  if (source && typeof source === 'object' && source.creativeDesk && typeof source.creativeDesk === 'object') {
+    out.creativeDesk = source.creativeDesk;
+  }
+  return out;
+}
+
 router.get('/', (req, res) => {
   const list = loadCanvasList()
     .map(normalizeCanvasMeta)
@@ -336,6 +344,7 @@ router.put('/:id', (req, res) => {
   }
 
   const persisted = {
+    ...canvasExtensionFields(incoming),
     ownerUserId: found.item.ownerUserId || null,
     ownerName: found.item.ownerName || '',
     ownerRole: found.item.ownerRole || '',
@@ -376,6 +385,7 @@ router.patch('/:id/nodes/:nodeId/data', express.json({ limit: '50mb' }), (req, r
 
   const persisted = {
     ...result.data,
+    ...canvasExtensionFields(existing),
     ownerUserId: found.item.ownerUserId || existing.ownerUserId || null,
     ownerName: found.item.ownerName || existing.ownerName || '',
     ownerRole: found.item.ownerRole || existing.ownerRole || '',
@@ -417,6 +427,7 @@ router.post('/:id/auto-save', (req, res) => {
       schema: 't8-penguin-canvas-autosave',
       version: 1,
       autoSavedAt: new Date(now).toISOString(),
+      ...canvasExtensionFields(incoming),
       canvas: {
         id: req.params.id,
         name,

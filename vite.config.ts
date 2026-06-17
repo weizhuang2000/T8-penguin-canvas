@@ -24,6 +24,26 @@ function localExtensionsPlugin() {
 
 // T8-penguin-canvas Vite 配置
 // 端口策略:前端 11422 / 后端 18766(避开主项目 5176/18765 与常见 51xx 占用)
+const BACKEND_TARGET = 'http://127.0.0.1:18766';
+
+function localBackendProxy(label: string) {
+  return {
+    target: BACKEND_TARGET,
+    changeOrigin: true,
+    configure(proxy: any) {
+      proxy.on('error', (error: any, _req: any, res: any) => {
+        if (!res || res.headersSent || typeof res.writeHead !== 'function') return;
+        const detail = error?.code || error?.message || 'proxy_error';
+        res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({
+          success: false,
+          error: `${label} 后端服务不可用，请先启动 npm run dev:backend（${BACKEND_TARGET}）。${detail}`,
+        }));
+      });
+    },
+  };
+}
+
 export default defineConfig({
   plugins: [react(), localExtensionsPlugin()],
   assetsInclude: ['**/*.mid'],
@@ -58,23 +78,11 @@ export default defineConfig({
     },
     proxy: {
       // 后端 API 代理
-      '/api': {
-        target: 'http://127.0.0.1:18766',
-        changeOrigin: true,
-      },
+      '/api': localBackendProxy('API'),
       // 静态文件服务代理
-      '/files': {
-        target: 'http://127.0.0.1:18766',
-        changeOrigin: true,
-      },
-      '/output': {
-        target: 'http://127.0.0.1:18766',
-        changeOrigin: true,
-      },
-      '/input': {
-        target: 'http://127.0.0.1:18766',
-        changeOrigin: true,
-      },
+      '/files': localBackendProxy('files'),
+      '/output': localBackendProxy('output'),
+      '/input': localBackendProxy('input'),
     },
   },
   build: {

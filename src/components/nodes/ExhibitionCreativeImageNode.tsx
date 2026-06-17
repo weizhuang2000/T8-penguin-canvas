@@ -765,6 +765,8 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const inspiration = String(d.inspiration || '').trim();
   const sourceText = String(d.sourceText || '');
   const documentSummary = String(d.documentSummary || '').trim();
+  const documentSummaryOutputToPrompt = d.documentSummaryOutputToPrompt !== false;
+  const documentSummaryForImagePrompt = documentSummaryOutputToPrompt ? documentSummary : '';
   const creativeBrief = normalizeExhibitionCreativeBrief(d.creativeBrief);
   const creativeResults = useMemo(() => creativeResultsFromData(d.creativeResults), [d.creativeResults]);
   const status = String(d.status || 'idle');
@@ -856,7 +858,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       colorMaterialReferenceMarkText: colorMaterialMarkSettings.text,
       colorMaterialReferenceMarkPosition: colorMaterialMarkSettings.position,
       inspiration,
-      documentSummary,
+      documentSummary: documentSummaryForImagePrompt,
       creativeBrief,
       insertItems: selectedInsertIds,
       insertItemOptions: insertOptions,
@@ -872,7 +874,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       roundIndex: 1,
       total: generationCount,
     }),
-    [colorMaterial, colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPalette, colorMaterialPriorityMode, colorMaterialReferenceMode, colorMaterialReferenceTone, colorMaterialTextures, creativeBrief, d.annotationTextEffective, documentSummary, effectiveColorMaterial, exhibitReferenceImage, excludeOptions, generationCount, hasColorMaterialPreset, hasColorMaterialReference, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceType, viewAngleOptions, viewControlEnabled],
+    [colorMaterial, colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPalette, colorMaterialPriorityMode, colorMaterialReferenceMode, colorMaterialReferenceTone, colorMaterialTextures, creativeBrief, d.annotationTextEffective, documentSummaryForImagePrompt, effectiveColorMaterial, exhibitReferenceImage, excludeOptions, generationCount, hasColorMaterialPreset, hasColorMaterialReference, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceType, viewAngleOptions, viewControlEnabled],
   );
 
   const renderMarkSettings = (
@@ -1506,7 +1508,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           colorMaterialReferenceMarkText: colorMaterialMarkSettings.text,
           colorMaterialReferenceMarkPosition: colorMaterialMarkSettings.position,
           inspiration,
-          documentSummary,
+          documentSummary: documentSummaryForImagePrompt,
           creativeBrief: brief,
           insertItems: selectedInsertIds,
           insertItemOptions: insertOptions,
@@ -1925,9 +1927,22 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           <div className="mb-1 flex items-center gap-1.5">
             <FileText size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">创意资料文档</span>
+            <label className="ml-auto flex items-center gap-1 text-[10px] text-white/55 select-none" title="关闭后总结资料不再写入生图提示词，但 LLM 创意描述仍会参考资料">
+              <span>输出到提示词</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={d.documentSummaryOutputToPrompt !== false}
+                className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border transition-colors ${d.documentSummaryOutputToPrompt !== false ? 'border-cyan-300/50 bg-cyan-300/25' : 'border-white/15 bg-white/10'}`}
+                disabled={isReadonly}
+                onClick={() => update({ documentSummaryOutputToPrompt: d.documentSummaryOutputToPrompt === false ? true : false })}
+              >
+                <span className={`inline-block h-2.5 w-2.5 rounded-full transition-transform ${d.documentSummaryOutputToPrompt !== false ? 'translate-x-3.5 bg-cyan-200' : 'translate-x-0.5 bg-white/50'}`} />
+              </button>
+            </label>
             <button
               type="button"
-              className={`${BUTTON} ml-auto`}
+              className={BUTTON}
               disabled={isReadonly || busy}
               onClick={() => fileRef.current?.click()}
             >

@@ -110,17 +110,34 @@ export function invalidateCanvasDataCache(id: string): void {
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-    ...init,
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { 'Content-Type': 'application/json' },
+      ...init,
+    });
+  } catch (error: any) {
+    const message = error?.message || String(error || 'network error');
+    throw new Error(`本地后端服务不可用，请确认后端已启动：${message}`);
+  }
   if (!res.ok) {
     let errMsg = `HTTP ${res.status}`;
+    let text = '';
     try {
-      const data = await res.json();
-      errMsg = data.error || data.message || errMsg;
+      text = await res.text();
     } catch {
       /* ignore */
+    }
+    if (text.trim()) {
+      try {
+        const data = JSON.parse(text);
+        errMsg = data.error || data.message || errMsg;
+      } catch {
+        errMsg = text.trim().slice(0, 500);
+      }
+    }
+    if (res.status === 502 && errMsg === `HTTP ${res.status}` && url.startsWith(BASE)) {
+      errMsg = '本地后端服务不可用，请确认已启动 npm run dev:backend 或 npm run dev';
     }
     throw new Error(errMsg);
   }
