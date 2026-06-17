@@ -295,7 +295,7 @@ export async function patchCanvasNodeData(
   patch: Record<string, any>,
 ): Promise<CanvasData> {
   const res = await request<{ success: boolean; data: CanvasData }>(
-    `${BASE}/canvas/${encodeURIComponent(canvasId)}/nodes/${encodeURIComponent(nodeId)}/data`,
+    `${BASE}/canvas/${encodeURIComponent(canvasId)}/nodes/${encodeURIComponent(nodeId)}/patch-data`,
     {
       method: 'PATCH',
       body: JSON.stringify({ patch }),

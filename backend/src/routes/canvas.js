@@ -366,7 +366,7 @@ router.put('/:id', (req, res) => {
   res.json({ success: true });
 });
 
-router.patch('/:id/nodes/:nodeId/data', express.json({ limit: '50mb' }), (req, res) => {
+router.patch('/:id/nodes/:nodeId/patch-data', express.json({ limit: '50mb' }), (req, res) => {
   const found = findCanvasForRequest(req, res);
   if (!found) return;
   if (!requireCanvasEdit(req, res, found)) return;
