@@ -137,6 +137,9 @@ import MaterialSetNode from './nodes/MaterialSetNode';
 import UploadNode from './nodes/UploadNode';
 import OutputNode from './nodes/OutputNode';
 import GroupBoxNode from './nodes/GroupBoxNode';
+import CodexCliAgentNode from './nodes/CodexCliAgentNode';
+import CodexImageConjureNode from './nodes/CodexImageConjureNode';
+import GrokOAuthAgentNode from './nodes/GrokOAuthAgentNode';
 import DeletableEdge from './edges/DeletableEdge';
 import { NODE_REGISTRY } from '../config/nodeRegistry';
 import type { NodeType, NodeMeta } from '../types/canvas';
@@ -211,6 +214,10 @@ const SPECIFIC_NODES: Record<string, any> = {
   upload: UploadNode,
   // Output (1) - 输出素材(文本/图像/视频/音频 预览 + 文本双击编辑)
   output: OutputNode,
+  // Agent (3) - AI Agent 工作台节点
+  'codex-cli-agent': CodexCliAgentNode,
+  'codex-image-conjure': CodexImageConjureNode,
+  'grok-oauth-agent': GrokOAuthAgentNode,
 };
 
 const NODE_SERIAL_ANCHOR_LEFT = '--t8-node-serial-anchor-left';
