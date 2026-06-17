@@ -414,9 +414,9 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
 
   return (
     <div className={`t8-node relative w-[620px] transition-all ${selected ? 'ring-2 ring-cyan-300' : ''}`}>
-      <Handle type="target" position={Position.Left} className="!border-0" style={{ background: PORT_COLOR.text }} />
-      <Handle id={OUTLINE_TEXT_HANDLE} type="source" position={Position.Right} className="!border-0" style={{ top: '42%', background: PORT_COLOR.text }} />
-      <Handle id={OUTLINE_IMAGE_HANDLE} type="source" position={Position.Right} className="!border-0" style={{ top: '58%', background: PORT_COLOR.image }} />
+      <Handle type="target" position={Position.Left} className="!border-0" style={{ background: PORT_COLOR.text }} title="输入：展陈资料文档文本（DOCX/PDF/TXT 或直接粘贴）" />
+      <Handle id={OUTLINE_TEXT_HANDLE} type="source" position={Position.Right} className="!border-0" style={{ top: '42%', background: PORT_COLOR.text }} title="输出：拆分后的大纲文本段（可连接多个下游节点）" />
+      <Handle id={OUTLINE_IMAGE_HANDLE} type="source" position={Position.Right} className="!border-0" style={{ top: '58%', background: PORT_COLOR.image }} title="输出：拆分过程中提取的配图（如有）" />
       <div className="pointer-events-none absolute right-2 top-[42%] z-10 -translate-y-1/2 text-[9px] font-semibold text-white/45">文本</div>
       <div className="pointer-events-none absolute right-2 top-[58%] z-10 -translate-y-1/2 text-[9px] font-semibold text-white/45">图片</div>
 

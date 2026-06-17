@@ -339,6 +339,7 @@ function ImageSlot({
         position={Position.Left}
         className="!h-3 !w-3 !border-0 !bg-cyan-300"
         style={{ top }}
+        title={`输入：${title} — ${subtitle}`}
       />
       <div className="rounded border border-white/10 bg-black/15 p-2">
         <div className="mb-1 flex items-center gap-1.5">
@@ -1004,7 +1005,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       }`}
       style={{ background: 'rgba(17,24,39,.96)', backdropFilter: 'blur(8px)' }}
     >
-      <Handle type="source" position={Position.Right} className="!bg-cyan-300 !border-0" />
+      <Handle type="source" position={Position.Right} className="!bg-cyan-300 !border-0" title="输出：展陈图生图结果（图像）" />
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex h-8 w-8 items-center justify-center rounded bg-cyan-300/15 text-cyan-200">
           <Boxes size={16} />

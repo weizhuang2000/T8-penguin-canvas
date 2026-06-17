@@ -267,8 +267,8 @@ const ExhibitionPromptNode = ({ id, data, selected }: NodeProps) => {
       }`}
       style={{ background: 'rgba(17,24,39,.94)', backdropFilter: 'blur(8px)' }}
     >
-      <Handle type="target" position={Position.Left} className="!bg-cyan-300 !border-0" />
-      <Handle type="source" position={Position.Right} className="!bg-cyan-300 !border-0" />
+      <Handle type="target" position={Position.Left} className="!bg-cyan-300 !border-0" title="输入：文本提示词或参考图像（可选）" />
+      <Handle type="source" position={Position.Right} className="!bg-cyan-300 !border-0" title="输出：组合后的展陈提示词文本" />
 
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex h-7 w-7 items-center justify-center rounded bg-cyan-300/15 text-cyan-200">

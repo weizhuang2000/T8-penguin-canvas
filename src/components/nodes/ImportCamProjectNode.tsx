@@ -248,7 +248,7 @@ const ImportCamProjectNode = ({ id, data, selected }: NodeProps) => {
           position={Position.Right}
           className="!border-0"
           style={{ background: accent, width: 11, height: 11 }}
-          title="导入后输出图像素材集"
+          title="输出：导入项目的图像素材集（可连接到图像类下游节点）"
         />
 
         <div className={`flex items-center gap-2 border-b px-3 py-2 ${isDark ? 'border-white/10' : 'border-black/10'}`}>
