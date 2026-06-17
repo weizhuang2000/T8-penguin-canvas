@@ -160,6 +160,20 @@ function firstImageFromData(data: any): string {
   return imagesFromData(data)[0] || '';
 }
 
+interface ExhibitReferenceInputImage {
+  id: string;
+  url: string;
+  label: string;
+}
+
+interface ExhibitReferenceItem extends ExhibitReferenceInputImage {
+  description: string;
+}
+
+function shortFileLabel(url: string, fallback = '展品') {
+  return (url.split('/').pop() || fallback).split('?')[0].slice(0, 28) || fallback;
+}
+
 function useInputImageByHandle(nodeId: string, handle: string, includeLegacySpace = false): string {
   const conns = useNodeConnections({ id: nodeId, handleType: 'target' });
   const sourceIds = useMemo(
@@ -177,6 +191,38 @@ function useInputImageByHandle(nodeId: string, handle: string, includeLegacySpac
       if (url) return url;
     }
     return '';
+  }, [nodesData]);
+}
+
+function useInputImagesByHandle(nodeId: string, handle: string): ExhibitReferenceInputImage[] {
+  const conns = useNodeConnections({ id: nodeId, handleType: 'target' });
+  const filteredConns = useMemo(
+    () => conns.filter((conn: any) => (conn.targetHandle || '') === handle),
+    [conns, handle],
+  );
+  const sourceIds = useMemo(
+    () => Array.from(new Set(filteredConns.map((conn: any) => conn.source).filter(Boolean))),
+    [filteredConns],
+  );
+  const nodesData = useNodesData(sourceIds);
+  return useMemo(() => {
+    const out: ExhibitReferenceInputImage[] = [];
+    const seen = new Set<string>();
+    const list = Array.isArray(nodesData) ? nodesData : [nodesData];
+    for (const node of list) {
+      const nodeIdValue = String((node as any)?.id || 'node');
+      const urls = imagesFromData((node as any)?.data || {});
+      urls.forEach((url, index) => {
+        if (!url || seen.has(url)) return;
+        seen.add(url);
+        out.push({
+          id: `${nodeIdValue}:exhibit-ref:${index}:${url}`,
+          url,
+          label: shortFileLabel(url, `展品参考 ${out.length + 1}`),
+        });
+      });
+    }
+    return out;
   }, [nodesData]);
 }
 
@@ -776,7 +822,19 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const pollAbortRef = useRef(false);
   const spaceImage = useInputImageByHandle(id, 'space', true);
   const colorMaterialReferenceImage = useInputImageByHandle(id, 'color-material-reference');
-  const exhibitReferenceImage = useInputImageByHandle(id, 'exhibit-reference');
+  const exhibitReferenceInputImages = useInputImagesByHandle(id, 'exhibit-reference');
+  const exhibitReferenceItems = useMemo(() => {
+    const saved: ExhibitReferenceItem[] = Array.isArray(d.exhibitReferenceItems) ? d.exhibitReferenceItems : [];
+    return exhibitReferenceInputImages.map((image, index) => {
+      const existing = saved.find((item) => item.url === image.url);
+      return existing
+        ? { ...existing, id: image.id, label: image.label }
+        : { ...image, description: '' };
+    });
+  }, [d.exhibitReferenceItems, exhibitReferenceInputImages]);
+  const exhibitReferenceImage = exhibitReferenceInputImages[0]?.url || '';
+  const exhibitReferenceImageUrls = useMemo(() => exhibitReferenceInputImages.map((img) => img.url), [exhibitReferenceInputImages]);
+  const hasExhibitReference = exhibitReferenceInputImages.length > 0;
   const hasColorMaterialReference = !!colorMaterialReferenceImage;
   const colorMaterialRecognitionDisabled = hasColorMaterialPreset || !hasColorMaterialReference;
   const effectiveColorMaterial = hasColorMaterialPreset || !hasColorMaterialReference ? combinedColorMaterial : '';
@@ -865,7 +923,8 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       excludeItems: selectedExcludeIds,
       excludeItemOptions: excludeOptions,
       hasSpaceImage: !!spaceImage,
-      hasExhibitReferenceImage: !!exhibitReferenceImage,
+      hasExhibitReferenceImage: hasExhibitReference,
+      exhibitReferenceItems,
       annotationTextEffective: d.annotationTextEffective === true,
       spaceSize: manualSpaceSize,
       viewControlEnabled,
@@ -874,7 +933,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       roundIndex: 1,
       total: generationCount,
     }),
-    [colorMaterial, colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPalette, colorMaterialPriorityMode, colorMaterialReferenceMode, colorMaterialReferenceTone, colorMaterialTextures, creativeBrief, d.annotationTextEffective, documentSummaryForImagePrompt, effectiveColorMaterial, exhibitReferenceImage, excludeOptions, generationCount, hasColorMaterialPreset, hasColorMaterialReference, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceType, viewAngleOptions, viewControlEnabled],
+    [colorMaterial, colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPalette, colorMaterialPriorityMode, colorMaterialReferenceMode, colorMaterialReferenceTone, colorMaterialTextures, creativeBrief, d.annotationTextEffective, documentSummaryForImagePrompt, effectiveColorMaterial, exhibitReferenceItems, excludeOptions, generationCount, hasColorMaterialPreset, hasColorMaterialReference, hasExhibitReference, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceType, viewAngleOptions, viewControlEnabled],
   );
 
   const renderMarkSettings = (
@@ -944,7 +1003,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   );
 
   useEffect(() => {
-    const refs = [spaceImage, colorMaterialReferenceImage, exhibitReferenceImage].filter(Boolean);
+    const refs = [spaceImage, colorMaterialReferenceImage, ...exhibitReferenceImageUrls].filter(Boolean);
     const patch = {
       prompt: previewPrompt,
       outputText: previewPrompt,
@@ -959,12 +1018,26 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     ) {
       update(patch);
     }
-  }, [colorMaterialReferenceImage, d.outputText, d.prompt, d.referenceImages, d.text, exhibitReferenceImage, previewPrompt, spaceImage, update]);
+  }, [colorMaterialReferenceImage, d.outputText, d.prompt, d.referenceImages, d.text, exhibitReferenceImageUrls, previewPrompt, spaceImage, update]);
 
   useEffect(() => {
     if (!inputDocumentText || d.sourceText === inputDocumentText) return;
     update({ sourceText: inputDocumentText, documentMeta: null });
   }, [d.sourceText, inputDocumentText, update]);
+
+  useEffect(() => {
+    const saved: ExhibitReferenceItem[] = Array.isArray(d.exhibitReferenceItems) ? d.exhibitReferenceItems : [];
+    const same = saved.length === exhibitReferenceItems.length
+      && saved.every((item, i) => item.url === exhibitReferenceItems[i].url && item.description === exhibitReferenceItems[i].description);
+    if (!same) update({ exhibitReferenceItems });
+  }, [d.exhibitReferenceItems, exhibitReferenceItems, update]);
+
+  const patchExhibitReferenceItem = useCallback((url: string, patch: Partial<Pick<ExhibitReferenceItem, 'description'>>) => {
+    const next = exhibitReferenceItems.map((item) =>
+      item.url === url ? { ...item, ...patch } : item
+    );
+    update({ exhibitReferenceItems: next });
+  }, [exhibitReferenceItems, update]);
 
   useEffect(() => {
     if (allowZhenzhenFallback || isExternalSelected || !firstImageAdvancedProvider) return;
@@ -1437,7 +1510,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           ? await createColorMaterialAbstractCardDataUrl(colorMaterialReferenceImage, colorMaterialMarkSettings)
           : await markImageDataUrl(colorMaterialReferenceImage, colorMaterialMarkSettings)
         : '';
-      const runtimeReferenceImages = [spaceImage, colorMaterialReferenceForModel, exhibitReferenceImage].filter(Boolean);
+      const runtimeReferenceImages = [spaceImage, colorMaterialReferenceForModel, ...exhibitReferenceImageUrls].filter(Boolean);
       let sharedBrief = creativeBrief;
       if (!regenerateEachTime) {
         if (!sharedBrief) {
@@ -1515,7 +1588,8 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           excludeItems: selectedExcludeIds,
           excludeItemOptions: excludeOptions,
           hasSpaceImage: !!spaceImage,
-          hasExhibitReferenceImage: !!exhibitReferenceImage,
+          hasExhibitReferenceImage: hasExhibitReference,
+          exhibitReferenceItems,
           annotationTextEffective: d.annotationTextEffective === true,
           spaceSize: manualSpaceSize,
           viewControlEnabled,
@@ -1591,7 +1665,8 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     colorMaterialTextures,
     inspiration,
     effectiveColorMaterial,
-    exhibitReferenceImage,
+    exhibitReferenceImageUrls,
+    exhibitReferenceItems,
     hasColorMaterialPreset,
     isReadonly,
     manualSpaceSize,
@@ -1778,14 +1853,27 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                 <ImageIcon size={12} />
                 展品参考图
               </div>
-              {exhibitReferenceImage ? (
-                <>
-                  <img src={exhibitReferenceImage} alt="" className="h-24 w-full rounded border border-white/10 object-contain" draggable={false} />
-                  <div className="mt-1 truncate text-[9px] text-white/40" title={exhibitReferenceImage}>{exhibitReferenceImage.split('/').pop() || exhibitReferenceImage}</div>
-                </>
-              ) : (
+              {exhibitReferenceItems.length === 0 ? (
                 <div className="flex h-24 items-center justify-center rounded border border-dashed border-white/15 px-2 text-center text-[10px] leading-snug text-white/35">
                   连接展品外观与主题参考图
+                </div>
+              ) : (
+                <div className="max-h-64 space-y-1.5 overflow-y-auto">
+                  {exhibitReferenceItems.map((item, index) => (
+                    <div key={item.url} className="grid grid-cols-[54px_minmax(0,1fr)] items-start gap-1.5 rounded border border-white/10 bg-black/15 p-1.5">
+                      <img src={item.url} alt="" className="h-12 w-12 rounded border border-white/10 object-cover" draggable={false} />
+                      <div className="min-w-0">
+                        <input
+                          className={FIELD}
+                          value={item.description}
+                          disabled={isReadonly || busy}
+                          placeholder={`展品 ${index + 1} 特征描述，如"红色的茶壶"`}
+                          onChange={(event) => patchExhibitReferenceItem(item.url, { description: event.target.value })}
+                        />
+                        <div className="mt-0.5 truncate text-[9px] text-white/35" title={item.url}>{item.label}</div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

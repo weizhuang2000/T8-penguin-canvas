@@ -13,12 +13,12 @@ test('exhibition creative node exposes color/material and exhibit reference hand
   assert.match(nodeSource, /id="color-material-reference"/);
   assert.match(nodeSource, /id="exhibit-reference"/);
   assert.match(nodeSource, /useInputImageByHandle\(id, 'color-material-reference'\)/);
-  assert.match(nodeSource, /useInputImageByHandle\(id, 'exhibit-reference'\)/);
+  assert.match(nodeSource, /useInputImagesByHandle\(id, 'exhibit-reference'\)/);
 });
 
 test('exhibition creative node disables manual color material inputs when reference image is connected', () => {
   assert.match(nodeSource, /已由接入的色彩与材质参考图接管/);
-  assert.match(nodeSource, /disabled=\{isReadonly \|\| busy \|\| hasColorMaterialReference\}/);
+  assert.match(nodeSource, /disabled=\{isReadonly \|\| busy \|\| hasColorMaterialReference/);
   assert.match(nodeSource, /colorMaterial: effectiveColorMaterial/);
   assert.match(nodeSource, /hasColorMaterialReferenceImage: hasColorMaterialReference/);
 });
@@ -30,7 +30,7 @@ test('exhibition creative node creates transient marked data urls without save A
   assert.match(nodeSource, /const colorMaterialReferenceForModel = colorMaterialReferenceImage/);
   assert.match(nodeSource, /await createColorMaterialAbstractCardDataUrl\(colorMaterialReferenceImage, colorMaterialMarkSettings\)/);
   assert.match(nodeSource, /await markImageDataUrl\(colorMaterialReferenceImage, colorMaterialMarkSettings\)/);
-  assert.match(nodeSource, /const runtimeReferenceImages = \[spaceImage, colorMaterialReferenceForModel, exhibitReferenceImage\]\.filter\(Boolean\)/);
+  assert.match(nodeSource, /const runtimeReferenceImages = \[spaceImage, colorMaterialReferenceForModel, \.\.\.exhibitReferenceImageUrls\]\.filter\(Boolean\)/);
   assert.match(nodeSource, /colorMaterialReferenceMode: ColorMaterialReferenceMode = useColorMaterialAbstractCard \? 'abstract-card' : 'marked-image'/);
   assert.match(nodeSource, /images: referenceImages/);
   assert.doesNotMatch(nodeSource, /markedSpaceImage/);

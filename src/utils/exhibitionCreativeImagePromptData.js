@@ -231,7 +231,8 @@ function exhibitionCreativeDeepeningRequirement(spaceType) {
 function exhibitionCreativeInputImagesText(values) {
   const hasSpaceImage = values.hasSpaceImage !== false;
   const hasColorMaterialReferenceImage = values.hasColorMaterialReferenceImage === true;
-  const hasExhibitReferenceImage = values.hasExhibitReferenceImage === true;
+  const exhibitReferenceItems = Array.isArray(values.exhibitReferenceItems) ? values.exhibitReferenceItems : [];
+  const hasExhibitReferenceImage = exhibitReferenceItems.length > 0 || values.hasExhibitReferenceImage === true;
   const colorMaterialReferenceMode = values.colorMaterialReferenceMode === 'abstract-card' ? 'abstract-card' : 'marked-image';
   const colorMaterialReferenceMarkText = exhibitionCreativeReferenceMarkText(values.colorMaterialReferenceMarkText, '图2');
   const colorMaterialReferenceMarkPositionText = exhibitionCreativeMarkPositionText(values.colorMaterialReferenceMarkPosition);
@@ -249,7 +250,16 @@ function exhibitionCreativeInputImagesText(values) {
     index += 1;
   }
   if (hasExhibitReferenceImage) {
-    roles.push(`图${index}=展品参考图，只用于提取展品外观、内容主题、体量关系和展示重点，不作为空间结构或色彩材质体系依据`);
+    if (exhibitReferenceItems.length > 0) {
+      exhibitReferenceItems.forEach((item, i) => {
+        const desc = typeof item.description === 'string' ? item.description.trim() : '';
+        const label = desc ? `${desc}参考图做为主要展品参考素材` : '展品参考图';
+        roles.push(`图${index}=${label}，只用于提取展品外观、内容主题、体量关系和展示重点，不作为空间结构或色彩材质体系依据`);
+        index += 1;
+      });
+    } else {
+      roles.push(`图${index}=展品参考图，只用于提取展品外观、内容主题、体量关系和展示重点，不作为空间结构或色彩材质体系依据`);
+    }
   }
   if (roles.length > 0) return roles.join('；');
   return '无输入图；按手动空间尺寸、项目资料和创意描述生成。';
@@ -317,7 +327,8 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   const excludeItemsText = exhibitionCreativeExcludeItemsText(values.excludeItems, values.excludeItemOptions);
   const annotationTextEffective = values.annotationTextEffective === true;
   const hasSpaceImage = values.hasSpaceImage !== false;
-  const hasExhibitReferenceImage = values.hasExhibitReferenceImage === true;
+  const exhibitReferenceItems = Array.isArray(values.exhibitReferenceItems) ? values.exhibitReferenceItems : [];
+  const hasExhibitReferenceImage = exhibitReferenceItems.length > 0 || values.hasExhibitReferenceImage === true;
   const spaceSizeText = exhibitionCreativeSpaceSizeText(values.spaceSize);
   const viewAnglesText = values.viewControlEnabled ? exhibitionCreativeViewAnglesText(values.viewAngles, values.viewAngleOptions) : '';
   const viewSentence = viewAnglesText ? `${viewAnglesText}；` : '';

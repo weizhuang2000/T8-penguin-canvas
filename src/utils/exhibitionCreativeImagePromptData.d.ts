@@ -62,6 +62,7 @@ export interface ExhibitionCreativeImagePromptValues extends ExhibitionCreativeB
   colorMaterialReferenceMarkText?: string;
   colorMaterialReferenceMarkPosition?: string;
   hasExhibitReferenceImage?: boolean;
+  exhibitReferenceItems?: Array<{ id?: string; url: string; label?: string; description?: string }>;
   annotationTextEffective?: boolean;
   spaceSize?: {
     width?: number | string;
