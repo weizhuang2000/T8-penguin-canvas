@@ -609,11 +609,12 @@ function viewAnglePresetEditorText(presets: ExhibitionCreativeViewAnglePresetIte
 function colorPresetEditorText(presets: ElevationColorMaterialPresetItem[]): string {
   return presets
     .map((preset) => {
+      const category = String(preset.category || '默认').trim() || '默认';
       const core = String(preset.core || '').trim();
       const features = String(preset.features || '').trim();
       const usage = String(preset.usage || '').trim();
-      if (core || features || usage) return [preset.label, core, features, usage].join('｜');
-      return preset.info ? `${preset.label}｜${preset.info}` : preset.label;
+      if (core || features || usage) return [category, preset.label, core, features, usage].join('｜');
+      return [category, preset.label, preset.info || '', '', ''].join('｜');
     })
     .join('\n');
 }
@@ -624,9 +625,12 @@ function parseColorPresetEditorText(text: string) {
     .map((line, index) => {
       const raw = line.trim();
       if (!raw) return null;
-      const [labelRaw, ...rest] = raw.split(/[｜|]/);
-      const label = String(labelRaw || '').trim();
+      const parts = raw.split(/[｜|]/).map((part) => String(part || '').trim());
+      const hasCategory = parts.length >= 5;
+      const category = String(hasCategory ? parts[0] : '默认').trim() || '默认';
+      const label = String(hasCategory ? parts[1] : (parts[0] || '')).trim();
       if (!label) return null;
+      const rest = hasCategory ? parts.slice(2) : parts.slice(1);
       const core = String(rest[0] || '').trim();
       const features = String(rest[1] || '').trim();
       const usage = rest.slice(2).join('｜').trim();
@@ -635,6 +639,7 @@ function parseColorPresetEditorText(text: string) {
         : rest.join('｜').trim();
       return {
         id: `${label.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'preset'}-${index + 1}`,
+        category,
         label,
         core,
         features,
@@ -643,7 +648,7 @@ function parseColorPresetEditorText(text: string) {
         order: index,
       };
     })
-    .filter(Boolean) as Array<{ id: string; label: string; core: string; features: string; usage: string; info: string; order: number }>;
+    .filter(Boolean) as Array<{ id: string; category: string; label: string; core: string; features: string; usage: string; info: string; order: number }>;
 }
 
 function colorMaterialTextFromPreset(preset: ElevationColorMaterialPresetItem): string {
@@ -653,6 +658,17 @@ function colorMaterialTextFromPreset(preset: ElevationColorMaterialPresetItem): 
     String(preset.features || '').trim(),
   ].filter(Boolean);
   return values.join('，');
+}
+
+function groupColorMaterialPresets(presets: ElevationColorMaterialPresetItem[]) {
+  const groups = new Map<string, ElevationColorMaterialPresetItem[]>();
+  for (const preset of presets) {
+    const category = String(preset.category || '默认').trim() || '默认';
+    const list = groups.get(category) || [];
+    list.push(preset);
+    groups.set(category, list);
+  }
+  return Array.from(groups.entries()).map(([category, items]) => ({ category, items }));
 }
 
 function colorPaletteTextFromPreset(preset: ElevationColorMaterialPresetItem): string {
@@ -1953,10 +1969,14 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               }}
             >
               <option value="">不使用色彩与材质预设</option>
-              {colorMaterialPresets.map((preset) => (
-                <option key={preset.id} value={preset.id} title={preset.info}>
-                  {preset.label}
-                </option>
+              {groupColorMaterialPresets(colorMaterialPresets).map((group) => (
+                <optgroup key={group.category} label={group.category}>
+                  {group.items.map((preset) => (
+                    <option key={preset.id} value={preset.id} title={preset.info}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
             {selectedColorMaterialPreset?.info && (
@@ -1971,7 +1991,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             )}
             {canManageTeam && colorMaterialEditorOpen && (
               <div className="space-y-1.5 rounded border border-cyan-300/15 bg-cyan-300/5 p-2">
-                <div className="text-[10px] text-white/45">每行一个预设：名称｜Color palette｜Materials/textures｜适用提示。输出提示词会分别写入对应字段。</div>
+                <div className="text-[10px] text-white/45">每行格式：分类｜名称｜Color palette｜Materials/textures｜适用；分类可直接修改或新增。旧格式“名称｜Color palette｜Materials/textures｜适用”会归入默认分类。</div>
                 <textarea
                   className={`${FIELD} min-h-[120px] resize-y font-mono`}
                   value={colorMaterialEditorValue}

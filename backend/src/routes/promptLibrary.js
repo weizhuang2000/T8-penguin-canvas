@@ -212,8 +212,10 @@ function normalizeElevationPresetList(value) {
       const core = safeText(raw?.core, 1200) || splitInfo.core;
       const features = safeText(raw?.features, 1600) || splitInfo.features;
       const usage = safeText(raw?.usage, 1200) || splitInfo.usage;
+      const category = safeText(raw?.category || raw?.group || raw?.type, 80) || '默认';
       return {
         id,
+        category,
         label,
         core,
         features,

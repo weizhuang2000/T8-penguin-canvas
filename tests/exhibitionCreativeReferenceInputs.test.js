@@ -31,6 +31,14 @@ test('exhibition creative color material preset and reference input stay mutuall
   assert.match(nodeSource, /if \(presetId\) disconnectColorMaterialReferenceInput\(\);/);
 });
 
+test('exhibition creative color material presets support editable categories', () => {
+  assert.match(nodeSource, /category = String\(preset\.category \|\| '默认'\)/);
+  assert.match(nodeSource, /function groupColorMaterialPresets/);
+  assert.match(nodeSource, /<optgroup key=\{group\.category\} label=\{group\.category\}>/);
+  assert.match(nodeSource, /分类｜名称｜Color palette｜Materials\/textures｜适用/);
+  assert.match(nodeSource, /category,/);
+});
+
 test('exhibition creative node creates transient marked data urls without save APIs', () => {
   assert.match(nodeSource, /canvas\.toDataURL\('image\/png'\)/);
   assert.match(nodeSource, /createColorMaterialAbstractCardDataUrl/);
