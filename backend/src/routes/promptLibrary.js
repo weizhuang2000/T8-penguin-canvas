@@ -225,7 +225,6 @@ function normalizeElevationPresetList(value) {
       };
     })
     .filter(Boolean)
-    .slice(0, 80)
     .sort((a, b) => (a.order || 0) - (b.order || 0))
     .map((item, index) => ({ ...item, order: index }));
 }

@@ -54,6 +54,7 @@ test('color material preset editor modal supports category and batch operations'
   assert.match(presetModalSource, /moveSelected/);
   assert.match(presetModalSource, /deleteSelected/);
   assert.match(presetModalSource, /parseRawText/);
+  assert.match(presetModalSource, /sourceDrafts = editMode === 'raw' \? parseRawText\(rawText\) : drafts/);
   assert.match(presetModalSource, /选择当前列表/);
   assert.match(presetModalSource, /批量移动/);
   assert.match(presetModalSource, /批量删除/);

@@ -261,14 +261,15 @@ export default function ColorMaterialPresetEditorModal({
   };
 
   const save = async () => {
-    const next = drafts
+    const sourceDrafts = editMode === 'raw' ? parseRawText(rawText) : drafts;
+    const next = sourceDrafts
       .map((item, index) => toSaveItem(item, index))
       .filter((item) => item.label);
     if (next.length === 0) {
       setLocalError('请至少保留一个有效预设。');
       return;
     }
-    if (next.length !== drafts.length) {
+    if (next.length !== sourceDrafts.length) {
       setLocalError('存在未填写名称的预设，请补全名称或删除。');
       return;
     }
