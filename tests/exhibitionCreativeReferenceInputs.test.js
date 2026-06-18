@@ -8,6 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const nodeSource = fs.readFileSync(path.join(root, 'src/components/nodes/ExhibitionCreativeImageNode.tsx'), 'utf8');
 const presetModalSource = fs.readFileSync(path.join(root, 'src/components/nodes/ColorMaterialPresetEditorModal.tsx'), 'utf8');
+const presetSelectSource = fs.readFileSync(path.join(root, 'src/components/nodes/ColorMaterialPresetSelect.tsx'), 'utf8');
 
 test('exhibition creative node exposes color/material and exhibit reference handles', () => {
   assert.match(nodeSource, /id="space"/);
@@ -33,14 +34,16 @@ test('exhibition creative color material preset and reference input stay mutuall
 });
 
 test('exhibition creative color material presets support editable categories', () => {
-  assert.match(nodeSource, /category = String\(preset\.category \|\| '默认'\)/);
-  assert.match(nodeSource, /function groupColorMaterialPresets/);
-  assert.match(nodeSource, /activeColorMaterialPresetCategory/);
-  assert.match(nodeSource, /renderColorMaterialPresetOptions/);
-  assert.match(nodeSource, /text-rose-300/);
-  assert.match(nodeSource, /presetId\.startsWith\('__category__'\)/);
+  assert.match(nodeSource, /ColorMaterialPresetSelect/);
   assert.match(nodeSource, /ColorMaterialPresetEditorModal/);
   assert.match(nodeSource, /category,/);
+  assert.match(presetSelectSource, /function groupPresets/);
+  assert.match(presetSelectSource, /expandedCategory/);
+  assert.match(presetSelectSource, /setExpandedCategory\(group\.category\)/);
+  assert.match(presetSelectSource, /text-rose-300/);
+  assert.match(presetSelectSource, /type="button"/);
+  assert.doesNotMatch(presetSelectSource, /__category__/);
+  assert.doesNotMatch(nodeSource, /presetId\.startsWith\('__category__'\)/);
 });
 
 test('color material preset editor modal supports category and batch operations', () => {

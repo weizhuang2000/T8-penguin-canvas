@@ -44,6 +44,7 @@ import { useCanvasStore } from '../../stores/canvas';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
+import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
@@ -129,57 +130,6 @@ function colorMaterialTextFromPreset(preset: ElevationColorMaterialPresetItem): 
     String(preset.features || '').trim(),
   ].filter(Boolean);
   return values.join('，');
-}
-
-function groupColorMaterialPresets(presets: ElevationColorMaterialPresetItem[]) {
-  const groups = new Map<string, ElevationColorMaterialPresetItem[]>();
-  for (const preset of presets) {
-    const category = String(preset.category || '默认').trim() || '默认';
-    const list = groups.get(category) || [];
-    list.push(preset);
-    groups.set(category, list);
-  }
-  return Array.from(groups.entries()).map(([category, items]) => ({ category, items }));
-}
-
-function activeColorMaterialPresetCategory(
-  presets: ElevationColorMaterialPresetItem[],
-  presetId: unknown,
-): string {
-  const selected = presets.find((preset) => preset.id === presetId);
-  const fallback = presets[0]?.category || '默认';
-  return String(selected?.category || fallback || '默认').trim() || '默认';
-}
-
-function renderColorMaterialPresetOptions(
-  presets: ElevationColorMaterialPresetItem[],
-  activeCategory: string,
-) {
-  return groupColorMaterialPresets(presets).flatMap((group) => {
-    const collapsed = group.category !== activeCategory;
-    if (collapsed) {
-      return [
-        <option
-          key={`category-${group.category}`}
-          value={`__category__${group.category}`}
-          disabled
-          className="bg-zinc-950 font-semibold text-rose-300"
-        >
-          {group.category}
-        </option>,
-      ];
-    }
-    return [
-      <option key={`category-${group.category}`} value={`__category__${group.category}`} disabled className="bg-zinc-950 font-semibold text-rose-300">
-        {group.category}
-      </option>,
-      ...group.items.map((preset) => (
-        <option key={preset.id} value={preset.id} title={preset.info}>
-          {preset.label}
-        </option>
-      )),
-    ];
-  });
 }
 
 function buildColorMaterialPresetPayload(presets: ElevationColorMaterialPresetItem[]) {
@@ -925,26 +875,18 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
             </select>
             <input className={FIELD} value={d.visualStyle || ''} disabled={isReadonly} placeholder="视觉风格" onChange={(event) => update({ visualStyle: event.target.value })} />
           </div>
-          <select
+          <ColorMaterialPresetSelect
             className={`${FIELD} mt-1`}
+            presets={colorMaterialPresets}
             value={d.colorMaterialPreset || ''}
             disabled={isReadonly}
-            onChange={(event) => {
-              const presetId = event.target.value;
-              if (presetId.startsWith('__category__')) return;
-              const preset = colorMaterialPresets.find((item) => item.id === presetId);
+            onChange={(presetId, preset) => {
               update({
                 colorMaterialPreset: presetId,
                 ...(preset ? { colorMaterial: colorMaterialTextFromPreset(preset) } : {}),
               });
             }}
-          >
-            <option value="">不使用色彩与材质预设</option>
-            {renderColorMaterialPresetOptions(
-              colorMaterialPresets,
-              activeColorMaterialPresetCategory(colorMaterialPresets, d.colorMaterialPreset),
-            )}
-          </select>
+          />
           {selectedColorMaterialPreset?.info && (
             <div className="mt-1 rounded border border-cyan-300/15 bg-cyan-300/10 px-2 py-1 text-[10px] leading-relaxed text-cyan-50/75">
               {selectedColorMaterialPreset.info}
