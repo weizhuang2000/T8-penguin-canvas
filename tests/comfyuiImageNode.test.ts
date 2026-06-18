@@ -23,6 +23,13 @@ test('ImageNode hides default image prompt and reference UI when ComfyUI is sele
   assert.match(imageNodeSource, /\{!isComfyExternal && <div>[\s\S]*本地 Prompt\(可选,优先取上游 text\)/);
 });
 
+test('ImageNode local prompt uses native textarea for stable IME input', () => {
+  const localPromptBlock = imageNodeSource.match(/\{!isComfyExternal && <div>[\s\S]*?title="图像 Prompt"[\s\S]*?<\/div>\}/)?.[0] || '';
+  assert.match(localPromptBlock, /<PromptTextarea/);
+  assert.match(localPromptBlock, /onValueChange=\{\(value\) => update\(\{ prompt: value, promptMentions: \[\] \}\)\}/);
+  assert.doesNotMatch(localPromptBlock, /<MentionPromptInput/);
+});
+
 test('ComfyUI source labels include positive prompt and media inputs', () => {
   assert.match(comfyAppsSource, /positive: '正向 Prompt'/);
   assert.match(comfyAppsSource, /image1: '图片输入 1'/);
