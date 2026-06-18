@@ -100,6 +100,8 @@ test('prompt template library supports custom management, import/export, and res
   assert.match(service, /importPromptTemplateBackup/);
   assert.match(service, /customCategories/);
   assert.match(service, /hiddenBuiltInIds/);
+  assert.match(service, /ownerUserId/);
+  assert.match(service, /ownerPatch/);
   assert.match(service, /normalizePromptTemplateAttachments/);
   assert.match(service, /createPromptTemplateFromMaterial/);
 
@@ -111,6 +113,9 @@ test('prompt template library supports custom management, import/export, and res
   assert.match(modal, /handleImport/);
   assert.match(modal, /handleExport/);
   assert.match(modal, /deleteSelected/);
+  assert.match(modal, /canManageAllTemplates/);
+  assert.match(modal, /canEditSelected/);
+  assert.match(modal, /api\.getCurrentUser/);
   assert.match(modal, /addCategory/);
   assert.match(modal, /renameCategory/);
   assert.match(modal, /deleteCategory/);
@@ -177,6 +182,7 @@ test('generated materials can be saved to prompt templates from context menu', (
 
   assert.match(contextMenu, /保存到提示词模板库/);
   assert.match(contextMenu, /createPromptTemplateFromMaterial/);
+  assert.match(contextMenu, /owner:\s*currentUser/);
   assert.match(contextMenu, /penguin:prompt-templates-changed/);
 
   for (const file of [image, video, seedance, audio, output, llm]) {

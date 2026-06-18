@@ -23,6 +23,8 @@ export interface PromptTemplateCategory {
   descriptionEn: string;
   order: number;
   builtIn?: boolean;
+  ownerUserId?: string;
+  ownerName?: string;
 }
 
 export interface PromptTemplateItem {
@@ -41,6 +43,8 @@ export interface PromptTemplateItem {
   attachments?: PromptTemplateAttachment[];
   source: PromptTemplateSource;
   builtIn?: boolean;
+  ownerUserId?: string;
+  ownerName?: string;
   createdAt?: string;
   updatedAt?: string;
 }

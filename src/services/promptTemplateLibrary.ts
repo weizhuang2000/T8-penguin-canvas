@@ -33,6 +33,11 @@ export interface PromptTemplateBackup {
   hiddenBuiltInIds: string[];
 }
 
+export interface PromptTemplateOwner {
+  id: string;
+  name?: string;
+}
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -61,6 +66,32 @@ function cleanId(value: unknown, fallback = '') {
 
 function cleanText(value: unknown, fallback = '', limit = 20000) {
   return String(value ?? fallback).trim().slice(0, limit);
+}
+
+function cleanOwnerId(value: unknown) {
+  return cleanText(value, '', 96);
+}
+
+function cleanOwnerName(value: unknown) {
+  return cleanText(value, '', 120);
+}
+
+function ownerPatch(owner?: PromptTemplateOwner | null) {
+  const ownerUserId = cleanOwnerId(owner?.id);
+  if (!ownerUserId) return {};
+  return {
+    ownerUserId,
+    ownerName: cleanOwnerName(owner?.name || ownerUserId),
+  };
+}
+
+function normalizeOwner(raw: any): PromptTemplateOwner | null {
+  const id = cleanOwnerId(raw?.ownerUserId || raw?.ownerId || raw?.createdByUserId);
+  if (!id) return null;
+  return {
+    id,
+    name: cleanOwnerName(raw?.ownerName || raw?.createdByUserName || raw?.owner || raw?.createdBy),
+  };
 }
 
 function normalizeKind(value: unknown): PromptTemplateKind | '' {
@@ -101,6 +132,7 @@ function normalizeCustomCategory(raw: any, index: number): PromptTemplateCategor
     descriptionEn: cleanText(raw?.descriptionEn, 'My category', 240),
     order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : 1000 + index,
     builtIn: false,
+    ...ownerPatch(normalizeOwner(raw)),
   };
 }
 
@@ -141,6 +173,7 @@ export function createCustomPromptTemplate(input: {
   tags?: string[];
   attachments?: PromptTemplateAttachment[];
   id?: string;
+  owner?: PromptTemplateOwner | null;
 }): PromptTemplateItem {
   const titleZh = cleanText(input.titleZh, '我的提示词模板', 120) || '我的提示词模板';
   const promptZh = cleanText(input.promptZh, '', 30000);
@@ -162,6 +195,7 @@ export function createCustomPromptTemplate(input: {
     attachments: normalizePromptTemplateAttachments(input.attachments),
     source: 'custom',
     builtIn: false,
+    ...ownerPatch(input.owner),
     createdAt: stamp,
     updatedAt: stamp,
   };
@@ -186,6 +220,7 @@ function normalizeCustomItem(raw: any, index: number): PromptTemplateItem | null
     negativeEn: cleanText(raw?.negativeEn, raw?.negativeZh || raw?.negative || '', 10000),
     tags: Array.isArray(raw?.tags) ? raw.tags : [],
     attachments: normalizePromptTemplateAttachments(raw?.attachments || raw?.media || raw?.materials),
+    owner: normalizeOwner(raw),
   });
   item.createdAt = cleanText(raw?.createdAt, item.createdAt, 40);
   item.updatedAt = cleanText(raw?.updatedAt, item.updatedAt, 40);
@@ -203,6 +238,7 @@ export function createPromptTemplateFromMaterial(input: {
   categoryId?: string;
   sourceNodeId?: string;
   mime?: string;
+  owner?: PromptTemplateOwner | null;
 }): PromptTemplateItem {
   const mediaKind = normalizeAttachmentKind(input.mediaKind) || 'image';
   const templateKind = normalizeKind(input.templateKind) || promptTemplateKindFromAttachmentKind(mediaKind);
@@ -221,6 +257,7 @@ export function createPromptTemplateFromMaterial(input: {
     negativeZh: cleanText(input.negative, '', 10000),
     negativeEn: cleanText(input.negative, '', 10000),
     tags: ['我的模板', mediaKind === 'image' ? '图像参考' : mediaKind === 'video' ? '视频参考' : '音频参考'],
+    owner: input.owner,
     attachments: [
       {
         id: `att-${mediaKind}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,

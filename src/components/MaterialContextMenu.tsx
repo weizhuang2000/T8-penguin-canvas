@@ -112,6 +112,7 @@ export default function MaterialContextMenu(_props: MaterialContextMenuProps) {
   const [artistStyleDraft, setArtistStyleDraft] = useState<ArtistStyleDraft | null>(null);
   const [animeTagDraft, setAnimeTagDraft] = useState<AnimeTagDraft | null>(null);
   const [copyingImage, setCopyingImage] = useState(false);
+  const [currentUser, setCurrentUser] = useState<api.AuthUser | null>(null);
 
   const close = useCallback(() => {
     setMenu(null);
@@ -137,6 +138,7 @@ export default function MaterialContextMenu(_props: MaterialContextMenuProps) {
   }, []);
 
   useEffect(() => {
+    api.getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
     const onContext = (e: MouseEvent) => {
       const target = e.target instanceof HTMLElement ? e.target : null;
       const source = target?.closest('[data-drag-source]') as HTMLElement | null;
@@ -293,11 +295,12 @@ export default function MaterialContextMenu(_props: MaterialContextMenuProps) {
       templateKind: menu.promptTemplateKind,
       categoryId: selectedPromptCategoryId,
       sourceNodeId: menu.sourceNodeId,
+      owner: currentUser ? { id: currentUser.id, name: currentUser.name || currentUser.username || currentUser.id } : null,
     });
     const current = loadPromptTemplateUserState();
     savePromptTemplateUserState({
       ...current,
-      customItems: [item, ...current.customItems],
+      customItems: [item, ...current.customItems.filter((tpl) => tpl.id !== item.id)],
     });
     window.dispatchEvent(new CustomEvent('penguin:prompt-templates-changed', { detail: { id: item.id } }));
     setMessage(`已保存到提示词模板库：${item.titleZh}`);

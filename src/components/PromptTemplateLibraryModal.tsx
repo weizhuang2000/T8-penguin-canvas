@@ -43,6 +43,7 @@ import {
   savePromptTemplateUserState,
   type PromptTemplateUserState,
 } from '../services/promptTemplateLibrary';
+import type { AuthUser } from '../services/api';
 import * as api from '../services/api';
 import ImageHoverPreview from './ImageHoverPreview';
 import SmartImage from './SmartImage';
@@ -55,6 +56,7 @@ interface PromptTemplateLibraryModalProps {
   onClose: () => void;
   isDark: boolean;
   isPixel: boolean;
+  currentUser?: AuthUser | null;
 }
 
 type SourceFilter = 'all' | 'builtin' | 'mine';
@@ -122,17 +124,30 @@ function sourceLabel(item: PromptTemplateItem, language: PromptTemplateLanguage)
   return language === 'en' ? 'Built-in' : '内置';
 }
 
+function isManagerRole(role?: string) {
+  return role === 'admin' || role === 'manager';
+}
+
+function normalizeOwnerLabel(user?: AuthUser | null) {
+  return user?.name || user?.username || user?.id || '';
+}
+
 function categoryFallback(kind: PromptTemplateKind) {
   return kind === 'image' ? 'image-portrait-character' : 'video-cinematic-shot';
 }
 
-function makeEditDraft(item: PromptTemplateItem | null, kind: PromptTemplateKind, categoryId: string): EditDraft {
+function makeEditDraft(
+  item: PromptTemplateItem | null,
+  kind: PromptTemplateKind,
+  categoryId: string,
+  allowDirectEdit = false,
+): EditDraft {
   return {
-    id: item?.source === 'custom' ? item.id : undefined,
+    id: item && allowDirectEdit ? item.id : undefined,
     kind: item?.kind || kind,
     categoryId: item?.categoryId || categoryId || categoryFallback(kind),
-    titleZh: item?.source === 'custom' ? item.titleZh : (item ? `${item.titleZh} 副本` : '我的提示词模板'),
-    titleEn: item?.source === 'custom' ? item.titleEn : (item ? `${item.titleEn || item.titleZh} Copy` : 'My Prompt Template'),
+    titleZh: item && allowDirectEdit ? item.titleZh : (item ? `${item.titleZh} 副本` : '我的提示词模板'),
+    titleEn: item && allowDirectEdit ? item.titleEn : (item ? `${item.titleEn || item.titleZh} Copy` : 'My Prompt Template'),
     descriptionZh: item?.descriptionZh || '',
     descriptionEn: item?.descriptionEn || '',
     promptZh: item?.promptZh || '',
@@ -164,6 +179,7 @@ export default function PromptTemplateLibraryModal({
   onClose,
   isDark,
   isPixel,
+  currentUser,
 }: PromptTemplateLibraryModalProps) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [state, setState] = useState<PromptTemplateUserState>(() => loadPromptTemplateUserState());
@@ -176,6 +192,9 @@ export default function PromptTemplateLibraryModal({
   const [message, setMessage] = useState('');
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
   const [busy, setBusy] = useState('');
+  const [loadedUser, setLoadedUser] = useState<AuthUser | null>(currentUser || null);
+  const canManageAllTemplates = isManagerRole(loadedUser?.role);
+  const currentUserId = String(loadedUser?.id || '');
 
   useEffect(() => {
     if (open) {
@@ -185,8 +204,13 @@ export default function PromptTemplateLibraryModal({
       setActiveKind(initialKind);
       setMessage('');
       setEditDraft(null);
+      if (currentUser) {
+        setLoadedUser(currentUser);
+      } else {
+        api.getCurrentUser().then(setLoadedUser).catch(() => setLoadedUser(null));
+      }
     }
-  }, [initialKind, open]);
+  }, [currentUser, initialKind, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -214,8 +238,15 @@ export default function PromptTemplateLibraryModal({
   }, [categories, categoryId]);
 
   const hidden = useMemo(() => new Set(state.hiddenBuiltInIds), [state.hiddenBuiltInIds]);
-  const builtIn = useMemo(() => getBuiltInPromptTemplates().filter((item) => !hidden.has(item.id)), [hidden]);
-  const allItems = useMemo(() => [...builtIn, ...state.customItems], [builtIn, state.customItems]);
+  const allBuiltInTemplates = useMemo(() => getBuiltInPromptTemplates(), []);
+  const builtIn = useMemo(() => allBuiltInTemplates.filter((item) => !hidden.has(item.id)), [allBuiltInTemplates, hidden]);
+  const builtInIds = useMemo(() => new Set(allBuiltInTemplates.map((item) => item.id)), [allBuiltInTemplates]);
+  const allItems = useMemo(() => {
+    const customById = new Map(state.customItems.map((item) => [item.id, item]));
+    const mergedBuiltIn = builtIn.map((item) => customById.get(item.id) || item);
+    const customOnly = state.customItems.filter((item) => !builtInIds.has(item.id));
+    return [...mergedBuiltIn, ...customOnly];
+  }, [builtIn, builtInIds, state.customItems]);
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     allItems
@@ -232,19 +263,27 @@ export default function PromptTemplateLibraryModal({
     return allItems
       .filter((item) => item.kind === activeKind)
       .filter((item) => categoryId === 'all' || item.categoryId === categoryId)
-      .filter((item) => sourceFilter === 'all' || (sourceFilter === 'mine' ? item.source === 'custom' : item.source !== 'custom'))
+      .filter((item) => sourceFilter === 'all' || (sourceFilter === 'mine'
+        ? item.source === 'custom' && !!item.ownerUserId && String(item.ownerUserId) === currentUserId
+        : item.source !== 'custom' || builtInIds.has(item.id)))
       .filter((item) => !q || textForSearch(item).includes(q))
       .sort((a, b) => {
         const sourceWeight = (item: PromptTemplateItem) => (item.source === 'infinite-canvas' ? 0 : item.source === 'custom' ? 1 : 2);
         return sourceWeight(a) - sourceWeight(b) || getPromptTemplateTitle(a, language).localeCompare(getPromptTemplateTitle(b, language));
       })
       .slice(0, 320);
-  }, [activeKind, allItems, categoryId, language, search, sourceFilter]);
+  }, [activeKind, allItems, builtInIds, categoryId, currentUserId, language, search, sourceFilter]);
 
   const selected = useMemo(
     () => visibleItems.find((item) => item.id === selectedId) || visibleItems[0] || null,
     [selectedId, visibleItems],
   );
+  const canEditSelected = !!selected && (
+    canManageAllTemplates ||
+    (selected.source === 'custom' && !!selected.ownerUserId && String(selected.ownerUserId) === currentUserId)
+  );
+  const canDeleteSelected = !!selected && canEditSelected;
+  const canCreateTemplate = !!loadedUser;
 
   useEffect(() => {
     if (visibleItems.length && !visibleItems.some((item) => item.id === selectedId)) {
@@ -309,6 +348,11 @@ export default function PromptTemplateLibraryModal({
       setMessage('模板名称和提示词不能为空');
       return;
     }
+    if (!canCreateTemplate) {
+      setMessage('请先登录后再创建模板');
+      return;
+    }
+    const isEditingExisting = !!editDraft.id;
     const nextItem = createCustomPromptTemplate({
       id: editDraft.id,
       kind: editDraft.kind,
@@ -323,19 +367,26 @@ export default function PromptTemplateLibraryModal({
       negativeEn: editDraft.negativeEn,
       tags: editDraft.tags.split(/[,，\n]/).map((tag) => tag.trim()).filter(Boolean),
       attachments: editDraft.attachments,
+      owner: loadedUser ? { id: loadedUser.id, name: normalizeOwnerLabel(loadedUser) } : null,
     });
     persist((prev) => {
       const exists = prev.customItems.some((item) => item.id === nextItem.id);
       return {
         ...prev,
-        customItems: exists ? prev.customItems.map((item) => (item.id === nextItem.id ? { ...nextItem, createdAt: item.createdAt } : item)) : [nextItem, ...prev.customItems],
+        customItems: exists
+          ? prev.customItems.map((item) => (item.id === nextItem.id ? { ...nextItem, createdAt: item.createdAt } : item))
+          : [
+              nextItem,
+              ...prev.customItems.filter((item) => item.id !== nextItem.id),
+            ],
+        hiddenBuiltInIds: prev.hiddenBuiltInIds.filter((id) => id !== nextItem.id),
       };
     });
     setSelectedId(nextItem.id);
     setActiveKind(nextItem.kind);
     setCategoryId(nextItem.categoryId);
     setEditDraft(null);
-    setMessage('模板已保存到我的模板');
+    setMessage(isEditingExisting ? '模板已更新' : '模板已保存到我的模板');
   };
 
   const saveCurrentAsTemplate = () => {
@@ -364,9 +415,17 @@ export default function PromptTemplateLibraryModal({
   const deleteSelected = () => {
     if (!selected) return;
     if (selected.source === 'custom') {
+      if (!canDeleteSelected) {
+        setMessage('没有权限删除这个模板');
+        return;
+      }
       if (!window.confirm(`删除模板「${getPromptTemplateTitle(selected, language)}」？`)) return;
       persist((prev) => ({ ...prev, customItems: prev.customItems.filter((item) => item.id !== selected.id) }));
       setMessage('模板已删除');
+      return;
+    }
+    if (!canManageAllTemplates) {
+      setMessage('普通用户只能隐藏内置模板，不能真正删除');
       return;
     }
     if (!window.confirm(`隐藏内置模板「${getPromptTemplateTitle(selected, language)}」？可通过“恢复内置”找回。`)) return;
@@ -375,6 +434,10 @@ export default function PromptTemplateLibraryModal({
   };
 
   const addCategory = () => {
+    if (!canCreateTemplate) {
+      setMessage('请先登录后再创建分类');
+      return;
+    }
     const name = window.prompt(activeKind === 'image' ? '新建图像模板分类' : '新建视频模板分类');
     if (!name?.trim()) return;
     const id = `custom-${activeKind}-${Date.now().toString(36)}`;
@@ -387,13 +450,15 @@ export default function PromptTemplateLibraryModal({
       descriptionEn: 'My prompt category',
       order: 1000 + state.customCategories.length,
       builtIn: false,
+      ownerUserId: currentUserId,
+      ownerName: normalizeOwnerLabel(loadedUser),
     };
     persist((prev) => ({ ...prev, customCategories: [...prev.customCategories, category] }));
     setCategoryId(id);
   };
 
   const renameCategory = (category: PromptTemplateCategory) => {
-    if (category.builtIn) return;
+    if (category.builtIn || (category.ownerUserId && category.ownerUserId !== currentUserId && !canManageAllTemplates)) return;
     const name = window.prompt('重命名分类', language === 'en' ? category.labelEn : category.labelZh);
     if (!name?.trim()) return;
     persist((prev) => ({
@@ -405,7 +470,7 @@ export default function PromptTemplateLibraryModal({
   };
 
   const deleteCategory = (category: PromptTemplateCategory) => {
-    if (category.builtIn) return;
+    if (category.builtIn || (category.ownerUserId && category.ownerUserId !== currentUserId && !canManageAllTemplates)) return;
     if (!window.confirm(`删除分类「${getPromptTemplateCategoryLabel(category, language)}」？其中我的模板会移动到默认分类。`)) return;
     const fallback = categoryFallback(category.kind);
     persist((prev) => ({
@@ -585,7 +650,7 @@ export default function PromptTemplateLibraryModal({
             <button type="button" className={`mt-3 w-full ${buttonClass}`} onClick={addCategory}>
               <Plus size={13} /> 分类
             </button>
-            {state.hiddenBuiltInIds.length > 0 && (
+            {canManageAllTemplates && state.hiddenBuiltInIds.length > 0 && (
               <button
                 type="button"
                 className={`mt-2 w-full ${buttonClass}`}
@@ -657,6 +722,7 @@ export default function PromptTemplateLibraryModal({
                               </span>
                             )}
                             {sourceLabel(item, language)}
+                            {item.source === 'custom' && item.ownerName ? ` · ${item.ownerName}` : ''}
                           </span>
                         </div>
                         <div className={`mt-1 line-clamp-2 text-[10px] leading-relaxed ${subtle}`}>
@@ -732,12 +798,19 @@ export default function PromptTemplateLibraryModal({
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <button type="button" className={buttonClass} onClick={() => setEditDraft(makeEditDraft(selected, activeKind, selected.categoryId))} title={selected.source === 'custom' ? '编辑' : '复制后编辑'}>
-                      <Pencil size={13} /> {selected.source === 'custom' ? '编辑' : '复制'}
+                    <button
+                      type="button"
+                      className={buttonClass}
+                      onClick={() => setEditDraft(makeEditDraft(selected, activeKind, selected.categoryId, canEditSelected))}
+                      title={canEditSelected ? '编辑' : '复制后编辑'}
+                    >
+                      <Pencil size={13} /> {canEditSelected ? '编辑' : '复制'}
                     </button>
-                    <button type="button" className={buttonClass} onClick={deleteSelected} title={selected.source === 'custom' ? '删除' : '隐藏'}>
-                      <Trash2 size={13} /> {selected.source === 'custom' ? '删除' : '隐藏'}
-                    </button>
+                    {canDeleteSelected && (
+                      <button type="button" className={buttonClass} onClick={deleteSelected} title={selected.source === 'custom' ? '删除' : '隐藏'}>
+                        <Trash2 size={13} /> {selected.source === 'custom' ? '删除' : '隐藏'}
+                      </button>
+                    )}
                   </div>
                 </div>
 
