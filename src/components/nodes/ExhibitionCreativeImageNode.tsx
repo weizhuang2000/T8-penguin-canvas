@@ -75,6 +75,7 @@ import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useThemeStore } from '../../stores/theme';
 import { useUpdateNodeData } from './useUpdateNodeData';
+import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
@@ -671,6 +672,19 @@ function groupColorMaterialPresets(presets: ElevationColorMaterialPresetItem[]) 
   return Array.from(groups.entries()).map(([category, items]) => ({ category, items }));
 }
 
+function buildColorMaterialPresetPayload(presets: ElevationColorMaterialPresetItem[]) {
+  return presets.map((preset, index) => ({
+    id: preset.id,
+    category: preset.category,
+    label: preset.label,
+    core: preset.core || '',
+    features: preset.features || '',
+    usage: preset.usage || '',
+    info: preset.info || '',
+    order: index,
+  }));
+}
+
 function colorPaletteTextFromPreset(preset: ElevationColorMaterialPresetItem): string {
   return String(preset.core || preset.info || preset.label || '').trim();
 }
@@ -1137,6 +1151,25 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     setColorMaterialError('');
     try {
       const saved = await updateElevationColorMaterialPresets(presets);
+      setColorMaterialPresets(saved);
+      setColorMaterialEditorOpen(false);
+    } catch (error: any) {
+      setColorMaterialError(error?.message || '保存色彩与材质预设失败');
+    } finally {
+      setColorMaterialSaving(false);
+    }
+  };
+
+  const saveColorMaterialPresetItems = async (presets: ElevationColorMaterialPresetItem[]) => {
+    if (!canManageTeam) return;
+    if (presets.length === 0) {
+      setColorMaterialError('请至少保留一条色彩与材质预设。');
+      return;
+    }
+    setColorMaterialSaving(true);
+    setColorMaterialError('');
+    try {
+      const saved = await updateElevationColorMaterialPresets(buildColorMaterialPresetPayload(presets));
       setColorMaterialPresets(saved);
       setColorMaterialEditorOpen(false);
     } catch (error: any) {
@@ -1989,35 +2022,18 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                 {hasColorMaterialPreset ? '色彩与材质预设已接管，参考图识别不参与 Color palette 和 Materials/textures。' : '已由接入的色彩与材质参考图接管'}
               </div>
             )}
-            {canManageTeam && colorMaterialEditorOpen && (
-              <div className="space-y-1.5 rounded border border-cyan-300/15 bg-cyan-300/5 p-2">
-                <div className="text-[10px] text-white/45">每行格式：分类｜名称｜Color palette｜Materials/textures｜适用；分类可直接修改或新增。旧格式“名称｜Color palette｜Materials/textures｜适用”会归入默认分类。</div>
-                <textarea
-                  className={`${FIELD} min-h-[120px] resize-y font-mono`}
-                  value={colorMaterialEditorValue}
-                  disabled={colorMaterialSaving || busy}
-                  onChange={(event) => setColorMaterialEditorValue(event.target.value)}
-                />
-                {colorMaterialError && <div className="text-[10px] text-red-200">{colorMaterialError}</div>}
-                <div className="flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    className={BUTTON}
-                    disabled={colorMaterialSaving || busy}
-                    onClick={() => setColorMaterialEditorOpen(false)}
-                  >
-                    取消
-                  </button>
-                  <button
-                    type="button"
-                    className={BUTTON}
-                    disabled={colorMaterialSaving || busy}
-                    onClick={() => void saveColorMaterialPresets()}
-                  >
-                    {colorMaterialSaving ? '保存中' : '保存'}
-                  </button>
-                </div>
-              </div>
+            {canManageTeam && (
+              <ColorMaterialPresetEditorModal
+                open={colorMaterialEditorOpen}
+                presets={colorMaterialPresets}
+                saving={colorMaterialSaving || busy}
+                error={colorMaterialError}
+                title="展陈创意色彩与材质预设管理"
+                paletteLabel="Color palette"
+                texturesLabel="Materials/textures"
+                onClose={() => setColorMaterialEditorOpen(false)}
+                onSave={saveColorMaterialPresetItems}
+              />
             )}
               <textarea
                 className={`${FIELD} min-h-[46px] resize-y`}

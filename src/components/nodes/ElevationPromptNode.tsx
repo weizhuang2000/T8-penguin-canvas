@@ -43,6 +43,7 @@ import { useApiKeysStore } from '../../stores/apiKeys';
 import { useCanvasStore } from '../../stores/canvas';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useUpdateNodeData } from './useUpdateNodeData';
+import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
@@ -139,6 +140,19 @@ function groupColorMaterialPresets(presets: ElevationColorMaterialPresetItem[]) 
     groups.set(category, list);
   }
   return Array.from(groups.entries()).map(([category, items]) => ({ category, items }));
+}
+
+function buildColorMaterialPresetPayload(presets: ElevationColorMaterialPresetItem[]) {
+  return presets.map((preset, index) => ({
+    id: preset.id,
+    category: preset.category,
+    label: preset.label,
+    core: preset.core || '',
+    features: preset.features || '',
+    usage: preset.usage || '',
+    info: preset.info || '',
+    order: index,
+  }));
 }
 
 function craftPresetEditorText(presets: ElevationCraftPresetItem[]): string {
@@ -478,6 +492,25 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
       setPresetEditorOpen(false);
     } catch (error: any) {
       setPresetError(error?.message || '保存预设失败');
+    } finally {
+      setPresetSaving(false);
+    }
+  };
+
+  const saveColorMaterialPresetItems = async (presets: ElevationColorMaterialPresetItem[]) => {
+    if (!canManageTeam) return;
+    if (presets.length === 0) {
+      setPresetError('请至少保留一条色彩与材质预设。');
+      return;
+    }
+    setPresetSaving(true);
+    setPresetError('');
+    try {
+      const saved = await updateElevationColorMaterialPresets(buildColorMaterialPresetPayload(presets));
+      setColorMaterialPresets(saved);
+      setPresetEditorOpen(false);
+    } catch (error: any) {
+      setPresetError(error?.message || '保存色彩与材质预设失败');
     } finally {
       setPresetSaving(false);
     }
@@ -881,35 +914,16 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
               {selectedColorMaterialPreset.info}
             </div>
           )}
-          {canManageTeam && presetEditorOpen && (
-            <div className="mt-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
-              <div className="mb-1 text-[10px] text-white/45">每行格式：分类｜名称｜核心｜特征｜适用；分类可直接修改或新增。旧格式“名称｜核心｜特征｜适用”会归入默认分类。</div>
-              <textarea
-                className={`${FIELD} min-h-[120px] resize-y font-mono`}
-                value={presetEditorValue}
-                disabled={presetSaving}
-                onChange={(event) => setPresetEditorValue(event.target.value)}
-              />
-              {presetError && <div className="mt-1 text-[10px] text-red-300">{presetError}</div>}
-              <div className="mt-1.5 flex justify-end gap-1">
-                <button
-                  type="button"
-                  className={BUTTON}
-                  disabled={presetSaving}
-                  onClick={() => setPresetEditorOpen(false)}
-                >
-                  取消
-                </button>
-                <button
-                  type="button"
-                  className={BUTTON}
-                  disabled={presetSaving}
-                  onClick={saveColorMaterialPresets}
-                >
-                  {presetSaving ? '保存中' : '保存预设'}
-                </button>
-              </div>
-            </div>
+          {canManageTeam && (
+            <ColorMaterialPresetEditorModal
+              open={presetEditorOpen}
+              presets={colorMaterialPresets}
+              saving={presetSaving}
+              error={presetError}
+              title="立面色彩与材质预设管理"
+              onClose={() => setPresetEditorOpen(false)}
+              onSave={saveColorMaterialPresetItems}
+            />
           )}
           <textarea className={`${FIELD} mt-1 min-h-[46px] resize-y`} value={d.colorMaterial || ''} disabled={isReadonly} placeholder="色彩与材质体系" onChange={(event) => update({ colorMaterial: event.target.value, colorMaterialPreset: '' })} />
           <div className="mt-1.5">

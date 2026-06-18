@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const nodeSource = fs.readFileSync(path.join(root, 'src/components/nodes/ExhibitionCreativeImageNode.tsx'), 'utf8');
+const presetModalSource = fs.readFileSync(path.join(root, 'src/components/nodes/ColorMaterialPresetEditorModal.tsx'), 'utf8');
 
 test('exhibition creative node exposes color/material and exhibit reference handles', () => {
   assert.match(nodeSource, /id="space"/);
@@ -35,8 +36,20 @@ test('exhibition creative color material presets support editable categories', (
   assert.match(nodeSource, /category = String\(preset\.category \|\| '默认'\)/);
   assert.match(nodeSource, /function groupColorMaterialPresets/);
   assert.match(nodeSource, /<optgroup key=\{group\.category\} label=\{group\.category\}>/);
-  assert.match(nodeSource, /分类｜名称｜Color palette｜Materials\/textures｜适用/);
+  assert.match(nodeSource, /ColorMaterialPresetEditorModal/);
   assert.match(nodeSource, /category,/);
+});
+
+test('color material preset editor modal supports category and batch operations', () => {
+  assert.match(presetModalSource, /createPortal/);
+  assert.match(presetModalSource, /addCategory/);
+  assert.match(presetModalSource, /confirmRenameCategory/);
+  assert.match(presetModalSource, /deleteActiveCategory/);
+  assert.match(presetModalSource, /moveSelected/);
+  assert.match(presetModalSource, /deleteSelected/);
+  assert.match(presetModalSource, /选择当前列表/);
+  assert.match(presetModalSource, /批量移动/);
+  assert.match(presetModalSource, /批量删除/);
 });
 
 test('exhibition creative node creates transient marked data urls without save APIs', () => {
