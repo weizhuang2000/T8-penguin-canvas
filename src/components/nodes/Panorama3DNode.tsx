@@ -1107,6 +1107,7 @@ const Panorama3DNode = (p: NodeProps) => {
   );
   const keyframeSequenceCount = sanitizePanoramaSequenceFrameCount(d.panoramaKeyframeSequenceCount ?? PANORAMA_KEYFRAME_SEQUENCE_DEFAULT);
   const activeCameraViewId = typeof d.panoramaActiveCameraViewId === 'string' ? d.panoramaActiveCameraViewId : '';
+  const activeCameraName = cameraViews.find((item) => item.id === activeCameraViewId)?.name?.trim() || '当前视角';
   const activeAvatarId = typeof d.panoramaActiveAvatarId === 'string' ? d.panoramaActiveAvatarId : '';
   const activeAvatar = avatars.find((item) => item.id === activeAvatarId) || avatars[0] || null;
   const avatarPickMode = Boolean(d.panoramaAvatarPickMode);
@@ -4534,7 +4535,7 @@ const Panorama3DNode = (p: NodeProps) => {
                 </div>
               </div>
 
-              <div className="order-[-10] grid grid-cols-[1fr_1fr_auto_auto] items-center gap-1.5">
+              <div className="order-[-10] grid grid-cols-[1fr_1fr_auto_minmax(0,auto)_auto] items-center gap-1.5">
                 <label className="min-w-0">
                   <span className="mb-1 block text-[10px] font-bold text-[var(--t8-text-muted)]">构图安全区</span>
                   <select
@@ -4566,6 +4567,9 @@ const Panorama3DNode = (p: NodeProps) => {
                 >
                   {avatarOverlayVisible ? <Eye size={13} /> : <EyeOff size={13} />}
                 </button>
+                <span className="min-w-0 self-end truncate pb-1 text-[10px] font-bold text-[var(--t8-text-muted)]" title={`当前相机：${activeCameraName}`}>
+                  {activeCameraName}
+                </span>
                 <button
                   type="button"
                   className="t8-mini-icon-button self-end"
