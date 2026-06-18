@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
+import { Handle, Position, useNodeConnections, useNodesData, useReactFlow, type NodeProps } from '@xyflow/react';
 import {
   Brain,
   CheckCircle2,
@@ -685,7 +685,9 @@ function parseLabelPresetEditorText(text: string, fallbackId: string) {
 const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
+  const rf = useReactFlow();
   const fileRef = useRef<HTMLInputElement>(null);
+  const colorMaterialPresetDisconnectRef = useRef(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [insertPresets, setInsertPresets] = useState<ExhibitionCreativeInsertPresetItem[]>([]);
   const [excludePresets, setExcludePresets] = useState<ExhibitionCreativeExcludePresetItem[]>([]);
@@ -848,6 +850,13 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   ]);
   const inputDocumentText = useInputDocumentText(id);
 
+  const disconnectColorMaterialReferenceInput = useCallback(() => {
+    colorMaterialPresetDisconnectRef.current = true;
+    rf.setEdges((eds) => eds.filter((edge: any) => (
+      edge.target !== id || (edge.targetHandle || '') !== 'color-material-reference'
+    )));
+  }, [id, rf]);
+
   useEffect(() => {
     if (Number(d.colorMaterialMarkDefaultsVersion) >= COLOR_MATERIAL_MARK_DEFAULTS_VERSION) return;
     const patch: Record<string, any> = {};
@@ -860,6 +869,16 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     patch.colorMaterialMarkDefaultsVersion = COLOR_MATERIAL_MARK_DEFAULTS_VERSION;
     if (Object.keys(patch).length > 0) update(patch);
   }, [d.colorMaterialMarkDefaultsVersion, d.colorMaterialMarkFontSize, d.colorMaterialMarkText, update]);
+
+  useEffect(() => {
+    if (!colorMaterialReferenceImage) {
+      colorMaterialPresetDisconnectRef.current = false;
+      return;
+    }
+    if (hasColorMaterialPreset && !colorMaterialPresetDisconnectRef.current) {
+      update({ colorMaterialPreset: '' });
+    }
+  }, [colorMaterialReferenceImage, hasColorMaterialPreset, update]);
 
   useEffect(() => {
     if (hasColorMaterialPreset) {
@@ -1922,6 +1941,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               onChange={(event) => {
                 const presetId = event.target.value;
                 const preset = colorMaterialPresets.find((item) => item.id === presetId);
+                if (presetId) disconnectColorMaterialReferenceInput();
                 update({
                   colorMaterialPreset: presetId,
                   ...(preset ? {

@@ -23,6 +23,14 @@ test('exhibition creative node disables manual color material inputs when refere
   assert.match(nodeSource, /hasColorMaterialReferenceImage: hasColorMaterialReference/);
 });
 
+test('exhibition creative color material preset and reference input stay mutually exclusive', () => {
+  assert.match(nodeSource, /useReactFlow/);
+  assert.match(nodeSource, /disconnectColorMaterialReferenceInput/);
+  assert.match(nodeSource, /edge\.target !== id \|\| \(edge\.targetHandle \|\| ''\) !== 'color-material-reference'/);
+  assert.match(nodeSource, /if \(hasColorMaterialPreset && !colorMaterialPresetDisconnectRef\.current\) \{\s*update\(\{ colorMaterialPreset: '' \}\);/);
+  assert.match(nodeSource, /if \(presetId\) disconnectColorMaterialReferenceInput\(\);/);
+});
+
 test('exhibition creative node creates transient marked data urls without save APIs', () => {
   assert.match(nodeSource, /canvas\.toDataURL\('image\/png'\)/);
   assert.match(nodeSource, /createColorMaterialAbstractCardDataUrl/);
