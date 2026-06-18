@@ -45,7 +45,7 @@ export default function ColorMaterialPresetSelect({
   );
   const selectedCategory = selectedPreset ? presetCategory(selectedPreset) : '';
   const fallbackCategory = selectedCategory || groups[0]?.category || DEFAULT_CATEGORY;
-  const [expandedCategory, setExpandedCategory] = useState(fallbackCategory);
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(fallbackCategory);
 
   useEffect(() => {
     if (!open) setExpandedCategory(fallbackCategory);
@@ -108,7 +108,7 @@ export default function ColorMaterialPresetSelect({
                 <button
                   type="button"
                   className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left font-semibold text-rose-300 hover:bg-rose-300/10 ${expanded ? 'bg-rose-300/10' : ''}`}
-                  onClick={() => setExpandedCategory(group.category)}
+                  onClick={() => setExpandedCategory((current) => current === group.category ? null : group.category)}
                 >
                   <span className="truncate">{group.category}</span>
                   <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />

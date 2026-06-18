@@ -39,7 +39,7 @@ test('exhibition creative color material presets support editable categories', (
   assert.match(nodeSource, /category,/);
   assert.match(presetSelectSource, /function groupPresets/);
   assert.match(presetSelectSource, /expandedCategory/);
-  assert.match(presetSelectSource, /setExpandedCategory\(group\.category\)/);
+  assert.match(presetSelectSource, /setExpandedCategory\(\(current\) => current === group\.category \? null : group\.category\)/);
   assert.match(presetSelectSource, /text-rose-300/);
   assert.match(presetSelectSource, /type="button"/);
   assert.doesNotMatch(presetSelectSource, /__category__/);
