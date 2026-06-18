@@ -68,6 +68,42 @@ function toSaveItem(preset: DraftPreset, order: number): ElevationColorMaterialP
   };
 }
 
+function serializeDrafts(presets: DraftPreset[]): string {
+  return presets
+    .map((preset) => [
+      normalizeCategory(preset.category),
+      preset.label,
+      String(preset.core || '').trim(),
+      String(preset.features || '').trim(),
+      String(preset.usage || '').trim(),
+    ].join('｜'))
+    .join('\n');
+}
+
+function parseRawText(text: string): DraftPreset[] {
+  return text
+    .split(/\r?\n/)
+    .map((line, index) => {
+      const raw = line.trim();
+      if (!raw) return null;
+      const parts = raw.split(/[｜|]/).map((part) => String(part || '').trim());
+      const hasCategory = parts.length >= 5;
+      const category = normalizeCategory(hasCategory ? parts[0] : DEFAULT_CATEGORY);
+      const label = String(hasCategory ? parts[1] : (parts[0] || '')).trim();
+      if (!label) return null;
+      const rest = hasCategory ? parts.slice(2) : parts.slice(1);
+      return makeDraft({
+        id: `${label.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'preset'}-${index + 1}`,
+        category,
+        label,
+        core: String(rest[0] || '').trim(),
+        features: String(rest[1] || '').trim(),
+        usage: rest.slice(2).join('｜').trim(),
+      }, index);
+    })
+    .filter(Boolean) as DraftPreset[];
+}
+
 export default function ColorMaterialPresetEditorModal({
   open,
   presets,
@@ -87,6 +123,8 @@ export default function ColorMaterialPresetEditorModal({
   const [moveTarget, setMoveTarget] = useState(DEFAULT_CATEGORY);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [localError, setLocalError] = useState('');
+  const [editMode, setEditMode] = useState<'table' | 'raw'>('table');
+  const [rawText, setRawText] = useState('');
 
   useEffect(() => {
     if (!open) return;
@@ -100,6 +138,8 @@ export default function ColorMaterialPresetEditorModal({
     setMoveTarget(nextCategories[0] || DEFAULT_CATEGORY);
     setSelectedIds(new Set());
     setLocalError('');
+    setEditMode('table');
+    setRawText(serializeDrafts(nextDrafts));
   }, [open, presets]);
 
   useEffect(() => {
@@ -198,6 +238,28 @@ export default function ColorMaterialPresetEditorModal({
     setActiveCategory(target);
   };
 
+  const openRawEditor = () => {
+    setRawText(serializeDrafts(drafts));
+    setEditMode('raw');
+    setLocalError('');
+  };
+
+  const applyRawEditor = () => {
+    const nextDrafts = parseRawText(rawText);
+    if (nextDrafts.length === 0) {
+      setLocalError('请至少保留一条有效预设。');
+      return;
+    }
+    const nextCategories = Array.from(new Set([DEFAULT_CATEGORY, ...nextDrafts.map((item) => normalizeCategory(item.category))]));
+    setDrafts(nextDrafts);
+    setCategories(nextCategories);
+    setActiveCategory('all');
+    setMoveTarget(nextCategories[0] || DEFAULT_CATEGORY);
+    setSelectedIds(new Set());
+    setLocalError('');
+    setEditMode('table');
+  };
+
   const save = async () => {
     const next = drafts
       .map((item, index) => toSaveItem(item, index))
@@ -230,6 +292,9 @@ export default function ColorMaterialPresetEditorModal({
           </div>
           <button type="button" className={BUTTON} onClick={addPreset} disabled={saving}>
             <Plus size={12} /> 新增预设
+          </button>
+          <button type="button" className={BUTTON} onClick={editMode === 'raw' ? applyRawEditor : openRawEditor} disabled={saving}>
+            {editMode === 'raw' ? '应用整段' : '整段编辑'}
           </button>
           <button type="button" className={BUTTON} onClick={save} disabled={saving}>
             <Save size={12} /> {saving ? '保存中' : '保存'}
@@ -291,6 +356,29 @@ export default function ColorMaterialPresetEditorModal({
           </aside>
 
           <main className="flex min-h-0 flex-col">
+            {editMode === 'raw' ? (
+              <div className="flex min-h-0 flex-1 flex-col p-3">
+                <div className="mb-2 flex items-center gap-2">
+                  <div className="min-w-0 flex-1 text-[10px] text-white/45">
+                    每行格式：分类｜名称｜{paletteLabel}｜{texturesLabel}｜适用。旧格式“名称｜核心｜特征｜适用”会归入默认分类。
+                  </div>
+                  <button type="button" className={BUTTON} onClick={() => setEditMode('table')} disabled={saving}>
+                    返回表格
+                  </button>
+                  <button type="button" className={BUTTON} onClick={applyRawEditor} disabled={saving}>
+                    应用整段
+                  </button>
+                </div>
+                {(localError || error) && <div className="mb-2 text-[10px] text-red-300">{localError || error}</div>}
+                <textarea
+                  className={`${FIELD} min-h-0 flex-1 resize-none font-mono leading-relaxed`}
+                  value={rawText}
+                  disabled={saving}
+                  onChange={(event) => setRawText(event.target.value)}
+                />
+              </div>
+            ) : (
+            <>
             <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-3 py-2">
               <button type="button" className={BUTTON} onClick={toggleVisible} disabled={visibleDrafts.length === 0 || saving}>
                 {allVisibleSelected ? <CheckSquare size={12} /> : <Square size={12} />} 选择当前列表
@@ -360,6 +448,8 @@ export default function ColorMaterialPresetEditorModal({
                 })}
               </div>
             </div>
+            </>
+            )}
           </main>
         </div>
       </section>

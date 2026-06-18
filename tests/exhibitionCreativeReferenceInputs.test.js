@@ -47,9 +47,12 @@ test('color material preset editor modal supports category and batch operations'
   assert.match(presetModalSource, /deleteActiveCategory/);
   assert.match(presetModalSource, /moveSelected/);
   assert.match(presetModalSource, /deleteSelected/);
+  assert.match(presetModalSource, /parseRawText/);
   assert.match(presetModalSource, /选择当前列表/);
   assert.match(presetModalSource, /批量移动/);
   assert.match(presetModalSource, /批量删除/);
+  assert.match(presetModalSource, /整段编辑/);
+  assert.match(presetModalSource, /应用整段/);
 });
 
 test('exhibition creative node creates transient marked data urls without save APIs', () => {
