@@ -64,16 +64,13 @@ export function useUpdateNodeData(nodeId: string) {
         enqueueOffscreenCanvasPatch(originCanvasId, nodeId, patch);
         if (activeCanvasId !== originCanvasId) return;
       }
-      const patchSnapshot = { ...patch };
-      requestAnimationFrame(() => {
-        setNodes((nds) =>
-          nds.map((n) =>
-            n.id === nodeId
-              ? { ...n, data: { ...(n.data as any), ...patchSnapshot } }
-              : n
-          )
-        );
-      });
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === nodeId
+            ? { ...n, data: { ...(n.data as any), ...patch } }
+            : n
+        )
+      );
     },
     [nodeId, originCanvasId, setNodes],
   );
