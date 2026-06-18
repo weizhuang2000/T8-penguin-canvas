@@ -88,6 +88,8 @@ function textForSearch(item: PromptTemplateItem) {
     item.negativeZh,
     item.negativeEn,
     item.tags.join(' '),
+    item.ownerName || '',
+    item.ownerUserId || '',
     (item.attachments || []).map((attachment) => attachment.title || attachment.url).join(' '),
     item.source,
   ].join(' ').toLowerCase();

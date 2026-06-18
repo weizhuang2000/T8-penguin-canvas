@@ -116,6 +116,7 @@ test('prompt template library supports custom management, import/export, and res
   assert.match(modal, /canManageAllTemplates/);
   assert.match(modal, /canEditSelected/);
   assert.match(modal, /api\.getCurrentUser/);
+  assert.match(modal, /ownerName \|\| ''/);
   assert.match(modal, /addCategory/);
   assert.match(modal, /renameCategory/);
   assert.match(modal, /deleteCategory/);
