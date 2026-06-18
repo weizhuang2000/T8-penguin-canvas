@@ -861,7 +861,7 @@ function createMainWindow() {
     minHeight: 640,
     show: false,
     backgroundColor: '#0b0b0d',
-    title: `贞贞的无限画布（企鹅共创版） v${APP_VERSION}`,
+    title: `百达的无限画布 v${APP_VERSION}`,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -915,7 +915,7 @@ function createLogWindow() {
 .h b{color:#ffd76b;}
 #log{padding:12px 18px;white-space:pre-wrap;line-height:1.5;font-size:12px;}
 </style></head><body>
-<div class="h">🐧 <b>贞贞的无限画布</b>（企鹅共创版）<span style="float:right;color:#666;">v${APP_VERSION}</span></div>
+<div class="h">🐧 <b>百达的无限画布</b><span style="float:right;color:#666;">v${APP_VERSION}</span></div>
 <div id="log">[启动] 正在初始化加密内核 + Express 后端...\n</div>
 </body></html>`;
   fs.writeFileSync(logHtmlPath, html, 'utf-8');

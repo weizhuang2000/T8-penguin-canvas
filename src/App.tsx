@@ -469,7 +469,7 @@ function App() {
               </span>
               <div className="min-w-0">
                 <h1 className="t8-soccer-brand__title text-[14px] font-black leading-none">
-                  足球小将 · 贞贞的无限画布
+                  足球小将 · 百达的无限画布
                 </h1>
                 <div className="t8-soccer-brand__sub text-[9px] font-bold tracking-wide leading-none mt-0.5">
                   CAPTAIN TSUBASA CANVAS / GOLDEN GOAL READY
@@ -484,7 +484,7 @@ function App() {
               </span>
               <div className="min-w-0">
                 <h1 className="t8-dragonball-brand__title text-[14px] font-black leading-none">
-                  七龙珠 · 贞贞的无限画布
+                  七龙珠 · 百达的无限画布
                 </h1>
                 <div className="t8-dragonball-brand__sub text-[9px] font-bold tracking-wide leading-none mt-0.5">
                   CAPSULE CORP CANVAS / DRAGON RADAR ONLINE
