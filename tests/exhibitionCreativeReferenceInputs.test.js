@@ -35,7 +35,10 @@ test('exhibition creative color material preset and reference input stay mutuall
 test('exhibition creative color material presets support editable categories', () => {
   assert.match(nodeSource, /category = String\(preset\.category \|\| '默认'\)/);
   assert.match(nodeSource, /function groupColorMaterialPresets/);
-  assert.match(nodeSource, /<optgroup key=\{group\.category\} label=\{group\.category\}>/);
+  assert.match(nodeSource, /activeColorMaterialPresetCategory/);
+  assert.match(nodeSource, /renderColorMaterialPresetOptions/);
+  assert.match(nodeSource, /text-rose-300/);
+  assert.match(nodeSource, /presetId\.startsWith\('__category__'\)/);
   assert.match(nodeSource, /ColorMaterialPresetEditorModal/);
   assert.match(nodeSource, /category,/);
 });

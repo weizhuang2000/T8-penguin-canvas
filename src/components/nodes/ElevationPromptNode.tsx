@@ -142,6 +142,46 @@ function groupColorMaterialPresets(presets: ElevationColorMaterialPresetItem[]) 
   return Array.from(groups.entries()).map(([category, items]) => ({ category, items }));
 }
 
+function activeColorMaterialPresetCategory(
+  presets: ElevationColorMaterialPresetItem[],
+  presetId: unknown,
+): string {
+  const selected = presets.find((preset) => preset.id === presetId);
+  const fallback = presets[0]?.category || '默认';
+  return String(selected?.category || fallback || '默认').trim() || '默认';
+}
+
+function renderColorMaterialPresetOptions(
+  presets: ElevationColorMaterialPresetItem[],
+  activeCategory: string,
+) {
+  return groupColorMaterialPresets(presets).flatMap((group) => {
+    const collapsed = group.category !== activeCategory;
+    if (collapsed) {
+      return [
+        <option
+          key={`category-${group.category}`}
+          value={`__category__${group.category}`}
+          disabled
+          className="bg-zinc-950 font-semibold text-rose-300"
+        >
+          {group.category}
+        </option>,
+      ];
+    }
+    return [
+      <option key={`category-${group.category}`} value={`__category__${group.category}`} disabled className="bg-zinc-950 font-semibold text-rose-300">
+        {group.category}
+      </option>,
+      ...group.items.map((preset) => (
+        <option key={preset.id} value={preset.id} title={preset.info}>
+          {preset.label}
+        </option>
+      )),
+    ];
+  });
+}
+
 function buildColorMaterialPresetPayload(presets: ElevationColorMaterialPresetItem[]) {
   return presets.map((preset, index) => ({
     id: preset.id,
@@ -891,6 +931,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
             disabled={isReadonly}
             onChange={(event) => {
               const presetId = event.target.value;
+              if (presetId.startsWith('__category__')) return;
               const preset = colorMaterialPresets.find((item) => item.id === presetId);
               update({
                 colorMaterialPreset: presetId,
@@ -899,15 +940,10 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
             }}
           >
             <option value="">不使用色彩与材质预设</option>
-            {groupColorMaterialPresets(colorMaterialPresets).map((group) => (
-              <optgroup key={group.category} label={group.category}>
-                {group.items.map((preset) => (
-                  <option key={preset.id} value={preset.id} title={preset.info}>
-                    {preset.label}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
+            {renderColorMaterialPresetOptions(
+              colorMaterialPresets,
+              activeColorMaterialPresetCategory(colorMaterialPresets, d.colorMaterialPreset),
+            )}
           </select>
           {selectedColorMaterialPreset?.info && (
             <div className="mt-1 rounded border border-cyan-300/15 bg-cyan-300/10 px-2 py-1 text-[10px] leading-relaxed text-cyan-50/75">
