@@ -9,6 +9,7 @@ import {
   type MutableRefObject,
   type TextareaHTMLAttributes,
 } from 'react';
+import { flushSync } from 'react-dom';
 import { Library, Maximize2 } from 'lucide-react';
 import { useThemeStore } from '../stores/theme';
 import { useShortcutStore } from '../stores/shortcuts';
@@ -51,6 +52,7 @@ const PromptTextarea = forwardRef<HTMLTextAreaElement, PromptTextareaProps>(func
 }: PromptTextareaProps, forwardedRef) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const composingRef = useRef(false);
+  const userTypingRef = useRef(false);
   const { theme, style: themeStyle } = useThemeStore();
   const shortcuts = useShortcutStore((s) => s.shortcuts);
   const expandCombos = shortcuts['editor.expand-prompt'];
@@ -65,11 +67,18 @@ const PromptTextarea = forwardRef<HTMLTextAreaElement, PromptTextareaProps>(func
   const effectiveTemplateKind = promptTemplateKind || 'image';
 
   useEffect(() => {
+    if (userTypingRef.current) {
+      userTypingRef.current = false;
+      return;
+    }
     if (!composingRef.current) setLocalValue(value || '');
   }, [value]);
 
   const commitValue = (nextValue: string) => {
-    setLocalValue(nextValue);
+    userTypingRef.current = true;
+    flushSync(() => {
+      setLocalValue(nextValue);
+    });
     if (!readOnly) onValueChange(nextValue);
   };
 
@@ -154,8 +163,14 @@ const PromptTextarea = forwardRef<HTMLTextAreaElement, PromptTextareaProps>(func
         onCompositionEnd={handleCompositionEnd}
         onChange={(event) => {
           const nextValue = event.target.value;
-          setLocalValue(nextValue);
-          if (composingRef.current || isImeCompositionInput(event.nativeEvent)) return;
+          if (composingRef.current || isImeCompositionInput(event.nativeEvent)) {
+            setLocalValue(nextValue);
+            return;
+          }
+          userTypingRef.current = true;
+          flushSync(() => {
+            setLocalValue(nextValue);
+          });
           if (!readOnly) onValueChange(nextValue);
         }}
         onKeyDown={handleKeyDown}

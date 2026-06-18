@@ -22,6 +22,25 @@ function localExtensionsPlugin() {
 }
 // T8-penguin-canvas Vite 配置
 // 端口策略:前端 11422 / 后端 18766(避开主项目 5176/18765 与常见 51xx 占用)
+var BACKEND_TARGET = 'http://127.0.0.1:18766';
+function localBackendProxy(label) {
+    return {
+        target: BACKEND_TARGET,
+        changeOrigin: true,
+        configure: function (proxy) {
+            proxy.on('error', function (error, _req, res) {
+                if (!res || res.headersSent || typeof res.writeHead !== 'function')
+                    return;
+                var detail = (error === null || error === void 0 ? void 0 : error.code) || (error === null || error === void 0 ? void 0 : error.message) || 'proxy_error';
+                res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({
+                    success: false,
+                    error: "".concat(label, " \u540E\u7AEF\u670D\u52A1\u4E0D\u53EF\u7528\uFF0C\u8BF7\u5148\u542F\u52A8 npm run dev:backend\uFF08").concat(BACKEND_TARGET, "\uFF09\u3002").concat(detail),
+                }));
+            });
+        },
+    };
+}
 export default defineConfig({
     plugins: [react(), localExtensionsPlugin()],
     assetsInclude: ['**/*.mid'],
@@ -56,23 +75,11 @@ export default defineConfig({
         },
         proxy: {
             // 后端 API 代理
-            '/api': {
-                target: 'http://127.0.0.1:18766',
-                changeOrigin: true,
-            },
+            '/api': localBackendProxy('API'),
             // 静态文件服务代理
-            '/files': {
-                target: 'http://127.0.0.1:18766',
-                changeOrigin: true,
-            },
-            '/output': {
-                target: 'http://127.0.0.1:18766',
-                changeOrigin: true,
-            },
-            '/input': {
-                target: 'http://127.0.0.1:18766',
-                changeOrigin: true,
-            },
+            '/files': localBackendProxy('files'),
+            '/output': localBackendProxy('output'),
+            '/input': localBackendProxy('input'),
         },
     },
     build: {
