@@ -18,12 +18,10 @@ import {
   Upload,
 } from 'lucide-react';
 import {
-  DEFAULT_LLM_MODEL,
   IMAGE_MODELS,
 } from '../../providers/models';
 import {
   generateExternalImage,
-  generateLlm,
   queryExternalImageStatus,
   queryImageStatus,
   submitImageAsync,
@@ -83,16 +81,14 @@ const EXTERNAL_SIZE_LEVELS = ['1K', '2K', '4K'];
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
 
-interface ExhibitInputImage {
+interface ExhibitReferenceInputImage {
   id: string;
   url: string;
   label: string;
 }
 
-interface ExhibitItem extends ExhibitInputImage {
+interface ExhibitReferenceItem extends ExhibitReferenceInputImage {
   description: string;
-  groupIndex: number;
-  recognizedAt?: number;
 }
 
 function same(valueA: unknown, valueB: unknown) {
@@ -138,25 +134,6 @@ function shortFileLabel(url: string, fallback = '展品') {
   return (url.split('/').pop() || fallback).split('?')[0].slice(0, 28) || fallback;
 }
 
-function cleanExhibitDescription(value: string, fallback: string) {
-  const text = String(value || '')
-    .replace(/^[\s"'“”‘’`]+|[\s"'“”‘’`]+$/g, '')
-    .replace(/[。；;，,、\n\r]+$/g, '')
-    .trim();
-  return (text || fallback).slice(0, 24);
-}
-
-function exhibitRecognitionErrorMessage(error: any) {
-  const message = String(error?.message || error || '').trim();
-  if (/no available accounts/i.test(message)) {
-    return '当前 LLM 上游没有可用账号，请在展品识别区切换支持视觉且账号可用的 LLM 配置，或稍后重试。';
-  }
-  if (/unknown variant [`']?(image_url|image)[`']?/i.test(message) || /expected [`']?text[`']?/i.test(message)) {
-    return '当前 LLM 配置不支持图片识别，请在展品识别区切换支持视觉输入的 LLM 配置。';
-  }
-  return message || '展品识别失败';
-}
-
 function useHandleImage(nodeId: string, targetHandle: string): string {
   const conns = useNodeConnections({ id: nodeId, handleType: 'target' });
   const sourceIds = useMemo(
@@ -177,11 +154,14 @@ function useHandleImage(nodeId: string, targetHandle: string): string {
   }, [nodesData]);
 }
 
-function useHandleImages(nodeId: string, targetHandle: string): ExhibitInputImage[] {
+function useHandleImages(nodeId: string, targetHandle: string, includeLegacyHandle = ''): ExhibitReferenceInputImage[] {
   const conns = useNodeConnections({ id: nodeId, handleType: 'target' });
   const filteredConns = useMemo(
-    () => conns.filter((conn: any) => (conn.targetHandle || '') === targetHandle),
-    [conns, targetHandle],
+    () => conns.filter((conn: any) => {
+      const handle = conn.targetHandle || '';
+      return handle === targetHandle || (!!includeLegacyHandle && handle === includeLegacyHandle);
+    }),
+    [conns, includeLegacyHandle, targetHandle],
   );
   const sourceIds = useMemo(
     () => Array.from(new Set(filteredConns.map((conn: any) => conn.source).filter(Boolean))),
@@ -189,7 +169,7 @@ function useHandleImages(nodeId: string, targetHandle: string): ExhibitInputImag
   );
   const nodesData = useNodesData(sourceIds);
   return useMemo(() => {
-    const out: ExhibitInputImage[] = [];
+    const out: ExhibitReferenceInputImage[] = [];
     const seen = new Set<string>();
     const list = Array.isArray(nodesData) ? nodesData : [nodesData];
     for (const node of list) {
@@ -201,45 +181,12 @@ function useHandleImages(nodeId: string, targetHandle: string): ExhibitInputImag
         out.push({
           id: `${nodeIdValue}:exhibit:${index}:${url}`,
           url,
-          label: shortFileLabel(url, `展品 ${out.length + 1}`),
+          label: shortFileLabel(url, `展品参考 ${out.length + 1}`),
         });
       });
     }
     return out;
   }, [nodesData]);
-}
-
-function normalizeExhibitItems(value: unknown): ExhibitItem[] {
-  const list = Array.isArray(value) ? value : [];
-  return list
-    .map((item, index) => {
-      const url = typeof item?.url === 'string' ? item.url.trim() : '';
-      if (!url) return null;
-      return {
-        id: String(item?.id || `exhibit:${index}:${url}`),
-        url,
-        label: String(item?.label || shortFileLabel(url, `展品 ${index + 1}`)),
-        description: String(item?.description || '').trim(),
-        groupIndex: Math.max(1, Math.min(24, Number(item?.groupIndex) || index + 1)),
-        recognizedAt: Number(item?.recognizedAt) || undefined,
-      };
-    })
-    .filter(Boolean) as ExhibitItem[];
-}
-
-function groupedExhibitsForPrompt(items: ExhibitItem[]) {
-  const groups = new Map<number, string[]>();
-  for (const item of items) {
-    const description = cleanExhibitDescription(item.description, '');
-    if (!description) continue;
-    const groupIndex = Math.max(1, Math.min(24, Number(item.groupIndex) || 1));
-    const list = groups.get(groupIndex) || [];
-    list.push(description);
-    groups.set(groupIndex, list);
-  }
-  return Array.from(groups.entries())
-    .sort(([a], [b]) => a - b)
-    .map(([groupIndex, items]) => ({ groupIndex, items }));
 }
 
 function craftPresetEditorText(presets: ElevationCraftPresetItem[]): string {
