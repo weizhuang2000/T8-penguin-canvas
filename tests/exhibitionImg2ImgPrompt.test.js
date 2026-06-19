@@ -144,6 +144,23 @@ test('exhibition img2img prompt uses llm color material recognition like creativ
   assert.doesNotMatch(prompt, /前端识别不应进入大模型识别模式/);
 });
 
+test('exhibition img2img prompt ignores preset text when color material reference is connected', () => {
+  const prompt = buildExhibitionImg2ImgPrompt({
+    hasColorMaterialPreset: true,
+    hasColorMaterialReferenceImage: true,
+    colorMaterialPriorityMode: 'frontend',
+    colorMaterialReferenceTone: '主色调：青绿、暖白；冷暖较均衡。',
+    colorMaterial: '不应出现的预设材质描述',
+    colorMaterialPalette: '不应出现的预设色盘',
+    colorMaterialTextures: '不应出现的预设肌理',
+  });
+
+  assert.match(prompt, /色彩与材质来源：使用前端识别的色彩与材质参考图主色调结果/);
+  assert.match(prompt, /主色调：青绿、暖白；冷暖较均衡。/);
+  assert.doesNotMatch(prompt, /使用已选择的共享色彩与材质预设/);
+  assert.doesNotMatch(prompt, /不应出现的预设/);
+});
+
 test('exhibition img2img prompt uses shared color material preset', () => {
   const prompt = buildExhibitionImg2ImgPrompt({
     hasColorMaterialPreset: true,

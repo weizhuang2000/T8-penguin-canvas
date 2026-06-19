@@ -734,10 +734,11 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const colorMaterialPalette = String(d.colorMaterialPalette || '').trim();
   const colorMaterialTextures = String(d.colorMaterialTextures || '').trim();
   const combinedColorMaterial = combineColorMaterialText(colorMaterialPalette, colorMaterialTextures, colorMaterial);
-  const hasColorMaterialPreset = !!String(d.colorMaterialPreset || '').trim();
   const colorMaterialPriorityMode = normalizeColorMaterialPriorityMode(d.colorMaterialPriorityMode);
   const hasColorMaterialReference = !!colorMaterialReferenceImage;
-  const activeColorMaterialReferenceImage = hasColorMaterialPreset ? '' : colorMaterialReferenceImage;
+  const hasSelectedColorMaterialPreset = !!String(d.colorMaterialPreset || '').trim();
+  const hasColorMaterialPreset = hasSelectedColorMaterialPreset && !hasColorMaterialReference;
+  const activeColorMaterialReferenceImage = hasColorMaterialReference ? colorMaterialReferenceImage : '';
   const colorMaterialRecognitionDisabled = hasColorMaterialPreset || !hasColorMaterialReference;
   const colorMaterialReferenceTone = String(d.colorMaterialReferenceTone || '').trim();
   const colorMaterialMarkSettings = useMemo(() => normalizeReferenceMarkSettings(d, 'colorMaterial'), [
@@ -748,6 +749,9 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     d.colorMaterialMarkText,
   ]);
   const hasColorMaterialInput = hasColorMaterialReference || hasColorMaterialPreset || !!combinedColorMaterial;
+  const promptColorMaterial = hasColorMaterialReference ? '' : combinedColorMaterial;
+  const promptColorMaterialPalette = hasColorMaterialReference ? '' : (colorMaterialPalette || colorMaterial);
+  const promptColorMaterialTextures = hasColorMaterialReference ? '' : (colorMaterialTextures || colorMaterial);
   const contentOutputs = useMemo(
     () => buildElevationOutputs({
       analysis,
@@ -818,10 +822,10 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       craftPresets,
       density: d.density,
       dimensions: d.dimensions,
-      colorMaterial: combinedColorMaterial,
+      colorMaterial: promptColorMaterial,
       visualStyle: d.visualStyle,
-      colorMaterialPalette: colorMaterialPalette || colorMaterial,
-      colorMaterialTextures: colorMaterialTextures || colorMaterial,
+      colorMaterialPalette: promptColorMaterialPalette,
+      colorMaterialTextures: promptColorMaterialTextures,
       hasColorMaterialPreset,
       hasColorMaterialReferenceImage: !!activeColorMaterialReferenceImage,
       colorMaterialReferenceTone,
@@ -835,15 +839,11 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     });
   }, [
     activeColorMaterialReferenceImage,
-    colorMaterial,
-    colorMaterialPalette,
-    colorMaterialTextures,
     colorMaterialMarkSettings.position,
     colorMaterialMarkSettings.text,
     colorMaterialPriorityMode,
     colorMaterialReferenceMode,
     colorMaterialReferenceTone,
-    combinedColorMaterial,
     craftPresets,
     d.aspectRatio,
     d.colorMaterial,
@@ -857,6 +857,9 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     exhibitReferenceItems,
     hasColorMaterialPreset,
     priorityOrder,
+    promptColorMaterial,
+    promptColorMaterialPalette,
+    promptColorMaterialTextures,
     selectedCrafts,
     wallCount,
     wallMode,
@@ -870,10 +873,10 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       craftPresets,
       density: d.density,
       dimensions: d.dimensions,
-      colorMaterial: combinedColorMaterial,
+      colorMaterial: promptColorMaterial,
       visualStyle: d.visualStyle,
-      colorMaterialPalette: colorMaterialPalette || colorMaterial,
-      colorMaterialTextures: colorMaterialTextures || colorMaterial,
+      colorMaterialPalette: promptColorMaterialPalette,
+      colorMaterialTextures: promptColorMaterialTextures,
       hasColorMaterialPreset,
       hasColorMaterialReferenceImage: !!activeColorMaterialReferenceImage,
       colorMaterialReferenceTone,
@@ -885,7 +888,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       wallContentPrompt,
       exhibitReferenceItems,
     }),
-    [activeColorMaterialReferenceImage, colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPriorityMode, colorMaterialReferenceMode, colorMaterialReferenceTone, combinedColorMaterial, colorMaterial, colorMaterialPalette, colorMaterialTextures, craftPresets, d.customCraft, d.density, d.dimensions, d.supplement, d.visualStyle, exhibitReferenceItems, hasColorMaterialPreset, priorityOrder, selectedCrafts, wallContentPrompt],
+    [activeColorMaterialReferenceImage, colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPriorityMode, colorMaterialReferenceMode, colorMaterialReferenceTone, craftPresets, d.customCraft, d.density, d.dimensions, d.supplement, d.visualStyle, exhibitReferenceItems, hasColorMaterialPreset, priorityOrder, promptColorMaterial, promptColorMaterialPalette, promptColorMaterialTextures, selectedCrafts, wallContentPrompt],
   );
 
   const disconnectColorMaterialReferenceInput = useCallback(() => {
@@ -1004,10 +1007,10 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       colorMaterialPresetDisconnectRef.current = false;
       return;
     }
-    if (hasColorMaterialPreset && !colorMaterialPresetDisconnectRef.current) {
+    if (hasSelectedColorMaterialPreset && !colorMaterialPresetDisconnectRef.current) {
       update({ colorMaterialPreset: '' });
     }
-  }, [colorMaterialReferenceImage, hasColorMaterialPreset, update]);
+  }, [colorMaterialReferenceImage, hasSelectedColorMaterialPreset, update]);
 
   useEffect(() => {
     if (hasColorMaterialPreset) {
@@ -1616,6 +1619,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
             <div className="rounded border border-white/10 bg-black/15 p-2">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[9px] font-semibold text-rose-100/80">色彩优先</span>
+                {hasSelectedColorMaterialPreset && hasColorMaterialReference && <span className="truncate text-[8px] text-white/35">参考图接管</span>}
                 {hasColorMaterialPreset && <span className="truncate text-[8px] text-white/35">预设接管</span>}
               </div>
               <div className="mt-1 grid grid-cols-2 rounded border border-white/10 bg-black/20 p-0.5">
