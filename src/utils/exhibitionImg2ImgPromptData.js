@@ -112,17 +112,27 @@ function colorMaterialSourceText(values) {
   const palette = cleanText(values.colorMaterialPalette || '', 1200);
   const textures = cleanText(values.colorMaterialTextures || '', 1200);
   const colorMaterial = cleanText(values.colorMaterial || '', 1600);
+  const colorMaterialPriorityMode = values.colorMaterialPriorityMode === 'llm' ? 'llm' : 'frontend';
+  const colorMaterialReferenceTone = cleanText(values.colorMaterialReferenceTone || '', 500);
   const lines = [];
   if (values.hasColorMaterialPreset) {
     lines.push('色彩与材质来源：使用已选择的共享色彩与材质预设；不要再从参考图推断空间结构或覆盖预设。');
   } else if (values.hasColorMaterialReferenceImage) {
-    lines.push('色彩与材质来源：使用接入的色彩与材质参考图，仅提取主色、辅助色、冷暖关系、材质肌理、表面光泽、灯光氛围和可落地工艺语言。');
+    lines.push(colorMaterialPriorityMode === 'llm'
+      ? '色彩与材质来源：使用大模型识别接入的色彩与材质参考图，仅提取主色、辅助色、冷暖关系、材质肌理、表面光泽、灯光氛围和可落地工艺语言。'
+      : '色彩与材质来源：使用前端识别的色彩与材质参考图主色调结果，参考图仅用于辅助提取色彩关系、材质肌理、表面光泽和灯光氛围。');
   } else if (colorMaterial || palette || textures) {
     lines.push('色彩与材质来源：使用手动填写的色彩与材质要求。');
   } else {
     lines.push('色彩与材质来源：未提供参考图或预设时，建立清晰、克制、可落地的专业展陈色彩材质体系。');
   }
-  if (palette) lines.push(`Color palette：${palette}`);
+  if (palette && !values.hasColorMaterialReferenceImage) lines.push(`Color palette：${palette}`);
+  if (values.hasColorMaterialReferenceImage && colorMaterialPriorityMode !== 'llm') {
+    lines.push(`Color palette：${colorMaterialReferenceTone || '以“主色调识别（像素采样）”文本框中的前端识别结果为准；如为空，请保持专业展陈色彩关系，避免杂乱高饱和配色。'}`);
+  }
+  if (values.hasColorMaterialReferenceImage && colorMaterialPriorityMode === 'llm') {
+    lines.push('Color palette：从色彩与材质参考图中提取主色、辅助色、金属色、明暗关系、冷暖倾向和局部发光色；不得借用该参考图的空间布局或构图。');
+  }
   if (textures) lines.push(`Materials/textures：${textures}`);
   if (colorMaterial && (!palette || !textures)) lines.push(`色彩与材质：${colorMaterial}`);
   if (values.hasColorMaterialReferenceImage) {
@@ -141,6 +151,22 @@ function priorityLabel(id, values) {
     return '色彩与材质体系';
   }
   return '';
+}
+
+function colorMaterialReferenceRoleText(values) {
+  if (values.hasColorMaterialReferenceImage !== true) return '';
+  const mode = values.colorMaterialReferenceMode === 'abstract-card' ? 'abstract-card' : 'marked-image';
+  const markText = cleanText(values.colorMaterialReferenceMarkText || '图2', 64);
+  const positionMap = {
+    'top-left': '左上角',
+    'top-right': '右上角',
+    'bottom-left': '左下角',
+    'bottom-right': '右下角',
+  };
+  const position = positionMap[values.colorMaterialReferenceMarkPosition] || '左上角';
+  return mode === 'abstract-card'
+    ? '色彩与材质参考输入：色彩与材质抽象卡片，只用于提取色彩关系、材质质感、表面肌理、光泽、冷暖倾向和灯光氛围，不作为空间结构依据。'
+    : `色彩与材质参考输入：${position}带 ${markText} 标识的色彩与材质参考图，只用于提取色彩关系、材质质感、表面肌理、光泽、冷暖倾向和灯光氛围，不作为空间结构依据。`;
 }
 
 function executionPriorityText(priorityOrder, values) {
@@ -238,11 +264,17 @@ function formatWallContentPrompt(value) {
 function colorMaterialSystemText(values) {
   const palette = cleanText(values.colorMaterialPalette || '', 1200);
   const textures = cleanText(values.colorMaterialTextures || '', 1200);
-  const colorMaterial = cleanText(values.colorMaterial || '', 1600);
+  const hasReference = values.hasColorMaterialReferenceImage === true;
+  const priorityMode = values.colorMaterialPriorityMode === 'llm' ? 'llm' : 'frontend';
+  const referenceTone = cleanText(values.colorMaterialReferenceTone || '', 500);
+  const colorMaterial = hasReference ? '' : cleanText(values.colorMaterial || '', 1600);
   const source = colorMaterialSourceText(values);
   const lines = [];
   if (palette) lines.push(`主色调：${palette}`);
+  if (hasReference && priorityMode !== 'llm' && referenceTone) lines.push(`主色调：${referenceTone}`);
+  if (hasReference && priorityMode === 'llm') lines.push('主色调：从色彩与材质参考图中提取主色、辅助色、金属色、明暗关系、冷暖倾向和局部发光色。');
   if (textures) lines.push(`材质与肌理：${textures}`);
+  if (hasReference) lines.push('材质与肌理：从色彩与材质参考图中提取可落地的墙面、地面、展柜、装置、金属字、发光亚克力、灯带、浮雕肌理和低反射表面工艺语言。');
   if (colorMaterial) lines.push(`视觉特征：${colorMaterial}`);
   if (!palette && !textures && !colorMaterial) {
     lines.push('视觉特征：建立清晰、克制、可落地的专业展陈色彩材质体系。');
@@ -305,6 +337,11 @@ export function buildExhibitionImg2ImgPrompt(values = {}) {
     ].join('\n'),
     '',
   ];
+  const colorMaterialReferenceRole = colorMaterialReferenceRoleText(values);
+  if (colorMaterialReferenceRole) {
+    lines.push(colorMaterialReferenceRole);
+    lines.push('');
+  }
   const spaceHeight = spaceHeightText(values.dimensions);
   if (spaceHeight || cleanText(values.visualStyle) || supplement) {
     lines.push('补充要求：');

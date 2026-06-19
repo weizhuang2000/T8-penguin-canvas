@@ -78,6 +78,31 @@ const MAX_IMAGE_SEED = 2147483647;
 const EXTERNAL_SIZE_LEVELS = ['1K', '2K', '4K'];
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
+const DEFAULT_REFERENCE_MARK_FONT_SIZE = 24;
+const DEFAULT_COLOR_MATERIAL_MARK_TEXT = '图2';
+const AUTO_REFERENCE_MARK_SIZE_RATIO = 0.05;
+const LEGACY_COLOR_MATERIAL_MARK_TEXT = 'R';
+const LEGACY_REFERENCE_MARK_FONT_SIZE = 12;
+const COLOR_MATERIAL_MARK_DEFAULTS_VERSION = 2;
+
+type ReferenceMarkPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+type ColorMaterialReferenceMode = 'abstract-card' | 'marked-image';
+type ColorMaterialPriorityMode = 'frontend' | 'llm';
+
+interface ReferenceMarkSettings {
+  text: string;
+  position: ReferenceMarkPosition;
+  color: string;
+  fontSize: number;
+  autoFontSize: boolean;
+}
+
+const REFERENCE_MARK_POSITION_OPTIONS: Array<{ value: ReferenceMarkPosition; label: string }> = [
+  { value: 'top-left', label: '左上角' },
+  { value: 'top-right', label: '右上角' },
+  { value: 'bottom-left', label: '左下角' },
+  { value: 'bottom-right', label: '右下角' },
+];
 
 interface ExhibitReferenceInputImage {
   id: string;
@@ -106,6 +131,256 @@ function randomImageSeed(): number {
     return (values[0] % MAX_IMAGE_SEED) + 1;
   }
   return Math.floor(Math.random() * MAX_IMAGE_SEED) + 1;
+}
+
+function normalizeReferenceMarkPosition(value: unknown): ReferenceMarkPosition {
+  if (value === 'top-right' || value === 'bottom-left' || value === 'bottom-right') return value;
+  return 'top-left';
+}
+
+function clampReferenceMarkFontSize(value: unknown): number {
+  const number = Number.parseInt(String(value), 10);
+  if (!Number.isFinite(number)) return DEFAULT_REFERENCE_MARK_FONT_SIZE;
+  return Math.max(1, Math.min(512, number));
+}
+
+function normalizeReferenceMarkColor(value: unknown): string {
+  const text = String(value || '').trim();
+  return /^#[0-9a-f]{6}$/i.test(text) ? text : '#ff0000';
+}
+
+function normalizeReferenceMarkText(value: unknown, fallback: string): string {
+  const text = typeof value === 'string' ? value.slice(0, 64) : '';
+  return text || fallback;
+}
+
+function normalizeColorMaterialPriorityMode(value: unknown): ColorMaterialPriorityMode {
+  return value === 'llm' ? 'llm' : 'frontend';
+}
+
+function normalizeReferenceMarkSettings(data: any, prefix: 'colorMaterial'): ReferenceMarkSettings {
+  return {
+    text: normalizeReferenceMarkText(data?.[`${prefix}MarkText`], DEFAULT_COLOR_MATERIAL_MARK_TEXT),
+    position: normalizeReferenceMarkPosition(data?.[`${prefix}MarkPosition`]),
+    color: normalizeReferenceMarkColor(data?.[`${prefix}MarkColor`]),
+    fontSize: clampReferenceMarkFontSize(data?.[`${prefix}MarkFontSize`]),
+    autoFontSize: data?.[`${prefix}MarkAutoFontSize`] === true,
+  };
+}
+
+function loadReferenceImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('参考图加载失败，无法添加标识'));
+    if (/^https?:\/\//i.test(src)) image.crossOrigin = 'anonymous';
+    image.src = src;
+  });
+}
+
+function rgbToHsl(red: number, green: number, blue: number): { h: number; s: number; l: number } {
+  const r = red / 255;
+  const g = green / 255;
+  const b = blue / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return { h: 0, s: 0, l };
+  const delta = max - min;
+  const s = l > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+  let h = 0;
+  if (max === r) h = ((g - b) / delta + (g < b ? 6 : 0)) / 6;
+  else if (max === g) h = ((b - r) / delta + 2) / 6;
+  else h = ((r - g) / delta + 4) / 6;
+  return { h: h * 360, s, l };
+}
+
+function colorToneName(red: number, green: number, blue: number): string {
+  const { h, s, l } = rgbToHsl(red, green, blue);
+  if (l <= 0.12) return '黑色';
+  if (s <= 0.1) {
+    if (l >= 0.86) return '暖白/浅灰';
+    if (l <= 0.32) return '深灰';
+    return '中性灰';
+  }
+  if (h < 12 || h >= 345) return l < 0.45 ? '深红' : '红色';
+  if (h < 28) return l < 0.46 ? '红褐' : '橙红';
+  if (h < 46) return l < 0.55 ? '铜褐/棕色' : '暖橙/铜金';
+  if (h < 66) return l < 0.5 ? '橄榄金' : '金黄';
+  if (h < 90) return '黄绿';
+  if (h < 165) return l < 0.42 ? '深绿' : '绿色';
+  if (h < 195) return '青色';
+  if (h < 245) return l < 0.42 ? '深蓝' : '蓝色';
+  if (h < 285) return '蓝紫';
+  if (h < 325) return '紫色';
+  return '玫红/酒红';
+}
+
+async function analyzeReferenceImageDominantTone(imageUrl: string): Promise<string> {
+  const image = await loadReferenceImage(imageUrl);
+  const sourceWidth = image.naturalWidth || image.width;
+  const sourceHeight = image.naturalHeight || image.height;
+  if (!sourceWidth || !sourceHeight) throw new Error('参考图尺寸无效，无法识别主色调');
+  const maxSide = 96;
+  const scale = Math.min(1, maxSide / Math.max(sourceWidth, sourceHeight));
+  const width = Math.max(1, Math.round(sourceWidth * scale));
+  const height = Math.max(1, Math.round(sourceHeight * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) throw new Error('当前浏览器无法创建主色调识别画布');
+  ctx.drawImage(image, 0, 0, width, height);
+  const pixels = ctx.getImageData(0, 0, width, height).data;
+  const buckets = new Map<string, { name: string; count: number; sat: number; light: number; warm: number; cool: number }>();
+  let total = 0;
+  let satSum = 0;
+  let lightSum = 0;
+  let warm = 0;
+  let cool = 0;
+  for (let index = 0; index < pixels.length; index += 16) {
+    const alpha = pixels[index + 3];
+    if (alpha < 128) continue;
+    const red = pixels[index];
+    const green = pixels[index + 1];
+    const blue = pixels[index + 2];
+    const { h, s, l } = rgbToHsl(red, green, blue);
+    const name = colorToneName(red, green, blue);
+    const bucket = buckets.get(name) || { name, count: 0, sat: 0, light: 0, warm: 0, cool: 0 };
+    const weight = 1 + Math.min(0.8, s);
+    bucket.count += weight;
+    bucket.sat += s * weight;
+    bucket.light += l * weight;
+    if (s > 0.08 && (h < 75 || h >= 325)) bucket.warm += weight;
+    if (s > 0.08 && h >= 165 && h < 285) bucket.cool += weight;
+    buckets.set(name, bucket);
+    total += weight;
+    satSum += s * weight;
+    lightSum += l * weight;
+    if (s > 0.08 && (h < 75 || h >= 325)) warm += weight;
+    if (s > 0.08 && h >= 165 && h < 285) cool += weight;
+  }
+  if (!total || buckets.size === 0) return '主色调：未识别到有效色彩；可手动填写色彩倾向。';
+  const dominant = Array.from(buckets.values())
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 4)
+    .map((item) => item.name);
+  const temperature = warm > cool * 1.25 ? '整体偏暖' : cool > warm * 1.25 ? '整体偏冷' : '冷暖较均衡';
+  const avgLight = lightSum / total;
+  const lightText = avgLight < 0.36 ? '明度偏暗' : avgLight > 0.68 ? '明度偏亮' : '明度中等';
+  const avgSat = satSum / total;
+  const satText = avgSat < 0.18 ? '饱和度克制' : avgSat > 0.46 ? '饱和度较高' : '饱和度适中';
+  return `主色调：${dominant.join('、')}；${temperature}，${lightText}，${satText}。`;
+}
+
+function resolveReferenceMarkFontSize(width: number, height: number, settings: ReferenceMarkSettings): number {
+  if (!settings.autoFontSize) return settings.fontSize;
+  return Math.max(1, Math.min(512, Math.round(Math.max(width, height) * AUTO_REFERENCE_MARK_SIZE_RATIO)));
+}
+
+function drawReferenceMark(ctx: CanvasRenderingContext2D, width: number, height: number, settings: ReferenceMarkSettings) {
+  const fontSize = resolveReferenceMarkFontSize(width, height, settings);
+  const margin = Math.max(2, Math.ceil(fontSize * 0.25));
+  const isRight = settings.position.endsWith('right');
+  const isBottom = settings.position.startsWith('bottom');
+  ctx.font = `${fontSize}px Arial, Helvetica, sans-serif`;
+  ctx.fillStyle = settings.color;
+  ctx.textAlign = isRight ? 'right' : 'left';
+  ctx.textBaseline = isBottom ? 'alphabetic' : 'top';
+  ctx.fillText(settings.text || DEFAULT_COLOR_MATERIAL_MARK_TEXT, isRight ? Math.max(0, width - margin) : margin, isBottom ? Math.max(fontSize, height - margin) : margin);
+}
+
+async function markImageDataUrl(imageUrl: string, settings: ReferenceMarkSettings): Promise<string> {
+  const image = await loadReferenceImage(imageUrl);
+  const width = image.naturalWidth || image.width;
+  const height = image.naturalHeight || image.height;
+  if (!width || !height) throw new Error('参考图尺寸无效，无法添加标识');
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('当前浏览器无法创建标识画布');
+  ctx.drawImage(image, 0, 0, width, height);
+  drawReferenceMark(ctx, width, height, settings);
+  return canvas.toDataURL('image/png');
+}
+
+async function createColorMaterialAbstractCardDataUrl(imageUrl: string, settings: ReferenceMarkSettings): Promise<string> {
+  const image = await loadReferenceImage(imageUrl);
+  const sourceWidth = image.naturalWidth || image.width;
+  const sourceHeight = image.naturalHeight || image.height;
+  if (!sourceWidth || !sourceHeight) throw new Error('Invalid color material reference image size');
+  const size = 1024;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Unable to create color material abstract card');
+  const sampleCanvas = document.createElement('canvas');
+  sampleCanvas.width = 18;
+  sampleCanvas.height = 18;
+  const sampleCtx = sampleCanvas.getContext('2d');
+  if (!sampleCtx) throw new Error('Unable to sample color material reference image');
+  sampleCtx.drawImage(image, 0, 0, sampleCanvas.width, sampleCanvas.height);
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(sampleCanvas, 0, 0, size, size);
+  ctx.restore();
+  ctx.save();
+  ctx.globalAlpha = 0.45;
+  ctx.filter = 'blur(24px) saturate(1.12)';
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(sampleCanvas, -48, -48, size + 96, size + 96);
+  ctx.restore();
+  const cells = 5;
+  const gap = 18;
+  const cellSize = (size - gap * (cells + 1)) / cells;
+  ctx.save();
+  ctx.globalAlpha = 0.78;
+  ctx.imageSmoothingEnabled = true;
+  for (let row = 0; row < cells; row += 1) {
+    for (let col = 0; col < cells; col += 1) {
+      const index = row * cells + col;
+      const sx = Math.floor((((index * 37) % 100) / 100) * Math.max(1, sourceWidth - sourceWidth * 0.18));
+      const sy = Math.floor((((index * 53 + 17) % 100) / 100) * Math.max(1, sourceHeight - sourceHeight * 0.18));
+      const sw = Math.max(16, Math.floor(sourceWidth * (0.12 + ((index % 4) * 0.035))));
+      const sh = Math.max(16, Math.floor(sourceHeight * (0.12 + (((index + 2) % 4) * 0.035))));
+      const dx = gap + col * (cellSize + gap);
+      const dy = gap + row * (cellSize + gap);
+      ctx.drawImage(image, sx, sy, Math.min(sw, sourceWidth - sx), Math.min(sh, sourceHeight - sy), dx, dy, cellSize, cellSize);
+    }
+  }
+  ctx.restore();
+  ctx.save();
+  ctx.globalCompositeOperation = 'soft-light';
+  ctx.globalAlpha = 0.28;
+  for (let i = 0; i < 28; i += 1) {
+    const x = ((i * 97) % size);
+    const y = ((i * 61 + 29) % size);
+    const radius = 90 + ((i * 23) % 140);
+    const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+    gradient.addColorStop(0, 'rgba(255,255,255,0.55)');
+    gradient.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(Math.max(0, x - radius), Math.max(0, y - radius), radius * 2, radius * 2);
+  }
+  ctx.restore();
+  ctx.save();
+  ctx.globalAlpha = 0.62;
+  ctx.fillStyle = 'rgba(255,255,255,0.72)';
+  ctx.fillRect(0, 0, size, 54);
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.font = '24px Arial, Helvetica, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('COLOR / MATERIAL ONLY - NO SPATIAL STRUCTURE', size / 2, 27);
+  ctx.restore();
+  drawReferenceMark(ctx, size, size, settings);
+  return canvas.toDataURL('image/png');
+}
+
+function isGptImage2Model(value: unknown): boolean {
+  return /^gpt-image-2(?:$|-|_)/i.test(String(value || '').trim());
 }
 
 function imagesFromData(data: any): string[] {
@@ -396,6 +671,10 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const model = d.model || 'gpt-image-2';
   const modelDef = useMemo(() => IMAGE_MODELS.find((item) => item.id === model) || IMAGE_MODELS[0], [model]);
   const apiModel = d.apiModel || modelDef.apiModel;
+  const useColorMaterialAbstractCard = isExternalSelected
+    ? isGptImage2Model(externalProviderModel)
+    : (isGptImage2Model(apiModel) || isGptImage2Model(modelDef.id));
+  const colorMaterialReferenceMode: ColorMaterialReferenceMode = useColorMaterialAbstractCard ? 'abstract-card' : 'marked-image';
   const aspectRatio = d.aspectRatio || modelDef.defaultAspectRatio || '1:1';
   const sizeLevel = d.sizeLevel || modelDef.defaultSize || '2K';
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
@@ -456,8 +735,18 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const colorMaterialTextures = String(d.colorMaterialTextures || '').trim();
   const combinedColorMaterial = combineColorMaterialText(colorMaterialPalette, colorMaterialTextures, colorMaterial);
   const hasColorMaterialPreset = !!String(d.colorMaterialPreset || '').trim();
+  const colorMaterialPriorityMode = normalizeColorMaterialPriorityMode(d.colorMaterialPriorityMode);
   const hasColorMaterialReference = !!colorMaterialReferenceImage;
   const activeColorMaterialReferenceImage = hasColorMaterialPreset ? '' : colorMaterialReferenceImage;
+  const colorMaterialRecognitionDisabled = hasColorMaterialPreset || !hasColorMaterialReference;
+  const colorMaterialReferenceTone = String(d.colorMaterialReferenceTone || '').trim();
+  const colorMaterialMarkSettings = useMemo(() => normalizeReferenceMarkSettings(d, 'colorMaterial'), [
+    d.colorMaterialMarkAutoFontSize,
+    d.colorMaterialMarkColor,
+    d.colorMaterialMarkFontSize,
+    d.colorMaterialMarkPosition,
+    d.colorMaterialMarkText,
+  ]);
   const hasColorMaterialInput = hasColorMaterialReference || hasColorMaterialPreset || !!combinedColorMaterial;
   const contentOutputs = useMemo(
     () => buildElevationOutputs({
@@ -535,6 +824,11 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       colorMaterialTextures: colorMaterialTextures || colorMaterial,
       hasColorMaterialPreset,
       hasColorMaterialReferenceImage: !!activeColorMaterialReferenceImage,
+      colorMaterialReferenceTone,
+      colorMaterialPriorityMode,
+      colorMaterialReferenceMode,
+      colorMaterialReferenceMarkText: colorMaterialMarkSettings.text,
+      colorMaterialReferenceMarkPosition: colorMaterialMarkSettings.position,
       supplement: d.supplement,
       wallContentPrompt: nextContentOutputs.mainOutput,
       exhibitReferenceItems,
@@ -544,6 +838,11 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     colorMaterial,
     colorMaterialPalette,
     colorMaterialTextures,
+    colorMaterialMarkSettings.position,
+    colorMaterialMarkSettings.text,
+    colorMaterialPriorityMode,
+    colorMaterialReferenceMode,
+    colorMaterialReferenceTone,
     combinedColorMaterial,
     craftPresets,
     d.aspectRatio,
@@ -577,11 +876,16 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       colorMaterialTextures: colorMaterialTextures || colorMaterial,
       hasColorMaterialPreset,
       hasColorMaterialReferenceImage: !!activeColorMaterialReferenceImage,
+      colorMaterialReferenceTone,
+      colorMaterialPriorityMode,
+      colorMaterialReferenceMode,
+      colorMaterialReferenceMarkText: colorMaterialMarkSettings.text,
+      colorMaterialReferenceMarkPosition: colorMaterialMarkSettings.position,
       supplement: d.supplement,
       wallContentPrompt,
       exhibitReferenceItems,
     }),
-    [activeColorMaterialReferenceImage, combinedColorMaterial, colorMaterial, colorMaterialPalette, colorMaterialTextures, craftPresets, d.customCraft, d.density, d.dimensions, d.supplement, d.visualStyle, exhibitReferenceItems, hasColorMaterialPreset, priorityOrder, selectedCrafts, wallContentPrompt],
+    [activeColorMaterialReferenceImage, colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPriorityMode, colorMaterialReferenceMode, colorMaterialReferenceTone, combinedColorMaterial, colorMaterial, colorMaterialPalette, colorMaterialTextures, craftPresets, d.customCraft, d.density, d.dimensions, d.supplement, d.visualStyle, exhibitReferenceItems, hasColorMaterialPreset, priorityOrder, selectedCrafts, wallContentPrompt],
   );
 
   const disconnectColorMaterialReferenceInput = useCallback(() => {
@@ -590,6 +894,72 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       edge.target !== id || !['color-material-reference', 'style'].includes(edge.targetHandle || '')
     )));
   }, [id, rf]);
+
+  const renderColorMaterialMarkSettings = (
+    title: string,
+    settings: ReferenceMarkSettings,
+  ) => (
+    <div className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-semibold text-cyan-100">{title}</span>
+        <label className="flex items-center gap-1.5 text-[9px] text-white/45">
+          <input
+            type="checkbox"
+            checked={settings.autoFontSize}
+            disabled={isReadonly || busy}
+            className="accent-cyan-300"
+            onChange={(event) => update({ colorMaterialMarkAutoFontSize: event.target.checked })}
+          />
+          自动字号
+        </label>
+      </div>
+      <div className="grid grid-cols-4 gap-1">
+        <input
+          className={FIELD}
+          value={settings.text}
+          disabled={isReadonly || busy}
+          maxLength={64}
+          placeholder="标识"
+          onChange={(event) => update({ colorMaterialMarkText: event.target.value })}
+        />
+        <select
+          className={`${FIELD} col-span-2`}
+          value={settings.position}
+          disabled={isReadonly || busy}
+          onChange={(event) => update({ colorMaterialMarkPosition: normalizeReferenceMarkPosition(event.target.value) })}
+        >
+          {REFERENCE_MARK_POSITION_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+        <input
+          className={FIELD}
+          type="number"
+          min={1}
+          max={512}
+          value={settings.fontSize}
+          disabled={isReadonly || busy || settings.autoFontSize}
+          onChange={(event) => update({ colorMaterialMarkFontSize: clampReferenceMarkFontSize(event.target.value) })}
+        />
+      </div>
+      <div className="grid grid-cols-[34px_1fr] gap-1">
+        <input
+          type="color"
+          value={settings.color}
+          disabled={isReadonly || busy}
+          className="h-7 w-full rounded border border-white/10 bg-black/20 p-0.5 disabled:opacity-55"
+          onChange={(event) => update({ colorMaterialMarkColor: normalizeReferenceMarkColor(event.target.value) })}
+        />
+        <input
+          className={FIELD}
+          value={settings.color}
+          disabled={isReadonly || busy}
+          onChange={(event) => update({ colorMaterialMarkColor: event.target.value })}
+          onBlur={(event) => update({ colorMaterialMarkColor: normalizeReferenceMarkColor(event.target.value) })}
+        />
+      </div>
+    </div>
+  );
 
   useEffect(() => {
     const refs = [structureImage, activeColorMaterialReferenceImage, ...exhibitReferenceImageUrls].filter(Boolean);
@@ -617,6 +987,19 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   }, [d.exhibitReferenceItems, exhibitReferenceItems, update]);
 
   useEffect(() => {
+    if (Number(d.colorMaterialMarkDefaultsVersion) >= COLOR_MATERIAL_MARK_DEFAULTS_VERSION) return;
+    const patch: Record<string, any> = {};
+    if (String(d.colorMaterialMarkText || '').trim() === LEGACY_COLOR_MATERIAL_MARK_TEXT) {
+      patch.colorMaterialMarkText = DEFAULT_COLOR_MATERIAL_MARK_TEXT;
+    }
+    if (Number(d.colorMaterialMarkFontSize) === LEGACY_REFERENCE_MARK_FONT_SIZE) {
+      patch.colorMaterialMarkFontSize = DEFAULT_REFERENCE_MARK_FONT_SIZE;
+    }
+    patch.colorMaterialMarkDefaultsVersion = COLOR_MATERIAL_MARK_DEFAULTS_VERSION;
+    if (Object.keys(patch).length > 0) update(patch);
+  }, [d.colorMaterialMarkDefaultsVersion, d.colorMaterialMarkFontSize, d.colorMaterialMarkText, update]);
+
+  useEffect(() => {
     if (!colorMaterialReferenceImage) {
       colorMaterialPresetDisconnectRef.current = false;
       return;
@@ -625,6 +1008,46 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       update({ colorMaterialPreset: '' });
     }
   }, [colorMaterialReferenceImage, hasColorMaterialPreset, update]);
+
+  useEffect(() => {
+    if (hasColorMaterialPreset) {
+      if (colorMaterialReferenceTone || d.colorMaterialReferenceToneSource || d.colorMaterialReferenceToneStatus) {
+        update({ colorMaterialReferenceTone: '', colorMaterialReferenceToneSource: '', colorMaterialReferenceToneStatus: '' });
+      }
+      return;
+    }
+    const source = colorMaterialReferenceImage || '';
+    const savedSource = String(d.colorMaterialReferenceToneSource || '').trim();
+    if (!source) {
+      if (d.colorMaterialReferenceTone || d.colorMaterialReferenceToneSource || d.colorMaterialReferenceToneStatus) {
+        update({ colorMaterialReferenceTone: '', colorMaterialReferenceToneSource: '', colorMaterialReferenceToneStatus: '' });
+      }
+      return;
+    }
+    if (savedSource === source && colorMaterialReferenceTone) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const tone = await analyzeReferenceImageDominantTone(source);
+        if (cancelled) return;
+        update({
+          colorMaterialReferenceTone: tone,
+          colorMaterialReferenceToneSource: source,
+          colorMaterialReferenceToneStatus: '',
+        });
+      } catch (error: any) {
+        if (cancelled) return;
+        update({
+          colorMaterialReferenceTone: '主色调：识别失败，可手动填写。',
+          colorMaterialReferenceToneSource: source,
+          colorMaterialReferenceToneStatus: error?.message || '主色调识别失败',
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [colorMaterialReferenceImage, colorMaterialReferenceTone, d.colorMaterialReferenceToneSource, d.colorMaterialReferenceToneStatus, hasColorMaterialPreset, update]);
 
   useEffect(() => {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
@@ -694,6 +1117,37 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     }
     return out;
   }, [activeColorMaterialReferenceImage, exhibitReferenceImageUrls, priorityOrder, structureImage]);
+
+  const buildRuntimeReferenceImages = useCallback(async () => {
+    const runtimeColorMaterialReference = activeColorMaterialReferenceImage && colorMaterialPriorityMode === 'llm'
+      ? useColorMaterialAbstractCard
+        ? await createColorMaterialAbstractCardDataUrl(activeColorMaterialReferenceImage, colorMaterialMarkSettings)
+        : await markImageDataUrl(activeColorMaterialReferenceImage, colorMaterialMarkSettings)
+      : activeColorMaterialReferenceImage;
+    const imageForPriority: Record<string, string[]> = {
+      structureAnnotations: structureImage ? [structureImage] : [],
+      craftLayout: [],
+      colorMaterialReference: runtimeColorMaterialReference ? [runtimeColorMaterialReference] : [],
+    };
+    const out: string[] = [];
+    for (const key of priorityOrder) {
+      for (const url of imageForPriority[key]) {
+        if (url && !out.includes(url)) out.push(url);
+      }
+    }
+    for (const url of exhibitReferenceImageUrls) {
+      if (url && !out.includes(url)) out.push(url);
+    }
+    return out;
+  }, [
+    activeColorMaterialReferenceImage,
+    colorMaterialMarkSettings,
+    colorMaterialPriorityMode,
+    exhibitReferenceImageUrls,
+    priorityOrder,
+    structureImage,
+    useColorMaterialAbstractCard,
+  ]);
 
   const saveCraftPresets = async () => {
     if (!canManageTeam) return;
@@ -856,6 +1310,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       const plan = await planWallContent(undefined, true);
       if (plan) promptForRun = buildPromptWithWallPlan(plan);
     }
+    const runtimeReferenceImages = await buildRuntimeReferenceImages();
     const runSeed = seed > 0 ? seed : randomImageSeed();
     const src = `exhibition-img2img:${id.slice(0, 6)}`;
     const historyContext = {
@@ -879,7 +1334,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           image_size: sizeLevel,
           imageSize: sizeLevel,
         };
-        logBus.info(`展陈图生图提交: ${providerSelection.provider.label || providerSelection.provider.id} · ${externalProviderModel} · refs=${orderedReferenceImages.length}`, src);
+        logBus.info(`展陈图生图提交: ${providerSelection.provider.label || providerSelection.provider.id} · ${externalProviderModel} · refs=${runtimeReferenceImages.length}`, src);
         let res = await generateExternalImage({
           providerId: providerSelection.provider.id,
           providerModel: externalProviderModel,
@@ -888,7 +1343,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           size,
           aspect_ratio: aspectRatio,
           image_size: sizeLevel,
-          images: orderedReferenceImages,
+          images: runtimeReferenceImages,
           outputFormat,
           seed: runSeed,
           n: Math.max(1, Math.min(4, Number(providerParams.n || 1))),
@@ -932,7 +1387,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         return;
       }
 
-      logBus.info(`展陈图生图提交: model=${apiModel} ratio=${aspectRatio} size=${sizeLevel} refs=${orderedReferenceImages.length}`, src);
+      logBus.info(`展陈图生图提交: model=${apiModel} ratio=${aspectRatio} size=${sizeLevel} refs=${runtimeReferenceImages.length}`, src);
       const submit = await submitImageAsync({
         model: modelDef.id,
         apiModel,
@@ -940,7 +1395,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         prompt: promptForRun,
         aspect_ratio: aspectRatio,
         image_size: sizeLevel,
-        images: orderedReferenceImages,
+        images: runtimeReferenceImages,
         n: 1,
         outputFormat,
         seed: runSeed,
@@ -1155,6 +1610,51 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           {selectedColorMaterialPreset?.info && (
             <div className="rounded border border-cyan-300/15 bg-cyan-300/5 px-2 py-1 text-[10px] leading-snug text-cyan-50/70">
               {selectedColorMaterialPreset.info}
+            </div>
+          )}
+          {hasColorMaterialReference && (
+            <div className="rounded border border-white/10 bg-black/15 p-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[9px] font-semibold text-rose-100/80">色彩优先</span>
+                {hasColorMaterialPreset && <span className="truncate text-[8px] text-white/35">预设接管</span>}
+              </div>
+              <div className="mt-1 grid grid-cols-2 rounded border border-white/10 bg-black/20 p-0.5">
+                {[
+                  { value: 'frontend', label: '前端识别' },
+                  { value: 'llm', label: '大模型识别' },
+                ].map((option) => {
+                  const active = colorMaterialPriorityMode === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      disabled={isReadonly || busy || colorMaterialRecognitionDisabled}
+                      className={`h-6 rounded px-1 text-[9px] transition ${active ? 'bg-rose-300/20 text-rose-50' : 'text-white/45 hover:bg-white/[0.08]'} disabled:cursor-not-allowed disabled:opacity-45`}
+                      onClick={() => update({ colorMaterialPriorityMode: option.value })}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-1.5 flex items-center justify-between gap-2">
+                <span className="text-[9px] font-semibold text-rose-100/80">主色调识别（像素采样）</span>
+                {d.colorMaterialReferenceToneStatus && (
+                  <span className="truncate text-[8px] text-amber-200/75" title={d.colorMaterialReferenceToneStatus}>需手动确认</span>
+                )}
+              </div>
+              <textarea
+                className={`${FIELD} mt-1 min-h-[46px] resize-y text-[10px] leading-snug${colorMaterialPriorityMode === 'llm' ? ' select-none pointer-events-none' : ''}`}
+                value={colorMaterialReferenceTone}
+                disabled={isReadonly || busy || hasColorMaterialPreset || colorMaterialPriorityMode === 'llm'}
+                placeholder="接入图片后自动识别主色调，可手动修正"
+                onChange={(event) => update({
+                  colorMaterialReferenceTone: event.target.value,
+                  colorMaterialReferenceToneSource: colorMaterialReferenceImage,
+                  colorMaterialReferenceToneStatus: '',
+                })}
+              />
+              {renderColorMaterialMarkSettings('色彩与材质图标识', colorMaterialMarkSettings)}
             </div>
           )}
           {canManageTeam && (

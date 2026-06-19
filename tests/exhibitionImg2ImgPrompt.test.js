@@ -120,10 +120,28 @@ test('exhibition img2img prompt forbids rendering design instruction fields as w
 });
 
 test('exhibition img2img prompt uses color material reference image as material source', () => {
-  const prompt = buildExhibitionImg2ImgPrompt({ hasColorMaterialReferenceImage: true });
-  assert.match(prompt, /色彩与材质来源：使用接入的色彩与材质参考图/);
-  assert.match(prompt, /仅提取主色、辅助色、冷暖关系、材质肌理、表面光泽、灯光氛围和可落地工艺语言/);
+  const prompt = buildExhibitionImg2ImgPrompt({
+    hasColorMaterialReferenceImage: true,
+    colorMaterialPriorityMode: 'frontend',
+    colorMaterialReferenceTone: '主色调：深红、铜褐、黑灰；整体偏暖，明度偏暗，饱和度适中。',
+  });
+  assert.match(prompt, /色彩与材质来源：使用前端识别的色彩与材质参考图主色调结果/);
+  assert.match(prompt, /Color palette：主色调：深红、铜褐、黑灰；整体偏暖，明度偏暗，饱和度适中。/);
+  assert.match(prompt, /色彩与材质参考输入：左上角带 图2 标识的色彩与材质参考图/);
   assert.match(prompt, /不得作为空间布局、墙体位置、展台位置、通道组织或透视角度依据/);
+});
+
+test('exhibition img2img prompt uses llm color material recognition like creative node', () => {
+  const prompt = buildExhibitionImg2ImgPrompt({
+    hasColorMaterialReferenceImage: true,
+    colorMaterialPriorityMode: 'llm',
+    colorMaterialReferenceMode: 'abstract-card',
+    colorMaterialReferenceTone: '主色调：前端识别不应进入大模型识别模式',
+  });
+  assert.match(prompt, /色彩与材质来源：使用大模型识别接入的色彩与材质参考图/);
+  assert.match(prompt, /色彩与材质参考输入：色彩与材质抽象卡片/);
+  assert.match(prompt, /Color palette：从色彩与材质参考图中提取主色、辅助色、金属色、明暗关系、冷暖倾向和局部发光色/);
+  assert.doesNotMatch(prompt, /前端识别不应进入大模型识别模式/);
 });
 
 test('exhibition img2img prompt uses shared color material preset', () => {
@@ -153,7 +171,7 @@ test('exhibition img2img prompt explains reference image roles after priority ch
     hasColorMaterialReferenceImage: true,
   });
   assert.match(prompt, /空间结构示意图是最终画面的唯一空间骨架和布局蓝本/);
-  assert.match(prompt, /色彩与材质来源：使用接入的色彩与材质参考图，仅提取主色、辅助色、冷暖关系、材质肌理、表面光泽、灯光氛围/);
+  assert.match(prompt, /色彩与材质来源：使用前端识别的色彩与材质参考图主色调结果/);
   assert.doesNotMatch(prompt, /第 \d+ 张参考图是空间结构示意图/);
   assert.doesNotMatch(prompt, /第 \d+ 张参考图是色彩与材质参考图/);
 });

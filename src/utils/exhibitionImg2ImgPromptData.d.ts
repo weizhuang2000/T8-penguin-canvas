@@ -22,6 +22,11 @@ export interface ExhibitionImg2ImgPromptValues {
   colorMaterialTextures?: string;
   hasColorMaterialPreset?: boolean;
   hasColorMaterialReferenceImage?: boolean;
+  colorMaterialReferenceTone?: string;
+  colorMaterialPriorityMode?: 'frontend' | 'llm';
+  colorMaterialReferenceMode?: 'abstract-card' | 'marked-image';
+  colorMaterialReferenceMarkText?: string;
+  colorMaterialReferenceMarkPosition?: string;
   visualStyle?: string;
   supplement?: string;
   wallContentPrompt?: string;
