@@ -364,6 +364,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     colorMaterial: '',
     colorMaterialPalette: '',
     colorMaterialTextures: '',
+    regenerateContentEachRun: false,
     prompt: '',
     outputText: '',
     text: '',

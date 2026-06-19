@@ -45,6 +45,7 @@ import {
   parseElevationContentPlanResponse,
   type ElevationCraft,
   type ElevationAnalysis,
+  type ElevationContentPlan,
   type ElevationWall,
 } from '../../utils/elevationPrompt';
 import {
@@ -419,6 +420,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const selectedCrafts: string[] = Array.isArray(d.selectedCrafts) ? d.selectedCrafts : DEFAULT_CRAFTS;
   const contentEnabled = d.contentPlanningEnabled === true;
   const sourceText = String(d.sourceText || '');
+  const regenerateContentEachRun = d.regenerateContentEachRun === true;
   const wallMode: 'single' | 'multi' = d.wallMode === 'single' ? 'single' : 'multi';
   const wallCount = Math.max(1, Math.min(12, Number(d.wallCount) || 3));
   const analysis = useMemo(
@@ -496,6 +498,70 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     !!d.contentPlanningPrompt
   );
   const wallContentPrompt = hasContentPlanning ? contentOutputs.mainOutput : '';
+
+  const buildPromptWithWallPlan = useCallback((plan: ElevationContentPlan) => {
+    const nextAnalysis = {
+      projectTheme: plan.projectTheme,
+      coreMessage: plan.coreMessage,
+      sections: [],
+    };
+    const nextContentOutputs = buildElevationOutputs({
+      analysis: nextAnalysis,
+      walls: plan.walls,
+      wallMode,
+      wallCount,
+      outputMode: d.outputMode === 'overview' ? 'overview' : 'segments',
+      downstreamContent: 'schedule',
+      selectedCrafts,
+      customCraft: d.customCraft,
+      aspectRatio: d.aspectRatio,
+      dimensions: d.dimensions,
+      density: d.density,
+      colorMaterial: d.colorMaterial,
+      visualStyle: d.visualStyle,
+      supplement: d.contentSupplement,
+      craftPresets,
+    });
+    return buildExhibitionImg2ImgPrompt({
+      priorityOrder,
+      selectedCrafts,
+      customCraft: d.customCraft,
+      craftPresets,
+      density: d.density,
+      dimensions: d.dimensions,
+      colorMaterial: combinedColorMaterial,
+      visualStyle: d.visualStyle,
+      colorMaterialPalette: colorMaterialPalette || colorMaterial,
+      colorMaterialTextures: colorMaterialTextures || colorMaterial,
+      hasColorMaterialPreset,
+      hasColorMaterialReferenceImage: !!activeColorMaterialReferenceImage,
+      supplement: d.supplement,
+      wallContentPrompt: nextContentOutputs.mainOutput,
+      exhibitReferenceItems,
+    });
+  }, [
+    activeColorMaterialReferenceImage,
+    colorMaterial,
+    colorMaterialPalette,
+    colorMaterialTextures,
+    combinedColorMaterial,
+    craftPresets,
+    d.aspectRatio,
+    d.colorMaterial,
+    d.contentSupplement,
+    d.customCraft,
+    d.density,
+    d.dimensions,
+    d.outputMode,
+    d.supplement,
+    d.visualStyle,
+    exhibitReferenceItems,
+    hasColorMaterialPreset,
+    priorityOrder,
+    selectedCrafts,
+    wallCount,
+    wallMode,
+  ]);
 
   const prompt = useMemo(
     () => buildExhibitionImg2ImgPrompt({
@@ -720,9 +786,11 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         error: '',
         plannedAt: Date.now(),
       });
+      return plan;
     } catch (error: any) {
       update({ status: 'error', error: error?.message || '展示内容生成失败' });
       if (rethrow) throw error;
+      return undefined;
     }
   }, [
     activeContentLlmConfig?.id,
@@ -783,6 +851,11 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       update({ status: 'error', error: msg });
       throw new Error(msg);
     }
+    let promptForRun = prompt;
+    if (contentEnabled && regenerateContentEachRun) {
+      const plan = await planWallContent(undefined, true);
+      if (plan) promptForRun = buildPromptWithWallPlan(plan);
+    }
     const runSeed = seed > 0 ? seed : randomImageSeed();
     const src = `exhibition-img2img:${id.slice(0, 6)}`;
     const historyContext = {
@@ -811,7 +884,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           providerId: providerSelection.provider.id,
           providerModel: externalProviderModel,
           model: externalProviderModel,
-          prompt,
+          prompt: promptForRun,
           size,
           aspect_ratio: aspectRatio,
           image_size: sizeLevel,
@@ -848,7 +921,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           imageUrl: urls[0],
           imageUrls: urls,
           remoteImageUrls: res.remoteImageUrls,
-          lastPrompt: prompt,
+          lastPrompt: promptForRun,
           lastSeed: runSeed,
           taskId: res.taskId || d.taskId,
           usedI2I: true,
@@ -864,7 +937,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         model: modelDef.id,
         apiModel,
         paramKind: modelDef.paramKind,
-        prompt,
+        prompt: promptForRun,
         aspect_ratio: aspectRatio,
         image_size: sizeLevel,
         images: orderedReferenceImages,
@@ -879,7 +952,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           progress: '100%',
           imageUrl: submit.urls[0],
           imageUrls: submit.urls,
-          lastPrompt: prompt,
+          lastPrompt: promptForRun,
           lastSeed: runSeed,
           usedI2I: true,
           error: '',
@@ -907,7 +980,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
             progress: '100%',
             imageUrl: url,
             imageUrls: q.urls,
-            lastPrompt: prompt,
+            lastPrompt: promptForRun,
             lastSeed: runSeed,
             usedI2I: true,
             error: '',
@@ -1035,7 +1108,16 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               <option value="适中，图文层级均衡">适中</option>
               <option value="信息丰富，采用严谨网格">丰富</option>
             </select>
-            <input className={FIELD} value={d.dimensions || ''} disabled={isReadonly} placeholder="空间/画面尺寸" onChange={(event) => update({ dimensions: event.target.value })} />
+            <input
+              className={FIELD}
+              type="number"
+              min={0}
+              step={0.1}
+              value={d.dimensions || ''}
+              disabled={isReadonly}
+              placeholder="空间高度"
+              onChange={(event) => update({ dimensions: event.target.value })}
+            />
             <input className={FIELD} value={d.visualStyle || ''} disabled={isReadonly} placeholder="视觉风格" onChange={(event) => update({ visualStyle: event.target.value })} />
           </div>
           <textarea className={`${FIELD} mt-1 min-h-[48px] resize-y`} value={d.supplement || ''} disabled={isReadonly} placeholder="补充要求" onChange={(event) => update({ supplement: event.target.value })} />
@@ -1208,9 +1290,19 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               <div className="rounded border border-white/10 bg-black/15 p-2">
                 <div className="mb-1.5 flex items-center gap-2">
                   <span className="text-[11px] font-semibold text-cyan-100">2. 生成展示内容</span>
+                  <label className="ml-auto inline-flex items-center gap-1.5 text-[10px] text-white/60" title="开启后，每次点击生图前都会先用大模型重新生成展墙展示内容">
+                    <input
+                      type="checkbox"
+                      className="h-3 w-3 accent-cyan-300"
+                      checked={regenerateContentEachRun}
+                      disabled={contentBusy || isReadonly}
+                      onChange={(event) => update({ regenerateContentEachRun: event.target.checked })}
+                    />
+                    每次生图重新生成
+                  </label>
                   <button
                     type="button"
-                    className={`${BUTTON} ml-auto`}
+                    className={BUTTON}
                     disabled={contentBusy || isReadonly || !sourceText.trim()}
                     onClick={() => void planWallContent()}
                   >

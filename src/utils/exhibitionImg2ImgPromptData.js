@@ -169,6 +169,12 @@ function splitSentences(text) {
     .filter(Boolean);
 }
 
+function spaceHeightText(value) {
+  const text = cleanText(value, 80);
+  const match = text.match(/\d+(?:\.\d+)?/u);
+  return match ? match[0] : '';
+}
+
 function formatWallContentPrompt(value) {
   const prompt = cleanWallContentPrompt(value);
   if (!prompt) return '未启用展墙内容设计时，按空间结构示意图中的展墙/隔断关系进行抽象图文层级与展品陈列组织，不生成可读长文。';
@@ -299,9 +305,10 @@ export function buildExhibitionImg2ImgPrompt(values = {}) {
     ].join('\n'),
     '',
   ];
-  if (cleanText(values.dimensions) || cleanText(values.visualStyle) || supplement) {
+  const spaceHeight = spaceHeightText(values.dimensions);
+  if (spaceHeight || cleanText(values.visualStyle) || supplement) {
     lines.push('补充要求：');
-    if (cleanText(values.dimensions)) lines.push(`空间/画面尺寸：${cleanText(values.dimensions)}。`);
+    if (spaceHeight) lines.push(`空间高度：${spaceHeight}米。`);
     if (cleanText(values.visualStyle)) lines.push(`视觉风格：${cleanText(values.visualStyle)}。`);
     if (supplement) lines.push(supplement);
     lines.push('');

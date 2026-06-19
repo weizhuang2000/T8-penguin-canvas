@@ -164,6 +164,7 @@ test('exhibition img2img prompt includes craft and layout values when present', 
     craftPresets: [{ id: 'custom-craft', label: '定制工艺', prompt: '定制工艺提示词' }],
     customCraft: '补充工艺',
     density: '信息丰富',
+    dimensions: '3.6',
     colorMaterial: '深色金属与暖光',
     visualStyle: '未来科技',
     supplement: '入口处保持开阔',
@@ -171,6 +172,8 @@ test('exhibition img2img prompt includes craft and layout values when present', 
   assert.match(prompt, /定制工艺提示词/);
   assert.match(prompt, /补充工艺/);
   assert.match(prompt, /信息丰富/);
+  assert.match(prompt, /空间高度：3\.6米/);
+  assert.doesNotMatch(prompt, /空间\/画面尺寸/);
   assert.match(prompt, /深色金属与暖光/);
   assert.match(prompt, /未来科技/);
   assert.match(prompt, /入口处保持开阔/);
