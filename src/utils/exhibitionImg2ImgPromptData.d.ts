@@ -25,10 +25,7 @@ export interface ExhibitionImg2ImgPromptValues {
   visualStyle?: string;
   supplement?: string;
   wallContentPrompt?: string;
-  exhibitGroups?: Array<{
-    groupIndex?: number;
-    items?: Array<string | { description?: string; label?: string }>;
-  }>;
+  exhibitReferenceItems?: Array<{ id?: string; url?: string; label?: string; description?: string }>;
 }
 
 export const EXHIBITION_IMG2IMG_PRIORITY: ExhibitionImg2ImgPriorityMeta[];

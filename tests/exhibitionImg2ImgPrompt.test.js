@@ -166,16 +166,17 @@ test('exhibition img2img prompt includes craft and layout values when present', 
   assert.match(prompt, /入口处保持开阔/);
 });
 
-test('exhibition img2img prompt places recognized exhibits by showcase groups', () => {
+test('exhibition img2img prompt describes exhibit reference images', () => {
   const prompt = buildExhibitionImg2ImgPrompt({
-    exhibitGroups: [
-      { groupIndex: 2, items: ['青铜鼎'] },
-      { groupIndex: 1, items: ['红色陶器', '圆形铜镜'] },
+    exhibitReferenceItems: [
+      { url: '/files/input/red-pot.png', description: '红色陶器' },
+      { url: '/files/input/bronze.png', description: '青铜鼎' },
     ],
   });
-  assert.match(prompt, /展柜展品布置/);
-  const first = prompt.indexOf('将红色陶器、圆形铜镜放入左边第 1 个展柜内。');
-  const second = prompt.indexOf('将青铜鼎放入左边第 2 个展柜内。');
+  assert.match(prompt, /展品参考图/);
+  const first = prompt.indexOf('展品 1 特征描述：红色陶器');
+  const second = prompt.indexOf('展品 2 特征描述：青铜鼎');
   assert.ok(first >= 0 && second > first);
-  assert.match(prompt, /展品图像只作为展品主体、轮廓、局部材质与展品自身色彩参考/);
+  assert.match(prompt, /展品参考图只用于提取展品外观、内容主题、体量关系、材质细节和展示重点/);
+  assert.match(prompt, /不作为空间结构、布局比例或整体色彩材质体系依据/);
 });

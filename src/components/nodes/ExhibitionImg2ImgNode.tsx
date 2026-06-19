@@ -18,10 +18,12 @@ import {
   Upload,
 } from 'lucide-react';
 import {
+  DEFAULT_LLM_MODEL,
   IMAGE_MODELS,
 } from '../../providers/models';
 import {
   generateExternalImage,
+  generateLlm,
   queryExternalImageStatus,
   queryImageStatus,
   submitImageAsync,
@@ -311,7 +313,7 @@ function ImageSlot({
   url,
   top,
 }: {
-  handleId: 'structure' | 'color-material-reference' | 'exhibits';
+  handleId: 'structure' | 'color-material-reference' | 'exhibit-reference';
   title: string;
   subtitle: string;
   url: string;
@@ -395,12 +397,6 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     || llmConfigOptions[0];
   const savedContentModel = String(d.contentModel || '').trim();
   const contentModel = activeContentLlmConfig?.model || savedContentModel || configuredLlmModel;
-  const selectedExhibitLlmKeyId = String(d.exhibitLlmKeyId || d.contentLlmKeyId || '').trim();
-  const activeExhibitLlmConfig = llmConfigOptions.find((item) => item.id === selectedExhibitLlmKeyId)
-    || llmConfigOptions.find((item) => item.isDefault)
-    || llmConfigOptions[0];
-  const savedExhibitModel = String(d.exhibitModel || '').trim();
-  const exhibitModel = activeExhibitLlmConfig?.model || savedExhibitModel || contentModel;
 
   const model = d.model || 'gpt-image-2';
   const modelDef = useMemo(() => IMAGE_MODELS.find((item) => item.id === model) || IMAGE_MODELS[0], [model]);
@@ -414,22 +410,17 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const colorMaterialReferenceInputImage = useHandleImage(id, 'color-material-reference');
   const legacyStyleInputImage = useHandleImage(id, 'style');
   const colorMaterialReferenceImage = colorMaterialReferenceInputImage || legacyStyleInputImage;
-  const exhibitInputImages = useHandleImages(id, 'exhibits');
-  const exhibitInputUrls = useMemo(() => exhibitInputImages.map((item) => item.url), [exhibitInputImages]);
-  const exhibitItems = useMemo(() => {
-    const saved = normalizeExhibitItems(d.exhibitItems);
-    return exhibitInputImages.map((image, index) => {
+  const exhibitReferenceInputImages = useHandleImages(id, 'exhibit-reference', 'exhibits');
+  const exhibitReferenceImageUrls = useMemo(() => exhibitReferenceInputImages.map((item) => item.url), [exhibitReferenceInputImages]);
+  const exhibitReferenceItems = useMemo(() => {
+    const saved: ExhibitReferenceItem[] = Array.isArray(d.exhibitReferenceItems) ? d.exhibitReferenceItems : [];
+    return exhibitReferenceInputImages.map((image) => {
       const existing = saved.find((item) => item.url === image.url);
       return existing
         ? { ...existing, id: image.id, label: image.label }
-        : {
-            ...image,
-            description: '',
-            groupIndex: index + 1,
-          };
+        : { ...image, description: '' };
     });
-  }, [d.exhibitItems, exhibitInputImages]);
-  const exhibitGroups = useMemo(() => groupedExhibitsForPrompt(exhibitItems), [exhibitItems]);
+  }, [d.exhibitReferenceItems, exhibitReferenceInputImages]);
   const priorityOrder = normalizeExhibitionImg2ImgPriority(d.priorityOrder);
   const selectedCrafts: string[] = Array.isArray(d.selectedCrafts) ? d.selectedCrafts : DEFAULT_CRAFTS;
   const contentEnabled = d.contentPlanningEnabled === true;
@@ -454,8 +445,6 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const [colorMaterialSaving, setColorMaterialSaving] = useState(false);
   const [craftError, setCraftError] = useState('');
   const [colorMaterialError, setColorMaterialError] = useState('');
-  const [recognizingExhibits, setRecognizingExhibits] = useState(false);
-  const [recognizeProgress, setRecognizeProgress] = useState('');
   const status = String(d.status || 'idle');
   const isGenerating = status === 'generating';
   const busy = isGenerating || status === 'extracting' || status === 'refining';
@@ -535,9 +524,9 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       hasColorMaterialReferenceImage: !!activeColorMaterialReferenceImage,
       supplement: d.supplement,
       wallContentPrompt,
-      exhibitGroups,
+      exhibitReferenceItems,
     }),
-    [activeColorMaterialReferenceImage, combinedColorMaterial, colorMaterial, colorMaterialPalette, colorMaterialTextures, craftPresets, d.customCraft, d.density, d.dimensions, d.supplement, d.visualStyle, exhibitGroups, hasColorMaterialPreset, priorityOrder, selectedCrafts, wallContentPrompt],
+    [activeColorMaterialReferenceImage, combinedColorMaterial, colorMaterial, colorMaterialPalette, colorMaterialTextures, craftPresets, d.customCraft, d.density, d.dimensions, d.supplement, d.visualStyle, exhibitReferenceItems, hasColorMaterialPreset, priorityOrder, selectedCrafts, wallContentPrompt],
   );
 
   const disconnectColorMaterialReferenceInput = useCallback(() => {
@@ -548,7 +537,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   }, [id, rf]);
 
   useEffect(() => {
-    const refs = [structureImage, activeColorMaterialReferenceImage, ...exhibitInputUrls].filter(Boolean);
+    const refs = [structureImage, activeColorMaterialReferenceImage, ...exhibitReferenceImageUrls].filter(Boolean);
     const patch = {
       prompt,
       outputText: prompt,
@@ -563,12 +552,14 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     ) {
       update(patch);
     }
-  }, [activeColorMaterialReferenceImage, d.imageUrl, d.outputText, d.prompt, d.referenceImages, d.text, exhibitInputUrls, prompt, structureImage, update]);
+  }, [activeColorMaterialReferenceImage, d.imageUrl, d.outputText, d.prompt, d.referenceImages, d.text, exhibitReferenceImageUrls, prompt, structureImage, update]);
 
   useEffect(() => {
-    if (same(d.exhibitItems || [], exhibitItems)) return;
-    update({ exhibitItems });
-  }, [d.exhibitItems, exhibitItems, update]);
+    const saved: ExhibitReferenceItem[] = Array.isArray(d.exhibitReferenceItems) ? d.exhibitReferenceItems : [];
+    const isSame = saved.length === exhibitReferenceItems.length
+      && saved.every((item, index) => item.url === exhibitReferenceItems[index].url && item.description === exhibitReferenceItems[index].description);
+    if (!isSame) update({ exhibitReferenceItems });
+  }, [d.exhibitReferenceItems, exhibitReferenceItems, update]);
 
   useEffect(() => {
     if (!colorMaterialReferenceImage) {
@@ -647,11 +638,11 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         if (url && !out.includes(url)) out.push(url);
       }
     }
-    for (const url of exhibitInputUrls) {
+    for (const url of exhibitReferenceImageUrls) {
       if (url && !out.includes(url)) out.push(url);
     }
     return out;
-  }, [activeColorMaterialReferenceImage, exhibitInputUrls, priorityOrder, structureImage]);
+  }, [activeColorMaterialReferenceImage, exhibitReferenceImageUrls, priorityOrder, structureImage]);
 
   const saveCraftPresets = async () => {
     if (!canManageTeam) return;
@@ -700,65 +691,13 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     update({ selectedCrafts: next });
   };
 
-  const patchExhibitItem = (url: string, patch: Partial<ExhibitItem>) => {
+  const patchExhibitReferenceItem = useCallback((url: string, patch: Partial<Pick<ExhibitReferenceItem, 'description'>>) => {
     if (isReadonly) return;
-    const next = exhibitItems.map((item) => (
+    const next = exhibitReferenceItems.map((item) => (
       item.url === url ? { ...item, ...patch } : item
     ));
-    update({ exhibitItems: next });
-  };
-
-  const recognizeExhibits = useCallback(async () => {
-    if (isReadonly || recognizingExhibits || exhibitItems.length === 0) return;
-    setRecognizingExhibits(true);
-    setRecognizeProgress('0%');
-    try {
-      const nextItems = exhibitItems.slice();
-      for (let index = 0; index < nextItems.length; index += 1) {
-        const item = nextItems[index];
-        setRecognizeProgress(`${index + 1}/${nextItems.length}`);
-        const response = await generateLlm({
-          model: exhibitModel,
-          llmKeyId: activeExhibitLlmConfig?.id,
-          temperature: 0.1,
-          max_tokens: 40,
-          messages: [
-            {
-              role: 'system',
-              content: '你是展陈展品图像识别助手。只输出展品主体的极简中文名词短语，2到8个汉字，不要解释，不要标点。',
-            },
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: '识别图片中的展品主体，用极简短中文描述。示例：红色陶器、圆形铜镜、青铜鼎。' },
-                { type: 'image', image_url: { url: item.url } },
-              ],
-            },
-          ] as any,
-        });
-        nextItems[index] = {
-          ...item,
-          description: cleanExhibitDescription(response.content, item.label),
-          groupIndex: Math.max(1, Number(item.groupIndex) || index + 1),
-          recognizedAt: Date.now(),
-        };
-        update({ exhibitItems: nextItems });
-      }
-      setRecognizeProgress('完成');
-    } catch (error: any) {
-      update({ status: 'error', error: exhibitRecognitionErrorMessage(error) });
-      setRecognizeProgress('失败');
-    } finally {
-      setRecognizingExhibits(false);
-    }
-  }, [
-    activeExhibitLlmConfig?.id,
-    exhibitModel,
-    exhibitItems,
-    isReadonly,
-    recognizingExhibits,
-    update,
-  ]);
+    update({ exhibitReferenceItems: next });
+  }, [exhibitReferenceItems, isReadonly, update]);
 
   const refineText = useCallback(async (textOverride?: string, rethrow = false) => {
     if (isReadonly || !contentEnabled) return;
@@ -1087,10 +1026,10 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           <ImageSlot handleId="structure" title="空间结构示意图" subtitle="保留结构、动线、分区；标注只作理解参考" url={structureImage} top="24%" />
           <ImageSlot handleId="color-material-reference" title="色彩与材质参考图" subtitle="仅提取色彩、材质、肌理、光泽和灯光氛围" url={colorMaterialReferenceImage} top="39%" />
           <ImageSlot
-            handleId="exhibits"
-            title="展品入口（可多张）"
-            subtitle={exhibitItems.length ? `已接入 ${exhibitItems.length} 件展品，识别后可按展柜分组` : '连接多张展品图，作为展柜内展品主体参考'}
-            url={exhibitItems[0]?.url || ''}
+            handleId="exhibit-reference"
+            title="展品参考图（可多张）"
+            subtitle={exhibitReferenceItems.length ? `已接入 ${exhibitReferenceItems.length} 张展品参考图` : '连接展品外观与主题参考图'}
+            url={exhibitReferenceItems[0]?.url || ''}
             top="54%"
           />
         </section>
@@ -1238,69 +1177,30 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         <section className="rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1.5 flex items-center gap-2">
             <ImageIcon size={13} className="text-cyan-200" />
-            <span className="text-[11px] font-semibold text-cyan-100">展品识别与分组</span>
-            <button
-              type="button"
-              className={`${BUTTON} ml-auto`}
-              disabled={isReadonly || recognizingExhibits || !exhibitItems.length}
-              onClick={() => void recognizeExhibits()}
-            >
-              {recognizingExhibits ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-              {recognizingExhibits ? `识别中 ${recognizeProgress}` : '识别展品'}
-            </button>
+            <span className="text-[11px] font-semibold text-cyan-100">展品参考图</span>
           </div>
           <div className="text-[10px] leading-snug text-white/45">
-            将多张展品图接入左侧展品入口；识别结果可手动改写，展柜编号相同的展品会放入同一个展柜，并按编号从左到右布置。
+            接入展品外观与主题参考图；描述只用于说明展品特征和展示重点，不改变空间结构或色彩材质体系。
           </div>
-          <div className="mt-2 grid grid-cols-2 gap-1">
-            <select
-              className={FIELD}
-              disabled={isReadonly || recognizingExhibits}
-              value={`llm-key:${activeExhibitLlmConfig?.id || 'default'}`}
-              onChange={(event) => {
-                const nextId = event.target.value;
-                if (nextId.startsWith('llm-key:')) {
-                  update({ exhibitLlmKeyId: nextId.slice(8), exhibitModel: '' });
-                }
-              }}
-            >
-              {llmConfigOptions.map((item) => <option key={item.id} value={`llm-key:${item.id}`}>{item.label || item.id}{item.model ? ` · ${item.model}` : ''}</option>)}
-            </select>
-            <input className={FIELD} disabled value={exhibitModel} title="展品识别模型由所选 LLM 配置决定" />
-          </div>
-          {exhibitItems.length === 0 ? (
+          {exhibitReferenceItems.length === 0 ? (
             <div className="mt-2 rounded border border-dashed border-white/15 px-2 py-3 text-[10px] text-white/35">
-              暂无展品图。可从上传节点、素材集或输出节点连接多张图片到展品入口。
+              暂无展品参考图。可从上传节点、素材集或输出节点连接多张图片到展品参考图入口。
             </div>
           ) : (
             <div className="mt-2 max-h-64 space-y-1.5 overflow-y-auto">
-              {exhibitItems.map((item, index) => (
-                <div key={item.url} className="grid grid-cols-[54px_minmax(0,1fr)_64px] items-center gap-1.5 rounded border border-white/10 bg-black/15 p-1.5">
+              {exhibitReferenceItems.map((item, index) => (
+                <div key={item.url} className="grid grid-cols-[54px_minmax(0,1fr)] items-start gap-1.5 rounded border border-white/10 bg-black/15 p-1.5">
                   <img src={item.url} alt="" className="h-12 w-12 rounded border border-white/10 object-cover" draggable={false} />
                   <div className="min-w-0">
                     <input
                       className={FIELD}
                       value={item.description}
-                      disabled={isReadonly || recognizingExhibits}
-                      placeholder={`展品 ${index + 1} 主体描述`}
-                      onChange={(event) => patchExhibitItem(item.url, { description: cleanExhibitDescription(event.target.value, '') })}
+                      disabled={isReadonly || busy}
+                      placeholder={`展品 ${index + 1} 特征描述，如"红色的茶壶"`}
+                      onChange={(event) => patchExhibitReferenceItem(item.url, { description: event.target.value })}
                     />
                     <div className="mt-0.5 truncate text-[9px] text-white/35" title={item.url}>{item.label}</div>
                   </div>
-                  <label className="text-[9px] text-white/45">
-                    展柜
-                    <input
-                      className={`${FIELD} mt-0.5 text-center`}
-                      type="number"
-                      min={1}
-                      max={24}
-                      value={item.groupIndex}
-                      disabled={isReadonly || recognizingExhibits}
-                      onChange={(event) => patchExhibitItem(item.url, {
-                        groupIndex: Math.max(1, Math.min(24, Number(event.target.value) || 1)),
-                      })}
-                    />
-                  </label>
                 </div>
               ))}
             </div>
@@ -1721,12 +1621,12 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         <section className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
           <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100">
             <Clipboard size={13} />
-            <span>输出 prompt</span>
+            <span>当前生图 Prompt</span>
             <button type="button" className="ml-auto flex h-6 items-center gap-1 rounded border border-white/10 px-2 text-[10px] text-white/65 hover:bg-white/10" onClick={() => navigator.clipboard?.writeText(prompt).catch(() => {})}>
               复制
             </button>
           </div>
-          <div className="max-h-28 overflow-y-auto whitespace-pre-wrap break-words text-[10px] leading-relaxed text-white/72">{prompt}</div>
+          <div className="max-h-56 overflow-y-auto whitespace-pre-wrap break-words text-[10px] leading-relaxed text-white/72">{prompt}</div>
         </section>
 
         {d.imageUrl && (

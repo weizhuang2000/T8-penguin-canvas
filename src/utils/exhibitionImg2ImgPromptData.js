@@ -29,35 +29,34 @@ function cleanWallContentPrompt(value) {
     .trim();
 }
 
-function normalizeExhibitGroups(value) {
+function normalizeExhibitReferenceItems(value) {
   const list = Array.isArray(value) ? value : [];
   return list
-    .map((group, index) => {
-      const groupIndex = Math.max(1, Number(group?.groupIndex) || index + 1);
-      const items = Array.isArray(group?.items)
-        ? group.items
-            .map((item) => cleanText(item?.description || item?.label || item, 80))
-            .filter(Boolean)
-        : [];
-      if (!items.length) return null;
-      return { groupIndex, items };
+    .map((item, index) => {
+      const url = cleanText(item?.url || '', 1000);
+      const description = cleanText(item?.description || item?.label || '', 120);
+      if (!url && !description) return null;
+      return {
+        index: index + 1,
+        description,
+      };
     })
-    .filter(Boolean)
-    .sort((a, b) => a.groupIndex - b.groupIndex);
+    .filter(Boolean);
 }
 
-function exhibitPlacementText(value) {
-  const groups = normalizeExhibitGroups(value);
-  if (!groups.length) return '';
+function exhibitReferenceText(value) {
+  const items = normalizeExhibitReferenceItems(value);
+  if (!items.length) return '';
   const lines = [
-    '【展柜展品布置】',
-    '根据已识别的展品主体描述，把展品自然放入展柜中。展柜按画面从左到右编号，第一组放入左边第一个展柜，第二组放入左边第二个展柜，依次向右排列；展品需要符合真实博物馆陈列尺度，带独立托座、低反射玻璃和重点照明，不要生成可读展品标签文字。',
+    '【展品参考图】',
+    '展品参考图只用于提取展品外观、内容主题、体量关系、材质细节和展示重点，不作为空间结构、布局比例或整体色彩材质体系依据。',
   ];
-  for (const group of groups) {
-    const names = group.items.join('、');
-    lines.push(`将${names}放入左边第 ${group.groupIndex} 个展柜内。`);
+  for (const item of items) {
+    if (item.description) {
+      lines.push(`展品 ${item.index} 特征描述：${item.description}`);
+    }
   }
-  lines.push('展品图像只作为展品主体、轮廓、局部材质与展品自身色彩参考；空间结构、展柜位置和整体色彩材质体系仍以空间结构示意图、工艺版式与色彩材质参考/预设为准。');
+  lines.push('如画面中需要呈现展品，应让展品符合真实博物馆陈列尺度，带必要托座、低反射保护和重点照明；不要生成可读展品标签文字。');
   return lines.join('\n');
 }
 
@@ -175,9 +174,9 @@ export function buildExhibitionImg2ImgPrompt(values = {}) {
     lines.push('');
   }
 
-  const exhibitPlacement = exhibitPlacementText(values.exhibitGroups);
-  if (exhibitPlacement) {
-    lines.push(exhibitPlacement);
+  const exhibitReference = exhibitReferenceText(values.exhibitReferenceItems);
+  if (exhibitReference) {
+    lines.push(exhibitReference);
     lines.push('');
   }
 
