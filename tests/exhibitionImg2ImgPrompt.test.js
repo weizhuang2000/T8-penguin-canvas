@@ -7,22 +7,28 @@ import {
 
 test('exhibition img2img prompt defaults to structure priority', () => {
   const order = normalizeExhibitionImg2ImgPriority();
-  assert.deepEqual(order, ['structureAnnotations', 'craftLayout', 'styleImageForm']);
+  assert.deepEqual(order, ['structureAnnotations', 'craftLayout', 'colorMaterialReference']);
   const prompt = buildExhibitionImg2ImgPrompt();
-  assert.match(prompt, /展陈工艺选用的优先级顺序：1\. 空间结构示意图标注 > 2\. 工艺与版式 > 3\. 输入效果图形式/);
+  assert.match(prompt, /展陈工艺选用的优先级顺序：1\. 空间结构示意图标注 > 2\. 工艺与版式 > 3\. 色彩与材质参考\/预设/);
   assert.match(prompt, /生成一张专业展陈空间效果图，真实室内建筑摄影级渲染/);
   assert.doesNotMatch(prompt, /^优先级顺序：/m);
   assert.doesNotMatch(prompt, /面向深化设计汇报/);
+  assert.doesNotMatch(prompt, /空间表现效果图|高级渲染参考图|输入效果图形式/);
 });
 
 test('exhibition img2img prompt follows custom priority order', () => {
   const prompt = buildExhibitionImg2ImgPrompt({
-    priorityOrder: ['styleImageForm', 'craftLayout', 'structureAnnotations'],
+    priorityOrder: ['colorMaterialReference', 'craftLayout', 'structureAnnotations'],
   });
-  const styleIndex = prompt.indexOf('【输入效果图形式】');
+  const colorMaterialIndex = prompt.indexOf('【色彩与材质参考/预设】');
   const craftIndex = prompt.indexOf('【工艺与版式】');
   const structureIndex = prompt.indexOf('【空间结构示意图标注】');
-  assert.ok(styleIndex >= 0 && craftIndex > styleIndex && structureIndex > craftIndex);
+  assert.ok(colorMaterialIndex >= 0 && craftIndex > colorMaterialIndex && structureIndex > craftIndex);
+});
+
+test('exhibition img2img prompt maps legacy style priority to color material reference', () => {
+  const order = normalizeExhibitionImg2ImgPriority(['styleImageForm', 'craftLayout', 'structureAnnotations']);
+  assert.deepEqual(order, ['colorMaterialReference', 'craftLayout', 'structureAnnotations']);
 });
 
 test('exhibition img2img prompt forbids rendering structure labels', () => {
@@ -33,7 +39,7 @@ test('exhibition img2img prompt forbids rendering structure labels', () => {
 
 test('exhibition img2img prompt treats structure image as layout source', () => {
   const prompt = buildExhibitionImg2ImgPrompt();
-  assert.match(prompt, /空间结构示意图，是空间几何、布局和动线的主约束/);
+  assert.match(prompt, /空间结构示意图是空间几何、布局、墙体、展陈体块、分区和动线的主约束/);
   assert.match(prompt, /空间骨架和布局蓝本/);
   assert.match(prompt, /不能只借鉴风格而改成另一套空间/);
   assert.match(prompt, /平面关系、动线、分区、展墙\/隔断、入口出口和主要体块转译为真实透视空间/);
@@ -41,11 +47,11 @@ test('exhibition img2img prompt treats structure image as layout source', () => 
 
 test('exhibition img2img priority only affects presentation, not spatial structure', () => {
   const prompt = buildExhibitionImg2ImgPrompt({
-    priorityOrder: ['styleImageForm', 'craftLayout', 'structureAnnotations'],
+    priorityOrder: ['colorMaterialReference', 'craftLayout', 'structureAnnotations'],
   });
-  assert.match(prompt, /优先级顺序只针对表现形式、工艺版式、视觉风格和渲染语言的取舍/);
+  assert.match(prompt, /优先级顺序只针对工艺版式、色彩材质语言、视觉风格和渲染语言的取舍/);
   assert.match(prompt, /空间结构不参与该优先级排序/);
-  assert.match(prompt, /即使“输入效果图形式”在优先级中排在前面，也只能优先采用它的表现形式/);
+  assert.match(prompt, /即使“色彩与材质参考\/预设”在优先级中排在前面，也只能优先采用它的色彩、材质、肌理、光泽、冷暖和灯光氛围/);
   assert.match(prompt, /最终空间结构必须完全遵循空间结构示意图/);
 });
 
@@ -105,29 +111,41 @@ test('exhibition img2img prompt forbids rendering design instruction fields as w
   assert.match(prompt, /不要把这些字段后的具体工艺、密度、配置、备注要求当作文案排到墙面上/);
 });
 
-test('exhibition img2img prompt includes tone reference mode', () => {
-  const defaultPrompt = buildExhibitionImg2ImgPrompt();
-  assert.match(defaultPrompt, /色调选择：高级渲染参考图优先/);
-  assert.ok(defaultPrompt.indexOf('色调选择：高级渲染参考图优先') < defaultPrompt.indexOf('【空间结构示意图标注】'));
-  assert.ok(defaultPrompt.indexOf('色调选择：高级渲染参考图优先') < defaultPrompt.indexOf('【输入效果图形式】'));
+test('exhibition img2img prompt uses color material reference image as material source', () => {
+  const prompt = buildExhibitionImg2ImgPrompt({ hasColorMaterialReferenceImage: true });
+  assert.match(prompt, /色彩与材质来源：使用接入的色彩与材质参考图/);
+  assert.match(prompt, /仅提取主色、辅助色、冷暖关系、材质肌理、表面光泽、灯光氛围和可落地工艺语言/);
+  assert.match(prompt, /不得作为空间布局、墙体位置、展台位置、通道组织或透视角度依据/);
+});
 
-  const solidPrompt = buildExhibitionImg2ImgPrompt({ toneReferenceMode: 'solidModelFirst' });
-  assert.match(solidPrompt, /色调选择：纯色素模优先/);
-  assert.match(solidPrompt, /基础色调、明暗大关系和空间体块层次优先参考纯色素模/);
+test('exhibition img2img prompt uses shared color material preset', () => {
+  const prompt = buildExhibitionImg2ImgPrompt({
+    hasColorMaterialPreset: true,
+    colorMaterialPalette: '深红、铜褐、黑金',
+    colorMaterialTextures: '微水泥、拉丝金属、低反射石材',
+  });
+  assert.match(prompt, /色彩与材质来源：使用已选择的共享色彩与材质预设/);
+  assert.match(prompt, /Color palette：深红、铜褐、黑金/);
+  assert.match(prompt, /Materials\/textures：微水泥、拉丝金属、低反射石材/);
+  assert.doesNotMatch(prompt, /高级渲染参考图/);
+});
 
-  const balancedPrompt = buildExhibitionImg2ImgPrompt({ toneReferenceMode: 'balanced' });
-  assert.match(balancedPrompt, /色调选择：二者结合/);
-  assert.match(balancedPrompt, /基础色调和体块明暗关系参考纯色素模，高级渲染参考图用于补充材质/);
+test('exhibition img2img prompt uses manual color material text', () => {
+  const prompt = buildExhibitionImg2ImgPrompt({
+    colorMaterial: '深色金属与暖光',
+  });
+  assert.match(prompt, /色彩与材质来源：使用手动填写的色彩与材质要求/);
+  assert.match(prompt, /色彩与材质：深色金属与暖光/);
 });
 
 test('exhibition img2img prompt explains reference image roles after priority changes', () => {
   const prompt = buildExhibitionImg2ImgPrompt({
-    priorityOrder: ['styleImageForm', 'craftLayout', 'structureAnnotations'],
+    priorityOrder: ['colorMaterialReference', 'craftLayout', 'structureAnnotations'],
   });
-  assert.match(prompt, /纯色素模的参考图是空间结构示意图/);
-  assert.match(prompt, /高级渲染的参考图是空间表现效果图/);
+  assert.match(prompt, /空间结构示意图是空间几何、布局、墙体、展陈体块、分区和动线的主约束/);
+  assert.match(prompt, /色彩与材质参考图只用于提取色彩关系、材质质感、表面肌理、光泽、冷暖倾向和灯光氛围/);
   assert.doesNotMatch(prompt, /第 \d+ 张参考图是空间结构示意图/);
-  assert.doesNotMatch(prompt, /第 \d+ 张参考图是空间表现效果图/);
+  assert.doesNotMatch(prompt, /第 \d+ 张参考图是色彩与材质参考图/);
 });
 
 test('exhibition img2img prompt includes craft and layout values when present', () => {
@@ -159,5 +177,5 @@ test('exhibition img2img prompt places recognized exhibits by showcase groups', 
   const first = prompt.indexOf('将红色陶器、圆形铜镜放入左边第 1 个展柜内。');
   const second = prompt.indexOf('将青铜鼎放入左边第 2 个展柜内。');
   assert.ok(first >= 0 && second > first);
-  assert.match(prompt, /展品图像只作为展品主体、轮廓、材质与色彩参考/);
+  assert.match(prompt, /展品图像只作为展品主体、轮廓、局部材质与展品自身色彩参考/);
 });

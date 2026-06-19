@@ -57,8 +57,10 @@ import {
   getElevationPromptPresets,
   MAX_DOCUMENT_FILE_SIZE,
   MAX_DOCUMENT_FILE_SIZE_MB,
+  updateElevationColorMaterialPresets,
   updateElevationCraftPresets,
   type AuthUser,
+  type ElevationColorMaterialPresetItem,
   type ElevationCraftPresetItem,
   type ExtractedDocument,
 } from '../../services/api';
@@ -69,6 +71,8 @@ import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useThemeStore } from '../../stores/theme';
 import { useUpdateNodeData } from './useUpdateNodeData';
+import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
+import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
@@ -262,6 +266,41 @@ function parseCraftPresetEditorText(text: string) {
     .filter(Boolean) as Array<{ id: string; label: string; prompt: string; order: number }>;
 }
 
+function colorMaterialTextFromPreset(preset: ElevationColorMaterialPresetItem): string {
+  return [
+    preset.label,
+    String(preset.core || '').trim(),
+    String(preset.features || '').trim(),
+    String(preset.usage || '').trim(),
+  ].filter(Boolean).join('；');
+}
+
+function colorPaletteTextFromPreset(preset: ElevationColorMaterialPresetItem): string {
+  return String(preset.core || preset.info || preset.label || '').trim();
+}
+
+function materialTexturesTextFromPreset(preset: ElevationColorMaterialPresetItem): string {
+  return String(preset.features || preset.info || preset.core || preset.label || '').trim();
+}
+
+function combineColorMaterialText(palette: string, textures: string, fallback = ''): string {
+  const parts = [String(palette || '').trim(), String(textures || '').trim()].filter(Boolean);
+  return parts.length ? parts.join('；') : String(fallback || '').trim();
+}
+
+function buildColorMaterialPresetPayload(presets: ElevationColorMaterialPresetItem[]) {
+  return presets.map((preset, index) => ({
+    id: preset.id,
+    category: preset.category,
+    label: preset.label,
+    core: preset.core || '',
+    features: preset.features || '',
+    usage: preset.usage || '',
+    info: preset.info || '',
+    order: index,
+  }));
+}
+
 function PrioritySorter({
   value,
   disabled,
@@ -325,7 +364,7 @@ function ImageSlot({
   url,
   top,
 }: {
-  handleId: 'structure' | 'style' | 'exhibits';
+  handleId: 'structure' | 'color-material-reference' | 'exhibits';
   title: string;
   subtitle: string;
   url: string;
@@ -421,12 +460,11 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const sizeLevel = d.sizeLevel || modelDef.defaultSize || '2K';
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
-  const toneReferenceMode = ['solidModelFirst', 'renderFirst', 'balanced'].includes(d.toneReferenceMode)
-    ? d.toneReferenceMode
-    : 'renderFirst';
 
   const structureImage = useHandleImage(id, 'structure');
-  const styleImage = useHandleImage(id, 'style');
+  const colorMaterialReferenceInputImage = useHandleImage(id, 'color-material-reference');
+  const legacyStyleInputImage = useHandleImage(id, 'style');
+  const colorMaterialReferenceImage = colorMaterialReferenceInputImage || legacyStyleInputImage;
   const exhibitInputImages = useHandleImages(id, 'exhibits');
   const exhibitInputUrls = useMemo(() => exhibitInputImages.map((item) => item.url), [exhibitInputImages]);
   const exhibitItems = useMemo(() => {
@@ -459,10 +497,14 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const canManageTeam = currentUser?.role === 'admin' || currentUser?.role === 'manager';
   const [craftPresets, setCraftPresets] = useState<ElevationCraftPresetItem[]>([]);
+  const [colorMaterialPresets, setColorMaterialPresets] = useState<ElevationColorMaterialPresetItem[]>([]);
   const [craftEditorOpen, setCraftEditorOpen] = useState(false);
+  const [colorMaterialEditorOpen, setColorMaterialEditorOpen] = useState(false);
   const [craftEditorValue, setCraftEditorValue] = useState('');
   const [craftSaving, setCraftSaving] = useState(false);
+  const [colorMaterialSaving, setColorMaterialSaving] = useState(false);
   const [craftError, setCraftError] = useState('');
+  const [colorMaterialError, setColorMaterialError] = useState('');
   const [recognizingExhibits, setRecognizingExhibits] = useState(false);
   const [recognizeProgress, setRecognizeProgress] = useState('');
   const status = String(d.status || 'idle');
@@ -474,6 +516,18 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     () => (craftPresets.length > 0 ? craftPresets : ELEVATION_CRAFTS),
     [craftPresets],
   );
+  const selectedColorMaterialPreset = useMemo(
+    () => colorMaterialPresets.find((preset) => preset.id === d.colorMaterialPreset) || null,
+    [colorMaterialPresets, d.colorMaterialPreset],
+  );
+  const colorMaterial = String(d.colorMaterial || '').trim();
+  const colorMaterialPalette = String(d.colorMaterialPalette || '').trim();
+  const colorMaterialTextures = String(d.colorMaterialTextures || '').trim();
+  const combinedColorMaterial = combineColorMaterialText(colorMaterialPalette, colorMaterialTextures, colorMaterial);
+  const hasColorMaterialPreset = !!String(d.colorMaterialPreset || '').trim();
+  const hasColorMaterialReference = !!colorMaterialReferenceImage;
+  const activeColorMaterialReferenceImage = hasColorMaterialPreset ? '' : colorMaterialReferenceImage;
+  const hasColorMaterialInput = hasColorMaterialReference || hasColorMaterialPreset || !!combinedColorMaterial;
   const contentOutputs = useMemo(
     () => buildElevationOutputs({
       analysis,
@@ -524,18 +578,21 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       craftPresets,
       density: d.density,
       dimensions: d.dimensions,
-      colorMaterial: d.colorMaterial,
+      colorMaterial: combinedColorMaterial,
       visualStyle: d.visualStyle,
-      toneReferenceMode,
+      colorMaterialPalette: colorMaterialPalette || colorMaterial,
+      colorMaterialTextures: colorMaterialTextures || colorMaterial,
+      hasColorMaterialPreset,
+      hasColorMaterialReferenceImage: !!activeColorMaterialReferenceImage,
       supplement: d.supplement,
       wallContentPrompt,
       exhibitGroups,
     }),
-    [craftPresets, d.colorMaterial, d.customCraft, d.density, d.dimensions, d.supplement, d.visualStyle, exhibitGroups, priorityOrder, selectedCrafts, toneReferenceMode, wallContentPrompt],
+    [activeColorMaterialReferenceImage, combinedColorMaterial, colorMaterial, colorMaterialPalette, colorMaterialTextures, craftPresets, d.customCraft, d.density, d.dimensions, d.supplement, d.visualStyle, exhibitGroups, hasColorMaterialPreset, priorityOrder, selectedCrafts, wallContentPrompt],
   );
 
   useEffect(() => {
-    const refs = [structureImage, styleImage, ...exhibitInputUrls].filter(Boolean);
+    const refs = [structureImage, activeColorMaterialReferenceImage, ...exhibitInputUrls].filter(Boolean);
     const patch = {
       prompt,
       outputText: prompt,
@@ -550,7 +607,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     ) {
       update(patch);
     }
-  }, [d.imageUrl, d.outputText, d.prompt, d.referenceImages, d.text, exhibitInputUrls, prompt, structureImage, styleImage, update]);
+  }, [activeColorMaterialReferenceImage, d.imageUrl, d.outputText, d.prompt, d.referenceImages, d.text, exhibitInputUrls, prompt, structureImage, update]);
 
   useEffect(() => {
     if (same(d.exhibitItems || [], exhibitItems)) return;
@@ -560,8 +617,14 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   useEffect(() => {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
     getElevationPromptPresets()
-      .then((presets) => setCraftPresets(presets.crafts || []))
-      .catch(() => setCraftPresets([]));
+      .then((presets) => {
+        setCraftPresets(presets.crafts || []);
+        setColorMaterialPresets(presets.colorMaterial || []);
+      })
+      .catch(() => {
+        setCraftPresets([]);
+        setColorMaterialPresets([]);
+      });
   }, []);
 
   useEffect(() => {
@@ -579,6 +642,11 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     setCraftEditorValue(craftPresetEditorText(craftPresets));
     setCraftError('');
   }, [craftEditorOpen, craftPresets]);
+
+  useEffect(() => {
+    if (!colorMaterialEditorOpen) return;
+    setColorMaterialError('');
+  }, [colorMaterialEditorOpen, colorMaterialPresets]);
 
   useEffect(() => {
     setAnalysisDraft(JSON.stringify(analysis, null, 2));
@@ -605,7 +673,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     const imageForPriority: Record<string, string[]> = {
       structureAnnotations: structureImage ? [structureImage] : [],
       craftLayout: [],
-      styleImageForm: styleImage ? [styleImage] : [],
+      colorMaterialReference: activeColorMaterialReferenceImage ? [activeColorMaterialReferenceImage] : [],
     };
     const out: string[] = [];
     for (const key of priorityOrder) {
@@ -617,7 +685,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       if (url && !out.includes(url)) out.push(url);
     }
     return out;
-  }, [exhibitInputUrls, priorityOrder, structureImage, styleImage]);
+  }, [activeColorMaterialReferenceImage, exhibitInputUrls, priorityOrder, structureImage]);
 
   const saveCraftPresets = async () => {
     if (!canManageTeam) return;
@@ -636,6 +704,25 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       setCraftError(error?.message || '保存工艺预设失败');
     } finally {
       setCraftSaving(false);
+    }
+  };
+
+  const saveColorMaterialPresetItems = async (presets: ElevationColorMaterialPresetItem[]) => {
+    if (!canManageTeam) return;
+    if (presets.length === 0) {
+      setColorMaterialError('请至少保留一条色彩与材质预设。');
+      return;
+    }
+    setColorMaterialSaving(true);
+    setColorMaterialError('');
+    try {
+      const saved = await updateElevationColorMaterialPresets(buildColorMaterialPresetPayload(presets));
+      setColorMaterialPresets(saved);
+      setColorMaterialEditorOpen(false);
+    } catch (error: any) {
+      setColorMaterialError(error?.message || '保存色彩与材质预设失败');
+    } finally {
+      setColorMaterialSaving(false);
     }
   };
 
@@ -839,12 +926,12 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
 
   const runGenerate = async () => {
     if (isReadonly) return;
-    if (!structureImage || !styleImage) {
-      const msg = !structureImage && !styleImage
-        ? '请连接空间结构示意图和空间表现效果图'
+    if (!structureImage || !hasColorMaterialInput) {
+      const msg = !structureImage && !hasColorMaterialInput
+        ? '请连接空间结构示意图，并连接色彩与材质参考图、选择共享预设或手填色彩材质'
         : !structureImage
           ? '请连接空间结构示意图'
-          : '请连接空间表现效果图';
+          : '请连接色彩与材质参考图、选择共享预设或手填色彩材质';
       update({ status: 'error', error: msg });
       throw new Error(msg);
     }
@@ -1032,7 +1119,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         <div className="columns-2 gap-2 [&>section]:mb-2 [&>section]:break-inside-avoid">
         <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <ImageSlot handleId="structure" title="空间结构示意图" subtitle="保留结构、动线、分区；标注只作理解参考" url={structureImage} top="24%" />
-          <ImageSlot handleId="style" title="空间表现效果图" subtitle="借鉴风格、材质、光影和完成度" url={styleImage} top="39%" />
+          <ImageSlot handleId="color-material-reference" title="色彩与材质参考图" subtitle="仅提取色彩、材质、肌理、光泽和灯光氛围" url={colorMaterialReferenceImage} top="39%" />
           <ImageSlot
             handleId="exhibits"
             title="展品入口（可多张）"
@@ -1045,7 +1132,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         <section className="rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1.5 text-[11px] font-semibold text-cyan-100">优先级顺序</div>
           <div className="mb-1.5 text-[10px] leading-snug text-white/45">
-            仅调整表现形式取舍；空间结构始终完全按结构示意图。
+            仅调整工艺、色彩材质与表现完成度取舍；空间结构始终完全按结构示意图。
           </div>
           <PrioritySorter
             value={priorityOrder}
@@ -1101,15 +1188,84 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               <option value="信息丰富，采用严谨网格">丰富</option>
             </select>
             <input className={FIELD} value={d.dimensions || ''} disabled={isReadonly} placeholder="空间/画面尺寸" onChange={(event) => update({ dimensions: event.target.value })} />
-            <input className={FIELD} value={d.colorMaterial || ''} disabled={isReadonly} placeholder="色彩与材质" onChange={(event) => update({ colorMaterial: event.target.value })} />
             <input className={FIELD} value={d.visualStyle || ''} disabled={isReadonly} placeholder="视觉风格" onChange={(event) => update({ visualStyle: event.target.value })} />
-            <select className={FIELD} value={toneReferenceMode} disabled={isReadonly} onChange={(event) => update({ toneReferenceMode: event.target.value })}>
-              <option value="solidModelFirst">纯色素模优先</option>
-              <option value="renderFirst">高级渲染参考图优先</option>
-              <option value="balanced">二者结合</option>
-            </select>
           </div>
           <textarea className={`${FIELD} mt-1 min-h-[48px] resize-y`} value={d.supplement || ''} disabled={isReadonly} placeholder="补充要求" onChange={(event) => update({ supplement: event.target.value })} />
+        </section>
+
+        <section className="rounded border border-white/10 bg-white/[0.035] p-2 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-semibold text-cyan-100">色彩与材质预设</span>
+            <span className="min-w-0 flex-1 truncate text-[9px] text-white/40">
+              {hasColorMaterialPreset ? '共享预设已接管色彩与材质' : hasColorMaterialReference ? '参考图接管色彩与材质' : '可选择共享预设或手填'}
+            </span>
+            {canManageTeam && (
+              <button type="button" className={BUTTON} disabled={colorMaterialSaving || busy} onClick={() => setColorMaterialEditorOpen((open) => !open)}>
+                <Settings size={11} />编辑
+              </button>
+            )}
+          </div>
+          <ColorMaterialPresetSelect
+            className={FIELD}
+            presets={colorMaterialPresets}
+            value={d.colorMaterialPreset || ''}
+            disabled={isReadonly || busy}
+            onChange={(presetId, preset) => {
+              update({
+                colorMaterialPreset: presetId,
+                ...(preset ? {
+                  colorMaterial: colorMaterialTextFromPreset(preset),
+                  colorMaterialPalette: colorPaletteTextFromPreset(preset),
+                  colorMaterialTextures: materialTexturesTextFromPreset(preset),
+                } : {}),
+              });
+            }}
+          />
+          {selectedColorMaterialPreset?.info && (
+            <div className="rounded border border-cyan-300/15 bg-cyan-300/5 px-2 py-1 text-[10px] leading-snug text-cyan-50/70">
+              {selectedColorMaterialPreset.info}
+            </div>
+          )}
+          {canManageTeam && (
+            <ColorMaterialPresetEditorModal
+              open={colorMaterialEditorOpen}
+              presets={colorMaterialPresets}
+              saving={colorMaterialSaving || busy}
+              error={colorMaterialError}
+              title="展陈图生图色彩与材质预设管理"
+              onClose={() => setColorMaterialEditorOpen(false)}
+              onSave={saveColorMaterialPresetItems}
+            />
+          )}
+          <div className="grid grid-cols-2 gap-1">
+            <textarea
+              className={`${FIELD} min-h-[54px] resize-y text-[10px] leading-snug`}
+              value={colorMaterialPalette || d.colorMaterial || ''}
+              disabled={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
+              placeholder="Color palette / 主色、辅助色、明暗、冷暖"
+              onChange={(event) => update({
+                colorMaterialPalette: event.target.value,
+                colorMaterial: combineColorMaterialText(event.target.value, colorMaterialTextures, d.colorMaterial || ''),
+                colorMaterialPreset: '',
+              })}
+            />
+            <textarea
+              className={`${FIELD} min-h-[54px] resize-y text-[10px] leading-snug`}
+              value={colorMaterialTextures || d.colorMaterial || ''}
+              disabled={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
+              placeholder="Materials/textures / 墙面、地面、展柜、灯光材质"
+              onChange={(event) => update({
+                colorMaterialTextures: event.target.value,
+                colorMaterial: combineColorMaterialText(colorMaterialPalette, event.target.value, d.colorMaterial || ''),
+                colorMaterialPreset: '',
+              })}
+            />
+          </div>
+          {hasColorMaterialReference && (
+            <div className="rounded border border-rose-300/15 bg-rose-300/5 px-2 py-1 text-[10px] leading-snug text-rose-50/70">
+              {hasColorMaterialPreset ? '色彩与材质预设已接管，参考图只保留为连接参考。' : '已由接入的色彩与材质参考图接管，手填项暂不参与。'}
+            </div>
+          )}
         </section>
 
         <section className="rounded border border-white/10 bg-white/[0.035] p-2">
@@ -1617,15 +1773,15 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         <button
           type="button"
           className="flex h-8 w-full items-center justify-center gap-1.5 rounded border border-cyan-300/30 bg-cyan-300/15 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-45"
-          disabled={isReadonly || busy || !structureImage || !styleImage}
+          disabled={isReadonly || busy || !structureImage || !hasColorMaterialInput}
           onClick={() => void runGenerate()}
         >
           {busy ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
           {isGenerating ? `生成中 ${d.progress || ''}` : contentBusy ? '内容提炼中' : '生成展陈效果图'}
         </button>
-        {!structureImage || !styleImage ? (
+        {!structureImage || !hasColorMaterialInput ? (
           <div className="col-span-2 text-[10px] text-white/35">
-            需要同时连接空间结构示意图和空间表现效果图。
+            需要连接空间结构示意图，并提供色彩与材质参考图、共享预设或手填色彩材质。
           </div>
         ) : null}
       </div>

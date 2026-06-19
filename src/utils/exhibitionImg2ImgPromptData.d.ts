@@ -3,7 +3,7 @@ import type { ElevationCraft } from './elevationPromptData.js';
 export type ExhibitionImg2ImgPriorityId =
   | 'structureAnnotations'
   | 'craftLayout'
-  | 'styleImageForm';
+  | 'colorMaterialReference';
 
 export interface ExhibitionImg2ImgPriorityMeta {
   id: ExhibitionImg2ImgPriorityId;
@@ -18,8 +18,11 @@ export interface ExhibitionImg2ImgPromptValues {
   density?: string;
   dimensions?: string;
   colorMaterial?: string;
+  colorMaterialPalette?: string;
+  colorMaterialTextures?: string;
+  hasColorMaterialPreset?: boolean;
+  hasColorMaterialReferenceImage?: boolean;
   visualStyle?: string;
-  toneReferenceMode?: 'solidModelFirst' | 'renderFirst' | 'balanced';
   supplement?: string;
   wallContentPrompt?: string;
   exhibitGroups?: Array<{
