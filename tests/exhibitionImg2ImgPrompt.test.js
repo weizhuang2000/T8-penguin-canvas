@@ -14,6 +14,7 @@ test('exhibition img2img prompt defaults to structure priority', () => {
   assert.doesNotMatch(prompt, /^优先级顺序：/m);
   assert.doesNotMatch(prompt, /面向深化设计汇报/);
   assert.doesNotMatch(prompt, /空间表现效果图|高级渲染参考图|输入效果图形式/);
+  assert.doesNotMatch(prompt, /色彩与材质参考图/);
 });
 
 test('exhibition img2img prompt follows custom priority order', () => {
@@ -51,7 +52,7 @@ test('exhibition img2img priority only affects presentation, not spatial structu
   });
   assert.match(prompt, /优先级顺序只针对工艺版式、色彩材质语言、视觉风格和渲染语言的取舍/);
   assert.match(prompt, /空间结构不参与该优先级排序/);
-  assert.match(prompt, /即使“色彩与材质参考\/预设”在优先级中排在前面，也只能优先采用它的色彩、材质、肌理、光泽、冷暖和灯光氛围/);
+  assert.match(prompt, /即使“色彩与材质参考\/预设”在优先级中排在前面，也只能优先采用色彩材质要求中的色彩、材质、肌理、光泽、冷暖和灯光氛围/);
   assert.match(prompt, /最终空间结构必须完全遵循空间结构示意图/);
 });
 
@@ -136,11 +137,13 @@ test('exhibition img2img prompt uses manual color material text', () => {
   });
   assert.match(prompt, /色彩与材质来源：使用手动填写的色彩与材质要求/);
   assert.match(prompt, /色彩与材质：深色金属与暖光/);
+  assert.doesNotMatch(prompt, /色彩与材质参考图/);
 });
 
 test('exhibition img2img prompt explains reference image roles after priority changes', () => {
   const prompt = buildExhibitionImg2ImgPrompt({
     priorityOrder: ['colorMaterialReference', 'craftLayout', 'structureAnnotations'],
+    hasColorMaterialReferenceImage: true,
   });
   assert.match(prompt, /空间结构示意图是空间几何、布局、墙体、展陈体块、分区和动线的主约束/);
   assert.match(prompt, /色彩与材质参考图只用于提取色彩关系、材质质感、表面肌理、光泽、冷暖倾向和灯光氛围/);
@@ -174,8 +177,8 @@ test('exhibition img2img prompt describes exhibit reference images', () => {
     ],
   });
   assert.match(prompt, /展品参考图/);
-  const first = prompt.indexOf('展品 1 特征描述：红色陶器');
-  const second = prompt.indexOf('展品 2 特征描述：青铜鼎');
+  const first = prompt.indexOf('图中红色陶器参考图作为主要展品参考素材。');
+  const second = prompt.indexOf('图中青铜鼎参考图作为主要展品参考素材。');
   assert.ok(first >= 0 && second > first);
   assert.match(prompt, /展品参考图只用于提取展品外观、内容主题、体量关系、材质细节和展示重点/);
   assert.match(prompt, /不作为空间结构、布局比例或整体色彩材质体系依据/);

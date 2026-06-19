@@ -53,7 +53,7 @@ function exhibitReferenceText(value) {
   ];
   for (const item of items) {
     if (item.description) {
-      lines.push(`展品 ${item.index} 特征描述：${item.description}`);
+      lines.push(`图中${item.description}参考图作为主要展品参考素材。`);
     }
   }
   lines.push('如画面中需要呈现展品，应让展品符合真实博物馆陈列尺度，带必要托座、低反射保护和重点照明；不要生成可读展品标签文字。');
@@ -104,16 +104,26 @@ function colorMaterialSourceText(values) {
   if (palette) lines.push(`Color palette：${palette}`);
   if (textures) lines.push(`Materials/textures：${textures}`);
   if (colorMaterial && (!palette || !textures)) lines.push(`色彩与材质：${colorMaterial}`);
-  lines.push('色彩与材质参考/预设不得作为空间布局、墙体位置、展台位置、通道组织或透视角度依据；这些内容必须完全遵循空间结构示意图。');
+  if (values.hasColorMaterialReferenceImage) {
+    lines.push('色彩与材质参考图不得作为空间布局、墙体位置、展台位置、通道组织或透视角度依据；这些内容必须完全遵循空间结构示意图。');
+  } else {
+    lines.push('色彩与材质要求不得作为空间布局、墙体位置、展台位置、通道组织或透视角度依据；这些内容必须完全遵循空间结构示意图。');
+  }
   return lines.join('\n');
 }
 
-function referenceRoleText(priorityOrderText) {
-  return [
-    '参考图角色说明：空间结构示意图是空间几何、布局、墙体、展陈体块、分区和动线的主约束；色彩与材质参考图只用于提取色彩关系、材质质感、表面肌理、光泽、冷暖倾向和灯光氛围。',
-    '生成时必须先从空间结构示意图提取干净的空间骨架，再把色彩与材质参考/预设的材料语言应用到该骨架上；不要直接沿用色彩材质参考图中的空间布局、墙体位置、透视角度或动线。',
-    `展陈工艺选用的优先级顺序：${priorityOrderText}，该优先级顺序只针对工艺版式、色彩材质语言、视觉风格和渲染语言的取舍；空间结构不参与该优先级排序，空间几何、布局、墙体、展陈体块、分区和动线必须完全按照空间结构示意图执行。`,
-  ].join('\n');
+function referenceRoleText(priorityOrderText, values) {
+  const lines = [
+    '参考图角色说明：空间结构示意图是空间几何、布局、墙体、展陈体块、分区和动线的主约束。',
+  ];
+  if (values.hasColorMaterialReferenceImage) {
+    lines.push('色彩与材质参考图只用于提取色彩关系、材质质感、表面肌理、光泽、冷暖倾向和灯光氛围。');
+    lines.push('生成时必须先从空间结构示意图提取干净的空间骨架，再把色彩与材质参考图的材料语言应用到该骨架上；不要直接沿用色彩材质参考图中的空间布局、墙体位置、透视角度或动线。');
+  } else {
+    lines.push('生成时必须先从空间结构示意图提取干净的空间骨架，再把色彩材质要求和工艺版式应用到该骨架上。');
+  }
+  lines.push(`展陈工艺选用的优先级顺序：${priorityOrderText}，该优先级顺序只针对工艺版式、色彩材质语言、视觉风格和渲染语言的取舍；空间结构不参与该优先级排序，空间几何、布局、墙体、展陈体块、分区和动线必须完全按照空间结构示意图执行。`);
+  return lines.join('\n');
 }
 
 function sectionText(id, values) {
@@ -128,7 +138,9 @@ function sectionText(id, values) {
     return [
       colorMaterialSourceText(values),
       '将色彩与材质语言落到墙面、地面、展柜、装置、金属字、发光亚克力、灯带、浮雕肌理和低反射表面上，保持真实施工逻辑和摄影级完成度。',
-      '即使“色彩与材质参考/预设”在优先级中排在前面，也只能优先采用它的色彩、材质、肌理、光泽、冷暖和灯光氛围，不能优先采用它的空间结构、布局比例、墙体位置、通道组织或分区关系。',
+      values.hasColorMaterialReferenceImage
+        ? '即使“色彩与材质参考/预设”在优先级中排在前面，也只能优先采用参考图的色彩、材质、肌理、光泽、冷暖和灯光氛围，不能优先采用它的空间结构、布局比例、墙体位置、通道组织或分区关系。'
+        : '即使“色彩与材质参考/预设”在优先级中排在前面，也只能优先采用色彩材质要求中的色彩、材质、肌理、光泽、冷暖和灯光氛围，不能改变空间结构、布局比例、墙体位置、通道组织或分区关系。',
     ].join('\n');
   }
   const crafts = craftText(values.selectedCrafts, values.customCraft, values.craftPresets);
@@ -156,7 +168,7 @@ export function buildExhibitionImg2ImgPrompt(values = {}) {
   }).join(' > ');
   const lines = [
     '生成一张专业展陈空间效果图，真实室内建筑摄影级渲染，空间尺度可信，材质细节清晰，灯光层次准确。',
-    referenceRoleText(priorityOrderText),
+    referenceRoleText(priorityOrderText, values),
     '',
   ];
 
