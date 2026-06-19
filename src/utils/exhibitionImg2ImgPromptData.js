@@ -75,16 +75,37 @@ export function normalizeExhibitionImg2ImgPriority(value) {
   return out;
 }
 
-function craftText(selectedIds, customCraft, craftPresets) {
+function craftItems(selectedIds, customCraft, craftPresets) {
   const selected = new Set(Array.isArray(selectedIds) ? selectedIds : []);
   const source = Array.isArray(craftPresets) && craftPresets.length > 0 ? craftPresets : ELEVATION_CRAFTS;
   const values = source
     .filter((craft) => selected.has(craft.id))
-    .map((craft) => cleanText(craft.prompt, 800))
-    .filter(Boolean);
+    .map((craft) => ({
+      label: cleanText(craft.label, 80),
+      prompt: cleanText(craft.prompt, 800),
+    }))
+    .filter((craft) => craft.label || craft.prompt);
   const custom = cleanText(customCraft, 800);
-  if (custom) values.push(custom);
-  return values.join('；');
+  if (custom) values.push({ label: '自定义工艺', prompt: custom });
+  return values;
+}
+
+function craftText(selectedIds, customCraft, craftPresets) {
+  return craftItems(selectedIds, customCraft, craftPresets)
+    .map((craft) => craft.prompt || craft.label)
+    .filter(Boolean);
+}
+
+function craftBulletText(values) {
+  const crafts = craftItems(values.selectedCrafts, values.customCraft, values.craftPresets);
+  if (!crafts.length) return '按专业展陈常规工艺执行，图文展板、标题字、灯光、展柜与装饰面均需符合真实施工逻辑。';
+  return crafts.map((craft) => {
+    const prompt = craft.prompt || craft.label;
+    const text = craft.label && prompt && !prompt.includes(craft.label)
+      ? `${craft.label}：${prompt}`
+      : prompt;
+    return `${text}。`;
+  }).join('\n');
 }
 
 function colorMaterialSourceText(values) {
@@ -112,91 +133,190 @@ function colorMaterialSourceText(values) {
   return lines.join('\n');
 }
 
-function referenceRoleText(priorityOrderText, values) {
-  const lines = [
-    '参考图角色说明：空间结构示意图是空间几何、布局、墙体、展陈体块、分区和动线的主约束。',
-  ];
-  if (values.hasColorMaterialReferenceImage) {
-    lines.push('色彩与材质参考图只用于提取色彩关系、材质质感、表面肌理、光泽、冷暖倾向和灯光氛围。');
-    lines.push('生成时必须先从空间结构示意图提取干净的空间骨架，再把色彩与材质参考图的材料语言应用到该骨架上；不要直接沿用色彩材质参考图中的空间布局、墙体位置、透视角度或动线。');
-  } else {
-    lines.push('生成时必须先从空间结构示意图提取干净的空间骨架，再把色彩材质要求和工艺版式应用到该骨架上。');
+function priorityLabel(id, values) {
+  if (id === 'craftLayout') return '工艺与版式';
+  if (id === 'colorMaterialReference') {
+    if (values.hasColorMaterialPreset) return '色彩与材质预设';
+    if (values.hasColorMaterialReferenceImage) return '色彩与材质参考图';
+    return '色彩与材质体系';
   }
-  lines.push(`展陈工艺选用的优先级顺序：${priorityOrderText}，该优先级顺序只针对工艺版式、色彩材质语言、视觉风格和渲染语言的取舍；空间结构不参与该优先级排序，空间几何、布局、墙体、展陈体块、分区和动线必须完全按照空间结构示意图执行。`);
-  return lines.join('\n');
+  return '';
 }
 
-function sectionText(id, values) {
-  if (id === 'structureAnnotations') {
-    return [
-      '优先理解空间结构示意图：它不是普通参考图，而是最终画面的空间骨架和布局蓝本。必须保留平面/轴测结构关系、主要体块比例、展墙/隔断位置、通道宽窄、动线走向、分区边界、入口出口、重点节点、开敞/封闭关系和尺度逻辑。',
-      '输出画面应能一眼看出与结构示意图具有相同的空间关系：主要墙体和展陈体块的位置相对一致，通行动线和视线组织一致，分区数量与前后左右关系一致，不能只借鉴风格而改成另一套空间。',
-      '结构图上的文字、箭头编号、尺寸标注、说明标签仅作为理解空间关系的参考，不要在最终效果图中渲染、复写、临摹或生成任何可读文字、编号、箭头说明、尺寸线和标签。',
-    ].join('\n');
+function executionPriorityText(priorityOrder, values) {
+  const ordered = priorityOrder
+    .filter((id) => id !== 'structureAnnotations')
+    .map((id) => priorityLabel(id, values))
+    .filter(Boolean);
+  const fallback = ['工艺与版式', '色彩与材质体系'];
+  const labels = ordered.length ? ordered : fallback;
+  const names = ['第一优先级', '第二优先级', '第三优先级'];
+  const lines = labels.map((label, index) => `${names[index] || `第 ${index + 1} 优先级`}：${label}。${label === '工艺与版式' ? '严格按照下方“工艺与版式深化”中的具体工法、材料和版式密度要求执行。' : '采用下方“色彩与材质体系”中定义的色彩、肌理和灯光氛围。'}`);
+  lines.push('注意：此优先级仅用于决定工艺、材质、色彩和风格的取舍。在任何情况下，都不得为了迁就色彩或材质而改变第一条中定义的空间结构。');
+  return lines.join('\n\n');
+}
+
+function lineValue(lines, label) {
+  const pattern = new RegExp(`^\\s*${label}\\s*[:：]\\s*(.*)$`, 'u');
+  const found = lines.find((line) => pattern.test(line));
+  return found ? cleanText(found.replace(pattern, '$1'), 6000) : '';
+}
+
+function splitSentences(text) {
+  return cleanText(text, 8000)
+    .split(/[。；;]\s*/u)
+    .map((item) => cleanText(item, 800))
+    .filter(Boolean);
+}
+
+function formatWallContentPrompt(value) {
+  const prompt = cleanWallContentPrompt(value);
+  if (!prompt) return '未启用展墙内容设计时，按空间结构示意图中的展墙/隔断关系进行抽象图文层级与展品陈列组织，不生成可读长文。';
+  const lines = prompt.split('\n').map((line) => cleanText(line, 6000)).filter(Boolean);
+  const project = lineValue(lines, '项目');
+  const core = lineValue(lines, '核心信息');
+  const wallStartIndexes = [];
+  lines.forEach((line, index) => {
+    if (/^立面\s*\d+\s*[｜|:：]/u.test(line)) wallStartIndexes.push(index);
+  });
+  const out = [
+    '将以下各立面的内容、文案和特定工艺，分别落实到从示意图中提取的对应展墙/隔断位置上。',
+  ];
+  if (project) out.push(`项目：${project}`);
+  if (core) out.push(`核心叙事：${core}`);
+  if (!wallStartIndexes.length) {
+    const genericCraft = lineValue(lines, '工艺配置');
+    const genericLayout = lineValue(lines, '版式备注');
+    const rest = lines.filter((line) => !/^\s*(工艺配置|版式备注)\s*[:：]/u.test(line));
+    if (rest.length) out.push(rest.join('\n'));
+    if (genericCraft) out.push(`工艺落位：${genericCraft}`);
+    if (genericLayout) out.push(`备注：${genericLayout}`);
+    out.push('重要说明：以上内容仅用于设计效果图中各展墙的主题、图文层级、内容分区、重点文案占位和工艺落位；必须贴合结构示意图中的展墙/隔断位置，不得改变空间结构。');
+    return out.join('\n\n');
   }
-  if (id === 'colorMaterialReference') {
-    return [
-      colorMaterialSourceText(values),
-      '将色彩与材质语言落到墙面、地面、展柜、装置、金属字、发光亚克力、灯带、浮雕肌理和低反射表面上，保持真实施工逻辑和摄影级完成度。',
-      values.hasColorMaterialReferenceImage
-        ? '即使“色彩与材质参考/预设”在优先级中排在前面，也只能优先采用参考图的色彩、材质、肌理、光泽、冷暖和灯光氛围，不能优先采用它的空间结构、布局比例、墙体位置、通道组织或分区关系。'
-        : '即使“色彩与材质参考/预设”在优先级中排在前面，也只能优先采用色彩材质要求中的色彩、材质、肌理、光泽、冷暖和灯光氛围，不能改变空间结构、布局比例、墙体位置、通道组织或分区关系。',
-    ].join('\n');
+  wallStartIndexes.forEach((start, wallIndex) => {
+    const end = wallStartIndexes[wallIndex + 1] ?? lines.length;
+    const block = lines.slice(start, end);
+    const heading = block[0];
+    const titleMatch = heading.match(/^立面\s*(\d+)\s*[｜|:：]\s*(.*)$/u);
+    const number = titleMatch?.[1] || String(wallIndex + 1);
+    const title = cleanText(titleMatch?.[2] || heading, 120);
+    const summary = lineValue(block, '内容摘要');
+    const exactText = lineValue(block, '准确文案');
+    const craftConfig = lineValue(block, '工艺配置');
+    const layoutNote = lineValue(block, '版式备注');
+    const elements = splitSentences(summary).slice(0, 8);
+    const crafts = splitSentences(craftConfig).slice(0, 10);
+    const wallLines = [
+      `（${wallIndex + 1}）立面 ${number}：${title || `立面 ${number}`}`,
+      '',
+      `主题：${title || summary || '根据本立面内容形成主题'}。`,
+    ];
+    if (summary) wallLines.push(`空间氛围：${summary}`);
+    if (elements.length || exactText) {
+      wallLines.push('', '核心元素：');
+      elements.forEach((item) => wallLines.push(`${item}。`));
+      if (exactText) wallLines.push(`重点文案占位：${exactText}。`);
+    }
+    if (crafts.length) {
+      wallLines.push('', '工艺落位：');
+      crafts.forEach((item) => wallLines.push(`${item}。`));
+    }
+    if (layoutNote) wallLines.push('', `备注：${layoutNote}`);
+    out.push(wallLines.join('\n'));
+  });
+  out.push('✧ 重要说明：以上立面组织结果仅用于设计效果图中各展墙的主题、图文层级、内容分区、重点文案占位和工艺落位；必须贴合结构示意图中的展墙/隔断位置，不得改变空间结构。');
+  return out.join('\n\n');
+}
+
+function colorMaterialSystemText(values) {
+  const palette = cleanText(values.colorMaterialPalette || '', 1200);
+  const textures = cleanText(values.colorMaterialTextures || '', 1200);
+  const colorMaterial = cleanText(values.colorMaterial || '', 1600);
+  const source = colorMaterialSourceText(values);
+  const lines = [];
+  if (palette) lines.push(`主色调：${palette}`);
+  if (textures) lines.push(`材质与肌理：${textures}`);
+  if (colorMaterial) lines.push(`视觉特征：${colorMaterial}`);
+  if (!palette && !textures && !colorMaterial) {
+    lines.push('视觉特征：建立清晰、克制、可落地的专业展陈色彩材质体系。');
+    lines.push('主色调：根据项目主题选择统一、耐看的主辅色关系。');
+    lines.push('材质与肌理：墙面、地面、展台、展柜和装置均采用真实可施工的低反射材料。');
   }
-  const crafts = craftText(values.selectedCrafts, values.customCraft, values.craftPresets);
-  const lines = ['根据工艺与版式要求深化展陈设计。'];
-  if (crafts) lines.push(`展陈工艺：${crafts}`);
-  lines.push(`版式密度：${cleanText(values.density || '适中，图文层级均衡，主次分明')}`);
-  lines.push('“展陈工艺”“版式密度”“工艺配置”“版式备注”等字段及其具体要求只作为设计执行说明，用于指导材料、工法、图文层级和版式组织，不得作为可读上墙文字、标题、标签或说明直接出现在效果图中。');
-  const wallContentPrompt = cleanWallContentPrompt(values.wallContentPrompt);
-  if (wallContentPrompt) {
-    lines.push('展墙具体内容设计提示：');
-    lines.push(wallContentPrompt);
-    lines.push('以上立面组织结果仅用于设计效果图中各展墙的主题、图文层级、内容分区、重点文案占位和工艺落位；必须贴合结构示意图中的展墙/隔断位置，不得改变空间结构。');
-  }
-  if (cleanText(values.dimensions)) lines.push(`空间/画面尺寸：${cleanText(values.dimensions)}`);
-  if (cleanText(values.colorMaterial)) lines.push(`色彩与材质：${cleanText(values.colorMaterial)}`);
-  if (cleanText(values.visualStyle)) lines.push(`视觉风格：${cleanText(values.visualStyle)}`);
+  lines.push('灯光氛围：重点区域使用精准的重点照明，整体灯光层次丰富、自然。');
+  lines.push('应用原则：将以上色彩、材质和灯光要求，真实、有逻辑地“包裹”在由示意图决定的空间骨架上（如墙面、地面、展柜、立体字、灯带、浮雕等表面），确保最终效果图具有摄影级的材质真实感和完成度。');
+  lines.push(source);
   return lines.join('\n');
 }
 
 export function buildExhibitionImg2ImgPrompt(values = {}) {
   const priorityOrder = normalizeExhibitionImg2ImgPriority(values.priorityOrder);
-  const priorityOrderText = priorityOrder.map((id, index) => {
-    const meta = EXHIBITION_IMG2IMG_PRIORITY.find((item) => item.id === id);
-    return `${index + 1}. ${meta?.label || id}`;
-  }).join(' > ');
+  const supplement = cleanText(values.supplement);
+  const exhibitReference = exhibitReferenceText(values.exhibitReferenceItems);
   const lines = [
-    '生成一张专业展陈空间效果图，真实室内建筑摄影级渲染，空间尺度可信，材质细节清晰，灯光层次准确。',
-    referenceRoleText(priorityOrderText, values),
+    '1. 核心任务与最高约束',
+    '',
+    '任务：生成一张专业展陈空间效果图，要求真实室内建筑摄影级渲染，空间尺度可信，材质细节清晰，灯光层次准确。',
+    '',
+    '最高优先级（不可违反）：空间结构示意图是最终画面的唯一空间骨架和布局蓝本。',
+    '',
+    '硬性要求：必须精确提取并遵循示意图中的平面/轴测结构、墙体位置、展陈体块比例、通道宽度、动线走向、分区边界、入口/出口、重点节点以及开敞/封闭关系。',
+    '',
+    '最终检验标准：输出画面必须与示意图具有可被一眼识别的相同空间关系，任何部分都不能被改变或重新设计。',
+    '',
+    '绝对禁止：效果图中不得出现示意图上的任何文字、箭头、编号、尺寸线或图例标签。',
+    '',
+    '2. 执行优先级（除空间结构外）',
+    '',
+    executionPriorityText(priorityOrder, values),
+    '',
+    '3. 工艺与版式深化',
+    '',
+    '将以下展陈工艺和版式要求，应用到从“空间结构示意图”提取的骨架上。',
+    '',
+    '通用展陈工艺：',
+    '',
+    craftBulletText(values),
+    '',
+    `版式密度：${cleanText(values.density || '适中，图文层级均衡') }。`,
+    '',
+    '绝对禁止：效果图中不得出现“展陈工艺”、“版式密度”等字段名或任何具体的设计说明文字。',
+    '',
+    '4. 展墙内容与设计（分立面执行）',
+    '',
+    formatWallContentPrompt(values.wallContentPrompt),
+    '',
+    '5. 色彩与材质体系',
+    '',
+    colorMaterialSystemText(values),
+    '',
+    '6. 展品呈现',
+    '',
+    exhibitReference || [
+      '参考素材：未接入展品参考图时，按展墙内容需要生成抽象展品占位或真实尺度的通用陈列体块。',
+      '呈现标准：展品需符合真实博物馆陈列尺度，配有必要的托座、低反射保护玻璃和精准的重点照明。',
+      '绝对禁止：效果图中不得生成任何可读的展品说明标签或文字。',
+    ].join('\n'),
     '',
   ];
-
-  for (const id of priorityOrder) {
-    const meta = EXHIBITION_IMG2IMG_PRIORITY.find((item) => item.id === id);
-    lines.push(`【${meta?.label || id}】`);
-    lines.push(sectionText(id, values));
+  if (cleanText(values.dimensions) || cleanText(values.visualStyle) || supplement) {
+    lines.push('补充要求：');
+    if (cleanText(values.dimensions)) lines.push(`空间/画面尺寸：${cleanText(values.dimensions)}。`);
+    if (cleanText(values.visualStyle)) lines.push(`视觉风格：${cleanText(values.visualStyle)}。`);
+    if (supplement) lines.push(supplement);
     lines.push('');
   }
-
-  const supplement = cleanText(values.supplement);
-  if (supplement) {
-    lines.push('【补充要求】');
-    lines.push(supplement);
-    lines.push('');
-  }
-
-  const exhibitReference = exhibitReferenceText(values.exhibitReferenceItems);
-  if (exhibitReference) {
-    lines.push(exhibitReference);
-    lines.push('');
-  }
-
-  lines.push('【统一输出约束】');
-  lines.push('最终画面不要出现结构示意图中的标注文字、箭头编号、尺寸线、图例、说明标签或乱码文本；如需图文信息，仅以不可读的抽象占位块和清晰版式层级表达。');
-  lines.push('不要把提示词中的字段名或设计说明渲染为上墙文字，尤其不要出现“展陈工艺”“版式密度”“工艺配置”“版式备注”等字样，也不要把这些字段后的具体工艺、密度、配置、备注要求当作文案排到墙面上。');
-  lines.push('再次强调：优先级顺序只决定工艺版式、色彩材质语言和表现完成度上的偏向，不决定空间结构；无论优先级如何调整，最终空间结构必须完全遵循空间结构示意图。');
-  lines.push('保持空间结构逻辑清楚，并把结构示意图的平面关系、动线、分区、展墙/隔断、入口出口和主要体块转译为真实透视空间；融合色彩与材质参考/预设的材料语言与工艺版式，输出干净完整的高品质展陈空间效果图。');
+  lines.push(
+    '7. 最终输出约束（必读）',
+    '',
+    '画面干净：画面中不得出现结构示意图上的标注文字、箭头、尺寸线或任何乱码文本。',
+    '',
+    '版式抽象：如需体现图文信息，仅以不可读的抽象色块/占位符和清晰的版式层级示意，不得渲染具体文字内容。',
+    '',
+    '禁止出现字段名：尤其不得将“展陈工艺”、“版式密度”、“工艺配置”、“版式备注”等字段或其后跟随的具体要求，作为画面中的文字呈现。',
+    '',
+    '最终目标：在严格遵循空间结构示意图的前提下，融合指定的工艺版式与色彩材质，输出一张结构逻辑清晰、材质细节丰富、灯光氛围真实的高品质展陈空间效果图。'
+  );
 
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }

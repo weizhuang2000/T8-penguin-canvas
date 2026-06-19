@@ -9,8 +9,15 @@ test('exhibition img2img prompt defaults to structure priority', () => {
   const order = normalizeExhibitionImg2ImgPriority();
   assert.deepEqual(order, ['structureAnnotations', 'craftLayout', 'colorMaterialReference']);
   const prompt = buildExhibitionImg2ImgPrompt();
-  assert.match(prompt, /展陈工艺选用的优先级顺序：1\. 空间结构示意图标注 > 2\. 工艺与版式 > 3\. 色彩与材质参考\/预设/);
-  assert.match(prompt, /生成一张专业展陈空间效果图，真实室内建筑摄影级渲染/);
+  assert.match(prompt, /^1\. 核心任务与最高约束/);
+  assert.match(prompt, /2\. 执行优先级（除空间结构外）/);
+  assert.match(prompt, /3\. 工艺与版式深化/);
+  assert.match(prompt, /4\. 展墙内容与设计（分立面执行）/);
+  assert.match(prompt, /5\. 色彩与材质体系/);
+  assert.match(prompt, /6\. 展品呈现/);
+  assert.match(prompt, /7\. 最终输出约束（必读）/);
+  assert.match(prompt, /任务：生成一张专业展陈空间效果图，要求真实室内建筑摄影级渲染/);
+  assert.match(prompt, /第一优先级：工艺与版式/);
   assert.doesNotMatch(prompt, /^优先级顺序：/m);
   assert.doesNotMatch(prompt, /面向深化设计汇报/);
   assert.doesNotMatch(prompt, /空间表现效果图|高级渲染参考图|输入效果图形式/);
@@ -21,10 +28,10 @@ test('exhibition img2img prompt follows custom priority order', () => {
   const prompt = buildExhibitionImg2ImgPrompt({
     priorityOrder: ['colorMaterialReference', 'craftLayout', 'structureAnnotations'],
   });
-  const colorMaterialIndex = prompt.indexOf('【色彩与材质参考/预设】');
-  const craftIndex = prompt.indexOf('【工艺与版式】');
-  const structureIndex = prompt.indexOf('【空间结构示意图标注】');
-  assert.ok(colorMaterialIndex >= 0 && craftIndex > colorMaterialIndex && structureIndex > craftIndex);
+  const colorMaterialIndex = prompt.indexOf('第一优先级：色彩与材质体系');
+  const craftIndex = prompt.indexOf('第二优先级：工艺与版式');
+  assert.ok(colorMaterialIndex >= 0 && craftIndex > colorMaterialIndex);
+  assert.match(prompt, /最高优先级（不可违反）：空间结构示意图是最终画面的唯一空间骨架和布局蓝本/);
 });
 
 test('exhibition img2img prompt maps legacy style priority to color material reference', () => {
@@ -34,34 +41,34 @@ test('exhibition img2img prompt maps legacy style priority to color material ref
 
 test('exhibition img2img prompt forbids rendering structure labels', () => {
   const prompt = buildExhibitionImg2ImgPrompt();
-  assert.match(prompt, /不要在最终效果图中渲染、复写、临摹或生成任何可读文字、编号、箭头说明、尺寸线和标签/);
-  assert.match(prompt, /不要出现结构示意图中的标注文字、箭头编号、尺寸线、图例、说明标签或乱码文本/);
+  assert.match(prompt, /效果图中不得出现示意图上的任何文字、箭头、编号、尺寸线或图例标签/);
+  assert.match(prompt, /画面中不得出现结构示意图上的标注文字、箭头、尺寸线或任何乱码文本/);
 });
 
 test('exhibition img2img prompt treats structure image as layout source', () => {
   const prompt = buildExhibitionImg2ImgPrompt();
-  assert.match(prompt, /空间结构示意图是空间几何、布局、墙体、展陈体块、分区和动线的主约束/);
-  assert.match(prompt, /空间骨架和布局蓝本/);
-  assert.match(prompt, /不能只借鉴风格而改成另一套空间/);
-  assert.match(prompt, /平面关系、动线、分区、展墙\/隔断、入口出口和主要体块转译为真实透视空间/);
+  assert.match(prompt, /空间结构示意图是最终画面的唯一空间骨架和布局蓝本/);
+  assert.match(prompt, /必须精确提取并遵循示意图中的平面\/轴测结构、墙体位置、展陈体块比例/);
+  assert.match(prompt, /输出画面必须与示意图具有可被一眼识别的相同空间关系/);
+  assert.match(prompt, /任何部分都不能被改变或重新设计/);
 });
 
 test('exhibition img2img priority only affects presentation, not spatial structure', () => {
   const prompt = buildExhibitionImg2ImgPrompt({
     priorityOrder: ['colorMaterialReference', 'craftLayout', 'structureAnnotations'],
   });
-  assert.match(prompt, /优先级顺序只针对工艺版式、色彩材质语言、视觉风格和渲染语言的取舍/);
-  assert.match(prompt, /空间结构不参与该优先级排序/);
-  assert.match(prompt, /即使“色彩与材质参考\/预设”在优先级中排在前面，也只能优先采用色彩材质要求中的色彩、材质、肌理、光泽、冷暖和灯光氛围/);
-  assert.match(prompt, /最终空间结构必须完全遵循空间结构示意图/);
+  assert.match(prompt, /此优先级仅用于决定工艺、材质、色彩和风格的取舍/);
+  assert.match(prompt, /不得为了迁就色彩或材质而改变第一条中定义的空间结构/);
+  assert.match(prompt, /第一优先级：色彩与材质体系/);
+  assert.match(prompt, /最高优先级（不可违反）/);
 });
 
 test('exhibition img2img prompt can include wall content planning', () => {
   const prompt = buildExhibitionImg2ImgPrompt({
     wallContentPrompt: '立面 1｜序厅\n内容摘要：品牌发展脉络\n准确文案：初心 / 创新',
   });
-  assert.match(prompt, /展墙具体内容设计提示/);
-  assert.match(prompt, /立面 1｜序厅/);
+  assert.match(prompt, /4\. 展墙内容与设计（分立面执行）/);
+  assert.match(prompt, /（1）立面 1：序厅/);
   assert.match(prompt, /品牌发展脉络/);
   assert.match(prompt, /仅用于设计效果图中各展墙的主题、图文层级、内容分区、重点文案占位和工艺落位/);
   assert.match(prompt, /不得改变空间结构/);
@@ -79,7 +86,7 @@ test('exhibition img2img wall content planning should use schedule instead of co
       '工艺配置：展板、立体字',
     ].join('\n'),
   });
-  assert.match(prompt, /准确文案：初心 \/ 创新/);
+  assert.match(prompt, /重点文案占位：初心 \/ 创新/);
   assert.doesNotMatch(prompt, /生成一张专业展陈彩立面平面设计概念图/);
   assert.doesNotMatch(prompt, /整套展陈彩立面设计/);
 });
@@ -94,8 +101,8 @@ test('exhibition img2img wall content planning strips size ratio lines', () => {
       '准确文案：初心 / 创新',
     ].join('\n'),
   });
-  assert.match(prompt, /内容摘要：品牌起源/);
-  assert.match(prompt, /准确文案：初心 \/ 创新/);
+  assert.match(prompt, /空间氛围：品牌起源/);
+  assert.match(prompt, /重点文案占位：初心 \/ 创新/);
   assert.doesNotMatch(prompt, /尺寸\s*\/\s*比例\s*[:：]/);
 });
 
@@ -106,10 +113,10 @@ test('exhibition img2img prompt forbids rendering design instruction fields as w
     density: '信息丰富，采用严谨网格',
     wallContentPrompt: '工艺配置：展板、立体字\n版式备注：适中，沿用整体视觉体系',
   });
-  assert.match(prompt, /只作为设计执行说明/);
-  assert.match(prompt, /不得作为可读上墙文字、标题、标签或说明直接出现在效果图中/);
-  assert.match(prompt, /不要出现“展陈工艺”“版式密度”“工艺配置”“版式备注”等字样/);
-  assert.match(prompt, /不要把这些字段后的具体工艺、密度、配置、备注要求当作文案排到墙面上/);
+  assert.match(prompt, /不得出现“展陈工艺”、“版式密度”等字段名或任何具体的设计说明文字/);
+  assert.match(prompt, /不得将“展陈工艺”、“版式密度”、“工艺配置”、“版式备注”等字段或其后跟随的具体要求，作为画面中的文字呈现/);
+  assert.match(prompt, /工艺落位：展板、立体字/);
+  assert.doesNotMatch(prompt, /^工艺配置：/m);
 });
 
 test('exhibition img2img prompt uses color material reference image as material source', () => {
@@ -145,8 +152,8 @@ test('exhibition img2img prompt explains reference image roles after priority ch
     priorityOrder: ['colorMaterialReference', 'craftLayout', 'structureAnnotations'],
     hasColorMaterialReferenceImage: true,
   });
-  assert.match(prompt, /空间结构示意图是空间几何、布局、墙体、展陈体块、分区和动线的主约束/);
-  assert.match(prompt, /色彩与材质参考图只用于提取色彩关系、材质质感、表面肌理、光泽、冷暖倾向和灯光氛围/);
+  assert.match(prompt, /空间结构示意图是最终画面的唯一空间骨架和布局蓝本/);
+  assert.match(prompt, /色彩与材质来源：使用接入的色彩与材质参考图，仅提取主色、辅助色、冷暖关系、材质肌理、表面光泽、灯光氛围/);
   assert.doesNotMatch(prompt, /第 \d+ 张参考图是空间结构示意图/);
   assert.doesNotMatch(prompt, /第 \d+ 张参考图是色彩与材质参考图/);
 });
