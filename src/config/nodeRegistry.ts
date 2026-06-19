@@ -98,7 +98,6 @@ export const NODE_REGISTRY: NodeMeta[] = [
   // ========== Toolbox 工具箱(6) ==========
   { type: 'cinematic', label: '电影感', category: 'toolbox', description: '电影感组合器：风格 / 镜头 / 光影 / 调色 / 质感各 50 项，支持收藏与 JSON 导入/导出', icon: 'Clapperboard', color: 'pink' },
   { type: 'video-motion', label: '视频运镜', category: 'toolbox', description: '视频运镜组合器：场景 / 动作 / 路径 / 节奏 / 稳定 / 主体约束各 50 项，支持收藏与 JSON 导入/导出', icon: 'Camera', color: 'pink' },
-  { type: 'exhibition-prompt', label: '展陈提示词', category: 'exhibition', description: '展陈设计生图 Prompt 组合器：空间、功能、工艺、色彩、灯光、材质、构图、风格和排除项', icon: 'GalleryHorizontalEnd', color: 'cyan' },
   { type: 'elevation-prompt', label: '立面提示词', category: 'exhibition', description: '解析 DOCX / 文本 PDF / TXT，AI 提炼内容并生成彩立面概念 Prompt 与准确图文工艺排版清单', icon: 'PanelsTopLeft', color: 'cyan' },
   { type: 'exhibition-img2img', label: '展陈图生图', category: 'exhibition', description: '双参考图展陈图生图：结构示意图 + 空间表现效果图，支持工艺版式与优先级控制', icon: 'Boxes', color: 'cyan' },
   { type: 'exhibition-creative-image', label: '展陈创意生图', category: 'exhibition', description: '面向序厅、尾厅和重亮点展项空间：单空间图约束建筑空间，LLM 创意描述后多次图生图', icon: 'Layers3', color: 'cyan' },

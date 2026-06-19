@@ -110,7 +110,6 @@ import MarkNode from './nodes/MarkNode';
 import RemoveBgNode from './nodes/RemoveBgNode';
 import ImageCompareNode from './nodes/ImageCompareNode';
 import ToolboxParamNode from './nodes/ToolboxParamNode';
-import ExhibitionPromptNode from './nodes/ExhibitionPromptNode';
 import ElevationPromptNode from './nodes/ElevationPromptNode';
 import ExhibitionImg2ImgNode from './nodes/ExhibitionImg2ImgNode';
 import ExhibitionCreativeImageNode from './nodes/ExhibitionCreativeImageNode';
@@ -202,7 +201,6 @@ const SPECIFIC_NODES: Record<string, any> = {
   // Toolbox (5)
   cinematic: ToolboxParamNode,
   'video-motion': ToolboxParamNode,
-  'exhibition-prompt': ExhibitionPromptNode,
   'elevation-prompt': ElevationPromptNode,
   'exhibition-img2img': ExhibitionImg2ImgNode,
   'exhibition-creative-image': ExhibitionCreativeImageNode,
@@ -350,7 +348,6 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
   },
   cinematic: { kind: 'cinematic', cinematicLanguage: 'en', cinematicStrength: 'balanced' },
   'video-motion': { kind: 'video-motion', motionLanguage: 'en' },
-  'exhibition-prompt': { prompt: '', outputText: '', text: '', imageUrls: [], referenceImages: [], materialOrder: [] },
   'exhibition-img2img': {
     model: 'gpt-image-2',
     apiModel: 'gpt-image-2-all',
@@ -618,7 +615,6 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'loop', 'pick-from-set',
   // v1.4.8: 工具箱文本节点也可点击 RUN 直接外挂 OutputNode
   'cinematic', 'video-motion', 'multi-angle-visual', 'portrait-master', 'pose-master',
-  'exhibition-prompt',
   'elevation-prompt',
   'exhibition-img2img',
   'exhibition-creative-image',

@@ -151,7 +151,6 @@ export const NODE_PORTS: Record<string, NodePorts> = {
   // ========== Toolbox ==========
   cinematic: { inputs: [], outputs: ['text'] },
   'video-motion': { inputs: [], outputs: ['text'] },
-  'exhibition-prompt': { inputs: ['text', 'image'], outputs: ['text', 'image'] },
   'elevation-prompt': { inputs: [], outputs: ['text'] },
   'exhibition-img2img': { inputs: ['image'], outputs: ['image'] },
   'exhibition-creative-image': { inputs: ['text', 'image'], outputs: ['image'] },

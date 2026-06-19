@@ -63,7 +63,6 @@ export type NodeType =
   // Toolbox (5)
   | 'cinematic'
   | 'video-motion'
-  | 'exhibition-prompt'
   | 'elevation-prompt'
   | 'exhibition-img2img'
   | 'exhibition-creative-image'
