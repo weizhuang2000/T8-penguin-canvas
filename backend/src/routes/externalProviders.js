@@ -9,6 +9,7 @@ const {
   generateChatWithProvider,
   generateImageWithProvider,
   generateVideoWithProvider,
+  queryImageTaskWithProvider,
   testProviderConnection,
 } = require('../providers/adapters');
 const { addHistoryItems } = require('../utils/generationHistory');
@@ -116,8 +117,13 @@ async function saveOneMediaOutput(url, kind = 'image', options = {}) {
 async function saveImageOutputs(urls, options = {}) {
   const out = [];
   for (const url of Array.isArray(urls) ? urls : []) {
-    const saved = await saveOneMediaOutput(url, 'image', options);
-    if (saved) out.push(saved);
+    try {
+      const saved = await saveOneMediaOutput(url, 'image', options);
+      if (saved) out.push(saved);
+    } catch (e) {
+      console.warn('[external/image] save output failed, falling back to remote url:', e?.message || e);
+      if (typeof url === 'string' && url) out.push(url);
+    }
   }
   return out;
 }
@@ -159,22 +165,28 @@ function parseHistoryContext(value) {
 }
 
 function rememberExternalOutputs(req, urls, kind, provider, extra = {}) {
+  const source = req.body && Object.keys(req.body).length ? req.body : (req.query || {});
   const list = (Array.isArray(urls) ? urls : [])
     .filter((url) => typeof url === 'string' && url)
     .map((url) => ({ url, kind, ...extra }));
   if (!list.length) return;
   try {
     addHistoryItems(list, {
-      ...parseHistoryContext(req.body?.historyContext),
-      prompt: req.body?.prompt,
+      ...parseHistoryContext(source?.historyContext),
+      prompt: source?.prompt,
       provider: provider?.label || provider?.id || '',
-      model: req.body?.providerModel || req.body?.model || '',
+      model: source?.providerModel || source?.model || '',
       taskId: extra.taskId || req.body?.taskId || '',
-      seed: req.body?.seed,
+      seed: source?.seed,
     }, req.user);
   } catch (e) {
     console.warn('[generation-history] external record failed:', e?.message || e);
   }
+}
+
+function canContinueImageTask(result) {
+  if (!result?.taskId) return false;
+  return ['timeout', 'network_error', 'empty_image'].includes(String(result.code || ''));
 }
 
 router.post('/test-provider', async (req, res) => {
@@ -257,7 +269,18 @@ router.post('/image', async (req, res) => {
       timeoutMs: generationTimeoutMs(req.body?.timeoutMs),
       baseUrl: `http://127.0.0.1:${config.PORT}`,
     });
-    if (!result.ok) return resultResponse(res, result, resolved.provider);
+    if (!result.ok) {
+      if (canContinueImageTask(result)) {
+        return resultResponse(res, {
+          ...result,
+          ok: true,
+          kind: 'image',
+          code: 'running',
+          status: 'running',
+        }, resolved.provider, { imageUrls: [], remoteImageUrls: [] });
+      }
+      return resultResponse(res, result, resolved.provider);
+    }
     const remoteImageUrls = Array.isArray(result.imageUrls) ? result.imageUrls : [];
     const imageUrls = await saveImageOutputs(remoteImageUrls);
     rememberExternalOutputs(req, imageUrls, 'image', resolved.provider, { taskId: result.taskId });
@@ -269,6 +292,43 @@ router.post('/image', async (req, res) => {
     return res.status(500).json({
       success: false,
       code: 'external_image_failed',
+      error: e?.message || String(e),
+    });
+  }
+});
+
+router.get('/image/status/:taskId', async (req, res) => {
+  try {
+    const settings = settingsRouter.loadSettings({ persistMigrations: false });
+    const currentProviders = normalizeAdvancedProviders(settings.advancedProviders);
+    const resolved = resolveRunnableProvider(req.query || {}, currentProviders);
+    if (!resolved.ok) {
+      return res.json({
+        success: false,
+        code: resolved.code,
+        error: resolved.error,
+        data: resolved.provider ? { provider: safeProviderForResponse(resolved.provider) } : undefined,
+      });
+    }
+    const result = await queryImageTaskWithProvider(resolved.provider, req.params.taskId, {
+      timeoutMs: Number(req.query?.timeoutMs) || undefined,
+      baseUrl: `http://127.0.0.1:${config.PORT}`,
+    });
+    if (!result.ok) return resultResponse(res, result, resolved.provider);
+
+    const remoteImageUrls = Array.isArray(result.imageUrls) ? result.imageUrls : [];
+    const imageUrls = remoteImageUrls.length ? await saveImageOutputs(remoteImageUrls) : [];
+    if (imageUrls.length) {
+      rememberExternalOutputs(req, imageUrls, 'image', resolved.provider, { taskId: result.taskId || req.params.taskId });
+    }
+    return resultResponse(res, result, resolved.provider, {
+      remoteImageUrls,
+      imageUrls,
+    });
+  } catch (e) {
+    return res.status(500).json({
+      success: false,
+      code: 'external_image_status_failed',
       error: e?.message || String(e),
     });
   }

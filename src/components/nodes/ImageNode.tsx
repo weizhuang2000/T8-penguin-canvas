@@ -35,6 +35,7 @@ import {
   uploadMjImage,
   buildMjPrompt,
   generateExternalImage,
+  queryExternalImageStatus,
   type MjSpeed,
 } from '../../services/generation';
 import { useUpdateNodeData } from './useUpdateNodeData';
@@ -81,6 +82,7 @@ import { LocalNodeAddonSlot } from 'virtual:t8-local-extensions';
 const IMAGE_POLL_TIMEOUT_SECONDS = 3600;
 const minPollCountForTimeout = (intervalMs: number) =>
   Math.ceil((IMAGE_POLL_TIMEOUT_SECONDS * 1000) / Math.max(1, intervalMs));
+const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
 const COMFY_NUMERIC_FIELD_SOURCES = new Set([
   'width',
   'height',
@@ -630,7 +632,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           `扩展平台提交: ${providerSelection.provider.label || providerSelection.provider.id} · ${providerModel}${loraLog} · size=${size} · 参考图=${allRefs.length}`,
           src,
         );
-        const res = await generateExternalImage({
+        let res = await generateExternalImage({
           providerId: providerSelection.provider.id,
           providerModel,
           model: providerModel,
@@ -644,7 +646,39 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           n: Math.max(1, Math.min(4, Number(d?.providerParams?.n || 1))),
           providerParams: externalProviderParams,
           historyContext,
+          async: true,
         });
+        if ((!res.imageUrls?.length) && res.taskId && (res.code === 'running' || res.status === 'running')) {
+          let pollingTaskId = res.taskId;
+          let transientFailures = 0;
+          update({ progress: '5%', taskId: pollingTaskId });
+          logBus.info(`扩展平台任务继续轮询 taskId=${pollingTaskId}`, src);
+          const maxPoll = minPollCountForTimeout(EXTERNAL_IMAGE_POLL_INTERVAL_MS);
+          for (let i = 0; i < maxPoll; i += 1) {
+            await new Promise((r) => setTimeout(r, EXTERNAL_IMAGE_POLL_INTERVAL_MS));
+            try {
+              res = await queryExternalImageStatus({
+                providerId: providerSelection.provider.id,
+                providerModel,
+                taskId: pollingTaskId,
+                historyContext,
+              });
+              transientFailures = 0;
+            } catch (err: any) {
+              transientFailures += 1;
+              const message = err?.message || String(err);
+              logBus.warn(`扩展平台状态查询暂时失败(${transientFailures}/5): ${message}`, src);
+              if (transientFailures >= 5) throw err;
+              continue;
+            }
+            pollingTaskId = res.taskId || pollingTaskId;
+            update({
+              taskId: pollingTaskId,
+              progress: `${Math.min(99, Math.round(((i + 1) / maxPoll) * 100))}%`,
+            });
+            if (res.imageUrls?.length || (res.code && res.code !== 'running')) break;
+          }
+        }
         const urls = res.imageUrls || [];
         if (!urls.length) throw new Error('扩展平台完成但未返回图片');
         update({

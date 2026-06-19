@@ -134,6 +134,7 @@ export interface QueryExternalImageStatusRequest {
   taskId: string;
   providerModel?: string;
   outputFormat?: 'jpg' | 'png';
+  historyContext?: GenerationHistoryContext;
 }
 
 export async function queryExternalImageStatus(req: QueryExternalImageStatusRequest): Promise<GenerateExternalImageResult> {
@@ -142,6 +143,7 @@ export async function queryExternalImageStatus(req: QueryExternalImageStatusRequ
   if (!isLocalJob && req.providerId) qs.set('providerId', req.providerId);
   if (!isLocalJob && req.providerModel) qs.set('providerModel', req.providerModel);
   if (req.outputFormat) qs.set('outputFormat', req.outputFormat);
+  if (req.historyContext) qs.set('historyContext', JSON.stringify(req.historyContext));
   const query = qs.toString();
   const r = await fetch(`/api/proxy/external/image/status/${encodeURIComponent(req.taskId)}${query ? `?${query}` : ''}`);
   const data = await parseJsonResponse(r);
