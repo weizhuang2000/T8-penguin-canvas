@@ -4,15 +4,12 @@ import {
   ArrowDown,
   ArrowUp,
   Boxes,
-  Check,
   Clipboard,
-  Download,
   FileText,
   Image as ImageIcon,
   Loader2,
   MoveVertical,
   Play,
-  RefreshCw,
   Settings,
   Sparkles,
   Upload,
@@ -42,14 +39,13 @@ import {
 } from '../../utils/exhibitionImg2ImgPrompt';
 import {
   ELEVATION_CRAFTS,
-  buildElevationAnalysisMessages,
+  buildElevationContentPlanMessages,
   buildElevationOutputs,
   normalizeElevationAnalysis,
-  parseElevationAnalysisResponse,
+  parseElevationContentPlanResponse,
   type ElevationCraft,
   type ElevationAnalysis,
   type ElevationWall,
-  wallsFromAnalysis,
 } from '../../utils/elevationPrompt';
 import {
   extractDocument,
@@ -77,7 +73,6 @@ import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
 const DEFAULT_CRAFTS = ['panel', 'dimensional-letters', 'soft-film-lightbox'];
-const DEFAULT_REFINE_WORD_COUNT = 1200;
 const MAX_IMAGE_SEED = 2147483647;
 const EXTERNAL_SIZE_LEVELS = ['1K', '2K', '4K'];
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
@@ -357,7 +352,6 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const update = useUpdateNodeData(id);
   const rf = useReactFlow();
   const fileRef = useRef<HTMLInputElement>(null);
-  const jsonFileRef = useRef<HTMLInputElement>(null);
   const colorMaterialPresetDisconnectRef = useRef(false);
   const { style } = useThemeStore();
   const isPixel = style === 'pixel';
@@ -427,13 +421,10 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const sourceText = String(d.sourceText || '');
   const wallMode: 'single' | 'multi' = d.wallMode === 'single' ? 'single' : 'multi';
   const wallCount = Math.max(1, Math.min(12, Number(d.wallCount) || 3));
-  const refineWordCount = Math.max(200, Math.min(3000, Number(d.refineWordCount) || DEFAULT_REFINE_WORD_COUNT));
   const analysis = useMemo(
     () => normalizeElevationAnalysis(d.analysis) as ElevationAnalysis,
     [d.analysis],
   );
-  const [analysisDraft, setAnalysisDraft] = useState('');
-  const [draftMessage, setDraftMessage] = useState('');
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const canManageTeam = currentUser?.role === 'admin' || currentUser?.role === 'manager';
   const [craftPresets, setCraftPresets] = useState<ElevationCraftPresetItem[]>([]);
@@ -502,9 +493,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   );
   const hasContentPlanning = contentEnabled && (
     Array.isArray(d.walls) && d.walls.length > 0 ||
-    !!analysis.projectTheme ||
-    !!analysis.coreMessage ||
-    analysis.sections.length > 0
+    !!d.contentPlanningPrompt
   );
   const wallContentPrompt = hasContentPlanning ? contentOutputs.mainOutput : '';
 
@@ -606,10 +595,6 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   }, [colorMaterialEditorOpen, colorMaterialPresets]);
 
   useEffect(() => {
-    setAnalysisDraft(JSON.stringify(analysis, null, 2));
-  }, [analysis]);
-
-  useEffect(() => {
     const patch = {
       contentPlanningPrompt: wallContentPrompt,
       contentWalls: contentOutputs.walls,
@@ -699,7 +684,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     update({ exhibitReferenceItems: next });
   }, [exhibitReferenceItems, isReadonly, update]);
 
-  const refineText = useCallback(async (textOverride?: string, rethrow = false) => {
+  const planWallContent = useCallback(async (textOverride?: string, rethrow = false) => {
     if (isReadonly || !contentEnabled) return;
     const text = String(textOverride ?? sourceText).trim();
     if (!text) {
@@ -708,34 +693,45 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     }
     update({ status: 'refining', error: '' });
     try {
-      const messages = buildElevationAnalysisMessages(text, wallMode, wallCount, refineWordCount);
-      const maxTokens = Math.max(1200, Math.min(8192, Math.ceil(refineWordCount * 3.2)));
+      const messages = buildElevationContentPlanMessages({
+        sourceText: text,
+        wallMode,
+        wallCount,
+        selectedCrafts,
+        customCraft: d.customCraft,
+        craftPresets,
+      });
       const response = await generateLlm({
         model: contentModel,
         messages: messages as any,
         llmKeyId: activeContentLlmConfig?.id,
         temperature: 0.2,
-        max_tokens: maxTokens,
+        max_tokens: 4096,
       });
-      const nextAnalysis = parseElevationAnalysisResponse(response.content) as ElevationAnalysis;
-      const nextWalls = wallsFromAnalysis(nextAnalysis, wallMode, wallCount) as ElevationWall[];
+      const plan = parseElevationContentPlanResponse(response.content);
       update({
-        analysis: nextAnalysis,
-        walls: nextWalls,
+        analysis: {
+          projectTheme: plan.projectTheme,
+          coreMessage: plan.coreMessage,
+          sections: [],
+        },
+        walls: plan.walls,
         status: 'success',
         error: '',
-        analyzedAt: Date.now(),
+        plannedAt: Date.now(),
       });
     } catch (error: any) {
-      update({ status: 'error', error: error?.message || 'AI 提炼失败' });
+      update({ status: 'error', error: error?.message || '展示内容生成失败' });
       if (rethrow) throw error;
     }
   }, [
     activeContentLlmConfig?.id,
     contentEnabled,
     contentModel,
+    craftPresets,
+    d.customCraft,
     isReadonly,
-    refineWordCount,
+    selectedCrafts,
     sourceText,
     update,
     wallCount,
@@ -760,17 +756,12 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         status: 'refining',
         error: '',
       });
-      await refineText(text);
+      await planWallContent(text);
     } catch (error: any) {
       update({ status: 'error', error: error?.message || '文档解析失败' });
     } finally {
       if (fileRef.current) fileRef.current.value = '';
     }
-  };
-
-  const rebuildWalls = () => {
-    if (isReadonly || !contentEnabled) return;
-    update({ walls: wallsFromAnalysis(analysis, wallMode, wallCount) });
   };
 
   const patchWall = (index: number, patch: Partial<ElevationWall>) => {
@@ -779,54 +770,6 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       wallIndex === index ? { ...wall, ...patch } : wall
     ));
     update({ walls: next });
-  };
-
-  const applyAnalysisDraft = () => {
-    if (isReadonly || !contentEnabled) return;
-    try {
-      const next = parseElevationAnalysisResponse(analysisDraft) as ElevationAnalysis;
-      update({ analysis: next, walls: wallsFromAnalysis(next, wallMode, wallCount), error: '' });
-      setDraftMessage('已应用');
-    } catch (error: any) {
-      setDraftMessage(error?.message || 'JSON 无法解析');
-    }
-  };
-
-  const importAnalysisJson = async (file?: File) => {
-    if (!file || isReadonly || !contentEnabled) return;
-    try {
-      const text = await file.text();
-      const next = parseElevationAnalysisResponse(text) as ElevationAnalysis;
-      setAnalysisDraft(JSON.stringify(next, null, 2));
-      setDraftMessage('已导入');
-    } catch (error: any) {
-      setDraftMessage(error?.message || 'JSON 无法解析');
-    } finally {
-      if (jsonFileRef.current) jsonFileRef.current.value = '';
-    }
-  };
-
-  const exportAnalysisJson = () => {
-    try {
-      const next = parseElevationAnalysisResponse(analysisDraft) as ElevationAnalysis;
-      const content = JSON.stringify(next, null, 2);
-      const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      const theme = String(next.projectTheme || 'exhibition-content-analysis')
-        .trim()
-        .replace(/[\\/:*?"<>|]+/g, '-')
-        .slice(0, 48) || 'exhibition-content-analysis';
-      link.href = url;
-      link.download = `${theme}.json`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-      setDraftMessage('已导出');
-    } catch (error: any) {
-      setDraftMessage(error?.message || 'JSON 无法解析');
-    }
   };
 
   const runGenerate = async () => {
@@ -1223,7 +1166,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
             </label>
           </div>
           <div className="text-[10px] leading-snug text-white/45">
-            开启后导入文档、AI 提炼和立面组织会作为效果图中展墙具体内容的设计提示词；关闭时完全不参与生成。
+            开启后，系统会根据文档内容和已选工艺直接生成各立面的展示内容、工艺落位和版式提示；关闭时完全不参与生成。
           </div>
           {contentEnabled && (
             <div className="mt-2 space-y-2">
@@ -1264,28 +1207,15 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
 
               <div className="rounded border border-white/10 bg-black/15 p-2">
                 <div className="mb-1.5 flex items-center gap-2">
-                  <span className="text-[11px] font-semibold text-cyan-100">2. AI 提炼</span>
-                  <label className="ml-auto flex min-w-[138px] items-center gap-1.5 text-[10px] text-white/55" title="控制 AI 结构化提炼的目标字数">
-                    <span className="whitespace-nowrap">字数 {refineWordCount}</span>
-                    <input
-                      type="range"
-                      min={200}
-                      max={3000}
-                      step={100}
-                      value={refineWordCount}
-                      disabled={contentBusy || isReadonly}
-                      className="h-1 w-16 accent-cyan-300"
-                      onChange={(event) => update({ refineWordCount: Number(event.target.value) })}
-                    />
-                  </label>
+                  <span className="text-[11px] font-semibold text-cyan-100">2. 生成展示内容</span>
                   <button
                     type="button"
-                    className={BUTTON}
+                    className={`${BUTTON} ml-auto`}
                     disabled={contentBusy || isReadonly || !sourceText.trim()}
-                    onClick={() => void refineText()}
+                    onClick={() => void planWallContent()}
                   >
                     {status === 'refining' ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-                    重新提炼
+                    生成展示内容
                   </button>
                 </div>
                 <div className="mb-1.5 grid grid-cols-2 gap-1">
@@ -1304,74 +1234,17 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                   </select>
                   <input className={FIELD} disabled value={contentModel} title="模型由所选 LLM 配置决定" />
                 </div>
-                <input
-                  className={FIELD}
-                  value={analysis.projectTheme}
-                  disabled={isReadonly}
-                  placeholder="项目主题"
-                  onChange={(event) => update({ analysis: { ...analysis, projectTheme: event.target.value } })}
-                />
-                <textarea
-                  className={`${FIELD} mt-1 min-h-[48px] resize-y`}
-                  value={analysis.coreMessage}
-                  disabled={isReadonly}
-                  placeholder="核心信息"
-                  onChange={(event) => update({ analysis: { ...analysis, coreMessage: event.target.value } })}
-                />
-                <details className="mt-1.5 text-[10px] text-white/55">
-                  <summary className="cursor-pointer select-none">编辑结构化分析 JSON</summary>
-                  <input
-                    ref={jsonFileRef}
-                    type="file"
-                    accept="application/json,.json"
-                    className="hidden"
-                    onChange={(event) => importAnalysisJson(event.target.files?.[0])}
-                  />
-                  <textarea
-                    className={`${FIELD} mt-1 min-h-[130px] resize-y font-mono`}
-                    value={analysisDraft}
-                    disabled={isReadonly}
-                    onChange={(event) => {
-                      setAnalysisDraft(event.target.value);
-                      setDraftMessage('');
-                    }}
-                  />
-                  <div className="mt-1 flex items-center justify-end gap-2">
-                    {draftMessage && (
-                      <span className={['已应用', '已导入', '已导出'].includes(draftMessage) ? 'text-emerald-300' : 'text-red-300'}>
-                        {draftMessage}
-                      </span>
-                    )}
-                    <button type="button" className={BUTTON} disabled={isReadonly} onClick={() => jsonFileRef.current?.click()}>
-                      <Upload size={11} />导入 JSON
-                    </button>
-                    <button type="button" className={BUTTON} onClick={exportAnalysisJson}>
-                      <Download size={11} />导出 JSON
-                    </button>
-                    <button type="button" className={BUTTON} disabled={isReadonly} onClick={applyAnalysisDraft}>
-                      <Check size={11} />应用 JSON
-                    </button>
-                  </div>
-                </details>
-              </div>
-
-              <div className="rounded border border-white/10 bg-black/15 p-2">
-                <div className="mb-1.5 flex items-center gap-2">
-                  <span className="text-[11px] font-semibold text-cyan-100">3. 立面组织</span>
-                  <button type="button" className={`${BUTTON} ml-auto`} disabled={isReadonly} onClick={rebuildWalls}>
-                    <RefreshCw size={11} />按分析重建
-                  </button>
-                </div>
                 <div className="grid grid-cols-3 gap-1">
                   <select
                     className={FIELD}
-                    disabled={isReadonly}
+                    disabled={isReadonly || contentBusy}
                     value={wallMode}
                     onChange={(event) => {
                       const nextMode = event.target.value === 'single' ? 'single' : 'multi';
                       update({
                         wallMode: nextMode,
-                        walls: wallsFromAnalysis(analysis, nextMode, nextMode === 'single' ? 1 : wallCount),
+                        wallCount: nextMode === 'single' ? 1 : wallCount,
+                        walls: [],
                       });
                     }}
                   >
@@ -1383,17 +1256,17 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                     type="number"
                     min={1}
                     max={12}
-                    disabled={isReadonly || wallMode === 'single'}
+                    disabled={isReadonly || contentBusy || wallMode === 'single'}
                     value={wallMode === 'single' ? 1 : wallCount}
                     onChange={(event) => {
                       const nextCount = Math.max(1, Math.min(12, Number(event.target.value) || 1));
-                      update({ wallCount: nextCount, walls: wallsFromAnalysis(analysis, 'multi', nextCount) });
+                      update({ wallCount: nextCount, walls: [] });
                     }}
                     title="立面数量"
                   />
                   <select
                     className={FIELD}
-                    disabled={isReadonly || wallMode === 'single'}
+                    disabled={isReadonly || contentBusy || wallMode === 'single'}
                     value={d.outputMode === 'overview' ? 'overview' : 'segments'}
                     onChange={(event) => update({ outputMode: event.target.value })}
                   >
@@ -1401,6 +1274,20 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                     <option value="overview">整套总览</option>
                   </select>
                 </div>
+                <input
+                  className={`${FIELD} mt-1.5`}
+                  value={analysis.projectTheme}
+                  disabled={isReadonly}
+                  placeholder="项目主题"
+                  onChange={(event) => update({ analysis: { ...analysis, projectTheme: event.target.value } })}
+                />
+                <textarea
+                  className={`${FIELD} mt-1 min-h-[48px] resize-y`}
+                  value={analysis.coreMessage}
+                  disabled={isReadonly}
+                  placeholder="核心叙事"
+                  onChange={(event) => update({ analysis: { ...analysis, coreMessage: event.target.value } })}
+                />
                 <div className="mt-2 max-h-56 space-y-1.5 overflow-y-auto">
                   {contentOutputs.walls.map((wall: ElevationWall, index: number) => (
                     <div key={wall.id || index} className="rounded border border-white/10 bg-white/[0.035] p-1.5">
@@ -1426,6 +1313,13 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                         onChange={(event) => patchWall(index, {
                           exactText: event.target.value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
                         })}
+                      />
+                      <textarea
+                        className={`${FIELD} mt-1 min-h-[40px] resize-y`}
+                        value={wall.craftNotes || ''}
+                        disabled={isReadonly}
+                        placeholder="本立面工艺与版式配置，如：立体字展示标题；图文展板展示纹样；沿墙文物柜展示展品"
+                        onChange={(event) => patchWall(index, { craftNotes: event.target.value })}
                       />
                     </div>
                   ))}

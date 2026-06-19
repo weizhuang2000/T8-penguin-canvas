@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildElevationAnalysisMessages,
+  buildElevationContentPlanMessages,
   buildElevationOutputs,
+  parseElevationContentPlanResponse,
   parseElevationAnalysisResponse,
   wallsFromAnalysis,
 } from '../src/utils/elevationPromptData.js';
@@ -32,9 +34,10 @@ test('multi-wall analysis is distributed into requested wall count', () => {
 });
 
 test('elevation outputs include crafts, concept prompts and accurate schedule', () => {
+  const wallsWithoutCraftLimits = wallsFromAnalysis(analysis, 'multi', 3).map(({ craftIds, craftNotes, ...wall }) => wall);
   const result = buildElevationOutputs({
     analysis,
-    walls: wallsFromAnalysis(analysis, 'multi', 3),
+    walls: wallsWithoutCraftLimits,
     wallMode: 'multi',
     outputMode: 'segments',
     downstreamContent: 'combined',
@@ -67,6 +70,52 @@ test('elevation outputs use configured craft presets', () => {
 
   assert.match(result.conceptPrompts[0], /定制工艺提示词/);
   assert.match(result.layoutSchedule, /定制工艺/);
+});
+
+test('content plan parser keeps wall craft choices and notes', () => {
+  const payload = {
+    projectTheme: '青花瓷展',
+    coreMessage: '呈现青花瓷的历史、纹样与工艺',
+    walls: [
+      {
+        id: 'wall-1',
+        title: '瓷韵初见',
+        content: '用立体字展示主标题，用图文展板展示青花瓷纹样演变。',
+        exactText: ['瓷韵初见', '纹样演变'],
+        craftIds: ['dimensional-letters', 'panel'],
+        craftNotes: '立体字展示标题；图文展板展示青花瓷纹样。',
+      },
+    ],
+  };
+
+  const parsed = parseElevationContentPlanResponse(`\`\`\`json\n${JSON.stringify(payload)}\n\`\`\``);
+
+  assert.equal(parsed.projectTheme, '青花瓷展');
+  assert.deepEqual(parsed.walls[0].craftIds, ['dimensional-letters', 'panel']);
+  assert.match(parsed.walls[0].craftNotes, /图文展板展示青花瓷纹样/);
+});
+
+test('wall output uses only crafts selected for that wall when provided', () => {
+  const result = buildElevationOutputs({
+    analysis,
+    walls: [
+      {
+        id: 'wall-1',
+        title: '瓷韵初见',
+        content: '展示青花瓷纹样和代表展品。',
+        exactText: ['瓷韵初见'],
+        craftIds: ['dimensional-letters', 'panel'],
+        craftNotes: '立体字展示标题；图文展板展示青花瓷纹样。',
+      },
+    ],
+    selectedCrafts: ['panel', 'dimensional-letters', 'soft-film-lightbox'],
+    downstreamContent: 'combined',
+  });
+
+  assert.match(result.conceptPrompts[0], /立体字展示标题/);
+  assert.match(result.conceptPrompts[0], /图文展板展示青花瓷纹样/);
+  assert.doesNotMatch(result.conceptPrompts[0], /软膜灯箱/);
+  assert.match(result.layoutSchedule, /立体字展示标题；图文展板展示青花瓷纹样/);
 });
 
 test('multi-wall segments omit wall number prefixes', () => {
@@ -109,6 +158,20 @@ test('analysis messages request strict JSON and preserve document text', () => {
   assert.match(messages[0].content, /约 4 个连续立面/);
   assert.match(messages[0].content, /约 800 字/);
   assert.equal(messages[1].content, '原始文档正文');
+});
+
+test('content plan messages ask for direct wall content with suitable crafts', () => {
+  const messages = buildElevationContentPlanMessages({
+    sourceText: '青花瓷纹样与代表器物',
+    wallMode: 'multi',
+    wallCount: 2,
+    selectedCrafts: ['panel', 'showcase-niche'],
+  });
+
+  assert.match(messages[0].content, /直接根据用户内容生成/);
+  assert.match(messages[0].content, /每个立面不需要使用全部候选工艺/);
+  assert.match(messages[0].content, /用图文展板展示青花瓷纹样/);
+  assert.equal(messages[1].content, '青花瓷纹样与代表器物');
 });
 
 test('empty values still produce a usable one-wall template', () => {

@@ -89,6 +89,8 @@ export function wallsFromAnalysis(analysisValue, mode = 'multi', count = 3) {
       title: titles.join(' · ') || (wallCount === 1 ? analysis.projectTheme || '主题立面' : `立面 ${index + 1}`),
       content: focus || analysis.coreMessage,
       exactText,
+      craftIds: cleanList(bucket.flatMap((item) => item.suggestedCrafts || []), 8, 80),
+      craftNotes: '',
     };
   });
 }
@@ -102,6 +104,36 @@ function craftText(selectedIds, customCraft, craftPresets) {
   return values.join('；');
 }
 
+function selectedCraftMetas(selectedIds, customCraft, craftPresets) {
+  const selected = new Set(Array.isArray(selectedIds) ? selectedIds : []);
+  const source = Array.isArray(craftPresets) && craftPresets.length > 0 ? craftPresets : ELEVATION_CRAFTS;
+  const metas = source
+    .filter((craft) => selected.has(craft.id))
+    .map((craft) => ({
+      id: craft.id,
+      label: craft.label,
+      prompt: craft.prompt,
+    }));
+  const custom = cleanText(customCraft, 800);
+  if (custom) metas.push({ id: 'custom', label: '自定义工艺', prompt: custom });
+  return metas;
+}
+
+function wallCraftText(values, wall) {
+  const selectedMetas = selectedCraftMetas(values.selectedCrafts, values.customCraft, values.craftPresets);
+  const wallCraftIds = cleanList(wall?.craftIds, 12, 120);
+  const wallCraftNotes = cleanText(wall?.craftNotes, 1200);
+  const matched = wallCraftIds.length
+    ? selectedMetas.filter((craft) => wallCraftIds.includes(craft.id) || wallCraftIds.includes(craft.label))
+    : [];
+  const source = matched.length ? matched : selectedMetas;
+  const labels = source.map((craft) => craft.label).filter(Boolean);
+  const prompts = source.map((craft) => craft.prompt).filter(Boolean);
+  if (wallCraftNotes) return wallCraftNotes;
+  if (matched.length && labels.length) return `${labels.join('、')}；${prompts.join('；')}`;
+  return prompts.join('；');
+}
+
 function exactTextInstruction(wall) {
   const quotes = cleanList(wall?.exactText, 10, 300);
   if (!quotes.length) return '文字仅作为短标题与关键词的视觉占位，不生成大段不可读正文';
@@ -109,7 +141,7 @@ function exactTextInstruction(wall) {
 }
 
 function buildWallPrompt(values, wall, index, total) {
-  const crafts = craftText(values.selectedCrafts, values.customCraft, values.craftPresets);
+  const crafts = wallCraftText(values, wall) || craftText(values.selectedCrafts, values.customCraft, values.craftPresets);
   const lines = [
     `生成一张专业展陈彩立面平面设计概念图，第 ${index + 1}/${total} 面，正立面、无透视、完整展示墙面边界。`,
     `项目主题：${cleanText(values.analysis?.projectTheme || wall.title || '展陈主题')}`,
@@ -129,20 +161,98 @@ function buildWallPrompt(values, wall, index, total) {
 }
 
 function buildWallSchedule(values, wall, index) {
-  const craftSource = Array.isArray(values.craftPresets) && values.craftPresets.length > 0 ? values.craftPresets : ELEVATION_CRAFTS;
-  const craftLabels = craftSource
-    .filter((craft) => (values.selectedCrafts || []).includes(craft.id))
-    .map((craft) => craft.label);
-  if (cleanText(values.customCraft)) craftLabels.push(cleanText(values.customCraft, 200));
+  const selectedMetas = selectedCraftMetas(values.selectedCrafts, values.customCraft, values.craftPresets);
+  const wallCraftIds = cleanList(wall?.craftIds, 12, 120);
+  const matched = wallCraftIds.length
+    ? selectedMetas.filter((craft) => wallCraftIds.includes(craft.id) || wallCraftIds.includes(craft.label))
+    : [];
+  const craftLabels = (matched.length ? matched : selectedMetas).map((craft) => craft.label);
+  const craftNotes = cleanText(wall?.craftNotes, 1200);
   const exact = cleanList(wall.exactText, 20, 800);
   return [
     `立面 ${index + 1}｜${cleanText(wall.title || `立面 ${index + 1}`)}`,
     `内容摘要：${cleanText(wall.content || values.analysis?.coreMessage || '待补充')}`,
     `准确文案：${exact.length ? exact.join(' / ') : '未提取关键原文，请人工补充最终上墙文案'}`,
-    `工艺配置：${craftLabels.length ? craftLabels.join('、') : '常规展板与图文喷绘'}`,
+    `工艺配置：${craftNotes || (craftLabels.length ? craftLabels.join('、') : '常规展板与图文喷绘')}`,
     `尺寸/比例：${cleanText(values.dimensions || values.aspectRatio || '待现场复核')}`,
     `版式备注：${cleanText(values.density || '适中')}；${cleanText(values.colorMaterial || '沿用整体视觉体系')}`,
   ].join('\n');
+}
+
+function normalizeContentPlan(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const walls = Array.isArray(source.walls) ? source.walls : [];
+  return {
+    projectTheme: cleanText(source.projectTheme || source.theme, 200),
+    coreMessage: cleanText(source.coreMessage || source.summary, 1600),
+    walls: walls
+      .map((wall, index) => {
+        const item = wall && typeof wall === 'object' ? wall : {};
+        const title = cleanText(item.title || item.name || `立面 ${index + 1}`, 120);
+        const content = cleanText(item.content || item.displayContent || item.summary || '', 2400);
+        const exactText = cleanList(item.exactText || item.keyText || item.textItems, 20, 500);
+        const craftIds = cleanList(item.craftIds || item.crafts || item.selectedCrafts, 12, 120);
+        const craftNotes = cleanText(item.craftNotes || item.craftPlan || item.technique || '', 1200);
+        if (!title && !content && !craftNotes && exactText.length === 0) return null;
+        return {
+          id: cleanText(item.id || `wall-${index + 1}`, 80),
+          title,
+          content,
+          exactText,
+          craftIds,
+          craftNotes,
+        };
+      })
+      .filter(Boolean)
+      .slice(0, 12),
+  };
+}
+
+export function parseElevationContentPlanResponse(content) {
+  const raw = cleanText(content, 200000);
+  if (!raw) throw new Error('AI 未返回展示内容方案');
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
+  const candidate = fenced || raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1);
+  if (!candidate || !candidate.trim().startsWith('{')) throw new Error('AI 返回内容不是有效 JSON');
+  let parsed;
+  try {
+    parsed = JSON.parse(candidate);
+  } catch {
+    throw new Error('AI 返回的展示内容 JSON 无法解析');
+  }
+  const plan = normalizeContentPlan(parsed);
+  if (!plan.projectTheme && !plan.coreMessage && plan.walls.length === 0) {
+    throw new Error('AI 返回的展示内容方案缺少有效内容');
+  }
+  return plan;
+}
+
+export function buildElevationContentPlanMessages(values = {}) {
+  const sourceText = cleanText(values.sourceText, 100000);
+  const wallMode = values.wallMode === 'single' ? 'single' : 'multi';
+  const wallCount = wallMode === 'single' ? 1 : Math.max(1, Math.min(12, Number(values.wallCount) || 3));
+  const craftOptions = selectedCraftMetas(values.selectedCrafts, values.customCraft, values.craftPresets);
+  const craftTextForPrompt = craftOptions.length
+    ? craftOptions.map((craft) => `${craft.id}｜${craft.label}｜${craft.prompt}`).join('\n')
+    : 'panel｜展板｜模块化图文展板\nuv-print｜UV 喷绘｜高精度图文喷绘';
+  return [
+    {
+      role: 'system',
+      content: [
+        '你是专业展陈策划与空间图文设计师。请直接根据用户内容生成可用于展陈效果图的展墙展示内容方案。',
+        '不要先做资料提炼说明，不要输出 Markdown，不要解释，只输出 JSON。',
+        'JSON 结构必须为：{"projectTheme":"项目主题","coreMessage":"核心叙事","walls":[{"id":"wall-1","title":"立面标题","content":"具体展示内容与画面组织描述","exactText":["建议清晰出现的短标题或关键词"],"craftIds":["从候选工艺 id 中选择本立面适合的若干项"],"craftNotes":"说明这些工艺如何服务具体内容"}]}。',
+        `立面数量：${wallCount}；${wallMode === 'single' ? '只生成一个综合立面。' : '按内容自然分配为多个连续立面。'}`,
+        '每个立面不需要使用全部候选工艺，只选择最合适的工艺。必须写清工艺如何承载具体内容，例如：用立体字展示标题、用图文展板展示青花瓷纹样、用沿墙文物柜展示青花瓷展品、用灯箱突出重点图像。',
+        '不得虚构用户内容中没有的关键事实；可以把长内容转化为适合上墙的短标题、关键词、图文展示重点和展品展示方式。',
+        `候选工艺：\n${craftTextForPrompt}`,
+      ].join('\n'),
+    },
+    {
+      role: 'user',
+      content: sourceText,
+    },
+  ];
 }
 
 function stripWallSegmentHeading(text) {

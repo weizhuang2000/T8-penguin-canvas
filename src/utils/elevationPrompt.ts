@@ -1,8 +1,10 @@
 import {
   buildElevationAnalysisMessages,
+  buildElevationContentPlanMessages,
   buildElevationOutputs,
   ELEVATION_CRAFTS,
   normalizeElevationAnalysis,
+  parseElevationContentPlanResponse,
   parseElevationAnalysisResponse,
   wallsFromAnalysis,
 } from './elevationPromptData.js';
@@ -33,13 +35,23 @@ export interface ElevationWall {
   title: string;
   content: string;
   exactText: string[];
+  craftIds?: string[];
+  craftNotes?: string;
+}
+
+export interface ElevationContentPlan {
+  projectTheme: string;
+  coreMessage: string;
+  walls: ElevationWall[];
 }
 
 export {
   buildElevationAnalysisMessages,
+  buildElevationContentPlanMessages,
   buildElevationOutputs,
   ELEVATION_CRAFTS,
   normalizeElevationAnalysis,
+  parseElevationContentPlanResponse,
   parseElevationAnalysisResponse,
   wallsFromAnalysis,
 };

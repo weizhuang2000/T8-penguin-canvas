@@ -24,6 +24,14 @@ export interface ElevationWall {
   title: string;
   content: string;
   exactText: string[];
+  craftIds?: string[];
+  craftNotes?: string;
+}
+
+export interface ElevationContentPlan {
+  projectTheme: string;
+  coreMessage: string;
+  walls: ElevationWall[];
 }
 
 export interface ElevationPromptValues {
@@ -77,3 +85,12 @@ export function buildElevationAnalysisMessages(
   wallCount?: number,
   wordCount?: number,
 ): ElevationAnalysisMessage[];
+export function parseElevationContentPlanResponse(content: string): ElevationContentPlan;
+export function buildElevationContentPlanMessages(values?: {
+  sourceText?: string;
+  wallMode?: 'single' | 'multi';
+  wallCount?: number;
+  selectedCrafts?: string[];
+  craftPresets?: ElevationCraft[];
+  customCraft?: string;
+}): ElevationAnalysisMessage[];
