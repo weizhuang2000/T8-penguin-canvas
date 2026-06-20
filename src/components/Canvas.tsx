@@ -457,6 +457,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     outputMode: 'set',
     splitDesignEnabled: true,
     dimensionMarksEnabled: true,
+    imageDisplayEnabled: true,
     dimensions: {
       totalWidth: 3600,
       totalHeight: 1800,

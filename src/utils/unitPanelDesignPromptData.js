@@ -223,6 +223,7 @@ export function buildUnitPanelImagePrompt(values = {}) {
   const dimensions = unitPanelDimensionsText(values.dimensions);
   const splitDesignEnabled = values.splitDesignEnabled !== false;
   const dimensionMarksEnabled = values.dimensionMarksEnabled === true;
+  const imageDisplayEnabled = values.imageDisplayEnabled !== false;
   const titleFont = unitPanelTitleFontMeta(values.titleFont);
   const bodyFont = unitPanelBodyFontMeta(values.bodyFont);
   const translations = values.translations && typeof values.translations === 'object' ? values.translations : {};
@@ -242,6 +243,9 @@ export function buildUnitPanelImagePrompt(values = {}) {
   const dimensionText = dimensionMarksEnabled
     ? `尺寸标注：开启。加入清晰的红色工程尺寸线和 mm 标注。${dimensions || '使用可信的 mm 尺寸，并标注关键宽度、高度、间距关系。'}`
     : `尺寸标注：关闭。不要绘制尺寸线、红色测量数字、尺子或工程标注符号。${dimensions ? `但仍需在画面结构中默默遵循这些尺寸：${dimensions}。` : ''}`;
+  const imageDisplayText = imageDisplayEnabled
+    ? ''
+    : '图片显示：关闭。除抽象背景图、底纹、材质肌理、纹样和非具象装饰以外，禁止显示任何图像照片或具象图片；不要出现人物照片、文物照片、历史场景照片、风景照片、实物插图、摄影图框或照片墙。';
   return [
     '用途：博物馆/展陈单元板设计图生成。',
     `出图类型：${layoutMode}。`,
@@ -250,6 +254,7 @@ export function buildUnitPanelImagePrompt(values = {}) {
     `板式模式：${outputMode === 'single' ? '单块单元板' : '整套板式图'}。`,
     splitText,
     dimensionText,
+    imageDisplayText,
     `标题字字体：${titleFont.label}；字体风格要求：${titleFont.prompt}。`,
     `说明文字字体：${bodyFont.label}；字体风格要求：${bodyFont.prompt}。`,
     '文字层级：标题字是第一视觉层级；说明文字是第二视觉层级；说明文字要组织成清晰文本块，避免随机乱码或不可读填充文字。',

@@ -34,6 +34,7 @@ export interface UnitPanelImagePromptValues {
   outputMode?: 'set' | 'single';
   splitDesignEnabled?: boolean;
   dimensionMarksEnabled?: boolean;
+  imageDisplayEnabled?: boolean;
   dimensions?: Partial<UnitPanelDimensions>;
   languages?: string[];
   translations?: Record<string, { title?: string; body?: string }>;

@@ -47,6 +47,16 @@ test('unit panel prompt switches dimension marks and panel count', () => {
   assert.match(unmarked, /不要绘制尺寸线/);
 });
 
+test('unit panel prompt switches image display constraints', () => {
+  const enabled = buildUnitPanelImagePrompt({ imageDisplayEnabled: true });
+  assert.doesNotMatch(enabled, /图片显示：关闭/);
+
+  const disabled = buildUnitPanelImagePrompt({ imageDisplayEnabled: false });
+  assert.match(disabled, /图片显示：关闭/);
+  assert.match(disabled, /禁止显示任何图像照片或具象图片/);
+  assert.match(disabled, /抽象背景图、底纹、材质肌理/);
+});
+
 test('unit panel material priority is above reference tone and color material preset', () => {
   const prompt = buildUnitPanelImagePrompt({
     primaryMaterial: { label: '深蓝哑光金属', description: '低反射金属主面' },
