@@ -1,6 +1,7 @@
 export const UNIT_PANEL_LANGUAGES = [
   { id: 'zh', label: '中文', promptName: 'Chinese' },
   { id: 'en', label: 'English', promptName: 'English' },
+  { id: 'mn-trad', label: '内蒙文（传统蒙古语）', promptName: 'Traditional Mongolian used in Inner Mongolia' },
   { id: 'mn', label: '蒙古文', promptName: 'Mongolian' },
   { id: 'ja', label: '日本語', promptName: 'Japanese' },
   { id: 'ko', label: '한국어', promptName: 'Korean' },
@@ -263,7 +264,7 @@ export function buildUnitPanelImagePrompt(values = {}) {
   const imageDisplayText = imageDisplayEnabled
     ? ''
     : '图片显示：关闭。除抽象背景图、底纹、材质肌理、纹样和非具象装饰以外，禁止显示任何图像照片或具象图片；不要出现人物照片、文物照片、历史场景照片、风景照片、实物插图、摄影图框或照片墙。';
-  const textLayoutText = `文字控制区：标题字和说明文字的主要排版区域必须位于距离地面 ${textLayoutBounds.lowerMeters} 米到 ${textLayoutBounds.upperMeters} 米之间；不要把主要文字放到低于下限或高于上限的位置，辅助纹样、背景和非文字装饰可在控制区外延展。`;
+  const textLayoutText = `文字控制区：所有语种的标题字和说明文字主要排版区域都必须位于距离地面 ${textLayoutBounds.lowerMeters} 米到 ${textLayoutBounds.upperMeters} 米之间；中文、英文、内蒙文（传统蒙古语）及其他语种都不要把主要文字放到低于下限或高于上限的位置，辅助纹样、背景和非文字装饰可在控制区外延展。`;
   const referenceStyleText = referenceOverridesStyle
     ? '参考图仿制优先：已接入色彩与材质参考图时，材质与字体板块的选择全部不生效。必须以参考图为最高优先级，仿制其材质、色彩、肌理、表面反光、收边方式、字体风格、字重、字号大小、文字比例、文字间距、排版密度和整体视觉气质；不要被节点中选择的主材质、辅助材质、共享色材预设、手动色材、标题字体或说明字体覆盖。'
     : '';

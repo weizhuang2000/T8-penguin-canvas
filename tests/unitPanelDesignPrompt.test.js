@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildUnitPanelImagePrompt,
+  UNIT_PANEL_LANGUAGES,
   normalizeUnitPanelLanguages,
   normalizeUnitPanelTextLayoutBounds,
 } from '../src/utils/unitPanelDesignPromptData.js';
@@ -17,7 +18,7 @@ test('unit panel prompt includes two-level text and language order in Chinese te
     },
   });
   assert.match(prompt, /文字层级：标题字是第一视觉层级/);
-  assert.ok(prompt.indexOf('English') < prompt.indexOf('中文'));
+  assert.ok(prompt.indexOf('Grassland Silk Road') < prompt.indexOf('草原丝路'));
   assert.match(prompt, /Grassland Silk Road/);
   assert.match(prompt, /草原丝路/);
   assert.doesNotMatch(prompt, /Text hierarchy|Primary request|Asset type/);
@@ -66,6 +67,7 @@ test('unit panel prompt includes text layout bounds', () => {
     textLayoutBounds: { lowerMeters: 0.9, upperMeters: 2.4 },
   });
   assert.match(prompt, /文字控制区|鏂囧瓧鎺у埗鍖?/);
+  assert.match(prompt, /所有语种|鎵€鏈夎绉?/);
   assert.match(prompt, /0\.9/);
   assert.match(prompt, /2\.4/);
 });
@@ -114,4 +116,6 @@ test('unit panel reference image overrides material and font controls', () => {
 test('unit panel language normalization defaults to Chinese and English', () => {
   assert.deepEqual(normalizeUnitPanelLanguages([]), ['zh', 'en']);
   assert.deepEqual(normalizeUnitPanelLanguages(['ja', 'zh', 'ja', 'bad']), ['ja', 'zh']);
+  assert.ok(UNIT_PANEL_LANGUAGES.some((item) => item.id === 'mn-trad' && /Traditional Mongolian/.test(item.promptName)));
+  assert.deepEqual(normalizeUnitPanelLanguages(['mn-trad', 'zh']), ['mn-trad', 'zh']);
 });
