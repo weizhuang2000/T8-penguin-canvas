@@ -275,6 +275,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
   const status = String(d.status || 'idle');
   const busy = ['extracting', 'translating', 'generating', 'uploading'].includes(status);
   const canManageMaterials = currentUser?.role === 'admin' || currentUser?.role === 'manager';
+  const referenceOverridesMaterialAndFont = !!colorMaterialReferenceImage;
 
   const previewPrompt = useMemo(() => buildUnitPanelImagePrompt({
     outputMode,
@@ -748,24 +749,29 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
             <div className="text-[11px] font-semibold text-cyan-100">材质与字体</div>
             {canManageMaterials && <button type="button" className={BUTTON} onClick={() => setMaterialsOpen(true)}>编辑材质</button>}
           </div>
+          {referenceOverridesMaterialAndFont && (
+            <div className="rounded border border-amber-300/25 bg-amber-300/10 px-2 py-1.5 text-[10px] leading-relaxed text-amber-100">
+              已连接色彩与材质参考图，材质与字体板块暂不生效；生成时将按参考图仿制材质、字体风格、字号大小和排版密度。
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-2">
             <label className="space-y-1">
               <span className="text-[10px] text-white/55">主材质</span>
-              <UnitPanelMaterialSelect materials={materials} value={d.primaryMaterialId || ''} disabled={isReadonly || busy} className={FIELD} placeholder="选择主材质" onChange={(next) => update({ primaryMaterialId: next })} />
+              <UnitPanelMaterialSelect materials={materials} value={d.primaryMaterialId || ''} disabled={isReadonly || busy || referenceOverridesMaterialAndFont} className={FIELD} placeholder="选择主材质" onChange={(next) => update({ primaryMaterialId: next })} />
             </label>
             <label className="space-y-1">
               <span className="text-[10px] text-white/55">辅助材质</span>
-              <UnitPanelMaterialSelect materials={materials} multiple values={Array.isArray(d.secondaryMaterialIds) ? d.secondaryMaterialIds : []} disabled={isReadonly || busy} className={FIELD} placeholder="选择辅助材质" onChange={(next) => update({ secondaryMaterialIds: next })} />
+              <UnitPanelMaterialSelect materials={materials} multiple values={Array.isArray(d.secondaryMaterialIds) ? d.secondaryMaterialIds : []} disabled={isReadonly || busy || referenceOverridesMaterialAndFont} className={FIELD} placeholder="选择辅助材质" onChange={(next) => update({ secondaryMaterialIds: next })} />
             </label>
             <label className="space-y-1">
               <span className="text-[10px] text-white/55">标题字体</span>
-              <select className={FIELD} value={titleFont} disabled={isReadonly || busy} onChange={(e) => update({ titleFont: normalizeUnitPanelTitleFont(e.target.value) })}>
+              <select className={FIELD} value={titleFont} disabled={isReadonly || busy || referenceOverridesMaterialAndFont} onChange={(e) => update({ titleFont: normalizeUnitPanelTitleFont(e.target.value) })}>
                 {UNIT_PANEL_TITLE_FONTS.map((item: UnitPanelFontOption) => <option key={item.id} value={item.id}>{item.label}</option>)}
               </select>
             </label>
             <label className="space-y-1">
               <span className="text-[10px] text-white/55">说明字体</span>
-              <select className={FIELD} value={bodyFont} disabled={isReadonly || busy} onChange={(e) => update({ bodyFont: normalizeUnitPanelBodyFont(e.target.value) })}>
+              <select className={FIELD} value={bodyFont} disabled={isReadonly || busy || referenceOverridesMaterialAndFont} onChange={(e) => update({ bodyFont: normalizeUnitPanelBodyFont(e.target.value) })}>
                 {UNIT_PANEL_BODY_FONTS.map((item: UnitPanelFontOption) => <option key={item.id} value={item.id}>{item.label}</option>)}
               </select>
             </label>
@@ -773,12 +779,12 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
           <ColorMaterialPresetSelect
             presets={colorMaterialPresets}
             value={d.colorMaterialPreset || ''}
-            disabled={isReadonly || busy}
+            disabled={isReadonly || busy || referenceOverridesMaterialAndFont}
             className={FIELD}
             placeholder="不使用共享色彩与材质预设"
             onChange={(presetId, preset) => update({ colorMaterialPreset: presetId, colorMaterial: colorMaterialTextFromPreset(preset) })}
           />
-          <textarea className={`${FIELD} min-h-[50px] resize-y`} value={d.colorMaterial || ''} disabled={isReadonly || busy} placeholder="手动色彩与材质补充（优先级最低）" onChange={(e) => update({ colorMaterial: e.target.value, colorMaterialPreset: '' })} />
+          <textarea className={`${FIELD} min-h-[50px] resize-y`} value={d.colorMaterial || ''} disabled={isReadonly || busy || referenceOverridesMaterialAndFont} placeholder="手动色彩与材质补充（优先级最低）" onChange={(e) => update({ colorMaterial: e.target.value, colorMaterialPreset: '' })} />
           {colorMaterialReferenceImage ? (
             <div className="rounded border border-white/10 bg-black/15 p-2">
               <img src={colorMaterialReferenceImage} alt="" className="h-24 w-full rounded border border-white/10 object-contain" draggable={false} />

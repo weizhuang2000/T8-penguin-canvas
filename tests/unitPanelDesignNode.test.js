@@ -24,6 +24,8 @@ test('unit panel design node exposes reference handle and shared controls', () =
   assert.match(source, /文字控制区/);
   assert.match(source, /imageDisplayEnabled/);
   assert.match(source, /textLayoutBounds/);
+  assert.match(source, /referenceOverridesMaterialAndFont/);
+  assert.match(source, /材质与字体板块暂不生效/);
   assert.match(source, /updatePanelCount/);
   assert.match(source, /updateTextLayoutBound/);
   assert.match(source, /advancedProvidersForNode\(advancedProviders, 'image'\)/);

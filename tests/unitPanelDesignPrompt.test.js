@@ -90,6 +90,27 @@ test('unit panel material priority is above reference tone and color material pr
   assert.match(prompt, /香槟金拉丝金属/);
 });
 
+test('unit panel reference image overrides material and font controls', () => {
+  const prompt = buildUnitPanelImagePrompt({
+    hasColorMaterialReferenceImage: true,
+    primaryMaterial: { label: 'Manual Primary Material' },
+    secondaryMaterials: [{ label: 'Manual Secondary Material' }],
+    colorMaterialPresetText: 'Manual preset text',
+    manualColorMaterial: 'Manual color material',
+    titleFont: 'song-display',
+    bodyFont: 'songti',
+    colorMaterialReferenceTone: 'Reference dominant tone',
+  });
+  assert.match(prompt, /参考图仿制优先|鍙傝€冨浘浠垮埗浼樺厛/);
+  assert.match(prompt, /字号大小|瀛楀彿澶у皬/);
+  assert.match(prompt, /Reference dominant tone/);
+  assert.doesNotMatch(prompt, /Manual Primary Material/);
+  assert.doesNotMatch(prompt, /Manual Secondary Material/);
+  assert.doesNotMatch(prompt, /Manual preset text/);
+  assert.doesNotMatch(prompt, /Manual color material/);
+  assert.doesNotMatch(prompt, /song-display|songti/);
+});
+
 test('unit panel language normalization defaults to Chinese and English', () => {
   assert.deepEqual(normalizeUnitPanelLanguages([]), ['zh', 'en']);
   assert.deepEqual(normalizeUnitPanelLanguages(['ja', 'zh', 'ja', 'bad']), ['ja', 'zh']);

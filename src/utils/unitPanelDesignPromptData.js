@@ -237,6 +237,7 @@ export function buildUnitPanelImagePrompt(values = {}) {
   const materials = unitPanelMaterialsText(values.primaryMaterial, values.secondaryMaterials);
   const dimensions = unitPanelDimensionsText(values.dimensions);
   const textLayoutBounds = normalizeUnitPanelTextLayoutBounds(values.textLayoutBounds);
+  const referenceOverridesStyle = values.hasColorMaterialReferenceImage === true;
   const splitDesignEnabled = values.splitDesignEnabled !== false;
   const dimensionMarksEnabled = values.dimensionMarksEnabled === true;
   const imageDisplayEnabled = values.imageDisplayEnabled !== false;
@@ -245,10 +246,10 @@ export function buildUnitPanelImagePrompt(values = {}) {
   const translations = values.translations && typeof values.translations === 'object' ? values.translations : {};
   const languageLines = languages.map((id) => translationLine(id, translations, titleText, bodyText));
   const materialPriority = [
-    materials && `1. 首先严格执行已选择的主材质和辅助材质：\n${materials}`,
+    !referenceOverridesStyle && materials && `1. 首先严格执行已选择的主材质和辅助材质：\n${materials}`,
     colorMaterialReferenceTone && `2. 其次参考色彩与材质参考图读取到的主色调：${colorMaterialReferenceTone}`,
-    colorMaterialPresetText && `3. 再把共享色彩与材质预设仅作为补充色彩体系和整体质感：${colorMaterialPresetText}`,
-    manualColorMaterial && `4. 最后才参考手动色彩材质补充：${manualColorMaterial}`,
+    !referenceOverridesStyle && colorMaterialPresetText && `3. 再把共享色彩与材质预设仅作为补充色彩体系和整体质感：${colorMaterialPresetText}`,
+    !referenceOverridesStyle && manualColorMaterial && `4. 最后才参考手动色彩材质补充：${manualColorMaterial}`,
   ].filter(Boolean).join('\n');
   const layoutMode = outputMode === 'single'
     ? '单块单元板设计，一张完整的单元板立面图'
@@ -263,6 +264,9 @@ export function buildUnitPanelImagePrompt(values = {}) {
     ? ''
     : '图片显示：关闭。除抽象背景图、底纹、材质肌理、纹样和非具象装饰以外，禁止显示任何图像照片或具象图片；不要出现人物照片、文物照片、历史场景照片、风景照片、实物插图、摄影图框或照片墙。';
   const textLayoutText = `文字控制区：标题字和说明文字的主要排版区域必须位于距离地面 ${textLayoutBounds.lowerMeters} 米到 ${textLayoutBounds.upperMeters} 米之间；不要把主要文字放到低于下限或高于上限的位置，辅助纹样、背景和非文字装饰可在控制区外延展。`;
+  const referenceStyleText = referenceOverridesStyle
+    ? '参考图仿制优先：已接入色彩与材质参考图时，材质与字体板块的选择全部不生效。必须以参考图为最高优先级，仿制其材质、色彩、肌理、表面反光、收边方式、字体风格、字重、字号大小、文字比例、文字间距、排版密度和整体视觉气质；不要被节点中选择的主材质、辅助材质、共享色材预设、手动色材、标题字体或说明字体覆盖。'
+    : '';
   return [
     '用途：博物馆/展陈单元板设计图生成。',
     `出图类型：${layoutMode}。`,
@@ -272,14 +276,15 @@ export function buildUnitPanelImagePrompt(values = {}) {
     splitText,
     dimensionText,
     imageDisplayText,
-    `标题字字体：${titleFont.label}；字体风格要求：${titleFont.prompt}。`,
-    `说明文字字体：${bodyFont.label}；字体风格要求：${bodyFont.prompt}。`,
+    referenceStyleText,
+    !referenceOverridesStyle ? `标题字字体：${titleFont.label}；字体风格要求：${titleFont.prompt}。` : '',
+    !referenceOverridesStyle ? `说明文字字体：${bodyFont.label}；字体风格要求：${bodyFont.prompt}。` : '',
     '文字层级：标题字是第一视觉层级；说明文字是第二视觉层级；说明文字要组织成清晰文本块，避免随机乱码或不可读填充文字。',
     textLayoutText,
     '多语言顺序与最终文字内容如下，必须按此顺序排版：',
     languageLines.join('\n'),
-    materialPriority ? `材质与色彩优先级（从高到低）：\n${materialPriority}` : '材质与色彩要求：使用克制、博物馆级的展板材料，低反射表面、金属收边、肌理背板和温暖聚焦照明。',
-    values.hasColorMaterialReferenceImage ? '输入参考图作用：色彩与材质参考图只用于参考色彩、肌理、表面处理、反光和氛围，不要复制它的构图作为单元板结构。' : '',
+    materialPriority ? `材质与色彩优先级（从高到低）：\n${materialPriority}` : (referenceOverridesStyle ? '' : '材质与色彩要求：使用克制、博物馆级的展板材料，低反射表面、金属收边、肌理背板和温暖聚焦照明。'),
+    referenceOverridesStyle ? '输入参考图作用：色彩与材质参考图用于完整仿制色彩、材质、字体与字号大小；仍需保留单元板设计结构，不要直接复制参考图中的具体文案或无关图像内容。' : '',
     '构图要求：以正立面或轻微展示透视呈现单元板；保持完整板体轮廓可见；包含标题区、文字区、图像/肌理区、底部条带，可加入适度文化纹样装饰。',
     '质量约束：不要人物，不要杂乱房间场景，不要扭曲字体，不要随机品牌 logo，不要破碎不可读文字，不要堆砌无关道具；最终结果必须像专业展陈施工/方案汇报渲染图。',
     '避免内容：人物、不可读文字、错误字符、破碎字体、多余 logo、混乱海报拼贴、低清模糊、过度饱和。',
