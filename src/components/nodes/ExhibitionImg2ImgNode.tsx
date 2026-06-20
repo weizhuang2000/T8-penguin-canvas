@@ -1242,6 +1242,8 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         selectedCrafts,
         customCraft: d.customCraft,
         craftPresets,
+        spaceLightingEnabled,
+        spaceLightingLevel,
       });
       const response = await generateLlm({
         model: contentModel,
@@ -1276,6 +1278,8 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     d.customCraft,
     isReadonly,
     selectedCrafts,
+    spaceLightingEnabled,
+    spaceLightingLevel,
     sourceText,
     update,
     wallCount,

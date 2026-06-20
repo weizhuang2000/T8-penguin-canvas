@@ -23,6 +23,32 @@ function cleanList(value, maxItems = 12, maxChars = 1200) {
   return value.map((item) => cleanText(item, maxChars)).filter(Boolean).slice(0, maxItems);
 }
 
+const SPACE_LIGHTING_LEVELS = {
+  'very-dark': {
+    label: '非常暗',
+    prompt: '整体空间照明必须非常暗，展示内容应围绕低照度、强重点光、深阴影和少量导视/轮廓光组织，避免大面积明亮背景、均匀泛光和高亮展板。',
+  },
+  dark: {
+    label: '比较暗',
+    prompt: '整体空间照明必须比较暗，展示内容应采用克制环境光、清晰但低调的洗墙光和重点光组织，避免把空间写成明亮通透或高照度氛围。',
+  },
+  bright: {
+    label: '比较亮',
+    prompt: '整体空间照明必须比较亮，展示内容应围绕清晰环境照明、可读展墙、均衡高光和不过曝的展示面组织，避免过度阴暗、沉重或低照度叙述。',
+  },
+  'very-bright': {
+    label: '非常亮',
+    prompt: '整体空间照明必须非常亮，展示内容应围绕高照度、明净通透、清晰可读的展陈界面组织，同时保留材质细节，避免低调昏暗、深阴影或沉浸黑场叙述。',
+  },
+};
+
+function contentPlanLightingPrecondition(values) {
+  if (values.spaceLightingEnabled !== true) return '';
+  const id = cleanText(values.spaceLightingLevel, 40);
+  const item = SPACE_LIGHTING_LEVELS[id] || SPACE_LIGHTING_LEVELS.bright;
+  return `空间整体光照前置条件（必须优先遵守）：${item.label}。${item.prompt}每个立面的 content、craftNotes 和画面组织描述都必须服务这个整体照明度；不得生成与该照明度冲突的明暗氛围描述。`;
+}
+
 export function normalizeElevationAnalysis(value) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   const rawSections = Array.isArray(source.sections) ? source.sections : [];
@@ -235,18 +261,20 @@ export function buildElevationContentPlanMessages(values = {}) {
   const craftTextForPrompt = craftOptions.length
     ? craftOptions.map((craft) => `${craft.id}｜${craft.label}｜${craft.prompt}`).join('\n')
     : 'panel｜展板｜模块化图文展板\nuv-print｜UV 喷绘｜高精度图文喷绘';
+  const lightingPrecondition = contentPlanLightingPrecondition(values);
   return [
     {
       role: 'system',
       content: [
         '你是专业展陈策划与空间图文设计师。请直接根据用户内容生成可用于展陈效果图的展墙展示内容方案。',
+        lightingPrecondition,
         '不要先做资料提炼说明，不要输出 Markdown，不要解释，只输出 JSON。',
         'JSON 结构必须为：{"projectTheme":"项目主题","coreMessage":"核心叙事","walls":[{"id":"wall-1","title":"立面标题","content":"具体展示内容与画面组织描述","exactText":["建议清晰出现的短标题或关键词"],"craftIds":["从候选工艺 id 中选择本立面适合的若干项"],"craftNotes":"说明这些工艺如何服务具体内容"}]}。',
         `立面数量：${wallCount}；${wallMode === 'single' ? '只生成一个综合立面。' : '按内容自然分配为多个连续立面。'}`,
         '每个立面不需要使用全部候选工艺，只选择最合适的工艺。必须写清工艺如何承载具体内容，例如：用立体字展示标题、用图文展板展示青花瓷纹样、用沿墙文物柜展示青花瓷展品、用灯箱突出重点图像。',
         '不得虚构用户内容中没有的关键事实；可以把长内容转化为适合上墙的短标题、关键词、图文展示重点和展品展示方式。',
         `候选工艺：\n${craftTextForPrompt}`,
-      ].join('\n'),
+      ].filter(Boolean).join('\n'),
     },
     {
       role: 'user',

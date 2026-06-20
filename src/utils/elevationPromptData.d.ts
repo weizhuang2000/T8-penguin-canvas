@@ -93,4 +93,6 @@ export function buildElevationContentPlanMessages(values?: {
   selectedCrafts?: string[];
   craftPresets?: ElevationCraft[];
   customCraft?: string;
+  spaceLightingEnabled?: boolean;
+  spaceLightingLevel?: 'very-dark' | 'dark' | 'bright' | 'very-bright';
 }): ElevationAnalysisMessage[];

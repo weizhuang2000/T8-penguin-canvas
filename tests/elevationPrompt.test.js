@@ -174,6 +174,24 @@ test('content plan messages ask for direct wall content with suitable crafts', (
   assert.equal(messages[1].content, '青花瓷纹样与代表器物');
 });
 
+test('content plan messages use space lighting as a precondition when enabled', () => {
+  const disabled = buildElevationContentPlanMessages({
+    sourceText: '展陈资料',
+    spaceLightingEnabled: false,
+    spaceLightingLevel: 'very-dark',
+  });
+  assert.doesNotMatch(disabled[0].content, /空间整体光照前置条件/);
+
+  const enabled = buildElevationContentPlanMessages({
+    sourceText: '展陈资料',
+    spaceLightingEnabled: true,
+    spaceLightingLevel: 'very-dark',
+  });
+  assert.match(enabled[0].content, /空间整体光照前置条件（必须优先遵守）：非常暗/);
+  assert.match(enabled[0].content, /每个立面的 content、craftNotes 和画面组织描述都必须服务这个整体照明度/);
+  assert.match(enabled[0].content, /避免大面积明亮背景/);
+});
+
 test('empty values still produce a usable one-wall template', () => {
   const result = buildElevationOutputs({ wallMode: 'single' });
   assert.equal(result.walls.length, 1);
