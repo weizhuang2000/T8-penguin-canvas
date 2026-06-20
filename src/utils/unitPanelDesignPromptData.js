@@ -100,11 +100,11 @@ export function normalizeUnitPanelDimensions(value) {
 export function unitPanelDimensionsText(value) {
   const d = normalizeUnitPanelDimensions(value);
   const parts = [];
-  if (d.totalWidth || d.totalHeight) parts.push(`overall ${d.totalWidth || '?'} mm W x ${d.totalHeight || '?'} mm H`);
-  if (d.panelWidth || d.panelHeight) parts.push(`single panel ${d.panelWidth || '?'} mm W x ${d.panelHeight || '?'} mm H`);
-  if (d.panelCount) parts.push(`${d.panelCount} panels`);
-  if (d.gap) parts.push(`${d.gap} mm gaps`);
-  if (d.thickness) parts.push(`${d.thickness} mm thickness`);
+  if (d.totalWidth || d.totalHeight) parts.push(`整体宽 ${d.totalWidth || '?'} mm x 高 ${d.totalHeight || '?'} mm`);
+  if (d.panelWidth || d.panelHeight) parts.push(`单块板宽 ${d.panelWidth || '?'} mm x 高 ${d.panelHeight || '?'} mm`);
+  if (d.panelCount) parts.push(`共 ${d.panelCount} 块单元板`);
+  if (d.gap) parts.push(`板间距 ${d.gap} mm`);
+  if (d.thickness) parts.push(`厚度 ${d.thickness} mm`);
   return parts.join('; ');
 }
 
@@ -116,9 +116,9 @@ function materialText(item) {
   const usage = cleanUnitPanelText(item.usage, 500);
   return [
     label,
-    description && `description: ${description}`,
-    texture && `texture: ${texture}`,
-    usage && `usage: ${usage}`,
+    description && `说明：${description}`,
+    texture && `肌理：${texture}`,
+    usage && `用途：${usage}`,
   ].filter(Boolean).join(' / ');
 }
 
@@ -128,8 +128,8 @@ export function unitPanelMaterialsText(primaryMaterial, secondaryMaterials = [])
     .map(materialText)
     .filter(Boolean);
   const lines = [];
-  if (primary) lines.push(`Primary material: ${primary}`);
-  if (secondary.length) lines.push(`Secondary materials: ${secondary.join(' | ')}`);
+  if (primary) lines.push(`主材质：${primary}`);
+  if (secondary.length) lines.push(`辅助材质：${secondary.join(' | ')}`);
   return lines.join('\n');
 }
 
@@ -138,7 +138,7 @@ function translationLine(id, translations = {}, titleText = '', bodyText = '') {
   const t = translations && typeof translations === 'object' ? translations[id] : null;
   const title = cleanUnitPanelText(t?.title || (id === 'zh' ? titleText : ''), 500);
   const body = cleanUnitPanelText(t?.body || (id === 'zh' ? bodyText : ''), 2000);
-  return `${meta.label} (${meta.promptName}): title="${title || '[translate title]'}"; body="${body || '[translate body]'}"`;
+  return `${meta.label}（${meta.promptName}）：标题字="${title || '[待翻译标题]'}"；说明文字="${body || '[待翻译说明]'}"`;
 }
 
 export function buildUnitPanelExtractPrompt(values = {}) {
@@ -228,37 +228,37 @@ export function buildUnitPanelImagePrompt(values = {}) {
   const translations = values.translations && typeof values.translations === 'object' ? values.translations : {};
   const languageLines = languages.map((id) => translationLine(id, translations, titleText, bodyText));
   const materialPriority = [
-    materials && `1. Follow selected materials first:\n${materials}`,
-    colorMaterialReferenceTone && `2. Then follow dominant tone from color/material reference image: ${colorMaterialReferenceTone}`,
-    colorMaterialPresetText && `3. Then use shared color/material preset only as supporting color system and atmosphere: ${colorMaterialPresetText}`,
-    manualColorMaterial && `4. Last fallback manual color/material note: ${manualColorMaterial}`,
+    materials && `1. 首先严格执行已选择的主材质和辅助材质：\n${materials}`,
+    colorMaterialReferenceTone && `2. 其次参考色彩与材质参考图读取到的主色调：${colorMaterialReferenceTone}`,
+    colorMaterialPresetText && `3. 再把共享色彩与材质预设仅作为补充色彩体系和整体质感：${colorMaterialPresetText}`,
+    manualColorMaterial && `4. 最后才参考手动色彩材质补充：${manualColorMaterial}`,
   ].filter(Boolean).join('\n');
   const layoutMode = outputMode === 'single'
-    ? 'single unit panel design, one complete panel elevation'
-    : 'complete set of unit panels, multiple coordinated panel elevations shown together like a design board';
+    ? '单块单元板设计，一张完整的单元板立面图'
+    : '整套单元板板式图，多块协调的单元板立面以设计板形式共同呈现';
   const splitText = splitDesignEnabled
-    ? 'Split-panel design is ON: panels must be visibly separated into independent boards/modules with clear gaps, individual edges, separable construction logic, and modular alignment.'
-    : 'Split-panel design is OFF: create a continuous integrated panel surface with unified background, no unnecessary separation seams, and one coherent wall-board composition.';
+    ? '分体设计：开启。画面必须清楚表现多块独立板体/模块，板与板之间有明确缝隙、独立边界、可分离施工逻辑和模块化对齐关系。'
+    : '分体设计：关闭。画面应形成连续一体化版面，背景统一，不出现不必要的分割缝，整体是一面连贯的展墙式单元板组合。';
   const dimensionText = dimensionMarksEnabled
-    ? `Dimension marks ON: include clean red engineering dimension lines and mm labels. ${dimensions || 'Use believable mm dimensions and mark key width/height/gap relationships.'}`
-    : `Dimension marks OFF: do not draw dimension lines, red measuring labels, rulers, or engineering annotation marks. ${dimensions ? `Still respect these dimensions silently: ${dimensions}.` : ''}`;
+    ? `尺寸标注：开启。加入清晰的红色工程尺寸线和 mm 标注。${dimensions || '使用可信的 mm 尺寸，并标注关键宽度、高度、间距关系。'}`
+    : `尺寸标注：关闭。不要绘制尺寸线、红色测量数字、尺子或工程标注符号。${dimensions ? `但仍需在画面结构中默默遵循这些尺寸：${dimensions}。` : ''}`;
   return [
-    'Use case: museum-exhibition-unit-panel-design',
-    `Asset type: ${layoutMode}`,
-    `Primary request: Generate a professional exhibition unit panel design similar to a finished elevation presentation, with dark/neutral background, refined panel blocks, readable hierarchy, and high-end cultural display materiality.`,
-    projectTheme ? `Project theme: ${projectTheme}` : '',
-    `Panel mode: ${outputMode === 'single' ? 'single panel' : 'full panel set'}`,
+    '用途：博物馆/展陈单元板设计图生成。',
+    `出图类型：${layoutMode}。`,
+    '核心要求：生成专业展陈单元板设计图，效果接近完成度高的立面展示方案；画面可使用深色或中性背景，板块精致，文字层级清晰，整体具有高端文化展陈的材质质感。',
+    projectTheme ? `项目主题：${projectTheme}` : '',
+    `板式模式：${outputMode === 'single' ? '单块单元板' : '整套板式图'}。`,
     splitText,
     dimensionText,
-    `Title typography: ${titleFont.label}; ${titleFont.prompt}.`,
-    `Body typography: ${bodyFont.label}; ${bodyFont.prompt}.`,
-    `Text hierarchy: title text is the first visual level; explanatory body text is the second visual level; keep body text in organized blocks, avoid random illegible filler.`,
-    'Multilingual order and exact content:',
+    `标题字字体：${titleFont.label}；字体风格要求：${titleFont.prompt}。`,
+    `说明文字字体：${bodyFont.label}；字体风格要求：${bodyFont.prompt}。`,
+    '文字层级：标题字是第一视觉层级；说明文字是第二视觉层级；说明文字要组织成清晰文本块，避免随机乱码或不可读填充文字。',
+    '多语言顺序与最终文字内容如下，必须按此顺序排版：',
     languageLines.join('\n'),
-    materialPriority ? `Material priority, highest to lowest:\n${materialPriority}` : 'Material priority: use restrained museum-grade panel materials, low-reflection surfaces, metal trims, textured backing, and warm focused lighting.',
-    values.hasColorMaterialReferenceImage ? 'Input image role: the color/material reference image is only for palette, texture, finish, light reflection and mood; do not copy its layout as panel structure.' : '',
-    'Composition: show panel elevations frontally or with slight presentation perspective; keep complete panel outlines visible; include title zones, text zones, image/texture zones, base strips and optional decorative cultural motifs.',
-    'Quality constraints: no people, no messy room scene, no warped typography, no random brand logos, no broken unreadable text, no cluttered unrelated props; final result must look like a professional exhibition construction presentation rendering.',
-    'Avoid: people, unreadable text, wrong characters, broken typography, extra logos, chaotic poster collage, low-resolution blur, excessive saturation.',
+    materialPriority ? `材质与色彩优先级（从高到低）：\n${materialPriority}` : '材质与色彩要求：使用克制、博物馆级的展板材料，低反射表面、金属收边、肌理背板和温暖聚焦照明。',
+    values.hasColorMaterialReferenceImage ? '输入参考图作用：色彩与材质参考图只用于参考色彩、肌理、表面处理、反光和氛围，不要复制它的构图作为单元板结构。' : '',
+    '构图要求：以正立面或轻微展示透视呈现单元板；保持完整板体轮廓可见；包含标题区、文字区、图像/肌理区、底部条带，可加入适度文化纹样装饰。',
+    '质量约束：不要人物，不要杂乱房间场景，不要扭曲字体，不要随机品牌 logo，不要破碎不可读文字，不要堆砌无关道具；最终结果必须像专业展陈施工/方案汇报渲染图。',
+    '避免内容：人物、不可读文字、错误字符、破碎字体、多余 logo、混乱海报拼贴、低清模糊、过度饱和。',
   ].filter(Boolean).join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }

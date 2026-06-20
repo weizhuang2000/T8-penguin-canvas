@@ -537,6 +537,10 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
     const n = Number(value);
     update({ dimensions: { ...dimensions, [key]: Number.isFinite(n) && n >= 0 ? n : 0 } });
   };
+  const updatePanelCount = (value: number | string) => {
+    const n = Math.floor(Number(value) || 0);
+    update({ dimensions: { ...dimensions, panelCount: Math.max(0, Math.min(99, n)) } });
+  };
 
   const moveLanguage = (lang: string, delta: number) => {
     const index = languages.indexOf(lang);
@@ -676,9 +680,21 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
           </select>
         </section>
 
-        <section className="grid grid-cols-2 gap-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+          <div className="flex items-center justify-between gap-2 rounded border border-cyan-300/20 bg-cyan-300/10 px-2 py-2">
+            <div>
+              <div className="text-[11px] font-semibold text-cyan-100">单元板数量</div>
+              <div className="text-[10px] text-white/45">设置本次生成几块单元板</div>
+            </div>
+            <div className="flex items-center gap-1">
+              <button type="button" className={`${BUTTON} h-8 w-8 px-0 text-sm`} disabled={isReadonly || busy || dimensions.panelCount <= 1} onClick={() => updatePanelCount(Math.max(1, dimensions.panelCount - 1))}>-</button>
+              <input className={`${FIELD} h-8 w-16 text-center text-sm font-semibold`} type="number" min={1} max={99} value={dimensions.panelCount || 1} disabled={isReadonly || busy} onChange={(e) => updatePanelCount(e.target.value)} />
+              <button type="button" className={`${BUTTON} h-8 w-8 px-0 text-sm`} disabled={isReadonly || busy || dimensions.panelCount >= 99} onClick={() => updatePanelCount((dimensions.panelCount || 1) + 1)}>+</button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
           {[
-            ['totalWidth', '总宽 mm'], ['totalHeight', '总高 mm'], ['panelWidth', '单板宽 mm'], ['panelHeight', '单板高 mm'], ['panelCount', '板数'], ['gap', '间距 mm'], ['thickness', '厚度 mm'],
+            ['totalWidth', '总宽 mm'], ['totalHeight', '总高 mm'], ['panelWidth', '单板宽 mm'], ['panelHeight', '单板高 mm'], ['gap', '间距 mm'], ['thickness', '厚度 mm'],
           ].map(([key, label]) => (
             <label key={key} className="space-y-1">
               <span className="text-[10px] text-white/55">{label}</span>
@@ -691,6 +707,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
               {modelDef.aspectRatios.map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
           </label>
+          </div>
         </section>
 
         <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">

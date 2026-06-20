@@ -19,6 +19,8 @@ test('unit panel design node exposes reference handle and shared controls', () =
   assert.match(source, /buildUnitPanelImagePrompt/);
   assert.match(source, /生图平台/);
   assert.match(source, /生图模型/);
+  assert.match(source, /单元板数量/);
+  assert.match(source, /updatePanelCount/);
   assert.match(source, /advancedProvidersForNode\(advancedProviders, 'image'\)/);
   assert.match(source, /generateExternalImage/);
   assert.match(source, /queryExternalImageStatus/);
