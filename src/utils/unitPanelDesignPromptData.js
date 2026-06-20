@@ -162,13 +162,13 @@ function translationLine(id, translations = {}, titleText = '', bodyText = '') {
 
 export function buildUnitPanelExtractPrompt(values = {}) {
   const sourceText = cleanUnitPanelText(values.sourceText, 50000);
-  const projectTheme = cleanUnitPanelText(values.projectTheme, 500);
+  const subtitleText = cleanUnitPanelText(values.subtitleText || values.projectTheme, 500);
   return [
     '请从展陈资料中提炼“单元板设计”所需的两级文字。',
     '输出 JSON，不要 Markdown，不要解释。',
     'JSON 结构：{"titleText":"不超过18个中文字的标题字","bodyText":"120-260个中文字的说明文字"}。',
     'titleText 要适合作为单元板主标题；bodyText 要准确、凝练、适合展板说明，不要编造资料中没有的事实。',
-    projectTheme ? `项目主题：${projectTheme}` : '',
+    subtitleText ? `副标题参考：${subtitleText}` : '',
     '',
     sourceText,
   ].filter(Boolean).join('\n');
@@ -234,7 +234,9 @@ export function buildUnitPanelImagePrompt(values = {}) {
   const languages = normalizeUnitPanelLanguages(values.languages);
   const titleText = cleanUnitPanelText(values.titleText, 500);
   const bodyText = cleanUnitPanelText(values.bodyText, 4000);
-  const projectTheme = cleanUnitPanelText(values.projectTheme, 500);
+  const subtitleText = cleanUnitPanelText(values.subtitleText || values.projectTheme, 500);
+  const subtitleEnabled = values.subtitleEnabled === true;
+  const mixedLanguageLayoutEnabled = values.mixedLanguageLayoutEnabled === true;
   const colorMaterialPresetText = cleanUnitPanelText(values.colorMaterialPresetText || values.colorMaterial, 1600);
   const colorMaterialReferenceTone = cleanUnitPanelText(values.colorMaterialReferenceTone, 800);
   const manualColorMaterial = cleanUnitPanelText(values.manualColorMaterial, 1200);
@@ -272,6 +274,12 @@ export function buildUnitPanelImagePrompt(values = {}) {
     ? ''
     : '图片显示：关闭。除抽象背景图、底纹、材质肌理、纹样和非具象装饰以外，禁止显示任何图像照片或具象图片；不要出现人物照片、文物照片、历史场景照片、风景照片、实物插图、摄影图框或照片墙。';
   const textLayoutText = `文字控制区：所有语种的标题字和说明文字主要排版区域都必须位于距离地面 ${textLayoutBounds.lowerMeters} 米到 ${textLayoutBounds.upperMeters} 米之间；中文、英文、内蒙文（传统蒙古语）及其他语种都不要把主要文字放到低于下限或高于上限的位置，辅助纹样、背景和非文字装饰可在控制区外延展。`;
+  const subtitlePromptText = subtitleEnabled && subtitleText
+    ? `副标题：有效。将副标题“${subtitleText}”放置到单元板上，位置在主标题下面，约占主标题下方一半区域，作为主标题和说明文字之间的过渡层级；副标题也必须满足文字控制区上下限。`
+    : '副标题：无效。不要在单元板画面上显示副标题，不要把副标题作为可见文字排版。';
+  const mixedLanguageLayoutText = mixedLanguageLayoutEnabled
+    ? '混排：有效。多语言排版时，先按语言顺序把几种语言的标题字全部排完，再按同一语言顺序排几种语言的说明文字；不要采用“某语言标题+某语言说明”成组循环的排法。'
+    : '混排：无效。多语言排版时，每种语言的标题字和说明文字可以按语言成组排版。';
   const proportionText = '比例约束：必须严格按单板宽、单板高、板数和板间距推导真实宽高比绘制；总宽只由单板宽度之和加板间距之和决定，总高等于单板高。禁止把单元板拉伸、压扁、压缩或透视变形，所有板块轮廓、文字区和装饰区都要服从真实尺寸比例。';
   const specialShapeText = specialShapeEnabled
     ? '特殊造型：开启。生成的单元板不能是标准长方形外观，必须在真实尺寸比例的外接框内设计异形轮廓、镂空图案、剪影造型，或将多种方式结合；可使用文化纹样轮廓、城市/历史主题剪影、局部穿孔镂空、阶梯边、弧形边、错落模块边界等。特殊造型不是拉伸变形，不能破坏单板真实宽高比和文字控制区。'
@@ -286,7 +294,6 @@ export function buildUnitPanelImagePrompt(values = {}) {
     '用途：博物馆/展陈单元板设计图生成。',
     `出图类型：${layoutMode}。`,
     '核心要求：生成专业展陈单元板设计图，效果接近完成度高的立面展示方案；画面可使用深色或中性背景，板块精致，文字层级清晰，整体具有高端文化展陈的材质质感。',
-    projectTheme ? `项目主题：${projectTheme}` : '',
     `板式模式：${outputMode === 'single' ? '单块单元板' : '整套板式图'}。`,
     splitText,
     dimensionText,
@@ -298,7 +305,9 @@ export function buildUnitPanelImagePrompt(values = {}) {
     !referenceOverridesStyle ? `标题字字体：${titleFont.label}；字体风格要求：${titleFont.prompt}。` : '',
     !referenceOverridesStyle ? `说明文字字体：${bodyFont.label}；字体风格要求：${bodyFont.prompt}。` : '',
     '文字层级：标题字是第一视觉层级；说明文字是第二视觉层级；说明文字要组织成清晰文本块，避免随机乱码或不可读填充文字。',
+    subtitlePromptText,
     textLayoutText,
+    mixedLanguageLayoutText,
     '多语言顺序与最终文字内容如下，必须按此顺序排版：',
     languageLines.join('\n'),
     materialPriority ? `材质与色彩优先级（从高到低）：\n${materialPriority}` : (referenceOverridesStyle ? '' : '材质与色彩要求：使用克制、博物馆级的展板材料，低反射表面、金属收边、肌理背板和温暖聚焦照明。'),

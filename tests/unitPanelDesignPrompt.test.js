@@ -85,6 +85,27 @@ test('unit panel prompt switches black or white background mode', () => {
   assert.match(white, /不要使用黑色或深色大面积背景/);
 });
 
+test('unit panel prompt switches subtitle visibility', () => {
+  const hidden = buildUnitPanelImagePrompt({ subtitleText: '城市记忆', subtitleEnabled: false });
+  assert.match(hidden, /副标题：无效/);
+  assert.doesNotMatch(hidden, /将副标题“城市记忆”放置到单元板上/);
+
+  const visible = buildUnitPanelImagePrompt({ subtitleText: '城市记忆', subtitleEnabled: true });
+  assert.match(visible, /副标题：有效/);
+  assert.match(visible, /将副标题“城市记忆”放置到单元板上/);
+  assert.match(visible, /主标题下面/);
+});
+
+test('unit panel prompt switches mixed language layout', () => {
+  const grouped = buildUnitPanelImagePrompt({ mixedLanguageLayoutEnabled: false });
+  assert.match(grouped, /混排：无效/);
+
+  const mixed = buildUnitPanelImagePrompt({ mixedLanguageLayoutEnabled: true });
+  assert.match(mixed, /混排：有效/);
+  assert.match(mixed, /先按语言顺序把几种语言的标题字全部排完/);
+  assert.match(mixed, /再按同一语言顺序排几种语言的说明文字/);
+});
+
 test('unit panel prompt includes text layout bounds', () => {
   assert.deepEqual(normalizeUnitPanelTextLayoutBounds({}), { lowerMeters: 0.8, upperMeters: 2.2 });
   assert.deepEqual(normalizeUnitPanelTextLayoutBounds({ lowerMeters: 2.5, upperMeters: 0.6 }), { lowerMeters: 0.6, upperMeters: 2.5 });

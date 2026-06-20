@@ -72,6 +72,9 @@ export interface UnitPanelImagePromptValues {
   translations?: Record<string, { title?: string; body?: string }>;
   titleText?: string;
   bodyText?: string;
+  subtitleText?: string;
+  subtitleEnabled?: boolean;
+  mixedLanguageLayoutEnabled?: boolean;
   titleFont?: string;
   bodyFont?: string;
   projectTheme?: string;

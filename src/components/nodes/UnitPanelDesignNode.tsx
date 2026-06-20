@@ -255,7 +255,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
   const translations = d.translations && typeof d.translations === 'object' ? d.translations : {};
   const titleText = String(d.titleText || '').trim();
   const bodyText = String(d.bodyText || '').trim();
-  const projectTheme = String(d.projectTheme || '').trim();
+  const subtitleText = String(d.subtitleText || d.projectTheme || '').trim();
   const sourceText = String(d.sourceText || '');
   const upstreamText = useMemo(() => upstream.texts.map((item) => item.url).join('\n\n'), [upstream.texts]);
   const effectiveSourceText = [d.useUpstream !== false ? upstreamText : '', sourceText].filter((item) => item.trim()).join('\n\n');
@@ -290,16 +290,18 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
     translations,
     titleText,
     bodyText,
+    subtitleText,
+    subtitleEnabled: d.subtitleEnabled === true,
+    mixedLanguageLayoutEnabled: d.mixedLanguageLayoutEnabled === true,
     titleFont,
     bodyFont,
-    projectTheme,
     primaryMaterial: selectedPrimaryMaterial,
     secondaryMaterials: selectedSecondaryMaterials,
     colorMaterialPresetText: colorMaterialTextFromPreset(selectedColorMaterialPreset),
     colorMaterialReferenceTone,
     manualColorMaterial: d.colorMaterial,
     hasColorMaterialReferenceImage: !!colorMaterialReferenceImage,
-  }), [bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.backgroundMode, d.colorMaterial, d.dimensionMarksEnabled, d.imageDisplayEnabled, d.specialShapeEnabled, d.splitDesignEnabled, dimensions, languages, outputMode, projectTheme, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, textLayoutBounds, titleFont, titleText, translations]);
+  }), [bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.backgroundMode, d.colorMaterial, d.dimensionMarksEnabled, d.imageDisplayEnabled, d.mixedLanguageLayoutEnabled, d.specialShapeEnabled, d.splitDesignEnabled, d.subtitleEnabled, dimensions, languages, outputMode, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, subtitleText, textLayoutBounds, titleFont, titleText, translations]);
 
   useEffect(() => {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
@@ -369,7 +371,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
         model: llmModel,
         llmKeyId: activeLlmConfig?.id,
         temperature: 0.25,
-        messages: [{ role: 'user', content: buildUnitPanelExtractPrompt({ sourceText: effectiveSourceText, projectTheme }) }],
+        messages: [{ role: 'user', content: buildUnitPanelExtractPrompt({ sourceText: effectiveSourceText, subtitleText }) }],
       });
       const parsed = parseUnitPanelExtractJson(response.content || '');
       if (!parsed.titleText && !parsed.bodyText) throw new Error('LLM 未返回有效标题或说明文字');
@@ -383,7 +385,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
     } catch (error: any) {
       update({ status: 'error', error: llmErrorMessage(error), progress: '' });
     }
-  }, [activeLlmConfig?.id, bodyText, busy, effectiveSourceText, isReadonly, llmModel, projectTheme, titleText, update]);
+  }, [activeLlmConfig?.id, bodyText, busy, effectiveSourceText, isReadonly, llmModel, subtitleText, titleText, update]);
 
   const runTranslate = useCallback(async () => {
     if (isReadonly || busy) return;
@@ -421,9 +423,11 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
       translations,
       titleText,
       bodyText,
+      subtitleText,
+      subtitleEnabled: d.subtitleEnabled === true,
+      mixedLanguageLayoutEnabled: d.mixedLanguageLayoutEnabled === true,
       titleFont,
       bodyFont,
-      projectTheme,
       primaryMaterial: selectedPrimaryMaterial,
       secondaryMaterials: selectedSecondaryMaterials,
       colorMaterialPresetText: colorMaterialTextFromPreset(selectedColorMaterialPreset),
@@ -540,7 +544,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`单元板设计生图失败: ${msg}`, src);
       throw error;
     }
-  }, [activeCanvasId, apiModel, aspectRatio, bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.backgroundMode, d.colorMaterial, d.dimensionMarksEnabled, d.imageDisplayEnabled, d.providerParams, d.specialShapeEnabled, d.splitDesignEnabled, dimensions, externalProviderModel, id, isExternalSelected, isReadonly, languages, modelDef.id, modelDef.paramKind, outputFormat, outputMode, projectTheme, providerSelection.provider, seed, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, sizeLevel, textLayoutBounds, titleFont, titleText, translations, update]);
+  }, [activeCanvasId, apiModel, aspectRatio, bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.backgroundMode, d.colorMaterial, d.dimensionMarksEnabled, d.imageDisplayEnabled, d.mixedLanguageLayoutEnabled, d.providerParams, d.specialShapeEnabled, d.splitDesignEnabled, d.subtitleEnabled, dimensions, externalProviderModel, id, isExternalSelected, isReadonly, languages, modelDef.id, modelDef.paramKind, outputFormat, outputMode, providerSelection.provider, seed, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, sizeLevel, subtitleText, textLayoutBounds, titleFont, titleText, translations, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -644,6 +648,10 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
             <input type="checkbox" className="accent-cyan-300" checked={d.specialShapeEnabled === true} disabled={isReadonly || busy} onChange={(e) => update({ specialShapeEnabled: e.target.checked })} />
             特殊造型
           </label>
+          <label className="flex items-center gap-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[11px] text-white/70">
+            <input type="checkbox" className="accent-cyan-300" checked={d.mixedLanguageLayoutEnabled === true} disabled={isReadonly || busy} onChange={(e) => update({ mixedLanguageLayoutEnabled: e.target.checked })} />
+            混排
+          </label>
           <label className="space-y-1">
             <span className="text-[10px] text-white/55">背景</span>
             <select className={FIELD} value={d.backgroundMode === 'white' ? 'white' : 'black'} disabled={isReadonly || busy} onChange={(e) => update({ backgroundMode: e.target.value })}>
@@ -668,8 +676,14 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
               <input className={FIELD} value={titleText} disabled={isReadonly || busy} onChange={(e) => update({ titleText: e.target.value })} />
             </label>
             <label className="space-y-1">
-              <span className="text-[10px] text-white/55">项目主题</span>
-              <input className={FIELD} value={projectTheme} disabled={isReadonly || busy} onChange={(e) => update({ projectTheme: e.target.value })} />
+              <span className="flex items-center justify-between gap-2 text-[10px] text-white/55">
+                <span>副标题</span>
+                <span className="flex items-center gap-1 text-white/60">
+                  <input type="checkbox" className="accent-cyan-300" checked={d.subtitleEnabled === true} disabled={isReadonly || busy} onChange={(e) => update({ subtitleEnabled: e.target.checked })} />
+                  有效
+                </span>
+              </span>
+              <input className={FIELD} value={subtitleText} disabled={isReadonly || busy} onChange={(e) => update({ projectTheme: e.target.value, subtitleText: e.target.value })} />
             </label>
           </div>
           <label className="space-y-1 block">

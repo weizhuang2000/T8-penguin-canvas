@@ -47,6 +47,9 @@ export interface UnitPanelImagePromptValues {
   translations?: Record<string, { title?: string; body?: string }>;
   titleText?: string;
   bodyText?: string;
+  subtitleText?: string;
+  subtitleEnabled?: boolean;
+  mixedLanguageLayoutEnabled?: boolean;
   titleFont?: string;
   bodyFont?: string;
   projectTheme?: string;
@@ -75,7 +78,7 @@ export function normalizeUnitPanelDimensions(value: unknown): UnitPanelDimension
 export function normalizeUnitPanelTextLayoutBounds(value: unknown): UnitPanelTextLayoutBounds;
 export function unitPanelDimensionsText(value: unknown): string;
 export function unitPanelMaterialsText(primaryMaterial?: UnitPanelMaterialLike | null, secondaryMaterials?: UnitPanelMaterialLike[]): string;
-export function buildUnitPanelExtractPrompt(values?: { sourceText?: string; projectTheme?: string }): string;
+export function buildUnitPanelExtractPrompt(values?: { sourceText?: string; projectTheme?: string; subtitleText?: string }): string;
 export function buildUnitPanelTranslatePrompt(values?: { languages?: string[]; titleText?: string; bodyText?: string }): string;
 export function parseUnitPanelExtractJson(text: string): { titleText: string; bodyText: string };
 export function parseUnitPanelTranslateJson(text: string, languages?: string[]): Record<string, { title: string; body: string }>;

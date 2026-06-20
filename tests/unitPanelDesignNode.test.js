@@ -32,6 +32,9 @@ test('unit panel design node exposes reference handle and shared controls', () =
   assert.match(source, /imageDisplayEnabled/);
   assert.match(source, /specialShapeEnabled/);
   assert.match(source, /backgroundMode/);
+  assert.match(source, /subtitleText/);
+  assert.match(source, /subtitleEnabled/);
+  assert.match(source, /mixedLanguageLayoutEnabled/);
   assert.match(source, /textLayoutBounds/);
   assert.match(source, /referenceOverridesMaterialAndFont/);
   assert.match(source, /材质与字体板块暂不生效/);
@@ -51,6 +54,9 @@ test('unit panel design is registered in frontend and permissions', () => {
   assert.match(read('src/components/Canvas.tsx'), /imageDisplayEnabled: true/);
   assert.match(read('src/components/Canvas.tsx'), /specialShapeEnabled: false/);
   assert.match(read('src/components/Canvas.tsx'), /backgroundMode: 'black'/);
+  assert.match(read('src/components/Canvas.tsx'), /subtitleText: ''/);
+  assert.match(read('src/components/Canvas.tsx'), /subtitleEnabled: false/);
+  assert.match(read('src/components/Canvas.tsx'), /mixedLanguageLayoutEnabled: false/);
   assert.match(read('src/components/Canvas.tsx'), /textLayoutBounds/);
   assert.match(read('src/components/Canvas.tsx'), /lowerMeters: 0\.8/);
   assert.match(read('src/components/Canvas.tsx'), /upperMeters: 2\.2/);
