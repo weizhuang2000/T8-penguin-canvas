@@ -872,6 +872,26 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
                   <option value="4K">4K</option>
                 </select>
               </label>
+              <label className="space-y-1">
+                <span className="text-[10px] text-white/55">输出格式</span>
+                <div className="grid grid-cols-2 gap-0.5 p-0.5 rounded bg-white/5">
+                  {(['jpg', 'png'] as const).map((fmt) => {
+                    const active = outputFormat === fmt;
+                    return (
+                      <button
+                        key={fmt}
+                        type="button"
+                        disabled={isReadonly || busy}
+                        onClick={() => update({ outputFormat: fmt })}
+                        title={fmt === 'png' ? '保留透明区域，文件更大' : '高质量 JPG，文件更小'}
+                        className={`py-1 text-[10px] font-semibold rounded transition-all ${active ? 'bg-amber-500/30 text-amber-200' : 'text-zinc-400 hover:text-zinc-200'}`}
+                      >
+                        {fmt.toUpperCase()}
+                      </button>
+                    );
+                  })}
+                </div>
+              </label>
             </div>
           </div>
           {d.progress && <div className="text-[10px] text-cyan-100">{d.progress}</div>}
