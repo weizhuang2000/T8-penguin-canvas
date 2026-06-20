@@ -609,42 +609,6 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
               ))}
             </select>
           </label>
-          <label className="space-y-1">
-            <span className="text-[10px] text-white/55">生图平台</span>
-            <select
-              className={FIELD}
-              value={providerSelectValue}
-              disabled={isReadonly || busy || (!allowZhenzhenFallback && imageAdvancedProviders.length === 0)}
-              onChange={(e) => {
-                const nextId = e.target.value;
-                if (nextId === 'zhenzhen') {
-                  update({ providerSource: 'zhenzhen', providerId: '', providerModel: '' });
-                  return;
-                }
-                const provider = imageAdvancedProviders.find((item) => item.id === nextId);
-                if (!provider) return;
-                const models = advancedProviderModelOptions(provider, 'image');
-                update({ providerSource: provider.protocol, providerId: provider.id, providerModel: models[0] || '' });
-              }}
-            >
-              {allowZhenzhenFallback && <option value="zhenzhen">内置生图平台</option>}
-              {imageAdvancedProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label || provider.id}</option>)}
-            </select>
-          </label>
-          <label className="space-y-1">
-            <span className="text-[10px] text-white/55">生图模型</span>
-            {isExternalSelected ? (
-              <select className={FIELD} value={externalProviderModel} disabled={isReadonly || busy || externalModelOptions.length === 0} onChange={(e) => update({ providerModel: e.target.value })}>
-                {externalModelOptions.length > 0
-                  ? externalModelOptions.map((item) => <option key={item} value={item}>{item}</option>)
-                  : <option value="">未配置图像模型</option>}
-              </select>
-            ) : (
-              <select className={FIELD} value={apiModel} disabled={isReadonly || busy} onChange={(e) => update({ apiModel: e.target.value })}>
-                {modelDef.apiModelOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-              </select>
-            )}
-          </label>
           <label className="flex items-center gap-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[11px] text-white/70">
             <input type="checkbox" className="accent-cyan-300" checked={d.splitDesignEnabled !== false} disabled={isReadonly || busy} onChange={(e) => update({ splitDesignEnabled: e.target.checked })} />
             是否分体设计
@@ -777,6 +741,47 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} /> 生图</div>
             <button type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy} onClick={() => void runGenerate()}><Play size={13} /> 生成单元板</button>
+          </div>
+          <div className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
+            <div className="mb-2 text-[11px] font-semibold text-cyan-100">生图平台与模型</div>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="space-y-1">
+                <span className="text-[10px] text-white/55">生图平台</span>
+                <select
+                  className={FIELD}
+                  value={providerSelectValue}
+                  disabled={isReadonly || busy || (!allowZhenzhenFallback && imageAdvancedProviders.length === 0)}
+                  onChange={(e) => {
+                    const nextId = e.target.value;
+                    if (nextId === 'zhenzhen') {
+                      update({ providerSource: 'zhenzhen', providerId: '', providerModel: '' });
+                      return;
+                    }
+                    const provider = imageAdvancedProviders.find((item) => item.id === nextId);
+                    if (!provider) return;
+                    const models = advancedProviderModelOptions(provider, 'image');
+                    update({ providerSource: provider.protocol, providerId: provider.id, providerModel: models[0] || '' });
+                  }}
+                >
+                  {allowZhenzhenFallback && <option value="zhenzhen">内置生图平台</option>}
+                  {imageAdvancedProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label || provider.id}</option>)}
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="text-[10px] text-white/55">生图模型</span>
+                {isExternalSelected ? (
+                  <select className={FIELD} value={externalProviderModel} disabled={isReadonly || busy || externalModelOptions.length === 0} onChange={(e) => update({ providerModel: e.target.value })}>
+                    {externalModelOptions.length > 0
+                      ? externalModelOptions.map((item) => <option key={item} value={item}>{item}</option>)
+                      : <option value="">未配置图像模型</option>}
+                  </select>
+                ) : (
+                  <select className={FIELD} value={apiModel} disabled={isReadonly || busy} onChange={(e) => update({ apiModel: e.target.value })}>
+                    {modelDef.apiModelOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                  </select>
+                )}
+              </label>
+            </div>
           </div>
           {d.progress && <div className="text-[10px] text-cyan-100">{d.progress}</div>}
           {d.imageUrl && <img src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} />}
