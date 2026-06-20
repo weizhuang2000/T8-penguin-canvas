@@ -67,6 +67,7 @@ export type NodeType =
   | 'exhibition-img2img'
   | 'exhibition-creative-image'
   | 'exhibition-outline-split'
+  | 'unit-panel-design'
   | 'multi-angle-visual'
   | 'portrait-master'
   | 'pose-master'

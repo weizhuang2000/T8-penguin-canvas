@@ -432,6 +432,16 @@ export interface ExhibitionCreativePromptPresetMap {
   viewAngles: ExhibitionCreativeViewAnglePresetItem[];
 }
 
+export interface UnitPanelMaterialItem {
+  id: string;
+  category: string;
+  label: string;
+  description: string;
+  texture: string;
+  usage: string;
+  order: number;
+}
+
 export async function listExhibitionPromptLibrary(options?: {
   dimension?: ExhibitionPromptDimension;
   includePersonal?: boolean;
@@ -561,6 +571,26 @@ export async function updateExhibitionCreativeViewAnglePresets(
     {
       method: 'PUT',
       body: JSON.stringify({ presets }),
+    },
+  );
+  return res.data || [];
+}
+
+export async function getUnitPanelMaterials(): Promise<UnitPanelMaterialItem[]> {
+  const res = await request<{ success: boolean; data: UnitPanelMaterialItem[] }>(
+    `${BASE}/prompt-library/unit-panel/materials`,
+  );
+  return res.data || [];
+}
+
+export async function updateUnitPanelMaterials(
+  materials: Array<Pick<UnitPanelMaterialItem, 'label'> & Partial<Pick<UnitPanelMaterialItem, 'id' | 'category' | 'description' | 'texture' | 'usage' | 'order'>>>,
+): Promise<UnitPanelMaterialItem[]> {
+  const res = await request<{ success: boolean; data: UnitPanelMaterialItem[] }>(
+    `${BASE}/prompt-library/unit-panel/materials`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ materials }),
     },
   );
   return res.data || [];

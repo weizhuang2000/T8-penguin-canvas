@@ -11,6 +11,7 @@ const router = express.Router();
 const DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition.json');
 const ELEVATION_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_elevation.json');
 const CREATIVE_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition_creative.json');
+const UNIT_PANEL_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_unit_panel.json');
 const DIMENSIONS = new Set([
   'spaceType',
   'functionalZones',
@@ -323,6 +324,92 @@ function normalizeCreativeViewAnglePresetList(value) {
     .map((item, index) => ({ ...item, order: index }));
 }
 
+const DEFAULT_UNIT_PANEL_MATERIALS = [
+  {
+    id: 'dark-blue-matte-metal',
+    category: '金属',
+    label: '深蓝哑光金属',
+    description: '深蓝低反射金属面板，适合沉稳历史文化主题',
+    texture: '哑光喷涂、细微金属颗粒、低反射表面',
+    usage: '主材质',
+  },
+  {
+    id: 'champagne-brushed-metal',
+    category: '金属',
+    label: '香槟金拉丝金属',
+    description: '暖金色拉丝金属，用于标题字、边框和重点装饰',
+    texture: '细密拉丝、微弱高光、金属包边',
+    usage: '主材质或辅助材质',
+  },
+  {
+    id: 'warm-wood-veneer',
+    category: '木作',
+    label: '暖色木饰面',
+    description: '温润木纹饰面，适合人文叙事与地方文化展陈',
+    texture: '自然木纹、半哑光清漆、细腻拼缝',
+    usage: '主材质',
+  },
+  {
+    id: 'stone-texture-panel',
+    category: '石材',
+    label: '深灰石纹板',
+    description: '深灰石材肌理板，强调厚重、历史和纪念性',
+    texture: '石材纹理、微水泥质感、低饱和灰阶',
+    usage: '主材质或背景材质',
+  },
+  {
+    id: 'translucent-acrylic',
+    category: '亚克力',
+    label: '半透明发光亚克力',
+    description: '半透明亚克力发光层，用于局部导视、标题背光和图形层',
+    texture: '柔和透光、磨砂边缘、内发光',
+    usage: '辅助材质',
+  },
+  {
+    id: 'etched-bronze',
+    category: '金属',
+    label: '蚀刻古铜',
+    description: '带历史感的古铜蚀刻面，适合纹样、地图和铭文装饰',
+    texture: '古铜氧化、浅浮雕、蚀刻线条',
+    usage: '辅助材质',
+  },
+  {
+    id: 'low-iron-glass',
+    category: '玻璃',
+    label: '超白玻璃',
+    description: '高通透玻璃或保护面层，用于展板局部覆盖和精致反射',
+    texture: '通透、轻微反射、精磨边',
+    usage: '辅助材质',
+  },
+].map((item, index) => ({ ...item, order: index }));
+
+function normalizeUnitPanelMaterialList(value) {
+  const source = Array.isArray(value) && value.length > 0 ? value : DEFAULT_UNIT_PANEL_MATERIALS;
+  const used = new Set();
+  return source
+    .map((raw, index) => {
+      const label = safeText(raw?.label, 120);
+      if (!label) return null;
+      let id = safeText(raw?.id, 96).replace(/[^a-zA-Z0-9_-]/g, '');
+      if (!id) id = `material_${index + 1}`;
+      while (used.has(id)) id = `${id}_${index + 1}`;
+      used.add(id);
+      return {
+        id,
+        category: safeText(raw?.category, 120) || '默认',
+        label,
+        description: safeText(raw?.description, 1000),
+        texture: safeText(raw?.texture, 1000),
+        usage: safeText(raw?.usage, 1000),
+        order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 120)
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+    .map((item, index) => ({ ...item, order: index }));
+}
+
 function readElevationDb() {
   try {
     if (!fs.existsSync(ELEVATION_DB_FILE)) {
@@ -388,6 +475,35 @@ function writeCreativeDb(db) {
       insertPresets: normalizeCreativeInsertPresetList(db?.insertPresets),
       excludePresets: normalizeCreativeExcludePresetList(db?.excludePresets),
       viewAnglePresets: normalizeCreativeViewAnglePresetList(db?.viewAnglePresets),
+    }, null, 2),
+    'utf-8',
+  );
+}
+
+function readUnitPanelDb() {
+  try {
+    if (!fs.existsSync(UNIT_PANEL_DB_FILE)) {
+      return {
+        materials: normalizeUnitPanelMaterialList(DEFAULT_UNIT_PANEL_MATERIALS),
+      };
+    }
+    const raw = JSON.parse(fs.readFileSync(UNIT_PANEL_DB_FILE, 'utf-8'));
+    return {
+      materials: normalizeUnitPanelMaterialList(raw?.materials),
+    };
+  } catch {
+    return {
+      materials: normalizeUnitPanelMaterialList(DEFAULT_UNIT_PANEL_MATERIALS),
+    };
+  }
+}
+
+function writeUnitPanelDb(db) {
+  fs.mkdirSync(path.dirname(UNIT_PANEL_DB_FILE), { recursive: true });
+  fs.writeFileSync(
+    UNIT_PANEL_DB_FILE,
+    JSON.stringify({
+      materials: normalizeUnitPanelMaterialList(db?.materials),
     }, null, 2),
     'utf-8',
   );
@@ -584,6 +700,21 @@ router.put('/exhibition-creative/presets/view-angles', (req, res) => {
   const presets = normalizeCreativeViewAnglePresetList(req.body?.presets);
   writeCreativeDb({ ...db, viewAnglePresets: presets });
   res.json({ success: true, data: presets });
+});
+
+router.get('/unit-panel/materials', (_req, res) => {
+  const db = readUnitPanelDb();
+  res.json({ success: true, data: normalizeUnitPanelMaterialList(db.materials) });
+});
+
+router.put('/unit-panel/materials', (req, res) => {
+  const user = req.user;
+  if (!isAdminRole(user?.role)) {
+    return res.status(403).json({ success: false, error: '只有系统管理员可以维护单元板材质选项' });
+  }
+  const materials = normalizeUnitPanelMaterialList(req.body?.materials);
+  writeUnitPanelDb({ materials });
+  res.json({ success: true, data: materials });
 });
 
 router.post('/exhibition', (req, res) => {

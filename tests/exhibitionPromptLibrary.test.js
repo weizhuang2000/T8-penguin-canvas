@@ -223,3 +223,40 @@ test('elevation craft presets are managed by admin and manager only', async (t) 
   });
   assert.equal(denied.status, 403);
 });
+
+test('unit panel materials are readable and admin managed', async (t) => {
+  const userBase = await startApp(t, { id: 'u1', username: 'alice', name: 'Alice', role: 'designer' });
+  const defaults = await fetch(`${userBase}/api/prompt-library/unit-panel/materials`).then((res) => res.json());
+  assert.equal(defaults.success, true);
+  assert.ok(defaults.data.length >= 3);
+  assert.equal(defaults.data[0].order, 0);
+
+  const denied = await fetch(`${userBase}/api/prompt-library/unit-panel/materials`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ materials: [{ label: '普通用户材质' }] }),
+  });
+  assert.equal(denied.status, 403);
+
+  const adminBase = await startApp(t, { id: 'admin', username: 'root', name: 'Root', role: 'admin' });
+  const saved = await fetch(`${adminBase}/api/prompt-library/unit-panel/materials`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      materials: [
+        { category: '金属', label: '测试主材质', description: '主面板', texture: '哑光', usage: '主材质' },
+        { category: '亚克力', label: '测试辅助材质', description: '发光层', texture: '磨砂透光', usage: '辅助材质' },
+      ],
+    }),
+  }).then((res) => res.json());
+
+  assert.equal(saved.success, true);
+  assert.deepEqual(saved.data.map((item) => [item.category, item.label, item.description, item.texture, item.usage, item.order]), [
+    ['金属', '测试主材质', '主面板', '哑光', '主材质', 0],
+    ['亚克力', '测试辅助材质', '发光层', '磨砂透光', '辅助材质', 1],
+  ]);
+
+  const listed = await fetch(`${adminBase}/api/prompt-library/unit-panel/materials`).then((res) => res.json());
+  assert.equal(listed.success, true);
+  assert.equal(listed.data[1].label, '测试辅助材质');
+});

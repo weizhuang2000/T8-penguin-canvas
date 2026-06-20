@@ -114,6 +114,7 @@ import ElevationPromptNode from './nodes/ElevationPromptNode';
 import ExhibitionImg2ImgNode from './nodes/ExhibitionImg2ImgNode';
 import ExhibitionCreativeImageNode from './nodes/ExhibitionCreativeImageNode';
 import ExhibitionOutlineSplitNode from './nodes/ExhibitionOutlineSplitNode';
+import UnitPanelDesignNode from './nodes/UnitPanelDesignNode';
 import PortraitMasterNode from './nodes/PortraitMasterNode';
 import PoseMasterNode from './nodes/PoseMasterNode';
 import IdeaNode from './nodes/IdeaNode';
@@ -205,6 +206,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'exhibition-img2img': ExhibitionImg2ImgNode,
   'exhibition-creative-image': ExhibitionCreativeImageNode,
   'exhibition-outline-split': ExhibitionOutlineSplitNode,
+  'unit-panel-design': UnitPanelDesignNode,
   'multi-angle-visual': ToolboxParamNode,
   'portrait-master': PortraitMasterNode,
   'pose-master': PoseMasterNode,
@@ -446,6 +448,50 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     status: 'idle',
     error: '',
   },
+  'unit-panel-design': {
+    model: 'gpt-image-2',
+    apiModel: 'gpt-image-2-all',
+    aspectRatio: '16:9',
+    sizeLevel: '2K',
+    outputFormat: 'jpg',
+    outputMode: 'set',
+    splitDesignEnabled: true,
+    dimensionMarksEnabled: true,
+    dimensions: {
+      totalWidth: 3600,
+      totalHeight: 1800,
+      panelWidth: 700,
+      panelHeight: 1600,
+      panelCount: 3,
+      gap: 50,
+      thickness: 40,
+    },
+    languages: ['zh', 'en'],
+    translations: {},
+    titleText: '',
+    bodyText: '',
+    titleFont: 'heavy-heiti',
+    bodyFont: 'fangzheng-dahei',
+    primaryMaterialId: '',
+    secondaryMaterialIds: [],
+    projectTheme: '',
+    colorMaterialPreset: '',
+    colorMaterial: '',
+    colorMaterialReferenceTone: '',
+    colorMaterialReferenceToneSource: '',
+    colorMaterialReferenceToneStatus: '',
+    useUpstream: true,
+    sourceText: '',
+    documentMeta: null,
+    prompt: '',
+    outputText: '',
+    text: '',
+    imageUrl: '',
+    imageUrls: [],
+    referenceImages: [],
+    status: 'idle',
+    error: '',
+  },
   'elevation-prompt': {
     model: '',
     sourceText: '',
@@ -619,6 +665,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'exhibition-img2img',
   'exhibition-creative-image',
   'exhibition-outline-split',
+  'unit-panel-design',
   'remove-ai-watermark',
 ]);
 
