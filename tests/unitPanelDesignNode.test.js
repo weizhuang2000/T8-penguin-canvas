@@ -21,8 +21,11 @@ test('unit panel design node exposes reference handle and shared controls', () =
   assert.match(source, /生图模型/);
   assert.match(source, /单元板数量/);
   assert.match(source, /图片显示/);
+  assert.match(source, /文字控制区/);
   assert.match(source, /imageDisplayEnabled/);
+  assert.match(source, /textLayoutBounds/);
   assert.match(source, /updatePanelCount/);
+  assert.match(source, /updateTextLayoutBound/);
   assert.match(source, /advancedProvidersForNode\(advancedProviders, 'image'\)/);
   assert.match(source, /generateExternalImage/);
   assert.match(source, /queryExternalImageStatus/);
@@ -35,6 +38,9 @@ test('unit panel design is registered in frontend and permissions', () => {
   assert.match(read('src/components/Canvas.tsx'), /'unit-panel-design': UnitPanelDesignNode/);
   assert.match(read('src/components/Canvas.tsx'), /primaryMaterialId/);
   assert.match(read('src/components/Canvas.tsx'), /imageDisplayEnabled: true/);
+  assert.match(read('src/components/Canvas.tsx'), /textLayoutBounds/);
+  assert.match(read('src/components/Canvas.tsx'), /lowerMeters: 0\.8/);
+  assert.match(read('src/components/Canvas.tsx'), /upperMeters: 2\.2/);
   assert.match(read('src/components/NodeActionBar.tsx'), /'unit-panel-design'/);
   assert.match(read('src/config/portTypes.ts'), /'unit-panel-design': \{ inputs: \['text', 'image'\], outputs: \['image'\] \}/);
   assert.match(read('backend/src/auth/toolPermissions.js'), /'unit-panel-design'/);

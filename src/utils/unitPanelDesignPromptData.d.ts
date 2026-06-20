@@ -20,6 +20,11 @@ export interface UnitPanelDimensions {
   thickness: number;
 }
 
+export interface UnitPanelTextLayoutBounds {
+  lowerMeters: number;
+  upperMeters: number;
+}
+
 export interface UnitPanelMaterialLike {
   id?: string;
   category?: string;
@@ -36,6 +41,7 @@ export interface UnitPanelImagePromptValues {
   dimensionMarksEnabled?: boolean;
   imageDisplayEnabled?: boolean;
   dimensions?: Partial<UnitPanelDimensions>;
+  textLayoutBounds?: Partial<UnitPanelTextLayoutBounds>;
   languages?: string[];
   translations?: Record<string, { title?: string; body?: string }>;
   titleText?: string;
@@ -65,6 +71,7 @@ export function normalizeUnitPanelBodyFont(value: unknown): string;
 export function unitPanelTitleFontMeta(value: unknown): UnitPanelFontOption;
 export function unitPanelBodyFontMeta(value: unknown): UnitPanelFontOption;
 export function normalizeUnitPanelDimensions(value: unknown): UnitPanelDimensions;
+export function normalizeUnitPanelTextLayoutBounds(value: unknown): UnitPanelTextLayoutBounds;
 export function unitPanelDimensionsText(value: unknown): string;
 export function unitPanelMaterialsText(primaryMaterial?: UnitPanelMaterialLike | null, secondaryMaterials?: UnitPanelMaterialLike[]): string;
 export function buildUnitPanelExtractPrompt(values?: { sourceText?: string; projectTheme?: string }): string;

@@ -97,6 +97,21 @@ export function normalizeUnitPanelDimensions(value) {
   };
 }
 
+export function normalizeUnitPanelTextLayoutBounds(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  const num = (raw, fallback) => {
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) return fallback;
+    return Math.round(Math.min(10, n) * 100) / 100;
+  };
+  const a = num(source.upperMeters ?? source.upper ?? source.maxMeters, 2.2);
+  const b = num(source.lowerMeters ?? source.lower ?? source.minMeters, 0.8);
+  return {
+    lowerMeters: Math.min(a, b),
+    upperMeters: Math.max(a, b),
+  };
+}
+
 export function unitPanelDimensionsText(value) {
   const d = normalizeUnitPanelDimensions(value);
   const parts = [];
@@ -221,6 +236,7 @@ export function buildUnitPanelImagePrompt(values = {}) {
   const manualColorMaterial = cleanUnitPanelText(values.manualColorMaterial, 1200);
   const materials = unitPanelMaterialsText(values.primaryMaterial, values.secondaryMaterials);
   const dimensions = unitPanelDimensionsText(values.dimensions);
+  const textLayoutBounds = normalizeUnitPanelTextLayoutBounds(values.textLayoutBounds);
   const splitDesignEnabled = values.splitDesignEnabled !== false;
   const dimensionMarksEnabled = values.dimensionMarksEnabled === true;
   const imageDisplayEnabled = values.imageDisplayEnabled !== false;
@@ -246,6 +262,7 @@ export function buildUnitPanelImagePrompt(values = {}) {
   const imageDisplayText = imageDisplayEnabled
     ? ''
     : '图片显示：关闭。除抽象背景图、底纹、材质肌理、纹样和非具象装饰以外，禁止显示任何图像照片或具象图片；不要出现人物照片、文物照片、历史场景照片、风景照片、实物插图、摄影图框或照片墙。';
+  const textLayoutText = `文字控制区：标题字和说明文字的主要排版区域必须位于距离地面 ${textLayoutBounds.lowerMeters} 米到 ${textLayoutBounds.upperMeters} 米之间；不要把主要文字放到低于下限或高于上限的位置，辅助纹样、背景和非文字装饰可在控制区外延展。`;
   return [
     '用途：博物馆/展陈单元板设计图生成。',
     `出图类型：${layoutMode}。`,
@@ -258,6 +275,7 @@ export function buildUnitPanelImagePrompt(values = {}) {
     `标题字字体：${titleFont.label}；字体风格要求：${titleFont.prompt}。`,
     `说明文字字体：${bodyFont.label}；字体风格要求：${bodyFont.prompt}。`,
     '文字层级：标题字是第一视觉层级；说明文字是第二视觉层级；说明文字要组织成清晰文本块，避免随机乱码或不可读填充文字。',
+    textLayoutText,
     '多语言顺序与最终文字内容如下，必须按此顺序排版：',
     languageLines.join('\n'),
     materialPriority ? `材质与色彩优先级（从高到低）：\n${materialPriority}` : '材质与色彩要求：使用克制、博物馆级的展板材料，低反射表面、金属收边、肌理背板和温暖聚焦照明。',

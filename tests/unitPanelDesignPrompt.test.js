@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildUnitPanelImagePrompt,
   normalizeUnitPanelLanguages,
+  normalizeUnitPanelTextLayoutBounds,
 } from '../src/utils/unitPanelDesignPromptData.js';
 
 test('unit panel prompt includes two-level text and language order in Chinese template', () => {
@@ -55,6 +56,18 @@ test('unit panel prompt switches image display constraints', () => {
   assert.match(disabled, /图片显示：关闭/);
   assert.match(disabled, /禁止显示任何图像照片或具象图片/);
   assert.match(disabled, /抽象背景图、底纹、材质肌理/);
+});
+
+test('unit panel prompt includes text layout bounds', () => {
+  assert.deepEqual(normalizeUnitPanelTextLayoutBounds({}), { lowerMeters: 0.8, upperMeters: 2.2 });
+  assert.deepEqual(normalizeUnitPanelTextLayoutBounds({ lowerMeters: 2.5, upperMeters: 0.6 }), { lowerMeters: 0.6, upperMeters: 2.5 });
+
+  const prompt = buildUnitPanelImagePrompt({
+    textLayoutBounds: { lowerMeters: 0.9, upperMeters: 2.4 },
+  });
+  assert.match(prompt, /文字控制区|鏂囧瓧鎺у埗鍖?/);
+  assert.match(prompt, /0\.9/);
+  assert.match(prompt, /2\.4/);
 });
 
 test('unit panel material priority is above reference tone and color material preset', () => {

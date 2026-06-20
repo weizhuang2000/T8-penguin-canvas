@@ -467,6 +467,10 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
       gap: 50,
       thickness: 40,
     },
+    textLayoutBounds: {
+      lowerMeters: 0.8,
+      upperMeters: 2.2,
+    },
     languages: ['zh', 'en'],
     translations: {},
     titleText: '',

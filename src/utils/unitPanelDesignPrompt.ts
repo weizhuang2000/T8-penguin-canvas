@@ -8,6 +8,7 @@ import {
   normalizeUnitPanelDimensions,
   normalizeUnitPanelLanguages,
   normalizeUnitPanelOutputMode,
+  normalizeUnitPanelTextLayoutBounds,
   normalizeUnitPanelTitleFont,
   parseUnitPanelExtractJson,
   parseUnitPanelTranslateJson,
@@ -44,6 +45,11 @@ export interface UnitPanelDimensions {
   thickness: number;
 }
 
+export interface UnitPanelTextLayoutBounds {
+  lowerMeters: number;
+  upperMeters: number;
+}
+
 export interface UnitPanelMaterialLike {
   id?: string;
   category?: string;
@@ -60,6 +66,7 @@ export interface UnitPanelImagePromptValues {
   dimensionMarksEnabled?: boolean;
   imageDisplayEnabled?: boolean;
   dimensions?: Partial<UnitPanelDimensions>;
+  textLayoutBounds?: Partial<UnitPanelTextLayoutBounds>;
   languages?: string[];
   translations?: Record<string, { title?: string; body?: string }>;
   titleText?: string;
@@ -86,6 +93,7 @@ export {
   normalizeUnitPanelDimensions,
   normalizeUnitPanelLanguages,
   normalizeUnitPanelOutputMode,
+  normalizeUnitPanelTextLayoutBounds,
   normalizeUnitPanelTitleFont,
   parseUnitPanelExtractJson,
   parseUnitPanelTranslateJson,

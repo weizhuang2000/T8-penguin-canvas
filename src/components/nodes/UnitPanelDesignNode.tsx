@@ -29,6 +29,7 @@ import {
   normalizeUnitPanelDimensions,
   normalizeUnitPanelLanguages,
   normalizeUnitPanelOutputMode,
+  normalizeUnitPanelTextLayoutBounds,
   normalizeUnitPanelTitleFont,
   parseUnitPanelExtractJson,
   parseUnitPanelTranslateJson,
@@ -247,6 +248,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
 
   const outputMode = normalizeUnitPanelOutputMode(d.outputMode);
   const dimensions = normalizeUnitPanelDimensions(d.dimensions);
+  const textLayoutBounds = normalizeUnitPanelTextLayoutBounds(d.textLayoutBounds);
   const languages: string[] = normalizeUnitPanelLanguages(d.languages);
   const titleFont = normalizeUnitPanelTitleFont(d.titleFont);
   const bodyFont = normalizeUnitPanelBodyFont(d.bodyFont);
@@ -280,6 +282,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
     dimensionMarksEnabled: d.dimensionMarksEnabled === true,
     imageDisplayEnabled: d.imageDisplayEnabled !== false,
     dimensions,
+    textLayoutBounds,
     languages,
     translations,
     titleText,
@@ -293,7 +296,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
     colorMaterialReferenceTone,
     manualColorMaterial: d.colorMaterial,
     hasColorMaterialReferenceImage: !!colorMaterialReferenceImage,
-  }), [bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.colorMaterial, d.dimensionMarksEnabled, d.imageDisplayEnabled, d.splitDesignEnabled, dimensions, languages, outputMode, projectTheme, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, titleFont, titleText, translations]);
+  }), [bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.colorMaterial, d.dimensionMarksEnabled, d.imageDisplayEnabled, d.splitDesignEnabled, dimensions, languages, outputMode, projectTheme, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, textLayoutBounds, titleFont, titleText, translations]);
 
   useEffect(() => {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
@@ -408,6 +411,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
       dimensionMarksEnabled: d.dimensionMarksEnabled === true,
       imageDisplayEnabled: d.imageDisplayEnabled !== false,
       dimensions,
+      textLayoutBounds,
       languages,
       translations,
       titleText,
@@ -531,7 +535,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`单元板设计生图失败: ${msg}`, src);
       throw error;
     }
-  }, [activeCanvasId, apiModel, aspectRatio, bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.colorMaterial, d.dimensionMarksEnabled, d.imageDisplayEnabled, d.providerParams, d.splitDesignEnabled, dimensions, externalProviderModel, id, isExternalSelected, isReadonly, languages, modelDef.id, modelDef.paramKind, outputFormat, outputMode, projectTheme, providerSelection.provider, seed, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, sizeLevel, titleFont, titleText, translations, update]);
+  }, [activeCanvasId, apiModel, aspectRatio, bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.colorMaterial, d.dimensionMarksEnabled, d.imageDisplayEnabled, d.providerParams, d.splitDesignEnabled, dimensions, externalProviderModel, id, isExternalSelected, isReadonly, languages, modelDef.id, modelDef.paramKind, outputFormat, outputMode, projectTheme, providerSelection.provider, seed, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, sizeLevel, textLayoutBounds, titleFont, titleText, translations, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -542,6 +546,10 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
   const updatePanelCount = (value: number | string) => {
     const n = Math.floor(Number(value) || 0);
     update({ dimensions: { ...dimensions, panelCount: Math.max(0, Math.min(99, n)) } });
+  };
+  const updateTextLayoutBound = (key: 'lowerMeters' | 'upperMeters', value: string) => {
+    const n = Number(value);
+    update({ textLayoutBounds: { ...textLayoutBounds, [key]: Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : 0 } });
   };
 
   const moveLanguage = (lang: string, delta: number) => {
@@ -696,6 +704,25 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
               <button type="button" className={`${BUTTON} h-8 w-8 px-0 text-sm`} disabled={isReadonly || busy || dimensions.panelCount <= 1} onClick={() => updatePanelCount(Math.max(1, dimensions.panelCount - 1))}>-</button>
               <input className={`${FIELD} h-8 w-16 text-center text-sm font-semibold`} type="number" min={1} max={99} value={dimensions.panelCount || 1} disabled={isReadonly || busy} onChange={(e) => updatePanelCount(e.target.value)} />
               <button type="button" className={`${BUTTON} h-8 w-8 px-0 text-sm`} disabled={isReadonly || busy || dimensions.panelCount >= 99} onClick={() => updatePanelCount((dimensions.panelCount || 1) + 1)}>+</button>
+            </div>
+          </div>
+          <div className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div>
+                <div className="text-[11px] font-semibold text-cyan-100">文字控制区</div>
+                <div className="text-[10px] text-white/45">限制标题字和说明文字的垂直排版高度</div>
+              </div>
+              <div className="text-[10px] text-cyan-100">{textLayoutBounds.lowerMeters}m - {textLayoutBounds.upperMeters}m</div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="space-y-1">
+                <span className="text-[10px] text-white/55">下限 m</span>
+                <input className={FIELD} type="number" min={0} max={10} step={0.1} value={textLayoutBounds.lowerMeters} disabled={isReadonly || busy} onChange={(e) => updateTextLayoutBound('lowerMeters', e.target.value)} />
+              </label>
+              <label className="space-y-1">
+                <span className="text-[10px] text-white/55">上限 m</span>
+                <input className={FIELD} type="number" min={0} max={10} step={0.1} value={textLayoutBounds.upperMeters} disabled={isReadonly || busy} onChange={(e) => updateTextLayoutBound('upperMeters', e.target.value)} />
+              </label>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
