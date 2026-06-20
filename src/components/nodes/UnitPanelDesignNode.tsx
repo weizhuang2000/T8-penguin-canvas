@@ -3,7 +3,13 @@ import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } fr
 import { ArrowDown, ArrowUp, Brain, FileText, Image as ImageIcon, Loader2, Palette, Play, Upload } from 'lucide-react';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
 import { extractDocument, getCurrentUser, getElevationPromptPresets, getUnitPanelMaterials, MAX_DOCUMENT_FILE_SIZE, MAX_DOCUMENT_FILE_SIZE_MB, updateUnitPanelMaterials, type AuthUser, type ElevationColorMaterialPresetItem, type ExtractedDocument, type UnitPanelMaterialItem } from '../../services/api';
-import { generateLlm, queryImageStatus, submitImageAsync } from '../../services/generation';
+import { generateExternalImage, generateLlm, queryExternalImageStatus, queryImageStatus, submitImageAsync } from '../../services/generation';
+import {
+  advancedProviderModelOptions,
+  advancedProvidersForNode,
+  externalImageSizeFor,
+  resolveAdvancedProviderSelection,
+} from '../../utils/advancedProviders';
 import { useApiKeysStore } from '../../stores/apiKeys';
 import { useCanvasStore } from '../../stores/canvas';
 import { logBus } from '../../stores/logs';
@@ -36,6 +42,8 @@ import {
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
 const MAX_IMAGE_SEED = 2147483647;
+const EXTERNAL_IMAGE_MAX_POLLS = 300;
+const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
 
 function documentLabel(meta?: Omit<ExtractedDocument, 'text'> | null) {
   if (!meta) return '未选择文档';
@@ -193,6 +201,8 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
   const isReadonly = activeCanvas?.access?.canEdit === false;
   const configuredLlmModel = useApiKeysStore((state) => state.settings.llmModel)?.trim() || DEFAULT_LLM_MODEL;
   const llmConfigs = useApiKeysStore((state) => state.settings.llmConfigs || state.settings.llmApiKeys) || [];
+  const advancedProviders = useApiKeysStore((state) => state.settings.advancedProviders);
+  const allowZhenzhenFallback = useApiKeysStore((state) => state.settings.enableZhenzhenFallback !== false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [materials, setMaterials] = useState<UnitPanelMaterialItem[]>([]);
   const [materialsOpen, setMaterialsOpen] = useState(false);
@@ -209,6 +219,24 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
     || llmConfigOptions.find((item) => item.isDefault)
     || llmConfigOptions[0];
   const llmModel = activeLlmConfig?.model || String(d.llmModel || '').trim() || configuredLlmModel;
+  const imageAdvancedProviders = useMemo(() => advancedProvidersForNode(advancedProviders, 'image'), [advancedProviders]);
+  const providerSelection = useMemo(
+    () => resolveAdvancedProviderSelection(advancedProviders, 'image', {
+      providerSource: d.providerSource,
+      providerId: d.providerId,
+      providerModel: d.providerModel,
+    }),
+    [advancedProviders, d.providerSource, d.providerId, d.providerModel],
+  );
+  const isExternalSelected = providerSelection.available && providerSelection.providerSource !== 'zhenzhen';
+  const externalModelOptions = providerSelection.provider
+    ? advancedProviderModelOptions(providerSelection.provider, 'image')
+    : [];
+  const externalProviderModel = providerSelection.providerModel || externalModelOptions[0] || '';
+  const firstImageAdvancedProvider = imageAdvancedProviders[0] || null;
+  const providerSelectValue = isExternalSelected
+    ? providerSelection.providerId
+    : (allowZhenzhenFallback ? 'zhenzhen' : (firstImageAdvancedProvider?.id || ''));
   const model = d.model || 'gpt-image-2';
   const modelDef = useMemo(() => IMAGE_MODELS.find((item) => item.id === model) || IMAGE_MODELS[0], [model]);
   const apiModel = d.apiModel || modelDef.apiModel;
@@ -400,39 +428,85 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
     try {
       logBus.info(`单元板设计生图提交 seed=${runSeed}`, src);
       const historyContext = { canvasId: activeCanvasId, sourceNodeId: id, sourceNodeType: 'unit-panel-design', seed: runSeed, nodeTitle: '单元板设计' };
-      const submit = await submitImageAsync({
-        model: modelDef.id,
-        apiModel,
-        paramKind: modelDef.paramKind,
-        prompt: imagePrompt,
-        aspect_ratio: aspectRatio,
-        image_size: sizeLevel,
-        images: colorMaterialReferenceImage ? [colorMaterialReferenceImage] : [],
-        n: 1,
-        outputFormat,
-        seed: runSeed,
-        historyContext,
-      });
-      let urls = submit.urls || [];
-      if (!submit.sync) {
-        if (!submit.taskId) throw new Error('未获取到任务 ID');
-        let lastProgress = submit.progress || '5%';
-        update({ taskId: submit.taskId, progress: lastProgress });
-        for (let index = 0; index < 1800; index += 1) {
-          if (pollAbortRef.current) throw new Error('任务已取消');
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-          const q = await queryImageStatus(submit.taskId, apiModel, outputFormat, historyContext);
-          if (q.progress && q.progress !== lastProgress) {
-            lastProgress = q.progress;
-            update({ progress: q.progress });
+      let urls: string[] = [];
+      if (isExternalSelected && providerSelection.provider) {
+        if (!externalProviderModel) throw new Error('扩展平台未配置可用图像模型');
+        const size = externalImageSizeFor(aspectRatio, sizeLevel);
+        let res = await generateExternalImage({
+          providerId: providerSelection.provider.id,
+          providerModel: externalProviderModel,
+          model: externalProviderModel,
+          prompt: imagePrompt,
+          size,
+          aspect_ratio: aspectRatio,
+          image_size: sizeLevel,
+          images: colorMaterialReferenceImage ? [colorMaterialReferenceImage] : [],
+          outputFormat,
+          seed: runSeed,
+          n: 1,
+          providerParams: {
+            ...(d.providerParams || {}),
+            aspect_ratio: aspectRatio,
+            aspectRatio,
+            image_size: sizeLevel,
+            imageSize: sizeLevel,
+          },
+          historyContext,
+          async: true,
+        });
+        if ((!res.imageUrls?.length) && res.taskId && (res.code === 'running' || res.status === 'running')) {
+          let pollingTaskId = res.taskId;
+          for (let index = 0; index < EXTERNAL_IMAGE_MAX_POLLS; index += 1) {
+            if (pollAbortRef.current) throw new Error('任务已取消');
+            await new Promise((resolve) => setTimeout(resolve, EXTERNAL_IMAGE_POLL_INTERVAL_MS));
+            res = await queryExternalImageStatus({
+              providerId: providerSelection.provider.id,
+              providerModel: externalProviderModel,
+              taskId: pollingTaskId,
+              outputFormat,
+              historyContext,
+            });
+            pollingTaskId = res.taskId || pollingTaskId;
+            update({ taskId: pollingTaskId, progress: `${Math.min(99, Math.round(((index + 1) / EXTERNAL_IMAGE_MAX_POLLS) * 100))}%` });
+            if (res.imageUrls?.length || (res.code && res.code !== 'running')) break;
           }
-          const statusText = String(q.status || '').toLowerCase();
-          if (statusText === 'completed' || statusText === 'success' || statusText === 'done') {
-            urls = q.urls || [];
-            break;
-          }
-          if (statusText === 'failed' || statusText === 'failure' || statusText === 'error') {
-            throw new Error(q.error || '任务失败');
+        }
+        urls = res.imageUrls || [];
+      } else {
+        const submit = await submitImageAsync({
+          model: modelDef.id,
+          apiModel,
+          paramKind: modelDef.paramKind,
+          prompt: imagePrompt,
+          aspect_ratio: aspectRatio,
+          image_size: sizeLevel,
+          images: colorMaterialReferenceImage ? [colorMaterialReferenceImage] : [],
+          n: 1,
+          outputFormat,
+          seed: runSeed,
+          historyContext,
+        });
+        urls = submit.urls || [];
+        if (!submit.sync) {
+          if (!submit.taskId) throw new Error('未获取到任务 ID');
+          let lastProgress = submit.progress || '5%';
+          update({ taskId: submit.taskId, progress: lastProgress });
+          for (let index = 0; index < 1800; index += 1) {
+            if (pollAbortRef.current) throw new Error('任务已取消');
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            const q = await queryImageStatus(submit.taskId, apiModel, outputFormat, historyContext);
+            if (q.progress && q.progress !== lastProgress) {
+              lastProgress = q.progress;
+              update({ progress: q.progress });
+            }
+            const statusText = String(q.status || '').toLowerCase();
+            if (statusText === 'completed' || statusText === 'success' || statusText === 'done') {
+              urls = q.urls || [];
+              break;
+            }
+            if (statusText === 'failed' || statusText === 'failure' || statusText === 'error') {
+              throw new Error(q.error || '任务失败');
+            }
           }
         }
       }
@@ -455,7 +529,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`单元板设计生图失败: ${msg}`, src);
       throw error;
     }
-  }, [activeCanvasId, apiModel, aspectRatio, bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.colorMaterial, d.dimensionMarksEnabled, d.splitDesignEnabled, dimensions, id, isReadonly, languages, modelDef.id, modelDef.paramKind, outputFormat, outputMode, projectTheme, seed, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, sizeLevel, titleFont, titleText, translations, update]);
+  }, [activeCanvasId, apiModel, aspectRatio, bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.colorMaterial, d.dimensionMarksEnabled, d.providerParams, d.splitDesignEnabled, dimensions, externalProviderModel, id, isExternalSelected, isReadonly, languages, modelDef.id, modelDef.paramKind, outputFormat, outputMode, projectTheme, providerSelection.provider, seed, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, sizeLevel, titleFont, titleText, translations, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -534,6 +608,42 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
                 </option>
               ))}
             </select>
+          </label>
+          <label className="space-y-1">
+            <span className="text-[10px] text-white/55">生图平台</span>
+            <select
+              className={FIELD}
+              value={providerSelectValue}
+              disabled={isReadonly || busy || (!allowZhenzhenFallback && imageAdvancedProviders.length === 0)}
+              onChange={(e) => {
+                const nextId = e.target.value;
+                if (nextId === 'zhenzhen') {
+                  update({ providerSource: 'zhenzhen', providerId: '', providerModel: '' });
+                  return;
+                }
+                const provider = imageAdvancedProviders.find((item) => item.id === nextId);
+                if (!provider) return;
+                const models = advancedProviderModelOptions(provider, 'image');
+                update({ providerSource: provider.protocol, providerId: provider.id, providerModel: models[0] || '' });
+              }}
+            >
+              {allowZhenzhenFallback && <option value="zhenzhen">内置生图平台</option>}
+              {imageAdvancedProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label || provider.id}</option>)}
+            </select>
+          </label>
+          <label className="space-y-1">
+            <span className="text-[10px] text-white/55">生图模型</span>
+            {isExternalSelected ? (
+              <select className={FIELD} value={externalProviderModel} disabled={isReadonly || busy || externalModelOptions.length === 0} onChange={(e) => update({ providerModel: e.target.value })}>
+                {externalModelOptions.length > 0
+                  ? externalModelOptions.map((item) => <option key={item} value={item}>{item}</option>)
+                  : <option value="">未配置图像模型</option>}
+              </select>
+            ) : (
+              <select className={FIELD} value={apiModel} disabled={isReadonly || busy} onChange={(e) => update({ apiModel: e.target.value })}>
+                {modelDef.apiModelOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </select>
+            )}
           </label>
           <label className="flex items-center gap-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[11px] text-white/70">
             <input type="checkbox" className="accent-cyan-300" checked={d.splitDesignEnabled !== false} disabled={isReadonly || busy} onChange={(e) => update({ splitDesignEnabled: e.target.checked })} />
