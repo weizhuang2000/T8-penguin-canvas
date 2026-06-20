@@ -173,6 +173,27 @@ test('exhibition img2img prompt uses shared color material preset', () => {
   assert.doesNotMatch(prompt, /高级渲染参考图/);
 });
 
+test('exhibition img2img prompt lets overall lighting override color material brightness', () => {
+  const disabled = buildExhibitionImg2ImgPrompt({
+    spaceLightingEnabled: false,
+    spaceLightingLevel: 'very-dark',
+    colorMaterialPalette: '非常亮 白色 明亮 high-key palette',
+    colorMaterialTextures: '比较亮 发光亚克力 bright metal',
+  });
+  assert.doesNotMatch(disabled, /IMPORTANT overall lighting priority/);
+  assert.match(disabled, /非常亮/);
+
+  const enabled = buildExhibitionImg2ImgPrompt({
+    spaceLightingEnabled: true,
+    spaceLightingLevel: 'very-dark',
+    colorMaterialPalette: '非常亮 白色 明亮 high-key palette',
+    colorMaterialTextures: '比较亮 发光亚克力 bright metal',
+  });
+  assert.match(enabled, /IMPORTANT overall lighting priority: very dark overall space lighting/);
+  assert.match(enabled, /overrides any brightness/);
+  assert.doesNotMatch(enabled, /非常亮|比较亮|high-key|bright metal/);
+});
+
 test('exhibition img2img prompt uses manual color material text', () => {
   const prompt = buildExhibitionImg2ImgPrompt({
     colorMaterial: '深色金属与暖光',

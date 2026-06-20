@@ -32,6 +32,8 @@ export interface ExhibitionImg2ImgPromptValues {
   colorMaterialReferenceMode?: 'abstract-card' | 'marked-image';
   colorMaterialReferenceMarkText?: string;
   colorMaterialReferenceMarkPosition?: string;
+  spaceLightingEnabled?: boolean;
+  spaceLightingLevel?: 'very-dark' | 'dark' | 'bright' | 'very-bright';
   visualStyle?: string;
   supplement?: string;
   wallContentPrompt?: string;

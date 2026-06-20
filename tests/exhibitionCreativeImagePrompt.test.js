@@ -188,6 +188,27 @@ test('exhibition creative image prompt lets preset override both color recogniti
   assert.doesNotMatch(prompt, /主色调：浅蓝、白灰/);
 });
 
+test('exhibition creative image prompt lets overall lighting override color material brightness', () => {
+  const disabled = buildExhibitionCreativeImagePrompt({
+    spaceLightingEnabled: false,
+    spaceLightingLevel: 'very-bright',
+    colorMaterialPalette: '非常暗 黑色 low-key palette',
+    colorMaterialTextures: '比较暗 金属 shadowy texture',
+  });
+  assert.doesNotMatch(disabled, /IMPORTANT overall lighting priority/);
+  assert.match(disabled, /非常暗/);
+
+  const enabled = buildExhibitionCreativeImagePrompt({
+    spaceLightingEnabled: true,
+    spaceLightingLevel: 'very-bright',
+    colorMaterialPalette: '非常暗 黑色 low-key palette',
+    colorMaterialTextures: '比较暗 金属 shadowy texture',
+  });
+  assert.match(enabled, /Lighting\/mood: IMPORTANT overall lighting priority: very bright overall space lighting/);
+  assert.match(enabled, /overrides any brightness/);
+  assert.doesNotMatch(enabled, /非常暗|比较暗|low-key|shadowy/);
+});
+
 test('exhibition creative prompt uses custom mark labels and suppresses color material in brief prompt', () => {
   const imagePrompt = buildExhibitionCreativeImagePrompt({
     hasSpaceImage: true,

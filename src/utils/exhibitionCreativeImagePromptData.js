@@ -17,6 +17,13 @@ export const EXHIBITION_CREATIVE_SPACE_TYPES = [
 ];
 
 const SPACE_TYPE_IDS = new Set(EXHIBITION_CREATIVE_SPACE_TYPES.map((item) => item.id));
+const SPACE_LIGHTING_LEVELS = {
+  'very-dark': 'very dark overall space lighting, deliberately low-key exhibition atmosphere, deep ambient shadows, only necessary accent lights and guide lights remain visible',
+  dark: 'relatively dark overall space lighting, restrained ambient brightness, clear but subdued wall-wash and accent lighting, controlled shadows',
+  bright: 'relatively bright overall space lighting, clear ambient illumination, readable exhibition surfaces, balanced highlights without overexposure',
+  'very-bright': 'very bright overall space lighting, high overall illumination, clean luminous exhibition atmosphere, crisp visibility while preserving material detail',
+};
+const BRIGHTNESS_PATTERN = /(?:非常暗|比较暗|较暗|偏暗|昏暗|暗色|深色|低亮度|明暗关系|明暗|比较亮|较亮|偏亮|非常亮|明亮|高亮度|亮色|dark|bright|brightness|low-key|high-key|shadowy|dim|moody)/gi;
 
 export const EXHIBITION_CREATIVE_INSERT_ITEMS = [
   { id: 'large-sculpture', label: '大型雕塑' },
@@ -55,6 +62,25 @@ export const EXHIBITION_CREATIVE_VIEW_ANGLES = [
 
 export function cleanExhibitionCreativeText(value, max = 12000) {
   return String(value || '').replace(/\r\n?/g, '\n').trim().slice(0, max);
+}
+
+function normalizeSpaceLightingLevel(value) {
+  const id = String(value || '').trim();
+  return Object.prototype.hasOwnProperty.call(SPACE_LIGHTING_LEVELS, id) ? id : 'bright';
+}
+
+function spaceLightingText(values) {
+  if (values.spaceLightingEnabled !== true) return '';
+  const level = normalizeSpaceLightingLevel(values.spaceLightingLevel);
+  return SPACE_LIGHTING_LEVELS[level];
+}
+
+function stripBrightnessText(value) {
+  return cleanExhibitionCreativeText(value)
+    .replace(BRIGHTNESS_PATTERN, '')
+    .replace(/[，、,;；]\s*[，、,;；]+/g, '，')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 }
 
 export function normalizeExhibitionCreativeSpaceType(value) {
@@ -312,12 +338,14 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   const projectTheme = cleanExhibitionCreativeText(values.projectTheme, 500);
   const hasColorMaterialReferenceImage = values.hasColorMaterialReferenceImage === true;
   const hasColorMaterialPreset = values.hasColorMaterialPreset === true;
-  const colorMaterial = hasColorMaterialReferenceImage ? '' : cleanExhibitionCreativeText(values.colorMaterial, 1000);
-  const colorMaterialPalette = cleanExhibitionCreativeText(values.colorMaterialPalette, 1000);
-  const colorMaterialTextures = cleanExhibitionCreativeText(values.colorMaterialTextures, 1000);
-  const colorMaterialOverride = hasColorMaterialPreset ? cleanExhibitionCreativeText(values.colorMaterial, 1000) : '';
+  const lightingOverride = spaceLightingText(values);
+  const cleanColorMaterialText = lightingOverride ? stripBrightnessText : cleanExhibitionCreativeText;
+  const colorMaterial = hasColorMaterialReferenceImage ? '' : cleanColorMaterialText(values.colorMaterial, 1000);
+  const colorMaterialPalette = cleanColorMaterialText(values.colorMaterialPalette, 1000);
+  const colorMaterialTextures = cleanColorMaterialText(values.colorMaterialTextures, 1000);
+  const colorMaterialOverride = hasColorMaterialPreset ? cleanColorMaterialText(values.colorMaterial, 1000) : '';
   const colorMaterialPriorityMode = values.colorMaterialPriorityMode === 'llm' ? 'llm' : 'frontend';
-  const colorMaterialReferenceTone = cleanExhibitionCreativeText(values.colorMaterialReferenceTone, 500);
+  const colorMaterialReferenceTone = cleanColorMaterialText(values.colorMaterialReferenceTone, 500);
   const inspiration = cleanExhibitionCreativeText(values.inspiration, 2000);
   const documentSummary = cleanExhibitionCreativeText(values.documentSummary, 3000);
   const creativeBrief = normalizeExhibitionCreativeBrief(values.creativeBrief || values.brief);
@@ -368,7 +396,7 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
     `Subject: ${subjectParts.join(' ')}`,
     'Style/medium: photorealistic interior architectural visualization, high-end exhibition design render',
     `Composition/framing: ${hasSpaceImage ? '延续图1的原始透视、主入口视线、空间开口和尺度关系，主视觉布置在原空间合理视线焦点内，空间完整可读，画面干净，尺度可信' : '使用可信室内建筑摄影视角，完整呈现空间边界、主视觉焦点、参观动线和展陈体块关系，画面干净，尺度可信'}`,
-    `Lighting/mood: ${exhibitionCreativeDeepeningRequirement(values.spaceType)} 灯光应纪念性、庄重、温暖或与项目气质一致，层次分明，局部线性灯光勾边，重点展墙、浮雕、装置或展品有洗墙光和重点光，整体像专业展陈施工落地图。`,
+    `Lighting/mood: ${lightingOverride ? `IMPORTANT overall lighting priority: ${lightingOverride}. This overrides any brightness, darkness, lightness, shadow density, or illumination level implied by Color palette or Materials/textures. ` : ''}${exhibitionCreativeDeepeningRequirement(values.spaceType)} 灯光应纪念性、庄重、温暖或与项目气质一致，层次分明，局部线性灯光勾边，重点展墙、浮雕、装置或展品有洗墙光和重点光，整体像专业展陈施工落地图。`,
     `Color palette: ${exhibitionCreativeColorPaletteText({ colorMaterialPalette, colorMaterial: colorMaterialOverride || colorMaterial, colorMaterialPriorityMode, colorMaterialReferenceTone, hasColorMaterialReferenceImage })}`,
     `Materials/textures: ${exhibitionCreativeMaterialsText({ colorMaterialTextures, colorMaterial: colorMaterialOverride || colorMaterial, hasColorMaterialPreset, hasColorMaterialReferenceImage })}`,
     `Text (verbatim): ${projectTheme ? `仅允许出现大型立体主题字装置“${projectTheme}”或等价主题装置字形；` : '仅允许出现必要的大型立体主题字装置或抽象主题装置字形；'}不要出现任何小字、说明文字、乱码、展板文字、标签文字、Markdown 字段名或参数说明。`,

@@ -61,6 +61,8 @@ export interface ExhibitionCreativeImagePromptValues extends ExhibitionCreativeB
   colorMaterialReferenceMode?: 'abstract-card' | 'marked-image';
   colorMaterialReferenceMarkText?: string;
   colorMaterialReferenceMarkPosition?: string;
+  spaceLightingEnabled?: boolean;
+  spaceLightingLevel?: 'very-dark' | 'dark' | 'bright' | 'very-bright';
   hasExhibitReferenceImage?: boolean;
   exhibitReferenceItems?: Array<{ id?: string; url: string; label?: string; description?: string }>;
   annotationTextEffective?: boolean;

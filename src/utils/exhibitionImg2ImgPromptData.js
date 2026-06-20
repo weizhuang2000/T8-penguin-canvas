@@ -16,9 +16,46 @@ const PRIORITY_IDS = new Set(EXHIBITION_IMG2IMG_PRIORITY.map((item) => item.id))
 const LEGACY_PRIORITY_ID_MAP = {
   styleImageForm: 'colorMaterialReference',
 };
+const SPACE_LIGHTING_LEVELS = {
+  'very-dark': 'very dark overall space lighting, deliberately low-key exhibition atmosphere, deep ambient shadows, only necessary accent lights and guide lights remain visible',
+  dark: 'relatively dark overall space lighting, restrained ambient brightness, clear but subdued wall-wash and accent lighting, controlled shadows',
+  bright: 'relatively bright overall space lighting, clear ambient illumination, readable exhibition surfaces, balanced highlights without overexposure',
+  'very-bright': 'very bright overall space lighting, high overall illumination, clean luminous exhibition atmosphere, crisp visibility while preserving material detail',
+};
+const BRIGHTNESS_PATTERN = /(?:非常暗|比较暗|较暗|偏暗|昏暗|暗色|深色|低亮度|明暗关系|明暗|比较亮|较亮|偏亮|非常亮|明亮|高亮度|亮色|dark|bright|brightness|low-key|high-key|shadowy|dim|moody)/gi;
 
 function cleanText(value, max = 12000) {
   return String(value || '').replace(/\r\n?/g, '\n').trim().slice(0, max);
+}
+
+function normalizeSpaceLightingLevel(value) {
+  const id = String(value || '').trim();
+  return Object.prototype.hasOwnProperty.call(SPACE_LIGHTING_LEVELS, id) ? id : 'bright';
+}
+
+function spaceLightingText(values) {
+  if (values.spaceLightingEnabled !== true) return '';
+  const level = normalizeSpaceLightingLevel(values.spaceLightingLevel);
+  return SPACE_LIGHTING_LEVELS[level];
+}
+
+function stripBrightnessText(value) {
+  return cleanText(value)
+    .replace(BRIGHTNESS_PATTERN, '')
+    .replace(/[，、,;；]\s*[，、,;；]+/g, '，')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function removeColorMaterialBrightness(values) {
+  if (!spaceLightingText(values)) return values;
+  return {
+    ...values,
+    colorMaterialPalette: stripBrightnessText(values.colorMaterialPalette),
+    colorMaterialTextures: stripBrightnessText(values.colorMaterialTextures),
+    colorMaterial: stripBrightnessText(values.colorMaterial),
+    colorMaterialReferenceTone: stripBrightnessText(values.colorMaterialReferenceTone),
+  };
 }
 
 function cleanWallContentPrompt(value) {
@@ -264,6 +301,7 @@ function formatWallContentPrompt(value) {
 }
 
 function colorMaterialSystemText(values) {
+  values = removeColorMaterialBrightness(values);
   const hasReference = values.hasColorMaterialReferenceImage === true;
   const palette = hasReference ? '' : cleanText(values.colorMaterialPalette || '', 1200);
   const textures = hasReference ? '' : cleanText(values.colorMaterialTextures || '', 1200);
@@ -285,6 +323,10 @@ function colorMaterialSystemText(values) {
   }
   lines.push('灯光氛围：重点区域使用精准的重点照明，整体灯光层次丰富、自然。');
   lines.push('应用原则：将以上色彩、材质和灯光要求，真实、有逻辑地“包裹”在由示意图决定的空间骨架上（如墙面、地面、展柜、立体字、灯带、浮雕等表面），确保最终效果图具有摄影级的材质真实感和完成度。');
+  const lighting = spaceLightingText(values);
+  if (lighting) {
+    lines.push(`IMPORTANT overall lighting priority: ${lighting}. This overrides any brightness, darkness, lightness, shadow density, or illumination level implied by Color palette or Materials/textures.`);
+  }
   lines.push(source);
   return lines.join('\n');
 }

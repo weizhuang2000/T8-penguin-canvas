@@ -84,10 +84,17 @@ const AUTO_REFERENCE_MARK_SIZE_RATIO = 0.05;
 const LEGACY_COLOR_MATERIAL_MARK_TEXT = 'R';
 const LEGACY_REFERENCE_MARK_FONT_SIZE = 12;
 const COLOR_MATERIAL_MARK_DEFAULTS_VERSION = 2;
+const SPACE_LIGHTING_OPTIONS = [
+  { value: 'very-dark', label: '非常暗' },
+  { value: 'dark', label: '比较暗' },
+  { value: 'bright', label: '比较亮' },
+  { value: 'very-bright', label: '非常亮' },
+] as const;
 
 type ReferenceMarkPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 type ColorMaterialReferenceMode = 'abstract-card' | 'marked-image';
 type ColorMaterialPriorityMode = 'frontend' | 'llm';
+type SpaceLightingLevel = typeof SPACE_LIGHTING_OPTIONS[number]['value'];
 
 interface ReferenceMarkSettings {
   text: string;
@@ -156,6 +163,10 @@ function normalizeReferenceMarkText(value: unknown, fallback: string): string {
 
 function normalizeColorMaterialPriorityMode(value: unknown): ColorMaterialPriorityMode {
   return value === 'llm' ? 'llm' : 'frontend';
+}
+
+function normalizeSpaceLightingLevel(value: unknown): SpaceLightingLevel {
+  return SPACE_LIGHTING_OPTIONS.some((item) => item.value === value) ? value as SpaceLightingLevel : 'bright';
 }
 
 function normalizeReferenceMarkSettings(data: any, prefix: 'colorMaterial'): ReferenceMarkSettings {
@@ -735,6 +746,8 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const colorMaterialTextures = String(d.colorMaterialTextures || '').trim();
   const combinedColorMaterial = combineColorMaterialText(colorMaterialPalette, colorMaterialTextures, colorMaterial);
   const colorMaterialPriorityMode = normalizeColorMaterialPriorityMode(d.colorMaterialPriorityMode);
+  const spaceLightingEnabled = d.spaceLightingEnabled === true;
+  const spaceLightingLevel = normalizeSpaceLightingLevel(d.spaceLightingLevel);
   const hasColorMaterialReference = !!colorMaterialReferenceImage;
   const hasSelectedColorMaterialPreset = !!String(d.colorMaterialPreset || '').trim();
   const hasColorMaterialPreset = hasSelectedColorMaterialPreset && !hasColorMaterialReference;
@@ -833,6 +846,8 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       colorMaterialReferenceMode,
       colorMaterialReferenceMarkText: colorMaterialMarkSettings.text,
       colorMaterialReferenceMarkPosition: colorMaterialMarkSettings.position,
+      spaceLightingEnabled,
+      spaceLightingLevel,
       supplement: d.supplement,
       wallContentPrompt: nextContentOutputs.mainOutput,
       exhibitReferenceItems,
@@ -861,6 +876,8 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     promptColorMaterialPalette,
     promptColorMaterialTextures,
     selectedCrafts,
+    spaceLightingEnabled,
+    spaceLightingLevel,
     wallCount,
     wallMode,
   ]);
@@ -884,11 +901,13 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       colorMaterialReferenceMode,
       colorMaterialReferenceMarkText: colorMaterialMarkSettings.text,
       colorMaterialReferenceMarkPosition: colorMaterialMarkSettings.position,
+      spaceLightingEnabled,
+      spaceLightingLevel,
       supplement: d.supplement,
       wallContentPrompt,
       exhibitReferenceItems,
     }),
-    [activeColorMaterialReferenceImage, colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPriorityMode, colorMaterialReferenceMode, colorMaterialReferenceTone, craftPresets, d.customCraft, d.density, d.dimensions, d.supplement, d.visualStyle, exhibitReferenceItems, hasColorMaterialPreset, priorityOrder, promptColorMaterial, promptColorMaterialPalette, promptColorMaterialTextures, selectedCrafts, wallContentPrompt],
+    [activeColorMaterialReferenceImage, colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPriorityMode, colorMaterialReferenceMode, colorMaterialReferenceTone, craftPresets, d.customCraft, d.density, d.dimensions, d.supplement, d.visualStyle, exhibitReferenceItems, hasColorMaterialPreset, priorityOrder, promptColorMaterial, promptColorMaterialPalette, promptColorMaterialTextures, selectedCrafts, spaceLightingEnabled, spaceLightingLevel, wallContentPrompt],
   );
 
   const disconnectColorMaterialReferenceInput = useCallback(() => {
@@ -1592,6 +1611,37 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                 <Settings size={11} />编辑
               </button>
             )}
+          </div>
+          <div className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-semibold text-cyan-100">空间整体光照</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={spaceLightingEnabled}
+                disabled={isReadonly || busy}
+                className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border transition-colors ${spaceLightingEnabled ? 'border-cyan-300/50 bg-cyan-300/25' : 'border-white/15 bg-white/10'} disabled:cursor-not-allowed disabled:opacity-45`}
+                onClick={() => update({ spaceLightingEnabled: !spaceLightingEnabled })}
+              >
+                <span className={`inline-block h-2.5 w-2.5 rounded-full transition-transform ${spaceLightingEnabled ? 'translate-x-3.5 bg-cyan-200' : 'translate-x-0.5 bg-white/50'}`} />
+              </button>
+            </div>
+            <div className="grid grid-cols-4 gap-1">
+              {SPACE_LIGHTING_OPTIONS.map((option) => {
+                const active = spaceLightingLevel === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    disabled={isReadonly || busy || !spaceLightingEnabled}
+                    className={`h-7 rounded border px-1 text-[10px] transition ${active ? 'border-cyan-300/55 bg-cyan-300/15 text-cyan-50' : 'border-white/10 bg-black/15 text-white/55 hover:bg-white/[0.08]'} disabled:cursor-not-allowed disabled:opacity-40`}
+                    onClick={() => update({ spaceLightingLevel: option.value })}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
           <ColorMaterialPresetSelect
             className={FIELD}
