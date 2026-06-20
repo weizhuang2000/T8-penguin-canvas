@@ -518,9 +518,21 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
             </select>
           </label>
           <label className="space-y-1">
-            <span className="text-[10px] text-white/55">模型</span>
-            <select className={FIELD} value={apiModel} disabled={isReadonly || busy} onChange={(e) => update({ apiModel: e.target.value })}>
-              {modelDef.apiModelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            <span className="text-[10px] text-white/55">LLM 配置模型</span>
+            <select
+              className={FIELD}
+              value={activeLlmConfig?.id || ''}
+              disabled={isReadonly || busy}
+              onChange={(e) => {
+                const next = llmConfigOptions.find((item) => item.id === e.target.value) || llmConfigOptions[0];
+                update({ llmKeyId: next?.id || '', llmModel: next?.model || configuredLlmModel });
+              }}
+            >
+              {llmConfigOptions.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label || item.id} · {item.model || configuredLlmModel}
+                </option>
+              ))}
             </select>
           </label>
           <label className="flex items-center gap-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[11px] text-white/70">
