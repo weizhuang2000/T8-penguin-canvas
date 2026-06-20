@@ -10,6 +10,7 @@ export const UNIT_PANEL_LANGUAGES = [
   { id: 'es', label: 'Español', promptName: 'Spanish' },
   { id: 'ru', label: 'Русский', promptName: 'Russian' },
   { id: 'ar', label: 'العربية', promptName: 'Arabic' },
+  { id: 'mn-uighur', label: '回鹘式蒙古文（传统蒙文）', promptName: 'Uyghur-style Traditional Mongolian Script' },
 ];
 
 export const UNIT_PANEL_TITLE_FONTS = [
