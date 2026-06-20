@@ -62,6 +62,19 @@ test('unit panel prompt switches image display constraints', () => {
   assert.match(disabled, /抽象背景图、底纹、材质肌理/);
 });
 
+test('unit panel prompt switches special shape constraints', () => {
+  const normal = buildUnitPanelImagePrompt({ specialShapeEnabled: false });
+  assert.doesNotMatch(normal, /特殊造型：开启/);
+
+  const shaped = buildUnitPanelImagePrompt({ specialShapeEnabled: true });
+  assert.match(shaped, /特殊造型：开启/);
+  assert.match(shaped, /不能是标准长方形/);
+  assert.match(shaped, /异形轮廓/);
+  assert.match(shaped, /镂空图案/);
+  assert.match(shaped, /剪影造型/);
+  assert.match(shaped, /不能破坏单板真实宽高比/);
+});
+
 test('unit panel prompt includes text layout bounds', () => {
   assert.deepEqual(normalizeUnitPanelTextLayoutBounds({}), { lowerMeters: 0.8, upperMeters: 2.2 });
   assert.deepEqual(normalizeUnitPanelTextLayoutBounds({ lowerMeters: 2.5, upperMeters: 0.6 }), { lowerMeters: 0.6, upperMeters: 2.5 });

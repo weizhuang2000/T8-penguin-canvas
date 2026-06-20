@@ -38,6 +38,7 @@ export interface UnitPanelImagePromptValues {
   splitDesignEnabled?: boolean;
   dimensionMarksEnabled?: boolean;
   imageDisplayEnabled?: boolean;
+  specialShapeEnabled?: boolean;
   dimensions?: Partial<UnitPanelDimensions>;
   textLayoutBounds?: Partial<UnitPanelTextLayoutBounds>;
   languages?: string[];

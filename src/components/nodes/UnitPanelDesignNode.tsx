@@ -282,6 +282,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
     splitDesignEnabled: d.splitDesignEnabled !== false,
     dimensionMarksEnabled: d.dimensionMarksEnabled === true,
     imageDisplayEnabled: d.imageDisplayEnabled !== false,
+    specialShapeEnabled: d.specialShapeEnabled === true,
     dimensions,
     textLayoutBounds,
     languages,
@@ -297,7 +298,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
     colorMaterialReferenceTone,
     manualColorMaterial: d.colorMaterial,
     hasColorMaterialReferenceImage: !!colorMaterialReferenceImage,
-  }), [bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.colorMaterial, d.dimensionMarksEnabled, d.imageDisplayEnabled, d.splitDesignEnabled, dimensions, languages, outputMode, projectTheme, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, textLayoutBounds, titleFont, titleText, translations]);
+  }), [bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.colorMaterial, d.dimensionMarksEnabled, d.imageDisplayEnabled, d.specialShapeEnabled, d.splitDesignEnabled, dimensions, languages, outputMode, projectTheme, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, textLayoutBounds, titleFont, titleText, translations]);
 
   useEffect(() => {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
@@ -411,6 +412,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
       splitDesignEnabled: d.splitDesignEnabled !== false,
       dimensionMarksEnabled: d.dimensionMarksEnabled === true,
       imageDisplayEnabled: d.imageDisplayEnabled !== false,
+      specialShapeEnabled: d.specialShapeEnabled === true,
       dimensions,
       textLayoutBounds,
       languages,
@@ -536,7 +538,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`单元板设计生图失败: ${msg}`, src);
       throw error;
     }
-  }, [activeCanvasId, apiModel, aspectRatio, bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.colorMaterial, d.dimensionMarksEnabled, d.imageDisplayEnabled, d.providerParams, d.splitDesignEnabled, dimensions, externalProviderModel, id, isExternalSelected, isReadonly, languages, modelDef.id, modelDef.paramKind, outputFormat, outputMode, projectTheme, providerSelection.provider, seed, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, sizeLevel, textLayoutBounds, titleFont, titleText, translations, update]);
+  }, [activeCanvasId, apiModel, aspectRatio, bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.colorMaterial, d.dimensionMarksEnabled, d.imageDisplayEnabled, d.providerParams, d.specialShapeEnabled, d.splitDesignEnabled, dimensions, externalProviderModel, id, isExternalSelected, isReadonly, languages, modelDef.id, modelDef.paramKind, outputFormat, outputMode, projectTheme, providerSelection.provider, seed, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, sizeLevel, textLayoutBounds, titleFont, titleText, translations, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -635,6 +637,10 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
           <label className="flex items-center gap-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[11px] text-white/70">
             <input type="checkbox" className="accent-cyan-300" checked={d.imageDisplayEnabled !== false} disabled={isReadonly || busy} onChange={(e) => update({ imageDisplayEnabled: e.target.checked })} />
             图片显示
+          </label>
+          <label className="flex items-center gap-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[11px] text-white/70">
+            <input type="checkbox" className="accent-cyan-300" checked={d.specialShapeEnabled === true} disabled={isReadonly || busy} onChange={(e) => update({ specialShapeEnabled: e.target.checked })} />
+            特殊造型
           </label>
         </section>
 
