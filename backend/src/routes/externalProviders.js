@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const config = require('../config');
 const settingsRouter = require('./settings');
 const { maskAdvancedProviders, normalizeAdvancedProviders } = require('../providers/registry');
+const { writeImageOutput } = require('../utils/imageOutput');
 const {
   generateChatWithProvider,
   generateImageWithProvider,
@@ -96,18 +97,29 @@ function defaultExtForKind(kind) {
 async function saveOneMediaOutput(url, kind = 'image', options = {}) {
   const text = String(url || '').trim();
   if (!text) return '';
+  const outputFormat = options.outputFormat || '';
+  const needConvert = kind === 'image' && (outputFormat === 'jpg' || outputFormat === 'png');
   const dataMatch = text.match(/^data:([^;,]+);base64,(.+)$/i);
   if (dataMatch) {
+    const buf = Buffer.from(dataMatch[2], 'base64');
+    if (needConvert) {
+      const out = await writeImageOutput(config.OUTPUT_DIR, 'external', buf, outputFormat);
+      return out.url;
+    }
     const ext = outputExtFromMime(dataMatch[1], defaultExtForKind(kind));
-    return writeOutputBuffer(Buffer.from(dataMatch[2], 'base64'), ext);
+    return writeOutputBuffer(buf, ext);
   }
   if (/^https?:\/\//i.test(text)) {
     const fetchImpl = options.fetchImpl || fetch;
     const res = await fetchImpl(text);
     if (!res.ok) throw new Error(`下载扩展平台输出失败：HTTP ${res.status}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (needConvert) {
+      const out = await writeImageOutput(config.OUTPUT_DIR, 'external', buf, outputFormat);
+      return out.url;
+    }
     const mime = typeof res.headers?.get === 'function' ? res.headers.get('content-type') : '';
     const ext = outputExtFromMime(mime, outputExtFromUrl(text, defaultExtForKind(kind)));
-    const buf = Buffer.from(await res.arrayBuffer());
     return writeOutputBuffer(buf, ext);
   }
   if (text.startsWith('/files/output/')) return text;
@@ -282,7 +294,7 @@ router.post('/image', async (req, res) => {
       return resultResponse(res, result, resolved.provider);
     }
     const remoteImageUrls = Array.isArray(result.imageUrls) ? result.imageUrls : [];
-    const imageUrls = await saveImageOutputs(remoteImageUrls);
+    const imageUrls = await saveImageOutputs(remoteImageUrls, { outputFormat: req.body?.outputFormat });
     rememberExternalOutputs(req, imageUrls, 'image', resolved.provider, { taskId: result.taskId });
     return resultResponse(res, result, resolved.provider, {
       remoteImageUrls,
@@ -317,7 +329,7 @@ router.get('/image/status/:taskId', async (req, res) => {
     if (!result.ok) return resultResponse(res, result, resolved.provider);
 
     const remoteImageUrls = Array.isArray(result.imageUrls) ? result.imageUrls : [];
-    const imageUrls = remoteImageUrls.length ? await saveImageOutputs(remoteImageUrls) : [];
+    const imageUrls = remoteImageUrls.length ? await saveImageOutputs(remoteImageUrls, { outputFormat: req.query?.outputFormat }) : [];
     if (imageUrls.length) {
       rememberExternalOutputs(req, imageUrls, 'image', resolved.provider, { taskId: result.taskId || req.params.taskId });
     }
