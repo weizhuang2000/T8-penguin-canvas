@@ -703,19 +703,12 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
           <div className="space-y-1">
             {languages.map((lang: string, index: number) => {
               const meta = languageMeta(lang);
-              const item = translations[lang] || {};
               return (
-                <div key={lang} className="rounded border border-white/10 bg-black/15 p-2">
-                  <div className="mb-1 flex items-center gap-2">
-                    <span className="min-w-0 flex-1 text-[10px] font-semibold text-white/70">{index + 1}. {meta.label}</span>
-                    <button type="button" className={BUTTON} disabled={isReadonly || busy || index === 0} onClick={() => moveLanguage(lang, -1)}><ArrowUp size={12} /></button>
-                    <button type="button" className={BUTTON} disabled={isReadonly || busy || index === languages.length - 1} onClick={() => moveLanguage(lang, 1)}><ArrowDown size={12} /></button>
-                    {languages.length > 1 && <button type="button" className={BUTTON} disabled={isReadonly || busy} onClick={() => update({ languages: languages.filter((languageId: string) => languageId !== lang) })}>删除</button>}
-                  </div>
-                  <div className="grid grid-cols-2 gap-1">
-                    <input className={FIELD} value={item.title || ''} disabled={isReadonly || busy} placeholder="译文标题" onChange={(e) => update({ translations: { ...translations, [lang]: { ...item, title: e.target.value } } })} />
-                    <input className={FIELD} value={item.body || ''} disabled={isReadonly || busy} placeholder="译文说明" onChange={(e) => update({ translations: { ...translations, [lang]: { ...item, body: e.target.value } } })} />
-                  </div>
+                <div key={lang} className="flex items-center gap-2 rounded border border-white/10 bg-black/15 p-2">
+                  <span className="min-w-0 flex-1 text-[10px] font-semibold text-white/70">{index + 1}. {meta.label}</span>
+                  <button type="button" className={BUTTON} disabled={isReadonly || busy || index === 0} onClick={() => moveLanguage(lang, -1)}><ArrowUp size={12} /></button>
+                  <button type="button" className={BUTTON} disabled={isReadonly || busy || index === languages.length - 1} onClick={() => moveLanguage(lang, 1)}><ArrowDown size={12} /></button>
+                  {languages.length > 1 && <button type="button" className={BUTTON} disabled={isReadonly || busy} onClick={() => update({ languages: languages.filter((languageId: string) => languageId !== lang) })}>删除</button>}
                 </div>
               );
             })}
