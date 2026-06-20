@@ -75,15 +75,14 @@ test('unit panel prompt switches special shape constraints', () => {
   assert.match(shaped, /不能破坏单板真实宽高比/);
 });
 
-test('unit panel prompt switches black white background constraints', () => {
-  const normal = buildUnitPanelImagePrompt({ blackWhiteBackgroundEnabled: false });
-  assert.doesNotMatch(normal, /黑白背景：开启/);
+test('unit panel prompt switches black or white background mode', () => {
+  const black = buildUnitPanelImagePrompt({ backgroundMode: 'black' });
+  assert.match(black, /背景模式：黑背景/);
+  assert.match(black, /不要使用白色或浅色大面积背景/);
 
-  const blackWhite = buildUnitPanelImagePrompt({ blackWhiteBackgroundEnabled: true });
-  assert.match(blackWhite, /黑白背景：开启/);
-  assert.match(blackWhite, /黑、白、灰阶体系/);
-  assert.match(blackWhite, /不要使用彩色背景/);
-  assert.match(blackWhite, /主要作用于背景/);
+  const white = buildUnitPanelImagePrompt({ backgroundMode: 'white' });
+  assert.match(white, /背景模式：白背景/);
+  assert.match(white, /不要使用黑色或深色大面积背景/);
 });
 
 test('unit panel prompt includes text layout bounds', () => {

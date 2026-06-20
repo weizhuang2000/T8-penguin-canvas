@@ -283,7 +283,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
     dimensionMarksEnabled: d.dimensionMarksEnabled === true,
     imageDisplayEnabled: d.imageDisplayEnabled !== false,
     specialShapeEnabled: d.specialShapeEnabled === true,
-    blackWhiteBackgroundEnabled: d.blackWhiteBackgroundEnabled === true,
+    backgroundMode: d.backgroundMode === 'white' ? 'white' : 'black',
     dimensions,
     textLayoutBounds,
     languages,
@@ -299,7 +299,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
     colorMaterialReferenceTone,
     manualColorMaterial: d.colorMaterial,
     hasColorMaterialReferenceImage: !!colorMaterialReferenceImage,
-  }), [bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.blackWhiteBackgroundEnabled, d.colorMaterial, d.dimensionMarksEnabled, d.imageDisplayEnabled, d.specialShapeEnabled, d.splitDesignEnabled, dimensions, languages, outputMode, projectTheme, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, textLayoutBounds, titleFont, titleText, translations]);
+  }), [bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.backgroundMode, d.colorMaterial, d.dimensionMarksEnabled, d.imageDisplayEnabled, d.specialShapeEnabled, d.splitDesignEnabled, dimensions, languages, outputMode, projectTheme, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, textLayoutBounds, titleFont, titleText, translations]);
 
   useEffect(() => {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
@@ -414,7 +414,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
       dimensionMarksEnabled: d.dimensionMarksEnabled === true,
       imageDisplayEnabled: d.imageDisplayEnabled !== false,
       specialShapeEnabled: d.specialShapeEnabled === true,
-      blackWhiteBackgroundEnabled: d.blackWhiteBackgroundEnabled === true,
+      backgroundMode: d.backgroundMode === 'white' ? 'white' : 'black',
       dimensions,
       textLayoutBounds,
       languages,
@@ -540,7 +540,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`单元板设计生图失败: ${msg}`, src);
       throw error;
     }
-  }, [activeCanvasId, apiModel, aspectRatio, bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.blackWhiteBackgroundEnabled, d.colorMaterial, d.dimensionMarksEnabled, d.imageDisplayEnabled, d.providerParams, d.specialShapeEnabled, d.splitDesignEnabled, dimensions, externalProviderModel, id, isExternalSelected, isReadonly, languages, modelDef.id, modelDef.paramKind, outputFormat, outputMode, projectTheme, providerSelection.provider, seed, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, sizeLevel, textLayoutBounds, titleFont, titleText, translations, update]);
+  }, [activeCanvasId, apiModel, aspectRatio, bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.backgroundMode, d.colorMaterial, d.dimensionMarksEnabled, d.imageDisplayEnabled, d.providerParams, d.specialShapeEnabled, d.splitDesignEnabled, dimensions, externalProviderModel, id, isExternalSelected, isReadonly, languages, modelDef.id, modelDef.paramKind, outputFormat, outputMode, projectTheme, providerSelection.provider, seed, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, sizeLevel, textLayoutBounds, titleFont, titleText, translations, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -644,9 +644,12 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
             <input type="checkbox" className="accent-cyan-300" checked={d.specialShapeEnabled === true} disabled={isReadonly || busy} onChange={(e) => update({ specialShapeEnabled: e.target.checked })} />
             特殊造型
           </label>
-          <label className="flex items-center gap-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[11px] text-white/70">
-            <input type="checkbox" className="accent-cyan-300" checked={d.blackWhiteBackgroundEnabled === true} disabled={isReadonly || busy} onChange={(e) => update({ blackWhiteBackgroundEnabled: e.target.checked })} />
-            黑白背景
+          <label className="space-y-1">
+            <span className="text-[10px] text-white/55">背景</span>
+            <select className={FIELD} value={d.backgroundMode === 'white' ? 'white' : 'black'} disabled={isReadonly || busy} onChange={(e) => update({ backgroundMode: e.target.value })}>
+              <option value="black">黑背景</option>
+              <option value="white">白背景</option>
+            </select>
           </label>
         </section>
 
@@ -727,7 +730,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
               </div>
               <div className="text-[10px] text-cyan-100">{textLayoutBounds.lowerMeters}m - {textLayoutBounds.upperMeters}m</div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <label className="space-y-1">
                 <span className="text-[10px] text-white/55">下限 m</span>
                 <input className={FIELD} type="number" min={0} max={10} step={0.1} value={textLayoutBounds.lowerMeters} disabled={isReadonly || busy} onChange={(e) => updateTextLayoutBound('lowerMeters', e.target.value)} />
@@ -851,6 +854,14 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
                     {modelDef.apiModelOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                   </select>
                 )}
+              </label>
+              <label className="space-y-1">
+                <span className="text-[10px] text-white/55">分辨率</span>
+                <select className={FIELD} value={sizeLevel} disabled={isReadonly || busy} onChange={(e) => update({ sizeLevel: e.target.value })}>
+                  <option value="1K">1K</option>
+                  <option value="2K">2K</option>
+                  <option value="4K">4K</option>
+                </select>
               </label>
             </div>
           </div>

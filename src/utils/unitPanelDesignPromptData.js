@@ -246,7 +246,9 @@ export function buildUnitPanelImagePrompt(values = {}) {
   const dimensionMarksEnabled = values.dimensionMarksEnabled === true;
   const imageDisplayEnabled = values.imageDisplayEnabled !== false;
   const specialShapeEnabled = values.specialShapeEnabled === true;
-  const blackWhiteBackgroundEnabled = values.blackWhiteBackgroundEnabled === true;
+  const backgroundMode = values.backgroundMode === 'white'
+    ? 'white'
+    : (values.blackWhiteBackgroundEnabled === true ? 'black' : 'black');
   const titleFont = unitPanelTitleFontMeta(values.titleFont);
   const bodyFont = unitPanelBodyFontMeta(values.bodyFont);
   const translations = values.translations && typeof values.translations === 'object' ? values.translations : {};
@@ -274,9 +276,9 @@ export function buildUnitPanelImagePrompt(values = {}) {
   const specialShapeText = specialShapeEnabled
     ? '特殊造型：开启。生成的单元板不能是标准长方形外观，必须在真实尺寸比例的外接框内设计异形轮廓、镂空图案、剪影造型，或将多种方式结合；可使用文化纹样轮廓、城市/历史主题剪影、局部穿孔镂空、阶梯边、弧形边、错落模块边界等。特殊造型不是拉伸变形，不能破坏单板真实宽高比和文字控制区。'
     : '';
-  const blackWhiteBackgroundText = blackWhiteBackgroundEnabled
-    ? '黑白背景：开启。背景必须使用黑、白、灰阶体系，可包含低对比度灰阶底纹、黑白渐变、黑白材质肌理或单色工程展示底色；不要使用彩色背景或彩色氛围光抢占画面。此限制主要作用于背景，不应抹掉单元板主体材质本身必要的金属、木纹、石材等质感层次。'
-    : '';
+  const backgroundModeText = backgroundMode === 'white'
+    ? '背景模式：白背景。画面展示底色必须以白色、浅灰白或近白工程展示背景为主，保持干净明亮；不要使用黑色或深色大面积背景。背景只作为展示底，不覆盖单元板主体材质与必要阴影层次。'
+    : '背景模式：黑背景。画面展示底色必须以黑色、深灰黑或近黑工程展示背景为主，保持高级、沉稳、低干扰；不要使用白色或浅色大面积背景。背景只作为展示底，不覆盖单元板主体材质与必要高光层次。';
   const referenceStyleText = referenceOverridesStyle
     ? '参考图仿制优先：已接入色彩与材质参考图时，材质与字体板块的选择全部不生效。必须以参考图为最高优先级，仿制其材质、色彩、肌理、表面反光、收边方式、字体风格、字重、字号大小、文字比例、文字间距、排版密度和整体视觉气质；不要被节点中选择的主材质、辅助材质、共享色材预设、手动色材、标题字体或说明字体覆盖。'
     : '';
@@ -290,7 +292,7 @@ export function buildUnitPanelImagePrompt(values = {}) {
     dimensionText,
     proportionText,
     specialShapeText,
-    blackWhiteBackgroundText,
+    backgroundModeText,
     imageDisplayText,
     referenceStyleText,
     !referenceOverridesStyle ? `标题字字体：${titleFont.label}；字体风格要求：${titleFont.prompt}。` : '',

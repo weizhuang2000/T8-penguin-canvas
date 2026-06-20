@@ -459,7 +459,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     dimensionMarksEnabled: true,
     imageDisplayEnabled: true,
     specialShapeEnabled: false,
-    blackWhiteBackgroundEnabled: false,
+    backgroundMode: 'black',
     dimensions: {
       panelWidth: 700,
       panelHeight: 1600,
