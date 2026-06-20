@@ -55,3 +55,15 @@ test('unit panel material API is wired', () => {
   assert.match(read('backend/src/routes/promptLibrary.js'), /unit-panel\/materials/);
   assert.match(read('backend/src/routes/promptLibrary.js'), /normalizeUnitPanelMaterialList/);
 });
+
+test('unit panel material editor supports ai generated shared materials', () => {
+  const source = read('src/components/nodes/UnitPanelMaterialEditorModal.tsx');
+  assert.match(source, /generateLlm/);
+  assert.match(source, /AI 自动添加材质/);
+  assert.match(source, /AI 生成 10 个/);
+  assert.match(source, /保存选中材质/);
+  assert.match(source, /type="checkbox"/);
+  assert.match(source, /onSave\(\[\.{3}cleaned, \.{3}additions\]\)/);
+  assert.match(read('src/components/nodes/UnitPanelDesignNode.tsx'), /llmModel=\{llmModel\}/);
+  assert.match(read('src/components/nodes/UnitPanelDesignNode.tsx'), /llmKeyId=\{activeLlmConfig\?\.id \|\| ''\}/);
+});

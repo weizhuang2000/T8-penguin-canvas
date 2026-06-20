@@ -1,18 +1,22 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Save, Trash2, X } from 'lucide-react';
+import { Brain, Plus, Save, Trash2, X } from 'lucide-react';
 import type { UnitPanelMaterialItem } from '../../services/api';
+import { generateLlm } from '../../services/generation';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/25 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
 
 type DraftMaterial = UnitPanelMaterialItem & { draftId: string };
+type AiCandidateMaterial = DraftMaterial & { candidateId: string };
 
 interface UnitPanelMaterialEditorModalProps {
   open: boolean;
   materials: UnitPanelMaterialItem[];
   saving?: boolean;
   error?: string;
+  llmModel?: string;
+  llmKeyId?: string;
   onClose: () => void;
   onSave: (materials: UnitPanelMaterialItem[]) => void | Promise<void>;
 }
@@ -44,20 +48,67 @@ function toSave(item: DraftMaterial, order: number): UnitPanelMaterialItem {
   };
 }
 
+function uniqueMaterialId(raw: string, used: Set<string>): string {
+  const base = String(raw || 'material').trim() || 'material';
+  let id = base;
+  let index = 2;
+  while (used.has(id)) {
+    id = `${base}-${index}`;
+    index += 1;
+  }
+  used.add(id);
+  return id;
+}
+
+function extractJsonArray(text: string): any[] {
+  const raw = String(text || '').trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed;
+    if (Array.isArray(parsed?.materials)) return parsed.materials;
+  } catch {}
+  const match = raw.match(/\[[\s\S]*\]/);
+  if (match) {
+    try {
+      const parsed = JSON.parse(match[0]);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {}
+  }
+  return [];
+}
+
+function buildAiMaterialPrompt(existing: UnitPanelMaterialItem[]): string {
+  const existingLabels = existing.map((item) => item.label).filter(Boolean).slice(0, 80).join('、');
+  return [
+    '请为“展陈单元板设计”生成 10 个可用于材质下拉库的材质选项。',
+    '输出 JSON，不要 Markdown，不要解释。',
+    'JSON 结构：{"materials":[{"category":"分类","label":"材质名称","description":"适合展陈单元板的简短说明","texture":"表面肌理/工艺","usage":"建议用于主材质或辅助材质的场景"}]}',
+    '要求：材质应适合博物馆、历史文化陈列、城市文化展、纪念馆等展陈场景；名称要清晰可复用，避免重复、空泛和品牌名。',
+    existingLabels ? `已有材质名称，尽量不要重复：${existingLabels}` : '',
+  ].filter(Boolean).join('\n');
+}
+
 export default function UnitPanelMaterialEditorModal({
   open,
   materials,
   saving = false,
   error = '',
+  llmModel = '',
+  llmKeyId = '',
   onClose,
   onSave,
 }: UnitPanelMaterialEditorModalProps) {
   const [drafts, setDrafts] = useState<DraftMaterial[]>([]);
+  const [aiCandidates, setAiCandidates] = useState<AiCandidateMaterial[]>([]);
+  const [selectedAiIds, setSelectedAiIds] = useState<Set<string>>(() => new Set());
+  const [aiGenerating, setAiGenerating] = useState(false);
   const [localError, setLocalError] = useState('');
 
   useEffect(() => {
     if (!open) return;
     setDrafts(materials.map(makeDraft));
+    setAiCandidates([]);
+    setSelectedAiIds(new Set());
     setLocalError('');
   }, [materials, open]);
 
@@ -82,6 +133,57 @@ export default function UnitPanelMaterialEditorModal({
 
   const removeDraft = (draftId: string) => {
     setDrafts((items) => items.filter((item) => item.draftId !== draftId));
+  };
+
+  const generateAiMaterials = async () => {
+    setAiGenerating(true);
+    setLocalError('');
+    try {
+      const response = await generateLlm({
+        model: llmModel,
+        llmKeyId,
+        temperature: 0.45,
+        max_tokens: 2200,
+        messages: [{ role: 'user', content: buildAiMaterialPrompt([...materials, ...drafts]) }],
+      });
+      const parsed = extractJsonArray(response.content || '').slice(0, 10);
+      if (!parsed.length) throw new Error('AI 未返回有效材质 JSON');
+      const candidates = parsed.map((item, index) => {
+        const draft = makeDraft(item, drafts.length + index);
+        return { ...draft, candidateId: `${draft.draftId}-candidate` };
+      });
+      setAiCandidates(candidates);
+      setSelectedAiIds(new Set(candidates.map((item) => item.candidateId)));
+    } catch (err: any) {
+      setLocalError(err?.message || 'AI 自动生成材质失败');
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
+  const toggleAiCandidate = (candidateId: string, checked: boolean) => {
+    setSelectedAiIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(candidateId);
+      else next.delete(candidateId);
+      return next;
+    });
+  };
+
+  const saveSelectedAiMaterials = async () => {
+    const selected = aiCandidates.filter((item) => selectedAiIds.has(item.candidateId));
+    if (!selected.length) {
+      setLocalError('请至少选择一个 AI 生成材质');
+      return;
+    }
+    const cleaned = drafts.map(toSave).filter((item) => item.label);
+    const used = new Set(cleaned.map((item) => item.id).filter(Boolean));
+    const additions = selected.map((item, index) => {
+      const saved = toSave(item, cleaned.length + index);
+      return { ...saved, id: uniqueMaterialId(saved.id, used), order: cleaned.length + index };
+    });
+    setLocalError('');
+    await onSave([...cleaned, ...additions]);
   };
 
   const save = async () => {
@@ -112,6 +214,44 @@ export default function UnitPanelMaterialEditorModal({
           </div>
         )}
         <div className="min-h-0 flex-1 overflow-auto p-4">
+          <div className="mb-4 rounded border border-cyan-300/20 bg-cyan-300/10 p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div>
+                <div className="text-[11px] font-semibold text-cyan-100">AI 自动添加材质</div>
+                <div className="text-[10px] text-white/45">使用当前 LLM 配置生成 10 个候选，勾选后可保存到全局材质库。</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" className={BUTTON} disabled={saving || aiGenerating} onClick={() => void generateAiMaterials()}>
+                  <Brain size={13} /> {aiGenerating ? '生成中...' : 'AI 生成 10 个'}
+                </button>
+                <button type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={saving || aiGenerating || selectedAiIds.size === 0} onClick={() => void saveSelectedAiMaterials()}>
+                  <Save size={13} /> 保存选中材质
+                </button>
+              </div>
+            </div>
+            {aiCandidates.length > 0 && (
+              <div className="grid grid-cols-2 gap-2">
+                {aiCandidates.map((item) => (
+                  <label key={item.candidateId} className="flex gap-2 rounded border border-white/10 bg-black/15 p-2 text-[10px] text-white/70">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 accent-cyan-300"
+                      checked={selectedAiIds.has(item.candidateId)}
+                      disabled={saving || aiGenerating}
+                      onChange={(event) => toggleAiCandidate(item.candidateId, event.target.checked)}
+                    />
+                    <span className="min-w-0">
+                      <span className="block font-semibold text-cyan-100">{item.label || '未命名材质'}</span>
+                      <span className="block text-white/45">{item.category}</span>
+                      <span className="mt-1 block leading-relaxed text-white/60">{item.description}</span>
+                      <span className="mt-1 block text-white/45">{item.texture}</span>
+                      <span className="mt-1 block text-white/45">{item.usage}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="space-y-2">
             {drafts.map((item, index) => (
               <div key={item.draftId} className="grid grid-cols-[90px_130px_1fr_1fr_1fr_34px] gap-2 rounded border border-white/10 bg-white/[0.035] p-2">

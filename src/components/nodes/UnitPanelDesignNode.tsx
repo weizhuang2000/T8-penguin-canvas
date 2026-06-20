@@ -844,7 +844,16 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
         </section>
       </div>
 
-      <UnitPanelMaterialEditorModal open={materialsOpen} materials={materials} saving={materialsSaving} error={materialsError} onClose={() => setMaterialsOpen(false)} onSave={saveMaterials} />
+      <UnitPanelMaterialEditorModal
+        open={materialsOpen}
+        materials={materials}
+        saving={materialsSaving}
+        error={materialsError}
+        llmModel={llmModel}
+        llmKeyId={activeLlmConfig?.id || ''}
+        onClose={() => setMaterialsOpen(false)}
+        onSave={saveMaterials}
+      />
     </div>
   );
 };
