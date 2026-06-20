@@ -64,6 +64,7 @@ export interface UnitPanelImagePromptValues {
   dimensionMarksEnabled?: boolean;
   imageDisplayEnabled?: boolean;
   specialShapeEnabled?: boolean;
+  blackWhiteBackgroundEnabled?: boolean;
   dimensions?: Partial<UnitPanelDimensions>;
   textLayoutBounds?: Partial<UnitPanelTextLayoutBounds>;
   languages?: string[];

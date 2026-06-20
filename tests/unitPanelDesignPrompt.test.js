@@ -75,6 +75,17 @@ test('unit panel prompt switches special shape constraints', () => {
   assert.match(shaped, /不能破坏单板真实宽高比/);
 });
 
+test('unit panel prompt switches black white background constraints', () => {
+  const normal = buildUnitPanelImagePrompt({ blackWhiteBackgroundEnabled: false });
+  assert.doesNotMatch(normal, /黑白背景：开启/);
+
+  const blackWhite = buildUnitPanelImagePrompt({ blackWhiteBackgroundEnabled: true });
+  assert.match(blackWhite, /黑白背景：开启/);
+  assert.match(blackWhite, /黑、白、灰阶体系/);
+  assert.match(blackWhite, /不要使用彩色背景/);
+  assert.match(blackWhite, /主要作用于背景/);
+});
+
 test('unit panel prompt includes text layout bounds', () => {
   assert.deepEqual(normalizeUnitPanelTextLayoutBounds({}), { lowerMeters: 0.8, upperMeters: 2.2 });
   assert.deepEqual(normalizeUnitPanelTextLayoutBounds({ lowerMeters: 2.5, upperMeters: 0.6 }), { lowerMeters: 0.6, upperMeters: 2.5 });
