@@ -374,9 +374,11 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
         messages: [{ role: 'user', content: buildUnitPanelExtractPrompt({ sourceText: effectiveSourceText, subtitleText }) }],
       });
       const parsed = parseUnitPanelExtractJson(response.content || '');
-      if (!parsed.titleText && !parsed.bodyText) throw new Error('LLM 未返回有效标题或说明文字');
+      if (!parsed.titleText && !parsed.subtitleText && !parsed.bodyText) throw new Error('LLM 未返回有效标题、副标题或说明文字');
       update({
         titleText: parsed.titleText || titleText,
+        projectTheme: parsed.subtitleText || subtitleText,
+        subtitleText: parsed.subtitleText || subtitleText,
         bodyText: parsed.bodyText || bodyText,
         status: 'idle',
         progress: '',

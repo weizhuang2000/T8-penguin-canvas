@@ -33,6 +33,8 @@ test('unit panel design node exposes reference handle and shared controls', () =
   assert.match(source, /specialShapeEnabled/);
   assert.match(source, /backgroundMode/);
   assert.match(source, /subtitleText/);
+  assert.match(source, /subtitleText: parsed\.subtitleText/);
+  assert.match(source, /projectTheme: parsed\.subtitleText/);
   assert.match(source, /subtitleEnabled/);
   assert.match(source, /mixedLanguageLayoutEnabled/);
   assert.match(source, /textLayoutBounds/);

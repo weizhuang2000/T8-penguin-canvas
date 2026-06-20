@@ -164,10 +164,10 @@ export function buildUnitPanelExtractPrompt(values = {}) {
   const sourceText = cleanUnitPanelText(values.sourceText, 50000);
   const subtitleText = cleanUnitPanelText(values.subtitleText || values.projectTheme, 500);
   return [
-    '请从展陈资料中提炼“单元板设计”所需的两级文字。',
+    '请从展陈资料中提炼“单元板设计”所需的三级文字。',
     '输出 JSON，不要 Markdown，不要解释。',
-    'JSON 结构：{"titleText":"不超过18个中文字的标题字","bodyText":"120-260个中文字的说明文字"}。',
-    'titleText 要适合作为单元板主标题；bodyText 要准确、凝练、适合展板说明，不要编造资料中没有的事实。',
+    'JSON 结构：{"titleText":"艺术化、精炼、不超过18个中文字的标题字","subtitleText":"比较通俗、易懂、适合作为副标题的标题","bodyText":"120-260个中文字的说明文字"}。',
+    'titleText 要艺术化、凝练、有展陈标题气质；subtitleText 要比主标题更通俗、直接、容易理解；bodyText 要准确、凝练、适合展板说明，不要编造资料中没有的事实。',
     subtitleText ? `副标题参考：${subtitleText}` : '',
     '',
     sourceText,
@@ -198,13 +198,15 @@ export function parseUnitPanelExtractJson(text) {
     const parsed = JSON.parse(raw);
     return {
       titleText: cleanUnitPanelText(parsed?.titleText || parsed?.title || '', 500),
+      subtitleText: cleanUnitPanelText(parsed?.subtitleText || parsed?.subtitle || parsed?.subTitle || '', 500),
       bodyText: cleanUnitPanelText(parsed?.bodyText || parsed?.body || parsed?.description || '', 4000),
     };
   } catch {
     const lines = raw.split(/\n+/).map((line) => line.trim()).filter(Boolean);
     return {
       titleText: cleanUnitPanelText(lines[0] || '', 500),
-      bodyText: cleanUnitPanelText(lines.slice(1).join('\n') || raw, 4000),
+      subtitleText: cleanUnitPanelText(lines[1] || '', 500),
+      bodyText: cleanUnitPanelText(lines.slice(2).join('\n') || lines.slice(1).join('\n') || raw, 4000),
     };
   }
 }

@@ -80,6 +80,6 @@ export function unitPanelDimensionsText(value: unknown): string;
 export function unitPanelMaterialsText(primaryMaterial?: UnitPanelMaterialLike | null, secondaryMaterials?: UnitPanelMaterialLike[]): string;
 export function buildUnitPanelExtractPrompt(values?: { sourceText?: string; projectTheme?: string; subtitleText?: string }): string;
 export function buildUnitPanelTranslatePrompt(values?: { languages?: string[]; titleText?: string; bodyText?: string }): string;
-export function parseUnitPanelExtractJson(text: string): { titleText: string; bodyText: string };
+export function parseUnitPanelExtractJson(text: string): { titleText: string; subtitleText: string; bodyText: string };
 export function parseUnitPanelTranslateJson(text: string, languages?: string[]): Record<string, { title: string; body: string }>;
 export function buildUnitPanelImagePrompt(values?: UnitPanelImagePromptValues): string;

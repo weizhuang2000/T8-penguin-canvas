@@ -1,11 +1,36 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildUnitPanelExtractPrompt,
   buildUnitPanelImagePrompt,
   UNIT_PANEL_LANGUAGES,
   normalizeUnitPanelLanguages,
   normalizeUnitPanelTextLayoutBounds,
+  parseUnitPanelExtractJson,
 } from '../src/utils/unitPanelDesignPromptData.js';
+
+test('unit panel extract prompt and parser support title subtitle and body text', () => {
+  const prompt = buildUnitPanelExtractPrompt({ sourceText: 'source text', subtitleText: 'plain subtitle' });
+  assert.match(prompt, /titleText/);
+  assert.match(prompt, /subtitleText/);
+  assert.match(prompt, /bodyText/);
+
+  assert.deepEqual(parseUnitPanelExtractJson(JSON.stringify({
+    titleText: 'Art title',
+    subtitleText: 'Plain subtitle',
+    bodyText: 'Body description',
+  })), {
+    titleText: 'Art title',
+    subtitleText: 'Plain subtitle',
+    bodyText: 'Body description',
+  });
+
+  assert.deepEqual(parseUnitPanelExtractJson('Line title\nLine subtitle\nLine body'), {
+    titleText: 'Line title',
+    subtitleText: 'Line subtitle',
+    bodyText: 'Line body',
+  });
+});
 
 test('unit panel prompt includes two-level text and language order in Chinese template', () => {
   const prompt = buildUnitPanelImagePrompt({
