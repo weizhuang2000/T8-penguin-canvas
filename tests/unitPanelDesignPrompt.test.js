@@ -37,12 +37,15 @@ test('unit panel prompt switches split design constraints', () => {
 test('unit panel prompt switches dimension marks and panel count', () => {
   const marked = buildUnitPanelImagePrompt({
     dimensionMarksEnabled: true,
-    dimensions: { totalWidth: 3600, totalHeight: 1800, panelWidth: 700, panelHeight: 1600, panelCount: 3, gap: 50 },
+    dimensions: { panelWidth: 700, panelHeight: 1600, panelCount: 3, gap: 50 },
   });
   assert.match(marked, /尺寸标注：开启/);
-  assert.match(marked, /整体宽 3600 mm x 高 1800 mm/);
+  assert.match(marked, /推导总宽 2200 mm/);
+  assert.match(marked, /总高等于单板高 1600 mm/);
   assert.match(marked, /共 3 块单元板/);
   assert.match(marked, /板间距 50 mm/);
+  assert.match(marked, /比例约束/);
+  assert.match(marked, /禁止把单元板拉伸、压扁/);
 
   const unmarked = buildUnitPanelImagePrompt({ dimensionMarksEnabled: false });
   assert.match(unmarked, /尺寸标注：关闭/);

@@ -36,8 +36,6 @@ export interface UnitPanelFontOption {
 }
 
 export interface UnitPanelDimensions {
-  totalWidth: number;
-  totalHeight: number;
   panelWidth: number;
   panelHeight: number;
   panelCount: number;

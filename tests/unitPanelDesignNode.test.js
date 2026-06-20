@@ -43,6 +43,10 @@ test('unit panel design is registered in frontend and permissions', () => {
   assert.match(read('src/components/Canvas.tsx'), /textLayoutBounds/);
   assert.match(read('src/components/Canvas.tsx'), /lowerMeters: 0\.8/);
   assert.match(read('src/components/Canvas.tsx'), /upperMeters: 2\.2/);
+  assert.doesNotMatch(read('src/components/Canvas.tsx'), /totalWidth: 3600/);
+  assert.doesNotMatch(read('src/components/Canvas.tsx'), /totalHeight: 1800/);
+  assert.doesNotMatch(read('src/components/nodes/UnitPanelDesignNode.tsx'), /\['totalWidth'/);
+  assert.doesNotMatch(read('src/components/nodes/UnitPanelDesignNode.tsx'), /\['totalHeight'/);
   assert.match(read('src/components/NodeActionBar.tsx'), /'unit-panel-design'/);
   assert.match(read('src/config/portTypes.ts'), /'unit-panel-design': \{ inputs: \['text', 'image'\], outputs: \['image'\] \}/);
   assert.match(read('backend/src/auth/toolPermissions.js'), /'unit-panel-design'/);

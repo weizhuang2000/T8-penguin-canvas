@@ -728,13 +728,16 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
           </div>
           <div className="grid grid-cols-2 gap-2">
           {[
-            ['totalWidth', '总宽 mm'], ['totalHeight', '总高 mm'], ['panelWidth', '单板宽 mm'], ['panelHeight', '单板高 mm'], ['gap', '间距 mm'], ['thickness', '厚度 mm'],
+            ['panelWidth', '单板宽 mm'], ['panelHeight', '单板高 mm'], ['gap', '间距 mm'], ['thickness', '厚度 mm'],
           ].map(([key, label]) => (
             <label key={key} className="space-y-1">
               <span className="text-[10px] text-white/55">{label}</span>
               <input className={FIELD} type="number" min={0} value={(dimensions as any)[key] || ''} disabled={isReadonly || busy} onChange={(e) => updateDimension(key, e.target.value)} />
             </label>
           ))}
+          <div className="rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[10px] leading-relaxed text-white/50">
+            总宽自动按“单板宽 x 板数 + 板间距总和”推导；总高等于单板高。
+          </div>
           <label className="space-y-1">
             <span className="text-[10px] text-white/55">比例</span>
             <select className={FIELD} value={aspectRatio} disabled={isReadonly || busy} onChange={(e) => update({ aspectRatio: e.target.value })}>

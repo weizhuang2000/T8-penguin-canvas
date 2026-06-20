@@ -88,8 +88,6 @@ export function normalizeUnitPanelDimensions(value) {
   };
   const count = Math.floor(Number(source.panelCount) || 0);
   return {
-    totalWidth: num(source.totalWidth),
-    totalHeight: num(source.totalHeight),
     panelWidth: num(source.panelWidth),
     panelHeight: num(source.panelHeight),
     panelCount: Math.max(0, Math.min(99, count)),
@@ -116,10 +114,15 @@ export function normalizeUnitPanelTextLayoutBounds(value) {
 export function unitPanelDimensionsText(value) {
   const d = normalizeUnitPanelDimensions(value);
   const parts = [];
-  if (d.totalWidth || d.totalHeight) parts.push(`整体宽 ${d.totalWidth || '?'} mm x 高 ${d.totalHeight || '?'} mm`);
   if (d.panelWidth || d.panelHeight) parts.push(`单块板宽 ${d.panelWidth || '?'} mm x 高 ${d.panelHeight || '?'} mm`);
   if (d.panelCount) parts.push(`共 ${d.panelCount} 块单元板`);
   if (d.gap) parts.push(`板间距 ${d.gap} mm`);
+  if (d.panelWidth && d.panelCount) {
+    const gapTotal = d.gap && d.panelCount > 1 ? d.gap * (d.panelCount - 1) : 0;
+    const totalWidth = (d.panelWidth * d.panelCount) + gapTotal;
+    parts.push(`推导总宽 ${totalWidth} mm（单板宽 x 板数 + 板间距总和）`);
+  }
+  if (d.panelHeight) parts.push(`总高等于单板高 ${d.panelHeight} mm`);
   if (d.thickness) parts.push(`厚度 ${d.thickness} mm`);
   return parts.join('; ');
 }
@@ -265,6 +268,7 @@ export function buildUnitPanelImagePrompt(values = {}) {
     ? ''
     : '图片显示：关闭。除抽象背景图、底纹、材质肌理、纹样和非具象装饰以外，禁止显示任何图像照片或具象图片；不要出现人物照片、文物照片、历史场景照片、风景照片、实物插图、摄影图框或照片墙。';
   const textLayoutText = `文字控制区：所有语种的标题字和说明文字主要排版区域都必须位于距离地面 ${textLayoutBounds.lowerMeters} 米到 ${textLayoutBounds.upperMeters} 米之间；中文、英文、内蒙文（传统蒙古语）及其他语种都不要把主要文字放到低于下限或高于上限的位置，辅助纹样、背景和非文字装饰可在控制区外延展。`;
+  const proportionText = '比例约束：必须严格按单板宽、单板高、板数和板间距推导真实宽高比绘制；总宽只由单板宽度之和加板间距之和决定，总高等于单板高。禁止把单元板拉伸、压扁、压缩或透视变形，所有板块轮廓、文字区和装饰区都要服从真实尺寸比例。';
   const referenceStyleText = referenceOverridesStyle
     ? '参考图仿制优先：已接入色彩与材质参考图时，材质与字体板块的选择全部不生效。必须以参考图为最高优先级，仿制其材质、色彩、肌理、表面反光、收边方式、字体风格、字重、字号大小、文字比例、文字间距、排版密度和整体视觉气质；不要被节点中选择的主材质、辅助材质、共享色材预设、手动色材、标题字体或说明字体覆盖。'
     : '';
@@ -276,6 +280,7 @@ export function buildUnitPanelImagePrompt(values = {}) {
     `板式模式：${outputMode === 'single' ? '单块单元板' : '整套板式图'}。`,
     splitText,
     dimensionText,
+    proportionText,
     imageDisplayText,
     referenceStyleText,
     !referenceOverridesStyle ? `标题字字体：${titleFont.label}；字体风格要求：${titleFont.prompt}。` : '',

@@ -459,8 +459,6 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     dimensionMarksEnabled: true,
     imageDisplayEnabled: true,
     dimensions: {
-      totalWidth: 3600,
-      totalHeight: 1800,
       panelWidth: 700,
       panelHeight: 1600,
       panelCount: 3,
