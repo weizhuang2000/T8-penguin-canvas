@@ -19,6 +19,7 @@ test('showcase interior design node is registered in frontend and permissions', 
   assert.match(read('src/components/Canvas.tsx'), /glassHeightMm: 1400/);
   assert.match(read('src/components/Canvas.tsx'), /capHeightMm: 180/);
   assert.match(read('src/components/Canvas.tsx'), /hasCap: true/);
+  assert.match(read('src/components/Canvas.tsx'), /perspectiveEnabled: true/);
   assert.match(read('src/components/Canvas.tsx'), /explodedViewEnabled: false/);
   assert.match(read('src/config/portTypes.ts'), /'showcase-interior-design': \{ inputs: \['image'\], outputs: \['image'\] \}/);
   assert.match(read('src/utils/nodePlacement.ts'), /'showcase-interior-design': \{ w: 520, h: 680 \}/);
@@ -32,6 +33,7 @@ test('showcase interior design component wires shared controls and generation se
   assert.match(source, /ColorMaterialPresetSelect/);
   assert.match(source, /buildShowcaseInteriorDesignPrompt/);
   assert.match(source, /buildShowcaseInteriorScaleReferenceDataUrl/);
+  assert.match(source, /buildScaledExhibitReferenceImage/);
   assert.match(source, /imageDataUrlToPngDataUrl/);
   assert.match(source, /scaleReferenceImage/);
   assert.match(source, /generateExternalImage/);
@@ -40,6 +42,8 @@ test('showcase interior design component wires shared controls and generation se
   assert.match(source, /queryExternalImageStatus/);
   assert.match(source, /exhibitItems/);
   assert.match(source, /maxSideMm/);
+  assert.match(source, /perspectiveEnabled/);
+  assert.match(source, /透视效果/);
   assert.match(source, /dimensionMarksEnabled/);
   assert.match(source, /explodedViewEnabled/);
 });

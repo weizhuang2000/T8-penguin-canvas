@@ -151,6 +151,89 @@ async function imageDataUrlToPngDataUrl(dataUrl: string): Promise<string> {
   });
 }
 
+function loadImageLoose(src: string): Promise<HTMLImageElement | null> {
+  if (typeof Image === 'undefined') return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+async function buildScaledExhibitReferenceImage(
+  scaleReferenceDataUrl: string,
+  exhibitItems: Array<{ url: string; label: string; maxSideMm: number }>,
+  showcaseStyle: ReturnType<typeof normalizeShowcaseStyle>,
+): Promise<string> {
+  if (typeof document === 'undefined') return imageDataUrlToPngDataUrl(scaleReferenceDataUrl);
+  const base = await loadImageLoose(scaleReferenceDataUrl);
+  if (!base) return imageDataUrlToPngDataUrl(scaleReferenceDataUrl);
+  const canvas = document.createElement('canvas');
+  canvas.width = base.naturalWidth || 1200;
+  canvas.height = base.naturalHeight || 1600;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return imageDataUrlToPngDataUrl(scaleReferenceDataUrl);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(base, 0, 0);
+
+  const totalHeightMm = showcaseStyle.baseHeightMm + showcaseStyle.glassHeightMm + (showcaseStyle.hasCap ? showcaseStyle.capHeightMm : 0);
+  const chartW = 760;
+  const chartH = 1160;
+  const margin = 120;
+  const scale = Math.min(chartW / Math.max(showcaseStyle.widthMm, 1), chartH / Math.max(totalHeightMm, 1));
+  const cabinetW = showcaseStyle.widthMm * scale;
+  const glassH = showcaseStyle.glassHeightMm * scale;
+  const capH = (showcaseStyle.hasCap ? showcaseStyle.capHeightMm : 0) * scale;
+  const baseH = showcaseStyle.baseHeightMm * scale;
+  const x = margin + (chartW - cabinetW) / 2;
+  const y = 260 + (chartH - (capH + glassH + baseH)) / 2;
+  const baseY = y + capH + glassH;
+  const exhibitGap = 24;
+  const slotCount = Math.max(exhibitItems.length, 1);
+  const slotW = Math.max(80, (cabinetW - exhibitGap * (slotCount + 1)) / slotCount);
+
+  const loaded = await Promise.all(exhibitItems.map((item) => loadImageLoose(item.url)));
+  loaded.forEach((img, index) => {
+    const item = exhibitItems[index];
+    if (!img || !item) return;
+    const targetLongest = Math.max(8, item.maxSideMm * scale);
+    const maxBySlot = Math.max(24, slotW);
+    const maxByGlass = Math.max(24, glassH * 0.86);
+    const targetBox = Math.min(targetLongest, maxBySlot, maxByGlass);
+    const iw = img.naturalWidth || img.width || targetBox;
+    const ih = img.naturalHeight || img.height || targetBox;
+    const longestPx = Math.max(iw, ih, 1);
+    const drawScale = targetBox / longestPx;
+    const dw = iw * drawScale;
+    const dh = ih * drawScale;
+    const cx = x + exhibitGap + slotW * index + exhibitGap * index + slotW / 2;
+    const bottom = baseY - Math.max(26, glassH * 0.08);
+    const dx = cx - dw / 2;
+    const dy = bottom - dh;
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.82)';
+    ctx.strokeStyle = '#0369a1';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([8, 6]);
+    ctx.strokeRect(cx - targetBox / 2, bottom - targetBox, targetBox, targetBox);
+    ctx.setLineDash([]);
+    ctx.drawImage(img, dx, dy, dw, dh);
+    ctx.fillStyle = '#0f172a';
+    ctx.font = '700 24px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`展品 ${index + 1}: 最长边 ${item.maxSideMm} mm`, cx, bottom + 104);
+    ctx.restore();
+  });
+  try {
+    return canvas.toDataURL('image/png');
+  } catch {
+    return imageDataUrlToPngDataUrl(scaleReferenceDataUrl);
+  }
+}
+
 const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
@@ -226,13 +309,14 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
     showcaseStyle,
     exhibitItems,
     colorMaterialPresetText: colorMaterialTextFromPreset(selectedColorMaterialPreset),
-    manualColorMaterial: d.colorMaterial,
+    manualColorMaterial: selectedColorMaterialPreset ? '' : d.colorMaterial,
     colorMaterialReferenceTone: d.colorMaterialReferenceTone,
     hasColorMaterialReferenceImage: !!colorMaterialReferenceImage,
+    perspectiveEnabled: d.perspectiveEnabled !== false,
     dimensionMarksEnabled: d.dimensionMarksEnabled === true,
     explodedViewEnabled: d.explodedViewEnabled === true,
     supplement: d.supplement,
-  }), [colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.explodedViewEnabled, d.supplement, exhibitItems, selectedColorMaterialPreset, showcaseStyle]);
+  }), [colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.explodedViewEnabled, d.perspectiveEnabled, d.supplement, exhibitItems, selectedColorMaterialPreset, showcaseStyle]);
 
   useEffect(() => {
     getElevationPromptPresets().then((presets) => setColorMaterialPresets(presets.colorMaterial || [])).catch(() => setColorMaterialPresets([]));
@@ -271,9 +355,10 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
       showcaseStyle,
       exhibitItems,
       colorMaterialPresetText: colorMaterialTextFromPreset(selectedColorMaterialPreset),
-      manualColorMaterial: d.colorMaterial,
+      manualColorMaterial: selectedColorMaterialPreset ? '' : d.colorMaterial,
       colorMaterialReferenceTone: d.colorMaterialReferenceTone,
       hasColorMaterialReferenceImage: !!colorMaterialReferenceImage,
+      perspectiveEnabled: d.perspectiveEnabled !== false,
       dimensionMarksEnabled: d.dimensionMarksEnabled === true,
       explodedViewEnabled: d.explodedViewEnabled === true,
       supplement: d.supplement,
@@ -283,7 +368,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
       exhibitItems,
       hasColorMaterialReferenceImage: !!colorMaterialReferenceImage,
     });
-    const scaleReferenceImage = await imageDataUrlToPngDataUrl(scaleReferenceDataUrl);
+    const scaleReferenceImage = await buildScaledExhibitReferenceImage(scaleReferenceDataUrl, exhibitItems, showcaseStyle);
     const runtimeReferenceImages = [
       scaleReferenceImage,
       ...exhibitItems.map((item) => item.url),
@@ -439,7 +524,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`柜内设计生成失败: ${msg}`, src);
       throw error;
     }
-  }, [activeCanvasId, apiModel, aspectRatio, busy, colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.explodedViewEnabled, d.providerParams, d.supplement, d.taskId, exhibitItems, externalProviderModel, id, isExternalSelected, isReadonly, modelDef.id, modelDef.paramKind, outputFormat, providerSelection.provider, seed, selectedColorMaterialPreset, showcaseStyle, sizeLevel, update]);
+  }, [activeCanvasId, apiModel, aspectRatio, busy, colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.explodedViewEnabled, d.perspectiveEnabled, d.providerParams, d.supplement, d.taskId, exhibitItems, externalProviderModel, id, isExternalSelected, isReadonly, modelDef.id, modelDef.paramKind, outputFormat, providerSelection.provider, seed, selectedColorMaterialPreset, showcaseStyle, sizeLevel, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -530,6 +615,10 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
             <button type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy} onClick={() => void runGenerate()}><Play size={13} /> 生成</button>
           </div>
           <div className="grid grid-cols-2 gap-2">
+            <label className="flex items-center gap-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[11px] text-white/70">
+              <input type="checkbox" className="accent-cyan-300" checked={d.perspectiveEnabled !== false} disabled={isReadonly || busy} onChange={(event) => update({ perspectiveEnabled: event.target.checked })} />
+              透视效果
+            </label>
             <label className="flex items-center gap-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[11px] text-white/70">
               <input type="checkbox" className="accent-cyan-300" checked={d.dimensionMarksEnabled === true} disabled={isReadonly || busy} onChange={(event) => update({ dimensionMarksEnabled: event.target.checked })} />
               是否标注尺寸

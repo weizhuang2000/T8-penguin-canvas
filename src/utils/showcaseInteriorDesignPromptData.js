@@ -21,6 +21,13 @@ function formatPercent(value) {
   return String(Math.round(value * 10) / 10);
 }
 
+function textSegments(value) {
+  return cleanText(value, 1200)
+    .split(/[；;。.\n\r，,、]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function escapeXml(value) {
   return String(value || '')
     .replace(/&/g, '&amp;')
@@ -61,9 +68,11 @@ export function normalizeShowcaseExhibitItems(value = []) {
 
 export function colorMaterialTextFromPreset(preset) {
   if (!preset) return '';
+  const materialKeywords = /(色|颜色|色彩|色调|主色|配色|冷色|暖色|灰|白|黑|金|银|铜|红|蓝|绿|黄|紫|橙|棕|米|材质|材料|质感|肌理|纹理|金属|玻璃|亚克力|木|石|布|织物|皮革|漆|哑光|亮光|磨砂|透明|反射|color|colour|palette|tone|hue|material|texture|metal|glass|acrylic|wood|stone|fabric|leather|matte|gloss|transparent|reflective)/i;
+  const forbiddenKeywords = /(图案|纹样|纹饰|花纹|图形|图标|文字|字体|字形|标识|标志|徽标|logo|符号|书法|标题|排版|pattern|motif|ornament|graphic|icon|text|typography|letter|word|signage|symbol|logo|calligraphy)/i;
   return [preset.core, preset.features, preset.usage, preset.info]
-    .map((item) => cleanText(item, 1200))
-    .filter(Boolean)
+    .flatMap(textSegments)
+    .filter((item) => materialKeywords.test(item) && !forbiddenKeywords.test(item))
     .join('；');
 }
 
@@ -92,11 +101,11 @@ function exhibitItemsText(items, style, values = {}) {
   }
 
   const lines = [
-    '运行时第 1 张参考图是“比例控制图”，只用于锁定展柜与展品的物理尺寸关系，不要把它作为最终画面风格。',
+    '运行时第 1 张参考图是“尺寸合成参考图”：展品原图已经按最长边 mm 缩放后放入展柜比例框中。最终效果图必须优先对齐这张图里的展品显示大小。',
     '普通 image 输入均视为展品图，只用于提取展品外观、体量、轮廓、材质和摆放重点，不作为色彩材质风格参考。',
     '参考图顺序：第 2 张参考图 = 展品 1，第 3 张参考图 = 展品 2，以此类推。必须按这个顺序匹配展品图片和尺寸。',
     '严格比例规则：每件展品只能按“最长边 mm”缩放，不能按原图像素、裁切大小、主体在参考图里看起来的大小或视觉重要性缩放。',
-    '比例控制图中的每个蓝色占位框就是该展品最长边的真实比例范围；最终展品必须放在对应编号框附近，最长边不得明显超出该框。',
+    '尺寸合成参考图中的展品图像外接框就是该展品最长边的真实比例范围；最终展品必须保持同等视觉大小，不得明显放大或缩小。',
   ];
 
   normalized.forEach((item, index) => {
@@ -110,7 +119,7 @@ function exhibitItemsText(items, style, values = {}) {
     lines.push('色彩材质参考图使用独立 color-material-reference 输入，并且排在所有展品图之后；它不是展品图，不得套用任何最长边尺寸。');
   }
   lines.push('相对尺寸审计：如果两张展品参考图看起来差不多大，但最长边数值不同，最终必须按毫米数显示出明显的物理大小差异。');
-  lines.push('渲染前最终检查：逐一比较每件展品与展柜宽度、玻璃区高度和比例控制图。小尺寸展品必须保持小件感，大尺寸展品只有在数值足够大时才可以成为视觉主体。');
+  lines.push('渲染前最终检查：逐一比较每件展品与展柜宽度、玻璃区高度和尺寸合成参考图。小尺寸展品必须保持小件感，大尺寸展品只有在数值足够大时才可以成为视觉主体。');
   return lines.join('\n');
 }
 
@@ -125,8 +134,8 @@ function colorMaterialText(values) {
     lines.push('色彩与材质参考图使用独立 color-material-reference 输入，只用于提取柜内背景、底座、背板、托架、灯光、金属/亚克力/玻璃等材质语言，不得当作展品图，也不得改变展品本身外观。');
     if (referenceTone) lines.push(`参考图主色调 / 材质说明：${referenceTone}`);
   }
-  if (presetText && !hasReference) lines.push(`共享色彩与材质预设：${presetText}`);
-  if (presetText && hasReference) lines.push(`共享色彩与材质预设作为次级补充：${presetText}`);
+  if (presetText && !hasReference) lines.push(`共享色彩与材质预设（仅采用色彩和材质信息，忽略其中所有图案、纹样、文字、符号、logo、排版约定）：${presetText}`);
+  if (presetText && hasReference) lines.push(`共享色彩与材质预设作为次级补充（仅采用色彩和材质信息，忽略其中所有图案、纹样、文字、符号、logo、排版约定）：${presetText}`);
   if (manualText) lines.push(`手动色彩与材质补充：${manualText}`);
   if (!lines.length) {
     lines.push('未指定色彩材质时，采用克制、低反射、博物馆级、可落地施工的柜内设计材质体系。');
@@ -136,6 +145,9 @@ function colorMaterialText(values) {
 
 function outputRequirementText(values) {
   return [
+    values.perspectiveEnabled === false
+      ? '透视效果：关闭。必须输出完全平面的正立面/二维方案效果，不要任何 3D 透视、斜视角、消失点、近大远小、景深、透视玻璃边或空间纵深；所有水平线和垂直线必须保持平行，像正投影立面图。'
+      : '透视效果：开启。可以使用轻微、克制的 3D 透视来表现展柜深度、玻璃厚度和柜内层次，但不得破坏展品最长边的物理比例。',
     values.dimensionMarksEnabled === true
       ? '尺寸标注：开启。输出中可加入清晰的工程尺寸标注、毫米单位和关键高度/宽度标注，但文字必须简洁、整洁，像方案图标注。'
       : '尺寸标注：关闭。不要绘制尺寸线、毫米数字、红色测量标注、工程尺或标注符号，但仍要按给定尺寸比例生成。',

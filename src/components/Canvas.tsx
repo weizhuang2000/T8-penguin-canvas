@@ -555,6 +555,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
       hasCap: true,
     },
     exhibitItems: [],
+    perspectiveEnabled: true,
     dimensionMarksEnabled: true,
     explodedViewEnabled: false,
     colorMaterialPreset: '',

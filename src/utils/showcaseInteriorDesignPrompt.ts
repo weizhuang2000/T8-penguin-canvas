@@ -34,6 +34,7 @@ export interface ShowcaseInteriorDesignPromptValues extends ShowcaseStyleValues 
   manualColorMaterial?: string;
   colorMaterialReferenceTone?: string;
   hasColorMaterialReferenceImage?: boolean;
+  perspectiveEnabled?: boolean;
   dimensionMarksEnabled?: boolean;
   explodedViewEnabled?: boolean;
   supplement?: string;
