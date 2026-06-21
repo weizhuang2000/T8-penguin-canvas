@@ -68,6 +68,7 @@ export type NodeType =
   | 'exhibition-style-transfer'
   | 'exhibition-creative-image'
   | 'exhibition-outline-split'
+  | 'exhibition-plan-layout'
   | 'unit-panel-design'
   | 'multi-angle-visual'
   | 'portrait-master'

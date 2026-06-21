@@ -156,6 +156,7 @@ export const NODE_PORTS: Record<string, NodePorts> = {
   'exhibition-style-transfer': { inputs: ['image'], outputs: ['image'] },
   'exhibition-creative-image': { inputs: ['text', 'image'], outputs: ['image'] },
   'exhibition-outline-split': { inputs: ['text'], outputs: ['text', 'image'] },
+  'exhibition-plan-layout': { inputs: ['text', 'image'], outputs: ['image', 'text'] },
   'unit-panel-design': { inputs: ['text', 'image'], outputs: ['image'] },
   'multi-angle-visual': { inputs: ['image'], outputs: ['text'] },
   'portrait-master': { inputs: ['text', 'metadata'], outputs: ['text', 'metadata'] },

@@ -115,6 +115,7 @@ import ExhibitionImg2ImgNode from './nodes/ExhibitionImg2ImgNode';
 import ExhibitionStyleTransferNode from './nodes/ExhibitionStyleTransferNode';
 import ExhibitionCreativeImageNode from './nodes/ExhibitionCreativeImageNode';
 import ExhibitionOutlineSplitNode from './nodes/ExhibitionOutlineSplitNode';
+import ExhibitionPlanLayoutNode from './nodes/ExhibitionPlanLayoutNode';
 import UnitPanelDesignNode from './nodes/UnitPanelDesignNode';
 import PortraitMasterNode from './nodes/PortraitMasterNode';
 import PoseMasterNode from './nodes/PoseMasterNode';
@@ -208,6 +209,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'exhibition-style-transfer': ExhibitionStyleTransferNode,
   'exhibition-creative-image': ExhibitionCreativeImageNode,
   'exhibition-outline-split': ExhibitionOutlineSplitNode,
+  'exhibition-plan-layout': ExhibitionPlanLayoutNode,
   'unit-panel-design': UnitPanelDesignNode,
   'multi-angle-visual': ToolboxParamNode,
   'portrait-master': PortraitMasterNode,
@@ -450,6 +452,38 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     status: 'idle',
     error: '',
   },
+  'exhibition-plan-layout': {
+    model: 'gpt-image-2',
+    apiModel: 'gpt-image-2-all',
+    aspectRatio: '16:9',
+    sizeLevel: '2K',
+    outputFormat: 'jpg',
+    sourceText: '',
+    useUpstream: true,
+    documentMeta: null,
+    layoutOutlineText: '',
+    layoutRequirement: '',
+    layoutPresetId: 'balanced',
+    showRoute: true,
+    showLabels: true,
+    showDescriptions: true,
+    llmKeyId: '',
+    llmModel: '',
+    providerSource: 'zhenzhen',
+    providerId: '',
+    providerModel: '',
+    providerParams: {},
+    seed: 0,
+    prompt: '',
+    outputText: '',
+    text: '',
+    imageUrl: '',
+    imageUrls: [],
+    urls: [],
+    referenceImages: [],
+    status: 'idle',
+    error: '',
+  },
   'unit-panel-design': {
     model: 'gpt-image-2',
     apiModel: 'gpt-image-2-all',
@@ -675,6 +709,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'exhibition-img2img',
   'exhibition-creative-image',
   'exhibition-outline-split',
+  'exhibition-plan-layout',
   'unit-panel-design',
   'remove-ai-watermark',
 ]);
