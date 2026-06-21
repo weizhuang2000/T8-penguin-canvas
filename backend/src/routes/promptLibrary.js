@@ -11,6 +11,7 @@ const router = express.Router();
 const DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition.json');
 const ELEVATION_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_elevation.json');
 const CREATIVE_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition_creative.json');
+const PLAN_LAYOUT_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition_plan_layout.json');
 const UNIT_PANEL_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_unit_panel.json');
 const DIMENSIONS = new Set([
   'spaceType',
@@ -154,6 +155,29 @@ const DEFAULT_EXHIBITION_CREATIVE_VIEW_ANGLE_PRESETS = [
   { id: 'left-45', label: '左45度视角' },
   { id: 'right-45', label: '右45度视角' },
   { id: 'top-45', label: '上45度视角' },
+].map((item, index) => ({ ...item, order: index }));
+
+const DEFAULT_EXHIBITION_PLAN_LAYOUT_INSERT_PRESETS = [
+  { id: 'large-sculpture', label: '大型雕塑' },
+  { id: 'relief', label: '浮雕' },
+  { id: 'group-sculpture', label: '群雕' },
+  { id: 'art-installation', label: '艺术装置' },
+  { id: 'multimedia-equipment', label: '多媒体设备' },
+  { id: 'showcase', label: '文物柜/展柜' },
+  { id: 'scene', label: '场景复原' },
+  { id: 'artwork', label: '艺术品/主题展项' },
+].map((item, index) => ({ ...item, order: index }));
+
+const DEFAULT_EXHIBITION_PLAN_LAYOUT_EXCLUDE_PRESETS = [
+  { id: 'readable-wrong-text', label: '可读错字/乱码文字' },
+  { id: 'real-brand-logo', label: '真实品牌标识' },
+  { id: 'instruction-table', label: '说明表格' },
+  { id: 'crowded-people', label: '过多人群' },
+  { id: 'messy-cables', label: '杂乱线缆' },
+  { id: 'cartoon-style', label: '卡通低幼风格' },
+  { id: 'blurry-low-quality', label: '低清晰度/模糊画面' },
+  { id: 'floating-islands', label: '孤立漂浮展区' },
+  { id: 'isolated-columns', label: '孤零零不连接任何物体的柱子' },
 ].map((item, index) => ({ ...item, order: index }));
 
 function now() {
@@ -324,6 +348,52 @@ function normalizeCreativeViewAnglePresetList(value) {
     .map((item, index) => ({ ...item, order: index }));
 }
 
+function normalizePlanLayoutInsertPresetList(value) {
+  const source = Array.isArray(value) && value.length > 0 ? value : DEFAULT_EXHIBITION_PLAN_LAYOUT_INSERT_PRESETS;
+  const used = new Set();
+  return source
+    .map((raw, index) => {
+      const label = safeText(raw?.label || raw?.text, 120);
+      if (!label) return null;
+      let id = safeText(raw?.id, 96).replace(/[^a-zA-Z0-9_-]/g, '');
+      if (!id) id = `insert_${index + 1}`;
+      while (used.has(id)) id = `${id}_${index + 1}`;
+      used.add(id);
+      return {
+        id,
+        label,
+        order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 80)
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+    .map((item, index) => ({ ...item, order: index }));
+}
+
+function normalizePlanLayoutExcludePresetList(value) {
+  const source = Array.isArray(value) && value.length > 0 ? value : DEFAULT_EXHIBITION_PLAN_LAYOUT_EXCLUDE_PRESETS;
+  const used = new Set();
+  return source
+    .map((raw, index) => {
+      const label = safeText(raw?.label || raw?.text, 120);
+      if (!label) return null;
+      let id = safeText(raw?.id, 96).replace(/[^a-zA-Z0-9_-]/g, '');
+      if (!id) id = `exclude_${index + 1}`;
+      while (used.has(id)) id = `${id}_${index + 1}`;
+      used.add(id);
+      return {
+        id,
+        label,
+        order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 80)
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+    .map((item, index) => ({ ...item, order: index }));
+}
+
 const DEFAULT_UNIT_PANEL_MATERIALS = [
   {
     id: 'dark-blue-matte-metal',
@@ -475,6 +545,39 @@ function writeCreativeDb(db) {
       insertPresets: normalizeCreativeInsertPresetList(db?.insertPresets),
       excludePresets: normalizeCreativeExcludePresetList(db?.excludePresets),
       viewAnglePresets: normalizeCreativeViewAnglePresetList(db?.viewAnglePresets),
+    }, null, 2),
+    'utf-8',
+  );
+}
+
+function readPlanLayoutDb() {
+  try {
+    if (!fs.existsSync(PLAN_LAYOUT_DB_FILE)) {
+      return {
+        insertPresets: normalizePlanLayoutInsertPresetList(DEFAULT_EXHIBITION_PLAN_LAYOUT_INSERT_PRESETS),
+        excludePresets: normalizePlanLayoutExcludePresetList(DEFAULT_EXHIBITION_PLAN_LAYOUT_EXCLUDE_PRESETS),
+      };
+    }
+    const raw = JSON.parse(fs.readFileSync(PLAN_LAYOUT_DB_FILE, 'utf-8'));
+    return {
+      insertPresets: normalizePlanLayoutInsertPresetList(raw?.insertPresets),
+      excludePresets: normalizePlanLayoutExcludePresetList(raw?.excludePresets),
+    };
+  } catch {
+    return {
+      insertPresets: normalizePlanLayoutInsertPresetList(DEFAULT_EXHIBITION_PLAN_LAYOUT_INSERT_PRESETS),
+      excludePresets: normalizePlanLayoutExcludePresetList(DEFAULT_EXHIBITION_PLAN_LAYOUT_EXCLUDE_PRESETS),
+    };
+  }
+}
+
+function writePlanLayoutDb(db) {
+  fs.mkdirSync(path.dirname(PLAN_LAYOUT_DB_FILE), { recursive: true });
+  fs.writeFileSync(
+    PLAN_LAYOUT_DB_FILE,
+    JSON.stringify({
+      insertPresets: normalizePlanLayoutInsertPresetList(db?.insertPresets),
+      excludePresets: normalizePlanLayoutExcludePresetList(db?.excludePresets),
     }, null, 2),
     'utf-8',
   );
@@ -699,6 +802,39 @@ router.put('/exhibition-creative/presets/view-angles', (req, res) => {
   const db = readCreativeDb();
   const presets = normalizeCreativeViewAnglePresetList(req.body?.presets);
   writeCreativeDb({ ...db, viewAnglePresets: presets });
+  res.json({ success: true, data: presets });
+});
+
+router.get('/exhibition-plan-layout/presets', (_req, res) => {
+  const db = readPlanLayoutDb();
+  res.json({
+    success: true,
+    data: {
+      inserts: normalizePlanLayoutInsertPresetList(db.insertPresets),
+      exclusions: normalizePlanLayoutExcludePresetList(db.excludePresets),
+    },
+  });
+});
+
+router.put('/exhibition-plan-layout/presets/inserts', (req, res) => {
+  const user = req.user;
+  if (!isAdminRole(user?.role)) {
+    return res.status(403).json({ success: false, error: '只有系统管理员或经理可以维护平面自动布局植入项预设' });
+  }
+  const db = readPlanLayoutDb();
+  const presets = normalizePlanLayoutInsertPresetList(req.body?.presets);
+  writePlanLayoutDb({ ...db, insertPresets: presets });
+  res.json({ success: true, data: presets });
+});
+
+router.put('/exhibition-plan-layout/presets/exclusions', (req, res) => {
+  const user = req.user;
+  if (!isAdminRole(user?.role)) {
+    return res.status(403).json({ success: false, error: '只有系统管理员或经理可以维护平面自动布局排除项预设' });
+  }
+  const db = readPlanLayoutDb();
+  const presets = normalizePlanLayoutExcludePresetList(req.body?.presets);
+  writePlanLayoutDb({ ...db, excludePresets: presets });
   res.json({ success: true, data: presets });
 });
 

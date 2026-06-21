@@ -45,3 +45,36 @@ test('exhibition plan layout node wires llm and image generation providers', () 
   assert.match(source, /id="outline-text"/);
   assert.match(source, /id="style-reference"/);
 });
+
+test('exhibition plan layout presets use independent editable prompt-library endpoints', () => {
+  const source = read('src/components/nodes/ExhibitionPlanLayoutNode.tsx');
+  assert.match(source, /getCurrentUser/);
+  assert.match(source, /canManageTeam/);
+  assert.match(source, /getExhibitionPlanLayoutPromptPresets/);
+  assert.match(source, /updateExhibitionPlanLayoutInsertPresets/);
+  assert.match(source, /updateExhibitionPlanLayoutExcludePresets/);
+  assert.match(source, /insertOptions/);
+  assert.match(source, /excludeOptions/);
+
+  const api = read('src/services/api.ts');
+  assert.match(api, /ExhibitionPlanLayoutInsertPresetItem/);
+  assert.match(api, /ExhibitionPlanLayoutExcludePresetItem/);
+  assert.match(api, /getExhibitionPlanLayoutPromptPresets/);
+  assert.match(api, /updateExhibitionPlanLayoutInsertPresets/);
+  assert.match(api, /updateExhibitionPlanLayoutExcludePresets/);
+  assert.match(api, /\/prompt-library\/exhibition-plan-layout\/presets/);
+  assert.match(api, /\/prompt-library\/exhibition-plan-layout\/presets\/inserts/);
+  assert.match(api, /\/prompt-library\/exhibition-plan-layout\/presets\/exclusions/);
+
+  const backend = read('backend/src/routes/promptLibrary.js');
+  assert.match(backend, /PLAN_LAYOUT_DB_FILE/);
+  assert.match(backend, /prompt_library_exhibition_plan_layout\.json/);
+  assert.match(backend, /DEFAULT_EXHIBITION_PLAN_LAYOUT_INSERT_PRESETS/);
+  assert.match(backend, /DEFAULT_EXHIBITION_PLAN_LAYOUT_EXCLUDE_PRESETS/);
+  assert.match(backend, /readPlanLayoutDb/);
+  assert.match(backend, /writePlanLayoutDb/);
+  assert.match(backend, /router\.get\('\/exhibition-plan-layout\/presets'/);
+  assert.match(backend, /router\.put\('\/exhibition-plan-layout\/presets\/inserts'/);
+  assert.match(backend, /router\.put\('\/exhibition-plan-layout\/presets\/exclusions'/);
+  assert.match(backend, /isAdminRole\(user\?\.role\)/);
+});

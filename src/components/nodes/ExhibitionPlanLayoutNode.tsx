@@ -1,8 +1,20 @@
-import { memo, useCallback, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
 import { Brain, FileText, Image as ImageIcon, Loader2, Map, Play, Route, Upload } from 'lucide-react';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
-import { extractDocument, MAX_DOCUMENT_FILE_SIZE, MAX_DOCUMENT_FILE_SIZE_MB, type ExtractedDocument } from '../../services/api';
+import {
+  extractDocument,
+  getCurrentUser,
+  getExhibitionPlanLayoutPromptPresets,
+  MAX_DOCUMENT_FILE_SIZE,
+  MAX_DOCUMENT_FILE_SIZE_MB,
+  updateExhibitionPlanLayoutExcludePresets,
+  updateExhibitionPlanLayoutInsertPresets,
+  type AuthUser,
+  type ExhibitionPlanLayoutExcludePresetItem,
+  type ExhibitionPlanLayoutInsertPresetItem,
+  type ExtractedDocument,
+} from '../../services/api';
 import { generateExternalImage, generateLlm, queryExternalImageStatus, queryImageStatus, submitImageAsync } from '../../services/generation';
 import {
   advancedProviderModelOptions,
@@ -94,6 +106,25 @@ function llmErrorMessage(error: any) {
   return message || 'LLM 请求失败';
 }
 
+function presetEditorText(presets: ExhibitionPlanLayoutChoiceItem[]) {
+  return presets.map((preset) => preset.label).join('\n');
+}
+
+function parseLabelPresetEditorText(text: string, fallbackId: string) {
+  return text
+    .split(/\r?\n/)
+    .map((line, index) => {
+      const label = line.trim();
+      if (!label) return null;
+      return {
+        id: `${label.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || fallbackId}-${index + 1}`,
+        label,
+        order: index,
+      };
+    })
+    .filter(Boolean) as Array<{ id: string; label: string; order: number }>;
+}
+
 function ImageSlot({ title, subtitle, url }: { title: string; subtitle: string; url: string }) {
   return (
     <div className="rounded border border-white/10 bg-black/15 p-2">
@@ -113,12 +144,24 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
   const update = useUpdateNodeData(id);
   const fileRef = useRef<HTMLInputElement>(null);
   const pollAbortRef = useRef(false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [insertPresets, setInsertPresets] = useState<ExhibitionPlanLayoutInsertPresetItem[]>([]);
+  const [excludePresets, setExcludePresets] = useState<ExhibitionPlanLayoutExcludePresetItem[]>([]);
+  const [insertEditorOpen, setInsertEditorOpen] = useState(false);
+  const [excludeEditorOpen, setExcludeEditorOpen] = useState(false);
+  const [insertEditorValue, setInsertEditorValue] = useState('');
+  const [excludeEditorValue, setExcludeEditorValue] = useState('');
+  const [insertSaving, setInsertSaving] = useState(false);
+  const [excludeSaving, setExcludeSaving] = useState(false);
+  const [insertError, setInsertError] = useState('');
+  const [excludeError, setExcludeError] = useState('');
   const planImage = useInputImageByHandle(id, 'plan-image');
   const styleReferenceImage = useInputImageByHandle(id, 'style-reference');
   const upstream = useUpstreamMaterials(id);
   const activeCanvas = useCanvasStore((state) => state.canvases.find((canvas) => canvas.id === state.activeId) || null);
   const activeCanvasId = useCanvasStore((state) => state.activeId);
   const isReadonly = activeCanvas?.access?.canEdit === false;
+  const canManageTeam = currentUser?.role === 'admin' || currentUser?.role === 'manager';
   const configuredLlmModel = useApiKeysStore((state) => state.settings.llmModel)?.trim() || DEFAULT_LLM_MODEL;
   const llmConfigs = useApiKeysStore((state) => state.settings.llmConfigs || state.settings.llmApiKeys) || [];
   const advancedProviders = useApiKeysStore((state) => state.settings.advancedProviders);
@@ -169,17 +212,25 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
   const showRoute = d.showRoute !== false;
   const showLabels = d.showLabels !== false;
   const showDescriptions = d.showDescriptions !== false;
+  const insertOptions = useMemo<ExhibitionPlanLayoutChoiceItem[]>(
+    () => (insertPresets.length > 0 ? insertPresets : EXHIBITION_PLAN_LAYOUT_INSERT_ITEMS),
+    [insertPresets],
+  );
+  const excludeOptions = useMemo<ExhibitionPlanLayoutChoiceItem[]>(
+    () => (excludePresets.length > 0 ? excludePresets : EXHIBITION_PLAN_LAYOUT_EXCLUDE_ITEMS),
+    [excludePresets],
+  );
   const selectedInsertItems = useMemo(
-    () => normalizeExhibitionPlanLayoutInsertItems(d.insertItems, EXHIBITION_PLAN_LAYOUT_INSERT_ITEMS),
-    [d.insertItems],
+    () => normalizeExhibitionPlanLayoutInsertItems(d.insertItems, insertOptions),
+    [d.insertItems, insertOptions],
   );
   const selectedInsertIds = useMemo(() => selectedInsertItems.map((item) => item.id), [selectedInsertItems]);
   const selectedExcludeItems = useMemo(
-    () => normalizeExhibitionPlanLayoutExcludeItems(d.excludeItems, EXHIBITION_PLAN_LAYOUT_EXCLUDE_ITEMS),
-    [d.excludeItems],
+    () => normalizeExhibitionPlanLayoutExcludeItems(d.excludeItems, excludeOptions),
+    [d.excludeItems, excludeOptions],
   );
   const selectedExcludeIds = useMemo(() => selectedExcludeItems.map((item) => item.id), [selectedExcludeItems]);
-  const allExcludeSelected = selectedExcludeIds.length === EXHIBITION_PLAN_LAYOUT_EXCLUDE_ITEMS.length;
+  const allExcludeSelected = excludeOptions.length > 0 && selectedExcludeIds.length === excludeOptions.length;
 
   const buildPrompt = useCallback((outlineText: string) => buildExhibitionPlanLayoutPrompt({
     layoutOutlineText: outlineText,
@@ -191,7 +242,9 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
     hasStyleReferenceImage: !!styleReferenceImage,
     insertItems: selectedInsertIds,
     excludeItems: selectedExcludeIds,
-  }), [d.layoutRequirement, layoutPresetId, selectedExcludeIds, selectedInsertIds, showDescriptions, showLabels, showRoute, styleReferenceImage]);
+    insertItemOptions: insertOptions,
+    excludeItemOptions: excludeOptions,
+  }), [d.layoutRequirement, excludeOptions, insertOptions, layoutPresetId, selectedExcludeIds, selectedInsertIds, showDescriptions, showLabels, showRoute, styleReferenceImage]);
 
   const pickDocument = useCallback(async (file?: File) => {
     if (!file || isReadonly || busy) return;
@@ -226,7 +279,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
         max_tokens: 2400,
         messages: [
           { role: 'system', content: '你是资深展陈策划与空间规划专家。你只输出严格 JSON。' },
-          { role: 'user', content: buildExhibitionPlanOutlinePrompt({ sourceText: text, insertItems: selectedInsertIds, excludeItems: selectedExcludeIds }) },
+          { role: 'user', content: buildExhibitionPlanOutlinePrompt({ sourceText: text, insertItems: selectedInsertIds, excludeItems: selectedExcludeIds, insertItemOptions: insertOptions, excludeItemOptions: excludeOptions }) },
         ],
       });
       const formatted = formatExhibitionPlanOutline(parseExhibitionPlanOutlineJson(response.content || ''));
@@ -237,7 +290,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
       update({ status: 'error', error: llmErrorMessage(error), progress: '' });
       throw error;
     }
-  }, [activeLlmConfig?.id, effectiveSourceText, llmModel, selectedExcludeIds, selectedInsertIds, update]);
+  }, [activeLlmConfig?.id, effectiveSourceText, excludeOptions, insertOptions, llmModel, selectedExcludeIds, selectedInsertIds, update]);
 
   const runGenerate = useCallback(async () => {
     if (isReadonly) return;
@@ -365,6 +418,73 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
   }, [activeCanvasId, apiModel, aspectRatio, buildPrompt, d.providerParams, effectiveSourceText, externalProviderModel, id, isExternalSelected, isReadonly, layoutOutlineText, modelDef.id, modelDef.paramKind, outputFormat, planImage, providerSelection.provider, runOutline, seed, sizeLevel, styleReferenceImage, update]);
 
   useRunTrigger(id, runGenerate, 'image');
+
+  useEffect(() => {
+    getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
+    getExhibitionPlanLayoutPromptPresets()
+      .then((presets) => {
+        setInsertPresets(presets.inserts || []);
+        setExcludePresets(presets.exclusions || []);
+      })
+      .catch(() => {
+        setInsertPresets([]);
+        setExcludePresets([]);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!insertEditorOpen) return;
+    setInsertEditorValue(presetEditorText(insertOptions));
+    setInsertError('');
+  }, [insertEditorOpen, insertOptions]);
+
+  useEffect(() => {
+    if (!excludeEditorOpen) return;
+    setExcludeEditorValue(presetEditorText(excludeOptions));
+    setExcludeError('');
+  }, [excludeEditorOpen, excludeOptions]);
+
+  const saveInsertPresets = async () => {
+    if (!canManageTeam) return;
+    const presets = parseLabelPresetEditorText(insertEditorValue, 'insert');
+    if (presets.length === 0) {
+      setInsertError('请至少保留一项植入内容。');
+      return;
+    }
+    setInsertSaving(true);
+    setInsertError('');
+    try {
+      const saved = await updateExhibitionPlanLayoutInsertPresets(presets);
+      setInsertPresets(saved);
+      update({ insertItems: normalizeExhibitionPlanLayoutInsertItems(selectedInsertIds, saved).map((item) => item.id) });
+      setInsertEditorOpen(false);
+    } catch (error: any) {
+      setInsertError(error?.message || '保存植入项失败');
+    } finally {
+      setInsertSaving(false);
+    }
+  };
+
+  const saveExcludePresets = async () => {
+    if (!canManageTeam) return;
+    const presets = parseLabelPresetEditorText(excludeEditorValue, 'exclude');
+    if (presets.length === 0) {
+      setExcludeError('请至少保留一项排除内容。');
+      return;
+    }
+    setExcludeSaving(true);
+    setExcludeError('');
+    try {
+      const saved = await updateExhibitionPlanLayoutExcludePresets(presets);
+      setExcludePresets(saved);
+      update({ excludeItems: normalizeExhibitionPlanLayoutExcludeItems(selectedExcludeIds, saved).map((item) => item.id) });
+      setExcludeEditorOpen(false);
+    } catch (error: any) {
+      setExcludeError(error?.message || '保存排除项失败');
+    } finally {
+      setExcludeSaving(false);
+    }
+  };
 
   const availableModelDefs = IMAGE_MODELS.filter((item) => item.paramKind !== 'mj');
 
@@ -498,13 +618,43 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
                   type="button"
                   className={`${BUTTON} ml-auto h-6 px-1.5`}
                   disabled={isReadonly || busy}
-                  onClick={() => update({ insertItems: EXHIBITION_PLAN_LAYOUT_INSERT_ITEMS.map((item) => item.id) })}
+                  onClick={() => update({ insertItems: insertOptions.map((item) => item.id) })}
                 >
                   全选
                 </button>
               </div>
+              {canManageTeam && (
+                <div className="space-y-1 rounded border border-cyan-300/20 bg-cyan-300/10 p-1.5">
+                  <button
+                    type="button"
+                    className={`${BUTTON} h-6 px-1.5`}
+                    disabled={busy || insertSaving}
+                    onClick={() => setInsertEditorOpen((open) => !open)}
+                  >
+                    {insertEditorOpen ? '收起编辑' : '编辑植入项'}
+                  </button>
+                  {insertEditorOpen && (
+                    <>
+                      <textarea
+                        className={`${FIELD} min-h-[88px] resize-y`}
+                        value={insertEditorValue}
+                        disabled={insertSaving}
+                        placeholder="每行一个植入项"
+                        onChange={(event) => setInsertEditorValue(event.target.value)}
+                      />
+                      {insertError && <div className="text-[9px] text-red-200">{insertError}</div>}
+                      <div className="flex justify-end gap-1">
+                        <button type="button" className={`${BUTTON} h-6 px-1.5`} disabled={insertSaving} onClick={() => setInsertEditorOpen(false)}>取消</button>
+                        <button type="button" className={`${BUTTON} h-6 border-cyan-300/30 bg-cyan-300/15 px-1.5 text-cyan-100`} disabled={insertSaving} onClick={() => void saveInsertPresets()}>
+                          {insertSaving ? '保存中' : '保存'}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-1">
-                {EXHIBITION_PLAN_LAYOUT_INSERT_ITEMS.map((item: ExhibitionPlanLayoutChoiceItem) => {
+                {insertOptions.map((item: ExhibitionPlanLayoutChoiceItem) => {
                   const checked = selectedInsertIds.includes(item.id);
                   return (
                     <label key={item.id} className="flex items-center gap-1 rounded bg-white/[0.04] px-1.5 py-1 text-[9px] text-white/65">
@@ -533,13 +683,43 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
                   type="button"
                   className={`${BUTTON} ml-auto h-6 px-1.5`}
                   disabled={isReadonly || busy}
-                  onClick={() => update({ excludeItems: allExcludeSelected ? [] : EXHIBITION_PLAN_LAYOUT_EXCLUDE_ITEMS.map((item) => item.id) })}
+                  onClick={() => update({ excludeItems: allExcludeSelected ? [] : excludeOptions.map((item) => item.id) })}
                 >
                   {allExcludeSelected ? '清空' : '全选'}
                 </button>
               </div>
+              {canManageTeam && (
+                <div className="space-y-1 rounded border border-cyan-300/20 bg-cyan-300/10 p-1.5">
+                  <button
+                    type="button"
+                    className={`${BUTTON} h-6 px-1.5`}
+                    disabled={busy || excludeSaving}
+                    onClick={() => setExcludeEditorOpen((open) => !open)}
+                  >
+                    {excludeEditorOpen ? '收起编辑' : '编辑排除项'}
+                  </button>
+                  {excludeEditorOpen && (
+                    <>
+                      <textarea
+                        className={`${FIELD} min-h-[88px] resize-y`}
+                        value={excludeEditorValue}
+                        disabled={excludeSaving}
+                        placeholder="每行一个排除项"
+                        onChange={(event) => setExcludeEditorValue(event.target.value)}
+                      />
+                      {excludeError && <div className="text-[9px] text-red-200">{excludeError}</div>}
+                      <div className="flex justify-end gap-1">
+                        <button type="button" className={`${BUTTON} h-6 px-1.5`} disabled={excludeSaving} onClick={() => setExcludeEditorOpen(false)}>取消</button>
+                        <button type="button" className={`${BUTTON} h-6 border-cyan-300/30 bg-cyan-300/15 px-1.5 text-cyan-100`} disabled={excludeSaving} onClick={() => void saveExcludePresets()}>
+                          {excludeSaving ? '保存中' : '保存'}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-1">
-                {EXHIBITION_PLAN_LAYOUT_EXCLUDE_ITEMS.map((item: ExhibitionPlanLayoutChoiceItem) => {
+                {excludeOptions.map((item: ExhibitionPlanLayoutChoiceItem) => {
                   const checked = selectedExcludeIds.includes(item.id);
                   return (
                     <label key={item.id} className="flex items-center gap-1 rounded bg-white/[0.04] px-1.5 py-1 text-[9px] text-white/65">

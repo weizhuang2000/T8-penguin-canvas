@@ -432,6 +432,23 @@ export interface ExhibitionCreativePromptPresetMap {
   viewAngles: ExhibitionCreativeViewAnglePresetItem[];
 }
 
+export interface ExhibitionPlanLayoutInsertPresetItem {
+  id: string;
+  label: string;
+  order: number;
+}
+
+export interface ExhibitionPlanLayoutExcludePresetItem {
+  id: string;
+  label: string;
+  order: number;
+}
+
+export interface ExhibitionPlanLayoutPromptPresetMap {
+  inserts: ExhibitionPlanLayoutInsertPresetItem[];
+  exclusions: ExhibitionPlanLayoutExcludePresetItem[];
+}
+
 export interface UnitPanelMaterialItem {
   id: string;
   category: string;
@@ -568,6 +585,39 @@ export async function updateExhibitionCreativeViewAnglePresets(
 ): Promise<ExhibitionCreativeViewAnglePresetItem[]> {
   const res = await request<{ success: boolean; data: ExhibitionCreativeViewAnglePresetItem[] }>(
     `${BASE}/prompt-library/exhibition-creative/presets/view-angles`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ presets }),
+    },
+  );
+  return res.data || [];
+}
+
+export async function getExhibitionPlanLayoutPromptPresets(): Promise<ExhibitionPlanLayoutPromptPresetMap> {
+  const res = await request<{ success: boolean; data: ExhibitionPlanLayoutPromptPresetMap }>(
+    `${BASE}/prompt-library/exhibition-plan-layout/presets`,
+  );
+  return res.data || { inserts: [], exclusions: [] };
+}
+
+export async function updateExhibitionPlanLayoutInsertPresets(
+  presets: Array<Pick<ExhibitionPlanLayoutInsertPresetItem, 'label'> & Partial<Pick<ExhibitionPlanLayoutInsertPresetItem, 'id' | 'order'>>>,
+): Promise<ExhibitionPlanLayoutInsertPresetItem[]> {
+  const res = await request<{ success: boolean; data: ExhibitionPlanLayoutInsertPresetItem[] }>(
+    `${BASE}/prompt-library/exhibition-plan-layout/presets/inserts`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ presets }),
+    },
+  );
+  return res.data || [];
+}
+
+export async function updateExhibitionPlanLayoutExcludePresets(
+  presets: Array<Pick<ExhibitionPlanLayoutExcludePresetItem, 'label'> & Partial<Pick<ExhibitionPlanLayoutExcludePresetItem, 'id' | 'order'>>>,
+): Promise<ExhibitionPlanLayoutExcludePresetItem[]> {
+  const res = await request<{ success: boolean; data: ExhibitionPlanLayoutExcludePresetItem[] }>(
+    `${BASE}/prompt-library/exhibition-plan-layout/presets/exclusions`,
     {
       method: 'PUT',
       body: JSON.stringify({ presets }),

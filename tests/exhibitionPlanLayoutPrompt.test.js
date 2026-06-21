@@ -104,7 +104,11 @@ test('exhibition plan layout prompt uses attachment style and hard layout constr
   assert.match(prompt, /附件参考图风格/);
   assert.match(prompt, /红色虚线参观动线和箭头/);
   assert.match(prompt, /动线必须从入口到出口连续穿过所有展陈单元和展区/);
+  assert.match(prompt, /每个单元都必须被主参观动线实际进入或贴近穿过/);
   assert.match(prompt, /不能遗漏任何单元/);
+  assert.match(prompt, /空间通行硬约束/);
+  assert.match(prompt, /不能出现任何完全闭合、没有门洞\/开口\/通道连接的展陈空间或单元/);
+  assert.match(prompt, /至少保留一个清晰可通行入口和一个可继续前进的出口或通道节点/);
   assert.match(prompt, /单元分隔要求/);
   assert.match(prompt, /文物柜、展柜、核心展项、艺术品、浮雕墙、半高隔断或装置隔开/);
   assert.match(prompt, /柱网与孤立物约束/);
