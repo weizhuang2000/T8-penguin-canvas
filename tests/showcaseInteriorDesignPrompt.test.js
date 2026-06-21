@@ -2,11 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildShowcaseInteriorDesignPrompt,
+  buildShowcaseInteriorScaleReferenceDataUrl,
+  buildShowcaseInteriorScaleReferenceSvg,
   normalizeShowcaseExhibitItems,
   normalizeShowcaseStyle,
 } from '../src/utils/showcaseInteriorDesignPromptData.js';
 
-test('showcase prompt includes four showcase dimensions and cap switch', () => {
+test('showcase prompt includes four showcase dimensions and cap switch in Chinese', () => {
   const withCap = buildShowcaseInteriorDesignPrompt({
     showcaseStyle: {
       widthMm: 1200,
@@ -16,17 +18,17 @@ test('showcase prompt includes four showcase dimensions and cap switch', () => {
       hasCap: true,
     },
   });
-  assert.match(withCap, /Showcase width: 1200 mm/);
-  assert.match(withCap, /Base height: 300 mm/);
-  assert.match(withCap, /Glass display zone height: 1400 mm/);
-  assert.match(withCap, /Has top cap: yes, top cap height 180 mm/);
-  assert.match(withCap, /Derived total height: 1880 mm/);
+  assert.match(withCap, /展柜宽度：1200 mm/);
+  assert.match(withCap, /底座高度：300 mm/);
+  assert.match(withCap, /玻璃区高度：1400 mm/);
+  assert.match(withCap, /柜帽：开启，柜帽高度 180 mm/);
+  assert.match(withCap, /推导总高度：1880 mm/);
 
   const withoutCap = buildShowcaseInteriorDesignPrompt({
     showcaseStyle: { widthMm: 1200, baseHeightMm: 300, glassHeightMm: 1400, capHeightMm: 180, hasCap: false },
   });
-  assert.match(withoutCap, /Has top cap: no/);
-  assert.match(withoutCap, /Derived total height: 1700 mm/);
+  assert.match(withoutCap, /柜帽：关闭/);
+  assert.match(withoutCap, /推导总高度：1700 mm/);
 
   assert.deepEqual(normalizeShowcaseStyle({}), {
     widthMm: 1200,
@@ -39,46 +41,64 @@ test('showcase prompt includes four showcase dimensions and cap switch', () => {
 
 test('showcase prompt keeps exhibit order and longest side in millimeters', () => {
   const items = normalizeShowcaseExhibitItems([
-    { url: '/files/input/a.png', label: 'Bronze vessel', maxSideMm: 420 },
-    { url: '/files/input/b.png', label: 'Pottery figure', maxSideMm: 260 },
+    { url: '/files/input/a.png', label: '青铜器', maxSideMm: 420 },
+    { url: '/files/input/b.png', label: '陶俑', maxSideMm: 260 },
   ]);
   assert.deepEqual(items.map((item) => item.maxSideMm), [420, 260]);
 
   const prompt = buildShowcaseInteriorDesignPrompt({ exhibitItems: items, showcaseStyle: { widthMm: 1200, glassHeightMm: 1400 } });
-  assert.ok(prompt.indexOf('1. Bronze vessel: longestSideMm = 420 mm') < prompt.indexOf('2. Pottery figure: longestSideMm = 260 mm'));
-  assert.match(prompt, /REFERENCE IMAGE ORDER/);
-  assert.match(prompt, /STRICT SCALE RULE/);
-  assert.match(prompt, /35% of the 1200 mm showcase width/);
-  assert.match(prompt, /18\.6% of the 1400 mm glass-zone height/);
-  assert.match(prompt, /RELATIVE SIZE AUDIT/);
+  assert.ok(prompt.indexOf('1. 青铜器：最长边 420 mm') < prompt.indexOf('2. 陶俑：最长边 260 mm'));
+  assert.match(prompt, /第 1 张参考图是“比例控制图”/);
+  assert.match(prompt, /参考图顺序：第 2 张参考图 = 展品 1/);
+  assert.match(prompt, /严格比例规则/);
+  assert.match(prompt, /展柜宽度 1200 mm 的 35%/);
+  assert.match(prompt, /玻璃区高度 1400 mm 的 18\.6%/);
+  assert.match(prompt, /相对尺寸审计/);
 });
 
 test('showcase prompt switches dimension marks and exploded view requirements', () => {
   const marked = buildShowcaseInteriorDesignPrompt({ dimensionMarksEnabled: true, explodedViewEnabled: true });
-  assert.match(marked, /Dimension marks: ON/);
-  assert.match(marked, /Exploded view: ON/);
-  assert.match(marked, /cabinet body, glass cover, base, top cap, mounts, exhibits, and lighting components/);
+  assert.match(marked, /尺寸标注：开启/);
+  assert.match(marked, /分解爆炸图：开启/);
+  assert.match(marked, /柜体、玻璃罩、底座、柜帽、托架、展品、灯光组件/);
 
   const unmarked = buildShowcaseInteriorDesignPrompt({ dimensionMarksEnabled: false, explodedViewEnabled: false });
-  assert.match(unmarked, /Dimension marks: OFF/);
-  assert.match(unmarked, /Exploded view: OFF/);
-  assert.match(unmarked, /fully assembled cabinet interior display/);
+  assert.match(unmarked, /尺寸标注：关闭/);
+  assert.match(unmarked, /分解爆炸图：关闭/);
+  assert.match(unmarked, /完整组装后的柜内陈列效果图/);
 });
 
 test('showcase prompt separates exhibit images from color material reference', () => {
   const prompt = buildShowcaseInteriorDesignPrompt({
-    exhibitItems: [{ url: '/files/input/exhibit.png', label: 'Exhibit photo', maxSideMm: 300 }],
-    colorMaterialPresetText: 'dark gray metal, warm light, low-reflection glass',
-    manualColorMaterial: 'fine textile back panel',
-    colorMaterialReferenceTone: 'dominant tone: deep blue, champagne gold',
+    exhibitItems: [{ url: '/files/input/exhibit.png', label: '展品图', maxSideMm: 300 }],
+    colorMaterialPresetText: '深灰金属、暖光、低反射玻璃',
+    manualColorMaterial: '背板使用细腻织物肌理',
+    colorMaterialReferenceTone: '主色调：深蓝、香槟金',
     hasColorMaterialReferenceImage: true,
   });
-  assert.match(prompt, /ordinary image inputs are EXHIBIT PHOTOS/);
-  assert.match(prompt, /separate color-material-reference input/);
-  assert.match(prompt, /NOT an exhibit photo/);
-  assert.match(prompt, /must NOT receive a longest-side size/);
-  assert.match(prompt, /Shared color and material preset as secondary support/);
-  assert.match(prompt, /Manual color\/material supplement/);
-  assert.match(prompt, /Exhibit photo: longestSideMm = 300 mm/);
+  assert.match(prompt, /普通 image 输入均视为展品图/);
+  assert.match(prompt, /独立 color-material-reference 输入/);
+  assert.match(prompt, /它不是展品图/);
+  assert.match(prompt, /不得套用任何最长边尺寸/);
+  assert.match(prompt, /共享色彩与材质预设作为次级补充/);
+  assert.match(prompt, /手动色彩与材质补充/);
+  assert.match(prompt, /展品图：最长边 300 mm/);
 });
 
+test('showcase scale reference image encodes cabinet and exhibit millimeter constraints', () => {
+  const values = {
+    showcaseStyle: { widthMm: 1200, baseHeightMm: 300, glassHeightMm: 1400, capHeightMm: 180, hasCap: true },
+    exhibitItems: [
+      { url: '/files/input/a.png', label: '青铜器', maxSideMm: 420 },
+      { url: '/files/input/b.png', label: '陶俑', maxSideMm: 260 },
+    ],
+  };
+  const svg = buildShowcaseInteriorScaleReferenceSvg(values);
+  assert.match(svg, /柜内设计比例控制图/);
+  assert.match(svg, /展柜宽 1200 mm/);
+  assert.match(svg, /最长边 420 mm/);
+  assert.match(svg, /最长边 260 mm/);
+
+  const dataUrl = buildShowcaseInteriorScaleReferenceDataUrl(values);
+  assert.match(dataUrl, /^data:image\/svg\+xml;base64,/);
+});

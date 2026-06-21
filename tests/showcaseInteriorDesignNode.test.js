@@ -31,6 +31,9 @@ test('showcase interior design component wires shared controls and generation se
   assert.match(source, /id="color-material-reference"/);
   assert.match(source, /ColorMaterialPresetSelect/);
   assert.match(source, /buildShowcaseInteriorDesignPrompt/);
+  assert.match(source, /buildShowcaseInteriorScaleReferenceDataUrl/);
+  assert.match(source, /imageDataUrlToPngDataUrl/);
+  assert.match(source, /scaleReferenceImage/);
   assert.match(source, /generateExternalImage/);
   assert.match(source, /submitImageAsync/);
   assert.match(source, /queryImageStatus/);
@@ -40,4 +43,3 @@ test('showcase interior design component wires shared controls and generation se
   assert.match(source, /dimensionMarksEnabled/);
   assert.match(source, /explodedViewEnabled/);
 });
-

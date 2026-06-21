@@ -12,6 +12,7 @@ import {
 } from '../../utils/advancedProviders';
 import {
   buildShowcaseInteriorDesignPrompt,
+  buildShowcaseInteriorScaleReferenceDataUrl,
   colorMaterialTextFromPreset,
   normalizeShowcaseExhibitItems,
   normalizeShowcaseStyle,
@@ -123,6 +124,33 @@ function sameJson(a: unknown, b: unknown) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+async function imageDataUrlToPngDataUrl(dataUrl: string): Promise<string> {
+  if (typeof document === 'undefined' || typeof Image === 'undefined') return dataUrl;
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || 1200;
+        canvas.height = img.naturalHeight || 1600;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(dataUrl);
+          return;
+        }
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL('image/png'));
+      } catch {
+        resolve(dataUrl);
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
 const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
@@ -182,6 +210,18 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
     });
   }, [d.exhibitItems, exhibitImages]);
 
+  const previewScaleReferenceImage = useMemo(() => buildShowcaseInteriorScaleReferenceDataUrl({
+    showcaseStyle,
+    exhibitItems,
+    hasColorMaterialReferenceImage: !!colorMaterialReferenceImage,
+  }), [colorMaterialReferenceImage, exhibitItems, showcaseStyle]);
+
+  const previewReferenceImages = useMemo(() => [
+    previewScaleReferenceImage,
+    ...exhibitItems.map((item) => item.url),
+    colorMaterialReferenceImage,
+  ].filter(Boolean), [colorMaterialReferenceImage, exhibitItems, previewScaleReferenceImage]);
+
   const previewPrompt = useMemo(() => buildShowcaseInteriorDesignPrompt({
     showcaseStyle,
     exhibitItems,
@@ -203,16 +243,15 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
   }, [d.exhibitItems, exhibitItems, update]);
 
   useEffect(() => {
-    const refs = colorMaterialReferenceImage ? [colorMaterialReferenceImage] : [];
     if (
       d.prompt !== previewPrompt ||
       d.outputText !== previewPrompt ||
       d.text !== previewPrompt ||
-      !sameJson(d.referenceImages || [], refs)
+      !sameJson(d.referenceImages || [], previewReferenceImages)
     ) {
-      update({ prompt: previewPrompt, outputText: previewPrompt, text: previewPrompt, referenceImages: refs });
+      update({ prompt: previewPrompt, outputText: previewPrompt, text: previewPrompt, referenceImages: previewReferenceImages });
     }
-  }, [colorMaterialReferenceImage, d.outputText, d.prompt, d.referenceImages, d.text, previewPrompt, update]);
+  }, [d.outputText, d.prompt, d.referenceImages, d.text, previewPrompt, previewReferenceImages, update]);
 
   const patchShowcaseStyle = (key: string, value: unknown) => {
     update({ showcaseStyle: { ...showcaseStyle, [key]: value } });
@@ -239,7 +278,17 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
       explodedViewEnabled: d.explodedViewEnabled === true,
       supplement: d.supplement,
     });
-    const runtimeReferenceImages = [...exhibitItems.map((item) => item.url), colorMaterialReferenceImage].filter(Boolean);
+    const scaleReferenceDataUrl = buildShowcaseInteriorScaleReferenceDataUrl({
+      showcaseStyle,
+      exhibitItems,
+      hasColorMaterialReferenceImage: !!colorMaterialReferenceImage,
+    });
+    const scaleReferenceImage = await imageDataUrlToPngDataUrl(scaleReferenceDataUrl);
+    const runtimeReferenceImages = [
+      scaleReferenceImage,
+      ...exhibitItems.map((item) => item.url),
+      colorMaterialReferenceImage,
+    ].filter(Boolean);
     const runSeed = seed > 0 ? seed : randomImageSeed();
     const src = `showcase-interior-design:${id.slice(0, 6)}`;
     const historyContext = {
@@ -251,7 +300,17 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
     };
     taskCompletionSound.primeAudio();
     pollAbortRef.current = false;
-    update({ status: 'generating', progress: '0%', error: '', imageUrls: [], urls: [], lastPrompt: imagePrompt, lastSeed: runSeed });
+    update({
+      status: 'generating',
+      progress: '0%',
+      error: '',
+      imageUrls: [],
+      urls: [],
+      lastPrompt: imagePrompt,
+      lastSeed: runSeed,
+      scaleReferenceImage,
+      referenceImages: runtimeReferenceImages,
+    });
     try {
       let urls: string[] = [];
       if (isExternalSelected && providerSelection.provider) {
@@ -569,4 +628,3 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
 };
 
 export default memo(ShowcaseInteriorDesignNode);
-

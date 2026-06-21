@@ -21,6 +21,20 @@ function formatPercent(value) {
   return String(Math.round(value * 10) / 10);
 }
 
+function escapeXml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function encodeBase64Utf8(value) {
+  if (typeof Buffer !== 'undefined') return Buffer.from(value, 'utf8').toString('base64');
+  const encoded = encodeURIComponent(value).replace(/%([0-9A-F]{2})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
+  return btoa(encoded);
+}
+
 export function normalizeShowcaseStyle(value = {}) {
   const source = value && typeof value === 'object' ? value : {};
   return {
@@ -37,10 +51,10 @@ export function normalizeShowcaseExhibitItems(value = []) {
   return list
     .map((item, index) => {
       const url = cleanText(item?.url || item?.imageUrl || '', 1000);
-      const label = cleanText(item?.label || item?.name || `Exhibit ${index + 1}`, 80);
+      const label = cleanText(item?.label || item?.name || `展品 ${index + 1}`, 80);
       const maxSideMm = normalizeNumber(item?.maxSideMm ?? item?.longestSideMm ?? item?.sizeMm, 300, 1, 99999);
       if (!url && !label) return null;
-      return { url, label: label || `Exhibit ${index + 1}`, maxSideMm };
+      return { url, label: label || `展品 ${index + 1}`, maxSideMm };
     })
     .filter(Boolean);
 }
@@ -50,20 +64,20 @@ export function colorMaterialTextFromPreset(preset) {
   return [preset.core, preset.features, preset.usage, preset.info]
     .map((item) => cleanText(item, 1200))
     .filter(Boolean)
-    .join('; ');
+    .join('；');
 }
 
 function showcaseStyleText(style) {
   const s = normalizeShowcaseStyle(style);
   const totalHeight = s.baseHeightMm + s.glassHeightMm + (s.hasCap ? s.capHeightMm : 0);
   return [
-    `Showcase width: ${s.widthMm} mm`,
-    `Base height: ${s.baseHeightMm} mm`,
-    `Glass display zone height: ${s.glassHeightMm} mm`,
+    `展柜宽度：${s.widthMm} mm`,
+    `底座高度：${s.baseHeightMm} mm`,
+    `玻璃区高度：${s.glassHeightMm} mm`,
     s.hasCap
-      ? `Has top cap: yes, top cap height ${s.capHeightMm} mm`
-      : `Has top cap: no. Do not render a top cap; the stored top cap height ${s.capHeightMm} mm is inactive.`,
-    `Derived total height: ${totalHeight} mm`,
+      ? `柜帽：开启，柜帽高度 ${s.capHeightMm} mm`
+      : `柜帽：关闭。不要生成柜帽结构；柜帽高度 ${s.capHeightMm} mm 仅作为关闭状态记录。`,
+    `推导总高度：${totalHeight} mm`,
   ].join('\n');
 }
 
@@ -72,29 +86,31 @@ function exhibitItemsText(items, style, values = {}) {
   const s = normalizeShowcaseStyle(style);
   if (!normalized.length) {
     return [
-      'No exhibit photos are connected. Use abstract exhibit placeholders, but keep realistic museum display scale.',
-      'Use appropriate mounts, supports, low-reflection protection, focal lighting, and clear cabinet hierarchy. Do not generate readable exhibit label text.',
+      '未接入展品图。可以生成抽象展品占位体块，但必须遵守真实博物馆展柜陈列尺度。',
+      '需要配置托架、支撑、低反射保护、重点照明和清晰的柜内层次，不要生成可读说明文字。',
     ].join('\n');
   }
 
   const lines = [
-    'All ordinary image inputs are EXHIBIT PHOTOS. They are only for exhibit appearance, silhouette, material detail, and display priority. They are NOT color/material style references.',
-    'REFERENCE IMAGE ORDER: input image #1 is Exhibit 1, input image #2 is Exhibit 2, and so on. Match the connected exhibit photos to the sizes below in the same order.',
-    'STRICT SCALE RULE: scale each exhibit only by its longestSideMm value. Do not scale by source-image pixel size, crop size, subject prominence, or how large the object appears in its reference photo.',
+    '运行时第 1 张参考图是“比例控制图”，只用于锁定展柜与展品的物理尺寸关系，不要把它作为最终画面风格。',
+    '普通 image 输入均视为展品图，只用于提取展品外观、体量、轮廓、材质和摆放重点，不作为色彩材质风格参考。',
+    '参考图顺序：第 2 张参考图 = 展品 1，第 3 张参考图 = 展品 2，以此类推。必须按这个顺序匹配展品图片和尺寸。',
+    '严格比例规则：每件展品只能按“最长边 mm”缩放，不能按原图像素、裁切大小、主体在参考图里看起来的大小或视觉重要性缩放。',
+    '比例控制图中的每个蓝色占位框就是该展品最长边的真实比例范围；最终展品必须放在对应编号框附近，最长边不得明显超出该框。',
   ];
 
   normalized.forEach((item, index) => {
     const widthPercent = s.widthMm > 0 ? (item.maxSideMm / s.widthMm) * 100 : 0;
     const glassPercent = s.glassHeightMm > 0 ? (item.maxSideMm / s.glassHeightMm) * 100 : 0;
-    lines.push(`${index + 1}. ${item.label}: longestSideMm = ${item.maxSideMm} mm; reference URL: ${item.url || '[upstream exhibit image]'}`);
-    lines.push(`   SCALE CHECK: Exhibit ${index + 1} longest side is ${formatPercent(widthPercent)}% of the ${s.widthMm} mm showcase width and ${formatPercent(glassPercent)}% of the ${s.glassHeightMm} mm glass-zone height.`);
+    lines.push(`${index + 1}. ${item.label}：最长边 ${item.maxSideMm} mm；参考图 URL：${item.url || '[上游展品图]'}`);
+    lines.push(`   比例校验：展品 ${index + 1} 的最长边约为展柜宽度 ${s.widthMm} mm 的 ${formatPercent(widthPercent)}%，约为玻璃区高度 ${s.glassHeightMm} mm 的 ${formatPercent(glassPercent)}%。`);
   });
 
   if (values.hasColorMaterialReferenceImage === true) {
-    lines.push('COLOR MATERIAL REFERENCE: the separate color-material-reference image is the final reference image. It is NOT an exhibit photo and must NOT receive a longest-side size.');
+    lines.push('色彩材质参考图使用独立 color-material-reference 输入，并且排在所有展品图之后；它不是展品图，不得套用任何最长边尺寸。');
   }
-  lines.push('RELATIVE SIZE AUDIT: if two exhibit reference photos look similarly large but have different longestSideMm values, render them at visibly different physical sizes according to the millimeter numbers.');
-  lines.push('FINAL SCALE AUDIT BEFORE RENDERING: compare every exhibit against the cabinet width and glass-zone height. Small maxSideMm values must stay small in the cabinet; large maxSideMm values may dominate only when the number justifies it.');
+  lines.push('相对尺寸审计：如果两张展品参考图看起来差不多大，但最长边数值不同，最终必须按毫米数显示出明显的物理大小差异。');
+  lines.push('渲染前最终检查：逐一比较每件展品与展柜宽度、玻璃区高度和比例控制图。小尺寸展品必须保持小件感，大尺寸展品只有在数值足够大时才可以成为视觉主体。');
   return lines.join('\n');
 }
 
@@ -106,14 +122,14 @@ function colorMaterialText(values) {
   const lines = [];
 
   if (hasReference) {
-    lines.push('The color/material reference uses the separate color-material-reference input. Use it only for cabinet background, base, back panel, mounts, lighting, metal/acrylic/glass material language. Do not treat it as an exhibit photo and do not alter exhibit identity.');
-    if (referenceTone) lines.push(`Reference dominant tone/material note: ${referenceTone}`);
+    lines.push('色彩与材质参考图使用独立 color-material-reference 输入，只用于提取柜内背景、底座、背板、托架、灯光、金属/亚克力/玻璃等材质语言，不得当作展品图，也不得改变展品本身外观。');
+    if (referenceTone) lines.push(`参考图主色调 / 材质说明：${referenceTone}`);
   }
-  if (presetText && !hasReference) lines.push(`Shared color and material preset: ${presetText}`);
-  if (presetText && hasReference) lines.push(`Shared color and material preset as secondary support: ${presetText}`);
-  if (manualText) lines.push(`Manual color/material supplement: ${manualText}`);
+  if (presetText && !hasReference) lines.push(`共享色彩与材质预设：${presetText}`);
+  if (presetText && hasReference) lines.push(`共享色彩与材质预设作为次级补充：${presetText}`);
+  if (manualText) lines.push(`手动色彩与材质补充：${manualText}`);
   if (!lines.length) {
-    lines.push('If no color/material direction is specified, use restrained, low-reflection, museum-grade, buildable cabinet interior materials.');
+    lines.push('未指定色彩材质时，采用克制、低反射、博物馆级、可落地施工的柜内设计材质体系。');
   }
   return lines.join('\n');
 }
@@ -121,43 +137,106 @@ function colorMaterialText(values) {
 function outputRequirementText(values) {
   return [
     values.dimensionMarksEnabled === true
-      ? 'Dimension marks: ON. Add clean engineering dimension annotations in millimeters for key widths/heights, but keep them tidy and proposal-like.'
-      : 'Dimension marks: OFF. Do not draw dimension lines, mm numbers, red measurement labels, rulers, or engineering annotation symbols. Still obey the provided dimensions silently.',
+      ? '尺寸标注：开启。输出中可加入清晰的工程尺寸标注、毫米单位和关键高度/宽度标注，但文字必须简洁、整洁，像方案图标注。'
+      : '尺寸标注：关闭。不要绘制尺寸线、毫米数字、红色测量标注、工程尺或标注符号，但仍要按给定尺寸比例生成。',
     values.explodedViewEnabled === true
-      ? 'Exploded view: ON. Show separated structural relationships among cabinet body, glass cover, base, top cap, mounts, exhibits, and lighting components.'
-      : 'Exploded view: OFF. Render a fully assembled cabinet interior display. Do not scatter or float cabinet components.',
+      ? '分解爆炸图：开启。输出应表现柜体、玻璃罩、底座、柜帽、托架、展品、灯光组件的分解关系，可用轻微错位或爆炸图形式展示结构层级。'
+      : '分解爆炸图：关闭。输出应为完整组装后的柜内陈列效果图，不要把柜体构件拆散漂浮。',
   ].join('\n');
+}
+
+export function buildShowcaseInteriorScaleReferenceSvg(values = {}) {
+  const style = normalizeShowcaseStyle(values.showcaseStyle || values.dimensions || values);
+  const exhibits = normalizeShowcaseExhibitItems(values.exhibitItems);
+  const totalHeightMm = style.baseHeightMm + style.glassHeightMm + (style.hasCap ? style.capHeightMm : 0);
+  const canvasW = 1200;
+  const canvasH = 1600;
+  const margin = 120;
+  const chartW = 760;
+  const chartH = 1160;
+  const scale = Math.min(chartW / Math.max(style.widthMm, 1), chartH / Math.max(totalHeightMm, 1));
+  const cabinetW = style.widthMm * scale;
+  const baseH = style.baseHeightMm * scale;
+  const glassH = style.glassHeightMm * scale;
+  const capH = (style.hasCap ? style.capHeightMm : 0) * scale;
+  const x = margin + (chartW - cabinetW) / 2;
+  const y = 260 + (chartH - (baseH + glassH + capH)) / 2;
+  const capY = y;
+  const glassY = y + capH;
+  const baseY = glassY + glassH;
+  const exhibitGap = 24;
+  const slotCount = Math.max(exhibits.length, 1);
+  const slotW = Math.max(80, (cabinetW - exhibitGap * (slotCount + 1)) / slotCount);
+  const exhibitEls = exhibits.map((item, index) => {
+    const box = Math.max(8, item.maxSideMm * scale);
+    const clamped = Math.min(box, Math.max(24, slotW), Math.max(24, glassH * 0.86));
+    const cx = x + exhibitGap + slotW * index + exhibitGap * index + slotW / 2;
+    const bottom = baseY - Math.max(26, glassH * 0.08);
+    const bx = cx - clamped / 2;
+    const by = bottom - clamped;
+    return [
+      `<rect x="${bx.toFixed(2)}" y="${by.toFixed(2)}" width="${clamped.toFixed(2)}" height="${clamped.toFixed(2)}" rx="8" fill="rgba(14,165,233,0.12)" stroke="#0284c7" stroke-width="4" stroke-dasharray="10 8"/>`,
+      `<line x1="${cx.toFixed(2)}" y1="${bottom.toFixed(2)}" x2="${cx.toFixed(2)}" y2="${(bottom + 34).toFixed(2)}" stroke="#334155" stroke-width="3"/>`,
+      `<text x="${cx.toFixed(2)}" y="${(by - 18).toFixed(2)}" text-anchor="middle" font-size="28" font-weight="700" fill="#0f172a">展品 ${index + 1}</text>`,
+      `<text x="${cx.toFixed(2)}" y="${(by + clamped / 2 + 10).toFixed(2)}" text-anchor="middle" font-size="24" fill="#075985">最长边 ${item.maxSideMm} mm</text>`,
+      `<text x="${cx.toFixed(2)}" y="${(bottom + 70).toFixed(2)}" text-anchor="middle" font-size="20" fill="#334155">${escapeXml(item.label).slice(0, 18)}</text>`,
+    ].join('\n');
+  }).join('\n');
+
+  const capEls = style.hasCap
+    ? `<rect x="${x.toFixed(2)}" y="${capY.toFixed(2)}" width="${cabinetW.toFixed(2)}" height="${capH.toFixed(2)}" fill="#e2e8f0" stroke="#334155" stroke-width="4"/>
+<text x="${(x + cabinetW + 34).toFixed(2)}" y="${(capY + capH / 2 + 8).toFixed(2)}" font-size="24" fill="#334155">柜帽 ${style.capHeightMm} mm</text>`
+    : `<text x="${x.toFixed(2)}" y="${(glassY - 24).toFixed(2)}" font-size="24" fill="#334155">无柜帽</text>`;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${canvasW}" height="${canvasH}" viewBox="0 0 ${canvasW} ${canvasH}">
+<rect width="${canvasW}" height="${canvasH}" fill="#f8fafc"/>
+<text x="60" y="82" font-size="42" font-weight="800" fill="#0f172a">柜内设计比例控制图</text>
+<text x="60" y="130" font-size="26" fill="#475569">仅用于约束尺寸比例：最终效果图需按此图控制展柜与展品大小关系</text>
+<text x="60" y="176" font-size="24" fill="#0f172a">展柜宽 ${style.widthMm} mm，总高 ${totalHeightMm} mm，玻璃区 ${style.glassHeightMm} mm，底座 ${style.baseHeightMm} mm</text>
+<rect x="${x.toFixed(2)}" y="${glassY.toFixed(2)}" width="${cabinetW.toFixed(2)}" height="${glassH.toFixed(2)}" fill="rgba(186,230,253,0.24)" stroke="#0284c7" stroke-width="5"/>
+${capEls}
+<rect x="${x.toFixed(2)}" y="${baseY.toFixed(2)}" width="${cabinetW.toFixed(2)}" height="${baseH.toFixed(2)}" fill="#cbd5e1" stroke="#334155" stroke-width="4"/>
+<text x="${(x + cabinetW + 34).toFixed(2)}" y="${(glassY + glassH / 2).toFixed(2)}" font-size="24" fill="#075985">玻璃区 ${style.glassHeightMm} mm</text>
+<text x="${(x + cabinetW + 34).toFixed(2)}" y="${(baseY + baseH / 2 + 8).toFixed(2)}" font-size="24" fill="#334155">底座 ${style.baseHeightMm} mm</text>
+<line x1="${x.toFixed(2)}" y1="${(baseY + baseH + 52).toFixed(2)}" x2="${(x + cabinetW).toFixed(2)}" y2="${(baseY + baseH + 52).toFixed(2)}" stroke="#0f172a" stroke-width="4"/>
+<text x="${(x + cabinetW / 2).toFixed(2)}" y="${(baseY + baseH + 92).toFixed(2)}" text-anchor="middle" font-size="26" fill="#0f172a">展柜宽度 ${style.widthMm} mm</text>
+${exhibitEls || `<text x="${(x + cabinetW / 2).toFixed(2)}" y="${(glassY + glassH / 2).toFixed(2)}" text-anchor="middle" font-size="30" fill="#64748b">无展品图，使用抽象占位体块</text>`}
+<text x="60" y="1510" font-size="24" fill="#475569">要求：展品外观来自后续展品参考图，但最长边必须贴合本图蓝色占位框的毫米比例。</text>
+</svg>`;
+}
+
+export function buildShowcaseInteriorScaleReferenceDataUrl(values = {}) {
+  return `data:image/svg+xml;base64,${encodeBase64Utf8(buildShowcaseInteriorScaleReferenceSvg(values))}`;
 }
 
 export function buildShowcaseInteriorDesignPrompt(values = {}) {
   const style = values.showcaseStyle || values.dimensions || values;
   const supplement = cleanText(values.supplement, 3000);
   const lines = [
-    'Task: museum / exhibition showcase interior design image generation.',
+    '用途：博物馆 / 展陈柜内设计图生成。',
     '',
-    'Core goal: generate a professional, realistic, buildable showcase interior display design from cabinet dimensions, exhibit reference photos, and cabinet interior style direction.',
+    '核心任务：根据展柜尺寸、比例控制图、展品参考图和柜内形式设计风格，生成一张专业、真实、可落地的展柜内部陈列设计效果图。',
     '',
-    '1. Showcase Style And Dimensions',
+    '1. 展柜样式与尺寸',
     showcaseStyleText(style),
     '',
-    'Proportion rule: the showcase width, base height, glass display zone height, and top cap height must form a believable physical cabinet. The glass display zone is the main exhibit volume. The top cap appears only when enabled.',
+    '比例要求：展柜宽度、底座高度、玻璃区高度、柜帽高度必须形成可信比例；玻璃区应是主要陈列空间，底座承托稳定，柜帽仅在开启时出现。',
     '',
-    '2. Exhibit Inputs And Physical Size Constraints',
+    '2. 展品输入与物理尺寸约束',
     exhibitItemsText(values.exhibitItems, style, values),
     '',
-    '3. Cabinet Interior Design Style',
+    '3. 柜内形式设计风格',
     colorMaterialText(values),
     '',
-    'Interior design requirements: organize exhibits with back panels, plinths, mounts, small platforms, shelves, concealed light strips, focal spotlights, low-reflection glass, protection clearance, and a clear visual focal hierarchy. The result should look like a real exhibition detail-design proposal, not a retail window display.',
+    '柜内设计要求：结合背板、台座、托架、微型展台、层板、暗藏灯带、重点射灯、低反射玻璃、展品保护距离和视觉焦点组织展品。设计应像真实展陈深化方案，而不是普通商品橱窗。',
     '',
-    '4. Output Requirements',
+    '4. 输出形式要求',
     outputRequirementText(values),
     '',
-    '5. Image Quality Constraints',
-    'Create a high-fidelity exhibition design rendering: clear structure, transparent glass, realistic materials, layered lighting, and credible exhibit scale.',
-    'Avoid random brand logos, unrelated people, retail-window clutter, low resolution blur, wrong text, unreadable label gibberish, or decorations unrelated to the exhibits.',
+    '5. 画面质量约束',
+    '生成高完成度展陈设计效果图；结构清晰、玻璃通透、材质真实、灯光有层次、展品尺度可信。',
+    '不要生成随机品牌 logo、无关人物、杂乱商店橱窗、低清模糊、错误文字、不可读乱码说明牌或与展品无关的装饰堆砌。',
   ];
-  if (supplement) lines.push('', '6. Supplement', supplement);
+  if (supplement) lines.push('', '6. 补充要求', supplement);
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
-
