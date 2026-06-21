@@ -38,15 +38,15 @@ test('exhibition plan layout prompt toggles route labels and descriptions', () =
   assert.match(visible, /显示说明文字：开启/);
 });
 
-test('exhibition plan layout prompt treats style reference as visual style only', () => {
+test('exhibition plan layout prompt uses built-in layout style only', () => {
   const prompt = buildExhibitionPlanLayoutPrompt({
     layoutOutlineText: '城市记忆展区：老城历史',
-    hasStyleReferenceImage: true,
   });
   assert.match(prompt, /图1是唯一建筑平面图依据/);
-  assert.match(prompt, /图2只是平面布局图的视觉样式参考/);
-  assert.match(prompt, /不得改变图1的建筑轮廓/);
-  assert.doesNotMatch(prompt, /使用内置默认样式/);
+  assert.match(prompt, /平面布局默认使用如下风格/);
+  assert.match(prompt, /白色汇报底图/);
+  assert.doesNotMatch(prompt, /图2/);
+  assert.doesNotMatch(prompt, /样式参考图/);
 });
 
 test('exhibition plan layout prompt includes preset and custom requirement', () => {
@@ -99,9 +99,8 @@ test('exhibition plan layout prompt uses attachment style and hard layout constr
     insertItems: ['showcase', 'art-installation'],
     excludeItems: ['isolated-columns'],
     showRoute: true,
-    hasStyleReferenceImage: false,
   });
-  assert.match(prompt, /图2是平面布局样式参考图，如果未输入样式参考图，使用如下风格/);
+  assert.match(prompt, /平面布局默认使用如下风格/);
   assert.match(prompt, /结构锁定模式：开启/);
   assert.match(prompt, /只生成透明背景的展陈布局叠加层 overlay/);
   assert.match(prompt, /这些建筑结构会由程序直接保留图1原始底图并在最后合成/);

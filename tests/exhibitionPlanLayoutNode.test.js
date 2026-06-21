@@ -49,7 +49,9 @@ test('exhibition plan layout node wires llm and image generation providers', () 
   assert.match(source, /显示说明文字/);
   assert.match(source, /id="plan-image"/);
   assert.match(source, /id="outline-text"/);
-  assert.match(source, /id="style-reference"/);
+  assert.doesNotMatch(source, /id="style-reference"/);
+  assert.doesNotMatch(source, /styleReferenceImage/);
+  assert.doesNotMatch(source, /hasStyleReferenceImage/);
 });
 
 test('exhibition plan layout presets use independent editable prompt-library endpoints', () => {

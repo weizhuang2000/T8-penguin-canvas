@@ -182,7 +182,6 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
   const [insertError, setInsertError] = useState('');
   const [excludeError, setExcludeError] = useState('');
   const planImage = useInputImageByHandle(id, 'plan-image');
-  const styleReferenceImage = useInputImageByHandle(id, 'style-reference');
   const upstream = useUpstreamMaterials(id);
   const activeCanvas = useCanvasStore((state) => state.canvases.find((canvas) => canvas.id === state.activeId) || null);
   const activeCanvasId = useCanvasStore((state) => state.activeId);
@@ -267,12 +266,11 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
     showLabels,
     showDescriptions,
     structureLock,
-    hasStyleReferenceImage: !!styleReferenceImage,
     insertItems: selectedInsertIds,
     excludeItems: selectedExcludeIds,
     insertItemOptions: insertOptions,
     excludeItemOptions: excludeOptions,
-  }), [d.layoutRequirement, excludeOptions, insertOptions, layoutPresetId, selectedExcludeIds, selectedInsertIds, showDescriptions, showLabels, showRoute, structureLock, styleReferenceImage]);
+  }), [d.layoutRequirement, excludeOptions, insertOptions, layoutPresetId, selectedExcludeIds, selectedInsertIds, showDescriptions, showLabels, showRoute, structureLock]);
 
   const pickDocument = useCallback(async (file?: File) => {
     if (!file || isReadonly || busy) return;
@@ -331,7 +329,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
       outlineText = await runOutline();
     }
     const imagePrompt = buildPrompt(outlineText);
-    const refs = [planImage, styleReferenceImage].filter(Boolean);
+    const refs = [planImage].filter(Boolean);
     pollAbortRef.current = false;
     taskCompletionSound.primeAudio();
     const runSeed = seed > 0 ? seed : randomImageSeed();
@@ -453,7 +451,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`平面自动布局失败: ${msg}`, src);
       throw error;
     }
-  }, [activeCanvasId, apiModel, aspectRatio, buildPrompt, d.providerParams, effectiveSourceText, externalProviderModel, id, isExternalSelected, isReadonly, layoutOutlineText, modelDef.id, modelDef.paramKind, outputFormat, planImage, providerSelection.provider, runOutline, seed, sizeLevel, structureLock, styleReferenceImage, update]);
+  }, [activeCanvasId, apiModel, aspectRatio, buildPrompt, d.providerParams, effectiveSourceText, externalProviderModel, id, isExternalSelected, isReadonly, layoutOutlineText, modelDef.id, modelDef.paramKind, outputFormat, planImage, providerSelection.provider, runOutline, seed, sizeLevel, structureLock, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -533,7 +531,6 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
     >
       <Handle id="plan-image" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-amber-300" style={{ top: '22%' }} title="输入：原始建筑平面图" />
       <Handle id="outline-text" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-sky-300" style={{ top: '42%' }} title="输入：大纲/资料文本" />
-      <Handle id="style-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-rose-300" style={{ top: '62%' }} title="输入：样式参考图（可选）" />
       <Handle type="source" position={Position.Right} className="!bg-cyan-300 !border-0" title="输出：展陈平面布局图" />
 
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
@@ -549,9 +546,8 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
         {isReadonly && <div className="rounded border border-amber-300/30 bg-amber-300/10 px-2 py-1.5 text-[10px] text-amber-100">当前画布为只读，仅可查看结果。</div>}
         {d.error && <div className="rounded border border-red-300/25 bg-red-400/10 px-2 py-1.5 text-[10px] text-red-200">{d.error}</div>}
 
-        <section className="grid grid-cols-2 gap-2">
+        <section>
           <ImageSlot title="原始建筑平面图" subtitle="图1，唯一建筑结构依据，必须连接" url={planImage} />
-          <ImageSlot title="样式参考图" subtitle="图2，仅参考图面风格，可不连接" url={styleReferenceImage} />
         </section>
 
         <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
