@@ -20,6 +20,7 @@ test('exhibition plan layout node is registered across frontend and permissions'
   assert.match(read('src/components/Canvas.tsx'), /showRoute: true/);
   assert.match(read('src/components/Canvas.tsx'), /showLabels: true/);
   assert.match(read('src/components/Canvas.tsx'), /showDescriptions: true/);
+  assert.match(read('src/components/Canvas.tsx'), /structureLock: true/);
   assert.match(read('src/components/NodeActionBar.tsx'), /'exhibition-plan-layout'/);
   assert.match(read('src/config/portTypes.ts'), /'exhibition-plan-layout': \{ inputs: \['text', 'image'\], outputs: \['image', 'text'\] \}/);
   assert.match(read('backend/src/auth/toolPermissions.js'), /'exhibition-plan-layout'/);
@@ -33,6 +34,11 @@ test('exhibition plan layout node wires llm and image generation providers', () 
   assert.match(source, /queryExternalImageStatus/);
   assert.match(source, /submitImageAsync/);
   assert.match(source, /queryImageStatus/);
+  assert.match(source, /uploadDataUrl/);
+  assert.match(source, /composeStructureLockedPlan/);
+  assert.match(source, /generationOutputFormat = structureLock \? 'png' : outputFormat/);
+  assert.match(source, /overlayUrl/);
+  assert.match(source, /structureLockedBaseUrl/);
   assert.match(source, /EXHIBITION_PLAN_LAYOUT_PRESETS/);
   assert.match(source, /EXHIBITION_PLAN_LAYOUT_INSERT_ITEMS/);
   assert.match(source, /EXHIBITION_PLAN_LAYOUT_EXCLUDE_ITEMS/);

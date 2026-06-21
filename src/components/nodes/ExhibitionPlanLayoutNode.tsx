@@ -16,6 +16,7 @@ import {
   type ExtractedDocument,
 } from '../../services/api';
 import { generateExternalImage, generateLlm, queryExternalImageStatus, queryImageStatus, submitImageAsync } from '../../services/generation';
+import { uploadDataUrl } from '../../services/imageOps';
 import {
   advancedProviderModelOptions,
   advancedProvidersForNode,
@@ -49,6 +50,31 @@ const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border
 const MAX_IMAGE_SEED = 2147483647;
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
+
+function loadImageElement(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('图片加载失败'));
+    img.src = src;
+  });
+}
+
+async function composeStructureLockedPlan(baseUrl: string, overlayUrl: string): Promise<string> {
+  const [base, overlay] = await Promise.all([loadImageElement(baseUrl), loadImageElement(overlayUrl)]);
+  const width = base.naturalWidth || base.width;
+  const height = base.naturalHeight || base.height;
+  if (!width || !height) throw new Error('原始平面图尺寸无效');
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('无法创建平面布局合成画布');
+  ctx.drawImage(base, 0, 0, width, height);
+  ctx.drawImage(overlay, 0, 0, width, height);
+  return uploadDataUrl(canvas.toDataURL('image/png'), 'exhibition-plan-layout');
+}
 
 function documentLabel(meta?: Omit<ExtractedDocument, 'text'> | null) {
   if (!meta) return '未选择文档';
@@ -209,6 +235,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
   const effectiveSourceText = [useUpstream ? upstreamText : '', sourceText].filter((item) => item.trim()).join('\n\n');
   const layoutPresetId = normalizeExhibitionPlanLayoutPresetId(d.layoutPresetId);
   const layoutOutlineText = String(d.layoutOutlineText || '').trim();
+  const structureLock = d.structureLock !== false;
   const showRoute = d.showRoute !== false;
   const showLabels = d.showLabels !== false;
   const showDescriptions = d.showDescriptions !== false;
@@ -239,12 +266,13 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
     showRoute,
     showLabels,
     showDescriptions,
+    structureLock,
     hasStyleReferenceImage: !!styleReferenceImage,
     insertItems: selectedInsertIds,
     excludeItems: selectedExcludeIds,
     insertItemOptions: insertOptions,
     excludeItemOptions: excludeOptions,
-  }), [d.layoutRequirement, excludeOptions, insertOptions, layoutPresetId, selectedExcludeIds, selectedInsertIds, showDescriptions, showLabels, showRoute, styleReferenceImage]);
+  }), [d.layoutRequirement, excludeOptions, insertOptions, layoutPresetId, selectedExcludeIds, selectedInsertIds, showDescriptions, showLabels, showRoute, structureLock, styleReferenceImage]);
 
   const pickDocument = useCallback(async (file?: File) => {
     if (!file || isReadonly || busy) return;
@@ -312,6 +340,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
     update({ status: 'generating', progress: '提交平面布局生图...', error: '', imageUrls: [], lastPrompt: imagePrompt, lastSeed: runSeed, referenceImages: refs });
     try {
       logBus.info(`平面自动布局提交 seed=${runSeed}`, src);
+      const generationOutputFormat = structureLock ? 'png' : outputFormat;
       let urls: string[] = [];
       if (isExternalSelected && providerSelection.provider) {
         if (!externalProviderModel) throw new Error('扩展平台未配置可用图像模型');
@@ -325,7 +354,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
           aspect_ratio: aspectRatio,
           image_size: sizeLevel,
           images: refs,
-          outputFormat,
+          outputFormat: generationOutputFormat,
           seed: runSeed,
           n: 1,
           providerParams: {
@@ -347,7 +376,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
               providerId: providerSelection.provider.id,
               providerModel: externalProviderModel,
               taskId: pollingTaskId,
-              outputFormat,
+              outputFormat: generationOutputFormat,
               historyContext,
             });
             pollingTaskId = res.taskId || pollingTaskId;
@@ -366,7 +395,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
           image_size: sizeLevel,
           images: refs,
           n: 1,
-          outputFormat,
+          outputFormat: generationOutputFormat,
           seed: runSeed,
           historyContext,
         });
@@ -378,7 +407,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
           for (let index = 0; index < 1800; index += 1) {
             if (pollAbortRef.current) throw new Error('任务已取消');
             await new Promise((resolve) => setTimeout(resolve, 2000));
-            const q = await queryImageStatus(submit.taskId, apiModel, outputFormat, historyContext);
+            const q = await queryImageStatus(submit.taskId, apiModel, generationOutputFormat, historyContext);
             if (q.progress && q.progress !== lastProgress) {
               lastProgress = q.progress;
               update({ progress: q.progress });
@@ -395,12 +424,21 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
         }
       }
       if (!urls.length) throw new Error('任务完成但未返回图片');
+      const overlayUrls = urls;
+      if (structureLock) {
+        update({ progress: '合成结构锁定底图...' });
+        const composedUrl = await composeStructureLockedPlan(planImage, overlayUrls[0]);
+        urls = [composedUrl];
+      }
       update({
         status: 'success',
         progress: '100%',
         imageUrl: urls[0],
         imageUrls: urls,
         urls,
+        overlayUrl: structureLock ? overlayUrls[0] : '',
+        overlayUrls: structureLock ? overlayUrls : [],
+        structureLockedBaseUrl: structureLock ? planImage : '',
         prompt: imagePrompt,
         outputText: imagePrompt,
         text: imagePrompt,
@@ -415,7 +453,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`平面自动布局失败: ${msg}`, src);
       throw error;
     }
-  }, [activeCanvasId, apiModel, aspectRatio, buildPrompt, d.providerParams, effectiveSourceText, externalProviderModel, id, isExternalSelected, isReadonly, layoutOutlineText, modelDef.id, modelDef.paramKind, outputFormat, planImage, providerSelection.provider, runOutline, seed, sizeLevel, styleReferenceImage, update]);
+  }, [activeCanvasId, apiModel, aspectRatio, buildPrompt, d.providerParams, effectiveSourceText, externalProviderModel, id, isExternalSelected, isReadonly, layoutOutlineText, modelDef.id, modelDef.paramKind, outputFormat, planImage, providerSelection.provider, runOutline, seed, sizeLevel, structureLock, styleReferenceImage, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -592,6 +630,16 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
             placeholder="补充布局要求：例如入口方向、必须保留的房间、重点展项位置、团队参观、消防通道等"
             onChange={(event) => update({ layoutRequirement: event.target.value })}
           />
+          <label className="flex items-center gap-1.5 rounded border border-cyan-300/20 bg-cyan-300/10 px-2 py-1.5 text-[10px] text-cyan-50">
+            <input
+              type="checkbox"
+              className="h-3 w-3 accent-cyan-300"
+              checked={structureLock}
+              disabled={isReadonly || busy}
+              onChange={(event) => update({ structureLock: event.target.checked })}
+            />
+            结构锁定模式：只生成透明展陈叠加层，最终保留图1原始墙柱底图合成
+          </label>
           <div className="grid grid-cols-3 gap-1">
             {[
               ['showRoute', '显示动线', showRoute],

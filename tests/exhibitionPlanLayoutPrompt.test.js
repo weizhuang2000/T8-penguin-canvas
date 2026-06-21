@@ -101,7 +101,12 @@ test('exhibition plan layout prompt uses attachment style and hard layout constr
     showRoute: true,
     hasStyleReferenceImage: false,
   });
-  assert.match(prompt, /附件参考图风格/);
+  assert.match(prompt, /图2是平面布局样式参考图，如果未输入样式参考图，使用如下风格/);
+  assert.match(prompt, /结构锁定模式：开启/);
+  assert.match(prompt, /只生成透明背景的展陈布局叠加层 overlay/);
+  assert.match(prompt, /这些建筑结构会由程序直接保留图1原始底图并在最后合成/);
+  assert.match(prompt, /不要重画、描摹、修改或新增任何建筑墙体、柱子/);
+  assert.match(prompt, /空白区域保持透明/);
   assert.match(prompt, /红色虚线参观动线和箭头/);
   assert.match(prompt, /动线必须从入口到出口连续穿过所有展陈单元和展区/);
   assert.match(prompt, /每个单元都必须被主参观动线实际进入或贴近穿过/);

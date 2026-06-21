@@ -464,6 +464,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     layoutOutlineText: '',
     layoutRequirement: '',
     layoutPresetId: 'balanced',
+    structureLock: true,
     insertItems: ['large-sculpture', 'relief', 'group-sculpture', 'art-installation', 'multimedia-equipment', 'showcase', 'scene', 'artwork'],
     excludeItems: ['readable-wrong-text', 'real-brand-logo', 'instruction-table', 'isolated-columns'],
     showRoute: true,

@@ -199,6 +199,7 @@ export function buildExhibitionPlanLayoutPrompt(values = {}) {
   const showRoute = values.showRoute !== false;
   const showLabels = values.showLabels !== false;
   const showDescriptions = values.showDescriptions !== false;
+  const structureLock = values.structureLock !== false;
   const hasStyleReferenceImage = values.hasStyleReferenceImage === true;
   const insertItemsText = exhibitionPlanLayoutInsertItemsText(values.insertItems, values.insertItemOptions);
   const excludeItemsText = exhibitionPlanLayoutExcludeItemsText(values.excludeItems, values.excludeItemOptions);
@@ -214,12 +215,18 @@ export function buildExhibitionPlanLayoutPrompt(values = {}) {
     : '显示说明文字：关闭。不要加入说明框、图例长文、设计注释、面积说明或段落文字。';
   const styleText = hasStyleReferenceImage
     ? '输入图像说明：图1是唯一建筑平面图依据；图2只是平面布局图的视觉样式参考，只能参考配色、线条、图例、分区表达和标注形式，不得改变图1的建筑轮廓、墙体、柱网、入口和房间边界。'
-    : '输入图像说明：图1是唯一建筑平面图依据。未输入样式参考图时，使用附件参考图风格：白色汇报底图、灰色建筑平面线稿、淡黄/淡粉/米色半透明展区色块、深灰大标题与单元标题、红色折线引导标注、红点节点、红色虚线参观动线和箭头、局部小号黑色展项标注，整体像展陈服务项目平面布局汇报图。';
+    : '输入图像说明：图1是唯一建筑平面图依据。图2是平面布局样式参考图，如果未输入样式参考图，使用如下风格：白色汇报底图、灰色建筑平面线稿、淡黄/淡粉/米色半透明展区色块、深灰大标题与单元标题、红色折线引导标注、红点节点、红色虚线参观动线和箭头、局部小号黑色展项标注，整体像展陈服务项目平面布局汇报图。';
+  const outputModeText = structureLock
+    ? '结构锁定模式：开启。请只生成透明背景的展陈布局叠加层 overlay，不要重画、描摹、修改或新增任何建筑墙体、柱子、门洞、窗、外轮廓、房间边界和原始尺寸标注；这些建筑结构会由程序直接保留图1原始底图并在最后合成。overlay 里只允许出现展区半透明色块、动线、箭头、展柜/展项/隔断/装置、标注文字、图例和说明。输出应为可叠加在图1上的透明 PNG 效果，空白区域保持透明。'
+    : '结构锁定模式：关闭。可以生成完整平面布局图，但仍必须尽量保持图1建筑结构关系不变。';
 
   return [
     'Use case: exhibition-floor-plan-layout.',
-    'Primary request: 基于输入的原始建筑平面图，生成一张专业展陈平面布局图。最终图必须是俯视平面布局，不是室内效果图、透视图、海报或鸟瞰渲染。',
+    structureLock
+      ? 'Primary request: 基于输入的原始建筑平面图，生成一张专业展陈平面布局透明叠加层，用于覆盖在原图上完成最终平面布局图。最终图必须是俯视平面 overlay，不是室内效果图、透视图、海报或鸟瞰渲染。'
+      : 'Primary request: 基于输入的原始建筑平面图，生成一张专业展陈平面布局图。最终图必须是俯视平面布局，不是室内效果图、透视图、海报或鸟瞰渲染。',
     styleText,
+    outputModeText,
     '必须严格保留图1的建筑外轮廓、墙体边界、柱网、门洞、入口、通道宽度关系和房间几何；只能在其上规划展区分区、展项点位、服务功能和参观组织。',
     '展陈大纲目录：',
     outlineText || '未提供详细大纲；请按通用展陈逻辑划分序厅、主题展区、互动区、尾厅和配套功能。',

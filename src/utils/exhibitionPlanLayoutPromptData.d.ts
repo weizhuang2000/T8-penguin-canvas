@@ -42,6 +42,7 @@ export interface ExhibitionPlanLayoutPromptValues {
   showRoute?: boolean;
   showLabels?: boolean;
   showDescriptions?: boolean;
+  structureLock?: boolean;
   hasStyleReferenceImage?: boolean;
   insertItems?: string[];
   excludeItems?: string[];
