@@ -100,6 +100,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: 'video-motion', label: '视频运镜', category: 'toolbox', description: '视频运镜组合器：场景 / 动作 / 路径 / 节奏 / 稳定 / 主体约束各 50 项，支持收藏与 JSON 导入/导出', icon: 'Camera', color: 'pink' },
   { type: 'elevation-prompt', label: '立面提示词', category: 'exhibition', description: '解析 DOCX / 文本 PDF / TXT，AI 提炼内容并生成彩立面概念 Prompt 与准确图文工艺排版清单', icon: 'PanelsTopLeft', color: 'cyan' },
   { type: 'exhibition-img2img', label: '展陈图生图', category: 'exhibition', description: '双参考图展陈图生图：结构示意图 + 空间表现效果图，支持工艺版式与优先级控制', icon: 'Boxes', color: 'cyan' },
+  { type: 'exhibition-style-transfer', label: '风格迁移', category: 'exhibition', description: '展陈空间风格迁移：原始图像结构不变，仅迁移设计风格、色彩、材质与表面质感', icon: 'Shuffle', color: 'cyan' },
   { type: 'exhibition-creative-image', label: '展陈创意生图', category: 'exhibition', description: '面向序厅、尾厅和重亮点展项空间：单空间图约束建筑空间，LLM 创意描述后多次图生图', icon: 'Layers3', color: 'cyan' },
   { type: 'exhibition-outline-split', label: '展陈大纲拆分', category: 'exhibition', description: '读取展陈资料文档，按指定单元数或自动模式拆分大纲并提炼总结，输出多段文本', icon: 'ListTree', color: 'cyan' },
   { type: 'unit-panel-design', label: '单元板设计', category: 'exhibition', description: '生成单元板/整套板式设计图：两级文字提炼、多语言排序、材质选择、色材参考和尺寸标注', icon: 'PanelsTopLeft', color: 'cyan' },
