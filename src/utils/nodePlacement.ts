@@ -79,6 +79,7 @@ export const NODE_DEFAULT_SIZE: Record<string, { w: number; h: number }> = {
   cinematic: { w: 720, h: 460 },
   'video-motion': { w: 720, h: 460 },
   'multi-angle-visual': { w: 760, h: 520 },
+  'showcase-interior-design': { w: 520, h: 680 },
   'portrait-master': { w: 560, h: 360 },
   'pose-master': { w: 900, h: 720 },
   'aggregate-parser': { w: 620, h: 680 },

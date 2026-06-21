@@ -70,6 +70,7 @@ export type NodeType =
   | 'exhibition-outline-split'
   | 'exhibition-plan-layout'
   | 'unit-panel-design'
+  | 'showcase-interior-design'
   | 'multi-angle-visual'
   | 'portrait-master'
   | 'pose-master'

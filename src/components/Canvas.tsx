@@ -117,6 +117,7 @@ import ExhibitionCreativeImageNode from './nodes/ExhibitionCreativeImageNode';
 import ExhibitionOutlineSplitNode from './nodes/ExhibitionOutlineSplitNode';
 import ExhibitionPlanLayoutNode from './nodes/ExhibitionPlanLayoutNode';
 import UnitPanelDesignNode from './nodes/UnitPanelDesignNode';
+import ShowcaseInteriorDesignNode from './nodes/ShowcaseInteriorDesignNode';
 import PortraitMasterNode from './nodes/PortraitMasterNode';
 import PoseMasterNode from './nodes/PoseMasterNode';
 import IdeaNode from './nodes/IdeaNode';
@@ -211,6 +212,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'exhibition-outline-split': ExhibitionOutlineSplitNode,
   'exhibition-plan-layout': ExhibitionPlanLayoutNode,
   'unit-panel-design': UnitPanelDesignNode,
+  'showcase-interior-design': ShowcaseInteriorDesignNode,
   'multi-angle-visual': ToolboxParamNode,
   'portrait-master': PortraitMasterNode,
   'pose-master': PoseMasterNode,
@@ -539,6 +541,41 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     status: 'idle',
     error: '',
   },
+  'showcase-interior-design': {
+    model: 'gpt-image-2',
+    apiModel: 'gpt-image-2-all',
+    aspectRatio: '1:1',
+    sizeLevel: '2K',
+    outputFormat: 'jpg',
+    showcaseStyle: {
+      widthMm: 1200,
+      baseHeightMm: 300,
+      glassHeightMm: 1400,
+      capHeightMm: 180,
+      hasCap: true,
+    },
+    exhibitItems: [],
+    dimensionMarksEnabled: true,
+    explodedViewEnabled: false,
+    colorMaterialPreset: '',
+    colorMaterial: '',
+    colorMaterialReferenceTone: '',
+    supplement: '',
+    providerSource: 'zhenzhen',
+    providerId: '',
+    providerModel: '',
+    providerParams: {},
+    seed: 0,
+    prompt: '',
+    outputText: '',
+    text: '',
+    imageUrl: '',
+    imageUrls: [],
+    urls: [],
+    referenceImages: [],
+    status: 'idle',
+    error: '',
+  },
   'elevation-prompt': {
     model: '',
     sourceText: '',
@@ -714,6 +751,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'exhibition-outline-split',
   'exhibition-plan-layout',
   'unit-panel-design',
+  'showcase-interior-design',
   'remove-ai-watermark',
 ]);
 
