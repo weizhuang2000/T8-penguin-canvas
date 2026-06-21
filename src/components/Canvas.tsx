@@ -112,6 +112,7 @@ import ImageCompareNode from './nodes/ImageCompareNode';
 import ToolboxParamNode from './nodes/ToolboxParamNode';
 import ElevationPromptNode from './nodes/ElevationPromptNode';
 import ExhibitionImg2ImgNode from './nodes/ExhibitionImg2ImgNode';
+import ExhibitionStyleTransferNode from './nodes/ExhibitionStyleTransferNode';
 import ExhibitionCreativeImageNode from './nodes/ExhibitionCreativeImageNode';
 import ExhibitionOutlineSplitNode from './nodes/ExhibitionOutlineSplitNode';
 import UnitPanelDesignNode from './nodes/UnitPanelDesignNode';
@@ -204,6 +205,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'video-motion': ToolboxParamNode,
   'elevation-prompt': ElevationPromptNode,
   'exhibition-img2img': ExhibitionImg2ImgNode,
+  'exhibition-style-transfer': ExhibitionStyleTransferNode,
   'exhibition-creative-image': ExhibitionCreativeImageNode,
   'exhibition-outline-split': ExhibitionOutlineSplitNode,
   'unit-panel-design': UnitPanelDesignNode,
