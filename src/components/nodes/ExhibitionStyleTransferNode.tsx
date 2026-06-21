@@ -180,6 +180,33 @@ async function analyzeDominantTone(imageUrl: string): Promise<string> {
   return `主色调：${names.join('、') || '中性灰'}；${tempText}；${lightText}。`;
 }
 
+async function readImageNaturalRatio(imageUrl: string): Promise<number> {
+  const image = await loadImage(imageUrl);
+  const width = image.naturalWidth || image.width;
+  const height = image.naturalHeight || image.height;
+  if (!width || !height) throw new Error('Invalid image dimensions');
+  return width / height;
+}
+
+function ratioValue(value: string): number | null {
+  const match = String(value || '').trim().match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
+  if (!match) return null;
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (!width || !height) return null;
+  return width / height;
+}
+
+function closestAspectRatio(sourceRatio: number, options: string[]): string {
+  const candidates = options
+    .map((value) => ({ value, ratio: ratioValue(value) }))
+    .filter((item): item is { value: string; ratio: number } => item.ratio !== null);
+  if (candidates.length === 0) return options[0] || '1:1';
+  return candidates.reduce((best, item) => (
+    Math.abs(item.ratio - sourceRatio) < Math.abs(best.ratio - sourceRatio) ? item : best
+  )).value;
+}
+
 function colorMaterialTextFromPreset(preset: ElevationColorMaterialPresetItem | null): string {
   if (!preset) return '';
   return [preset.label, preset.core, preset.features, preset.usage, preset.info].map((item) => String(item || '').trim()).filter(Boolean).join('；');
@@ -206,10 +233,9 @@ function buildColorMaterialPresetPayload(presets: ElevationColorMaterialPresetIt
   }));
 }
 
-function ImageSlot({ handleId, title, subtitle, url, top }: { handleId: string; title: string; subtitle: string; url: string; top: string }) {
+function ImageSlot({ title, subtitle, url }: { title: string; subtitle: string; url: string }) {
   return (
     <div className="relative rounded border border-white/10 bg-black/15 p-2">
-      <Handle id={handleId} type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-rose-300" style={{ top }} title={`输入：${title}`} />
       <div className="mb-1 text-[11px] font-semibold text-cyan-100">{title}</div>
       <div className="mb-2 text-[10px] leading-snug text-white/45">{subtitle}</div>
       {url ? (
@@ -301,6 +327,23 @@ const ExhibitionStyleTransferNode = ({ id, data, selected }: NodeProps) => {
     getElevationPromptPresets().then((presets) => setColorMaterialPresets(presets.colorMaterial || [])).catch(() => setColorMaterialPresets([]));
     getUnitPanelMaterials().then(setMaterials).catch(() => setMaterials([]));
   }, []);
+
+  useEffect(() => {
+    if (!originalImage || isReadonly || busy) return;
+    const ratioSourceKey = `${originalImage}|${modelDef.id}`;
+    if (d.aspectRatioSource === ratioSourceKey) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const sourceRatio = await readImageNaturalRatio(originalImage);
+        const nextRatio = closestAspectRatio(sourceRatio, modelDef.aspectRatios);
+        if (!cancelled) update({ aspectRatio: nextRatio, aspectRatioSource: ratioSourceKey });
+      } catch {
+        if (!cancelled) update({ aspectRatioSource: ratioSourceKey });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [busy, d.aspectRatioSource, isReadonly, modelDef.aspectRatios, modelDef.id, originalImage, update]);
 
   useEffect(() => {
     if (mode === 'style-reference') return;
@@ -585,6 +628,8 @@ const ExhibitionStyleTransferNode = ({ id, data, selected }: NodeProps) => {
       }`}
       style={{ background: 'rgba(17,24,39,.96)', backdropFilter: 'blur(8px)' }}
     >
+      <Handle id="original-image" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-rose-300" style={{ top: '24%' }} title="输入：原始图像" />
+      <Handle id="style-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-rose-300" style={{ top: '39%' }} title="输入：设计风格参考图" />
       <Handle type="source" position={Position.Right} className="!bg-cyan-300 !border-0" title="输出：风格迁移结果（图像）" />
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex h-8 w-8 items-center justify-center rounded bg-cyan-300/15 text-cyan-200">
@@ -594,6 +639,9 @@ const ExhibitionStyleTransferNode = ({ id, data, selected }: NodeProps) => {
           <div className="text-sm font-semibold text-white">风格迁移</div>
           <div className="truncate text-[10px] text-white/45">原图结构不变 / 风格色材迁移 / 图生图输出</div>
         </div>
+        <button type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy} onClick={() => void runGenerate()}>
+          <Play size={12} /> run
+        </button>
         {busy && <Loader2 size={15} className="animate-spin text-cyan-200" />}
       </div>
 
@@ -602,8 +650,8 @@ const ExhibitionStyleTransferNode = ({ id, data, selected }: NodeProps) => {
         {d.error && <div className="rounded border border-red-300/25 bg-red-400/10 px-2 py-1.5 text-[10px] text-red-200">{d.error}</div>}
 
         <section className="grid grid-cols-2 gap-2">
-          <ImageSlot handleId="original-image" title="原始图像" subtitle="空间、展品、文字、展示手段和构图唯一依据" url={originalImage} top="50%" />
-          <ImageSlot handleId="style-reference" title="设计风格参考图" subtitle={mode === 'style-reference' ? '只提取风格、色彩、材质、肌理和灯光氛围' : '当前模式会自动断开并清空此输入'} url={mode === 'style-reference' ? styleReferenceImage : ''} top="50%" />
+          <ImageSlot title="原始图像" subtitle="空间、展品、文字、展示手段和构图唯一依据" url={originalImage} />
+          <ImageSlot title="设计风格参考图" subtitle={mode === 'style-reference' ? '只提取风格、色彩、材质、肌理和灯光氛围' : '当前模式会自动断开并清空此输入'} url={mode === 'style-reference' ? styleReferenceImage : ''} />
         </section>
 
         <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
