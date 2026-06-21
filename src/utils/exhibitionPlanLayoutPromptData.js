@@ -43,6 +43,31 @@ export const EXHIBITION_PLAN_LAYOUT_PRESETS = [
 
 const PRESET_IDS = new Set(EXHIBITION_PLAN_LAYOUT_PRESETS.map((item) => item.id));
 
+export const EXHIBITION_PLAN_LAYOUT_INSERT_ITEMS = [
+  { id: 'large-sculpture', label: '大型雕塑' },
+  { id: 'relief', label: '浮雕' },
+  { id: 'group-sculpture', label: '群雕' },
+  { id: 'art-installation', label: '艺术装置' },
+  { id: 'multimedia-equipment', label: '多媒体设备' },
+  { id: 'showcase', label: '文物柜/展柜' },
+  { id: 'scene', label: '场景复原' },
+  { id: 'artwork', label: '艺术品/主题展项' },
+].map((item, index) => ({ ...item, order: index }));
+
+export const EXHIBITION_PLAN_LAYOUT_EXCLUDE_ITEMS = [
+  { id: 'readable-wrong-text', label: '可读错字/乱码文字' },
+  { id: 'real-brand-logo', label: '真实品牌标识' },
+  { id: 'instruction-table', label: '说明表格' },
+  { id: 'crowded-people', label: '过多人群' },
+  { id: 'messy-cables', label: '杂乱线缆' },
+  { id: 'cartoon-style', label: '卡通低幼风格' },
+  { id: 'blurry-low-quality', label: '低清晰度/模糊画面' },
+  { id: 'floating-islands', label: '孤立漂浮展区' },
+  { id: 'isolated-columns', label: '孤零零不连接任何物体的柱子' },
+].map((item, index) => ({ ...item, order: index }));
+
+const INSERT_ITEM_IDS = new Set(EXHIBITION_PLAN_LAYOUT_INSERT_ITEMS.map((item) => item.id));
+
 function cleanText(value, max = 20000) {
   return String(value || '').replace(/\r\n?/g, '\n').trim().slice(0, max);
 }
@@ -57,14 +82,59 @@ export function exhibitionPlanLayoutPresetText(value) {
   return EXHIBITION_PLAN_LAYOUT_PRESETS.find((item) => item.id === id)?.text || EXHIBITION_PLAN_LAYOUT_PRESETS[0].text;
 }
 
+function labelsText(items) {
+  const labels = items.map((item) => cleanText(item.label || item.id, 80)).filter(Boolean);
+  if (labels.length === 0) return '';
+  if (labels.length === 1) return labels[0];
+  if (labels.length === 2) return labels.join('和');
+  return `${labels.slice(0, -1).join('、')}和${labels[labels.length - 1]}`;
+}
+
+export function normalizeExhibitionPlanLayoutInsertItems(value, options = EXHIBITION_PLAN_LAYOUT_INSERT_ITEMS) {
+  const source = Array.isArray(options) && options.length > 0 ? options : EXHIBITION_PLAN_LAYOUT_INSERT_ITEMS;
+  const labelsById = new Map(source.map((item) => [String(item.id), String(item.label || item.id).trim()]));
+  const ids = Array.isArray(value) ? value.map((item) => String(item || '').trim()).filter(Boolean) : [];
+  const validIds = ids.filter((id) => labelsById.has(id));
+  const fallback = source
+    .filter((item) => INSERT_ITEM_IDS.has(String(item.id)))
+    .map((item) => String(item.id));
+  const picked = validIds.length > 0 ? validIds : fallback;
+  return Array.from(new Set(picked)).map((id) => ({
+    id,
+    label: labelsById.get(id) || id,
+  }));
+}
+
+export function exhibitionPlanLayoutInsertItemsText(value, options = EXHIBITION_PLAN_LAYOUT_INSERT_ITEMS) {
+  return labelsText(normalizeExhibitionPlanLayoutInsertItems(value, options));
+}
+
+export function normalizeExhibitionPlanLayoutExcludeItems(value, options = EXHIBITION_PLAN_LAYOUT_EXCLUDE_ITEMS) {
+  const source = Array.isArray(options) && options.length > 0 ? options : EXHIBITION_PLAN_LAYOUT_EXCLUDE_ITEMS;
+  const labelsById = new Map(source.map((item) => [String(item.id), String(item.label || item.id).trim()]));
+  const ids = Array.isArray(value) ? value.map((item) => String(item || '').trim()).filter(Boolean) : [];
+  return Array.from(new Set(ids.filter((id) => labelsById.has(id)))).map((id) => ({
+    id,
+    label: labelsById.get(id) || id,
+  }));
+}
+
+export function exhibitionPlanLayoutExcludeItemsText(value, options = EXHIBITION_PLAN_LAYOUT_EXCLUDE_ITEMS) {
+  return labelsText(normalizeExhibitionPlanLayoutExcludeItems(value, options));
+}
+
 export function buildExhibitionPlanOutlinePrompt(values = {}) {
   const sourceText = cleanText(values.sourceText, 50000);
   const projectTheme = cleanText(values.projectTheme, 500);
+  const insertItemsText = exhibitionPlanLayoutInsertItemsText(values.insertItems, values.insertItemOptions);
+  const excludeItemsText = exhibitionPlanLayoutExcludeItemsText(values.excludeItems, values.excludeItemOptions);
   return [
     '你是资深展陈策划师。请从输入资料中提炼用于展陈平面自动布局的展区大纲。',
     '只输出 JSON，不要 Markdown，不要解释。',
-    'JSON 结构：{"title":"展览主题","zones":[{"name":"展区名称","summary":"该展区展示内容与空间功能，40-100字","priority":1,"areaHint":"面积/位置建议，可为空","routeHint":"与前后展区的动线关系，可为空"}]}。',
+    'JSON 结构：{"title":"展览主题","zones":[{"name":"展区名称","summary":"该展区展示内容与空间功能，40-100字","displayMethods":["展示手段1","展示手段2"],"priority":1,"areaHint":"面积/位置建议，可为空","routeHint":"与前后展区的动线关系，可为空"}]}。',
     'zones 建议 4-8 个，必须覆盖资料的主要章节或叙事单元；不要编造资料中没有的事实。',
+    `指定植入项展示手段：${insertItemsText}。请结合资料内容，为每个展区分配适合的展示手段，写入 displayMethods 和 summary。`,
+    excludeItemsText ? `排除项：${excludeItemsText}。大纲和展示手段中不要设计、暗示或要求生成这些内容。` : '',
     projectTheme ? `项目主题参考：${projectTheme}` : '',
     '',
     sourceText,
@@ -80,6 +150,9 @@ export function parseExhibitionPlanOutlineJson(text) {
       .map((zone, index) => ({
         name: cleanText(zone?.name || zone?.title || `展区${index + 1}`, 80),
         summary: cleanText(zone?.summary || zone?.description || zone?.content || '', 600),
+        displayMethods: Array.isArray(zone?.displayMethods)
+          ? zone.displayMethods.map((item) => cleanText(item, 80)).filter(Boolean).slice(0, 6)
+          : [],
         priority: Math.max(1, Math.min(5, Math.floor(Number(zone?.priority) || index + 1))),
         areaHint: cleanText(zone?.areaHint || zone?.area || '', 200),
         routeHint: cleanText(zone?.routeHint || zone?.route || '', 200),
@@ -95,7 +168,7 @@ export function parseExhibitionPlanOutlineJson(text) {
       const [nameRaw, ...rest] = line.split(/[：:]/);
       const name = cleanText(nameRaw || `展区${index + 1}`, 80);
       const summary = cleanText(rest.join('：') || line, 600);
-      return { name, summary, priority: index + 1, areaHint: '', routeHint: '' };
+      return { name, summary, displayMethods: [], priority: index + 1, areaHint: '', routeHint: '' };
     });
     return { title: '', zones };
   }
@@ -110,6 +183,7 @@ export function formatExhibitionPlanOutline(result) {
     const parts = [
       `${index + 1}. ${cleanText(zone.name || `展区${index + 1}`, 80)}`,
       cleanText(zone.summary, 600),
+      Array.isArray(zone.displayMethods) && zone.displayMethods.length > 0 ? `展示手段：${zone.displayMethods.map((item) => cleanText(item, 80)).filter(Boolean).join('、')}` : '',
       zone.areaHint ? `面积/位置：${cleanText(zone.areaHint, 200)}` : '',
       zone.routeHint ? `动线：${cleanText(zone.routeHint, 200)}` : '',
     ].filter(Boolean);
@@ -126,9 +200,11 @@ export function buildExhibitionPlanLayoutPrompt(values = {}) {
   const showLabels = values.showLabels !== false;
   const showDescriptions = values.showDescriptions !== false;
   const hasStyleReferenceImage = values.hasStyleReferenceImage === true;
+  const insertItemsText = exhibitionPlanLayoutInsertItemsText(values.insertItems, values.insertItemOptions);
+  const excludeItemsText = exhibitionPlanLayoutExcludeItemsText(values.excludeItems, values.excludeItemOptions);
 
   const routeText = showRoute
-    ? '显示动线：开启。请用清晰箭头、虚线或彩色路径表现参观方向、入口、出口、主环线和必要的分流路径。'
+    ? '显示动线：开启。请用清晰箭头、红色虚线或彩色路径表现参观方向、入口、出口、主环线和必要的分流路径。动线必须从入口到出口连续穿过所有展陈单元和展区，不能遗漏任何单元，不能出现断线、跳线或只经过局部展区。'
     : '显示动线：关闭。不要绘制箭头、路线、脚印、方向线或任何显性参观路径符号。';
   const labelText = showLabels
     ? '显示标注文字：开启。允许在平面图中标注展区名称、入口、出口、服务点、核心展项、互动区等短标签。'
@@ -138,7 +214,7 @@ export function buildExhibitionPlanLayoutPrompt(values = {}) {
     : '显示说明文字：关闭。不要加入说明框、图例长文、设计注释、面积说明或段落文字。';
   const styleText = hasStyleReferenceImage
     ? '输入图像说明：图1是唯一建筑平面图依据；图2只是平面布局图的视觉样式参考，只能参考配色、线条、图例、分区表达和标注形式，不得改变图1的建筑轮廓、墙体、柱网、入口和房间边界。'
-    : '输入图像说明：图1是唯一建筑平面图依据。使用内置默认样式：干净俯视、展陈方案汇报用平面布局图、彩色半透明展区分区、清晰边界、现代图例、工程制图般整洁。';
+    : '输入图像说明：图1是唯一建筑平面图依据。未输入样式参考图时，使用附件参考图风格：白色汇报底图、灰色建筑平面线稿、淡黄/淡粉/米色半透明展区色块、深灰大标题与单元标题、红色折线引导标注、红点节点、红色虚线参观动线和箭头、局部小号黑色展项标注，整体像展陈服务项目平面布局汇报图。';
 
   return [
     'Use case: exhibition-floor-plan-layout.',
@@ -150,9 +226,13 @@ export function buildExhibitionPlanLayoutPrompt(values = {}) {
     '',
     `布局要求预设：${presetText}`,
     customRequirement ? `用户补充布局要求：${customRequirement}` : '',
+    `植入项展示手段：${insertItemsText}。请把这些展示手段合理分配到展区中，可作为文物柜、展柜、艺术品、装置、多媒体点位、场景复原或主题展项来组织空间。`,
+    excludeItemsText ? `排除项：${excludeItemsText}。最终平面布局中不得出现这些内容。` : '',
     routeText,
     labelText,
     descriptionText,
+    '单元分隔要求：各展陈单元之间必须有明确遮挡物或空间界面分隔，观众通道除外。分隔可以是墙体完全隔开，也可以是文物柜、展柜、核心展项、艺术品、浮雕墙、半高隔断或装置隔开；这些界面用于引导参观路线，视觉可以局部穿透，但不能让所有单元完全敞开混成一片。',
+    '柱网与孤立物约束：不得出现柱子或小构筑物孤零零地漂浮在空地中且不连接任何物体。所有柱子、展柜、展墙、装置或节点都必须与墙体、展项、隔断、展柜组、地台或展区边界形成明确关系。',
     '图面表达：彩色分区要覆盖在原始建筑平面内部；每个展区边界清晰，过渡自然；重要展项、互动装置、休息/服务点以简洁符号表达；图例和标注不遮挡关键平面结构。',
     '质量约束：线条锐利、文字如开启则尽量少且可读、分区色彩有区分度、整体像专业展陈设计汇报图；不要生成真实人物、摄影质感、杂乱装饰、三维透视、错误墙体、破碎文字或无关 logo。',
   ].filter(Boolean).join('\n').replace(/\n{3,}/g, '\n\n').trim();

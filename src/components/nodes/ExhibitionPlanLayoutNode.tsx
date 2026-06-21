@@ -11,12 +11,17 @@ import {
   resolveAdvancedProviderSelection,
 } from '../../utils/advancedProviders';
 import {
+  EXHIBITION_PLAN_LAYOUT_EXCLUDE_ITEMS,
+  EXHIBITION_PLAN_LAYOUT_INSERT_ITEMS,
   EXHIBITION_PLAN_LAYOUT_PRESETS,
   buildExhibitionPlanLayoutPrompt,
   buildExhibitionPlanOutlinePrompt,
   formatExhibitionPlanOutline,
+  normalizeExhibitionPlanLayoutExcludeItems,
+  normalizeExhibitionPlanLayoutInsertItems,
   normalizeExhibitionPlanLayoutPresetId,
   parseExhibitionPlanOutlineJson,
+  type ExhibitionPlanLayoutChoiceItem,
   type ExhibitionPlanLayoutPreset,
 } from '../../utils/exhibitionPlanLayoutPrompt';
 import { useApiKeysStore } from '../../stores/apiKeys';
@@ -164,6 +169,17 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
   const showRoute = d.showRoute !== false;
   const showLabels = d.showLabels !== false;
   const showDescriptions = d.showDescriptions !== false;
+  const selectedInsertItems = useMemo(
+    () => normalizeExhibitionPlanLayoutInsertItems(d.insertItems, EXHIBITION_PLAN_LAYOUT_INSERT_ITEMS),
+    [d.insertItems],
+  );
+  const selectedInsertIds = useMemo(() => selectedInsertItems.map((item) => item.id), [selectedInsertItems]);
+  const selectedExcludeItems = useMemo(
+    () => normalizeExhibitionPlanLayoutExcludeItems(d.excludeItems, EXHIBITION_PLAN_LAYOUT_EXCLUDE_ITEMS),
+    [d.excludeItems],
+  );
+  const selectedExcludeIds = useMemo(() => selectedExcludeItems.map((item) => item.id), [selectedExcludeItems]);
+  const allExcludeSelected = selectedExcludeIds.length === EXHIBITION_PLAN_LAYOUT_EXCLUDE_ITEMS.length;
 
   const buildPrompt = useCallback((outlineText: string) => buildExhibitionPlanLayoutPrompt({
     layoutOutlineText: outlineText,
@@ -173,7 +189,9 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
     showLabels,
     showDescriptions,
     hasStyleReferenceImage: !!styleReferenceImage,
-  }), [d.layoutRequirement, layoutPresetId, showDescriptions, showLabels, showRoute, styleReferenceImage]);
+    insertItems: selectedInsertIds,
+    excludeItems: selectedExcludeIds,
+  }), [d.layoutRequirement, layoutPresetId, selectedExcludeIds, selectedInsertIds, showDescriptions, showLabels, showRoute, styleReferenceImage]);
 
   const pickDocument = useCallback(async (file?: File) => {
     if (!file || isReadonly || busy) return;
@@ -208,7 +226,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
         max_tokens: 2400,
         messages: [
           { role: 'system', content: '你是资深展陈策划与空间规划专家。你只输出严格 JSON。' },
-          { role: 'user', content: buildExhibitionPlanOutlinePrompt({ sourceText: text }) },
+          { role: 'user', content: buildExhibitionPlanOutlinePrompt({ sourceText: text, insertItems: selectedInsertIds, excludeItems: selectedExcludeIds }) },
         ],
       });
       const formatted = formatExhibitionPlanOutline(parseExhibitionPlanOutlineJson(response.content || ''));
@@ -219,7 +237,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
       update({ status: 'error', error: llmErrorMessage(error), progress: '' });
       throw error;
     }
-  }, [activeLlmConfig?.id, effectiveSourceText, llmModel, update]);
+  }, [activeLlmConfig?.id, effectiveSourceText, llmModel, selectedExcludeIds, selectedInsertIds, update]);
 
   const runGenerate = useCallback(async () => {
     if (isReadonly) return;
@@ -471,6 +489,78 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
                 {label}
               </label>
             ))}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1 rounded border border-white/10 bg-black/15 p-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-semibold text-cyan-100">植入项</span>
+                <button
+                  type="button"
+                  className={`${BUTTON} ml-auto h-6 px-1.5`}
+                  disabled={isReadonly || busy}
+                  onClick={() => update({ insertItems: EXHIBITION_PLAN_LAYOUT_INSERT_ITEMS.map((item) => item.id) })}
+                >
+                  全选
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-1">
+                {EXHIBITION_PLAN_LAYOUT_INSERT_ITEMS.map((item: ExhibitionPlanLayoutChoiceItem) => {
+                  const checked = selectedInsertIds.includes(item.id);
+                  return (
+                    <label key={item.id} className="flex items-center gap-1 rounded bg-white/[0.04] px-1.5 py-1 text-[9px] text-white/65">
+                      <input
+                        type="checkbox"
+                        className="h-3 w-3 accent-cyan-300"
+                        checked={checked}
+                        disabled={isReadonly || busy}
+                        onChange={(event) => {
+                          const next = event.target.checked
+                            ? Array.from(new Set([...selectedInsertIds, item.id]))
+                            : selectedInsertIds.filter((itemId) => itemId !== item.id);
+                          update({ insertItems: next });
+                        }}
+                      />
+                      {item.label}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="space-y-1 rounded border border-white/10 bg-black/15 p-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-semibold text-cyan-100">排除项</span>
+                <button
+                  type="button"
+                  className={`${BUTTON} ml-auto h-6 px-1.5`}
+                  disabled={isReadonly || busy}
+                  onClick={() => update({ excludeItems: allExcludeSelected ? [] : EXHIBITION_PLAN_LAYOUT_EXCLUDE_ITEMS.map((item) => item.id) })}
+                >
+                  {allExcludeSelected ? '清空' : '全选'}
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-1">
+                {EXHIBITION_PLAN_LAYOUT_EXCLUDE_ITEMS.map((item: ExhibitionPlanLayoutChoiceItem) => {
+                  const checked = selectedExcludeIds.includes(item.id);
+                  return (
+                    <label key={item.id} className="flex items-center gap-1 rounded bg-white/[0.04] px-1.5 py-1 text-[9px] text-white/65">
+                      <input
+                        type="checkbox"
+                        className="h-3 w-3 accent-cyan-300"
+                        checked={checked}
+                        disabled={isReadonly || busy}
+                        onChange={(event) => {
+                          const next = event.target.checked
+                            ? Array.from(new Set([...selectedExcludeIds, item.id]))
+                            : selectedExcludeIds.filter((itemId) => itemId !== item.id);
+                          update({ excludeItems: next });
+                        }}
+                      />
+                      {item.label}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </section>
 
