@@ -20,6 +20,8 @@ export interface ShowcaseExhibitItem {
   imageUrl?: string;
   label?: string;
   name?: string;
+  heightMm?: number;
+  displayHeightMm?: number;
   maxSideMm?: number;
   longestSideMm?: number;
   sizeMm?: number;

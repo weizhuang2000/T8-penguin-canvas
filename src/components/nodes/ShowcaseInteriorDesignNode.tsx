@@ -30,7 +30,7 @@ const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border
 const MAX_IMAGE_SEED = 2147483647;
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
-const DEFAULT_EXHIBIT_SIZE_MM = 300;
+const DEFAULT_EXHIBIT_HEIGHT_MM = 300;
 
 interface InputImageItem {
   id: string;
@@ -164,7 +164,7 @@ function loadImageLoose(src: string): Promise<HTMLImageElement | null> {
 
 async function buildScaledExhibitReferenceImage(
   scaleReferenceDataUrl: string,
-  exhibitItems: Array<{ url: string; label: string; maxSideMm: number }>,
+  exhibitItems: Array<{ url: string; label: string; heightMm: number }>,
   showcaseStyle: ReturnType<typeof normalizeShowcaseStyle>,
 ): Promise<string> {
   if (typeof document === 'undefined') return imageDataUrlToPngDataUrl(scaleReferenceDataUrl);
@@ -199,16 +199,16 @@ async function buildScaledExhibitReferenceImage(
   loaded.forEach((img, index) => {
     const item = exhibitItems[index];
     if (!img || !item) return;
-    const targetLongest = Math.max(8, item.maxSideMm * scale);
+    const targetHeight = Math.max(8, item.heightMm * scale);
     const maxBySlot = Math.max(24, slotW);
     const maxByGlass = Math.max(24, glassH * 0.86);
-    const targetBox = Math.min(targetLongest, maxBySlot, maxByGlass);
-    const iw = img.naturalWidth || img.width || targetBox;
-    const ih = img.naturalHeight || img.height || targetBox;
-    const longestPx = Math.max(iw, ih, 1);
-    const drawScale = targetBox / longestPx;
+    const targetDrawHeight = Math.min(targetHeight, maxByGlass);
+    const iw = img.naturalWidth || img.width || targetDrawHeight;
+    const ih = img.naturalHeight || img.height || targetDrawHeight;
+    const drawScale = targetDrawHeight / Math.max(ih, 1);
     const dw = iw * drawScale;
-    const dh = ih * drawScale;
+    const dh = targetDrawHeight;
+    const frameW = Math.min(Math.max(dw, 24), maxBySlot);
     const cx = x + exhibitGap + slotW * index + exhibitGap * index + slotW / 2;
     const bottom = baseY - Math.max(26, glassH * 0.08);
     const dx = cx - dw / 2;
@@ -218,13 +218,13 @@ async function buildScaledExhibitReferenceImage(
     ctx.strokeStyle = '#0369a1';
     ctx.lineWidth = 3;
     ctx.setLineDash([8, 6]);
-    ctx.strokeRect(cx - targetBox / 2, bottom - targetBox, targetBox, targetBox);
+    ctx.strokeRect(cx - frameW / 2, bottom - targetDrawHeight, frameW, targetDrawHeight);
     ctx.setLineDash([]);
     ctx.drawImage(img, dx, dy, dw, dh);
     ctx.fillStyle = '#0f172a';
     ctx.font = '700 24px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`展品 ${index + 1}: 最长边 ${item.maxSideMm} mm`, cx, bottom + 104);
+    ctx.fillText(`展品 ${index + 1}: 高度 ${item.heightMm} mm`, cx, bottom + 104);
     ctx.restore();
   });
   try {
@@ -288,7 +288,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
       return {
         url: image.url,
         label: prev?.label || image.label || `展品 ${index + 1}`,
-        maxSideMm: prev?.maxSideMm || DEFAULT_EXHIBIT_SIZE_MM,
+        heightMm: prev?.heightMm || DEFAULT_EXHIBIT_HEIGHT_MM,
       };
     });
   }, [d.exhibitItems, exhibitImages]);
@@ -344,7 +344,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
   const updateExhibitSize = (url: string, value: string) => {
     const n = Number(value);
     const next = exhibitItems.map((item) => item.url === url
-      ? { ...item, maxSideMm: Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : DEFAULT_EXHIBIT_SIZE_MM }
+      ? { ...item, heightMm: Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : DEFAULT_EXHIBIT_HEIGHT_MM }
       : item);
     update({ exhibitItems: next });
   };
@@ -577,14 +577,14 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
                     <div className="truncate text-[9px] text-white/35">{item.url}</div>
                   </div>
                   <label className="space-y-0.5">
-                    <span className="text-[9px] text-white/45">最长边 mm</span>
-                    <input className={`${FIELD} px-1 text-center`} type="number" min={1} value={item.maxSideMm} disabled={isReadonly || busy} onChange={(event) => updateExhibitSize(item.url, event.target.value)} />
+                    <span className="text-[9px] text-white/45">高度 mm</span>
+                    <input className={`${FIELD} px-1 text-center`} type="number" min={1} value={item.heightMm} disabled={isReadonly || busy} onChange={(event) => updateExhibitSize(item.url, event.target.value)} />
                   </label>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="rounded border border-dashed border-white/15 p-3 text-center text-[10px] text-white/35">连接图像素材作为展品图后，可逐件填写最长边 mm</div>
+            <div className="rounded border border-dashed border-white/15 p-3 text-center text-[10px] text-white/35">连接图像素材作为展品图后，可逐件填写高度 mm</div>
           )}
         </section>
 

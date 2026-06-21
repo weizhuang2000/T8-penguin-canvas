@@ -11,6 +11,8 @@ export interface ShowcaseExhibitItem {
   imageUrl?: string;
   label?: string;
   name?: string;
+  heightMm?: number;
+  displayHeightMm?: number;
   maxSideMm?: number;
   longestSideMm?: number;
   sizeMm?: number;
@@ -32,7 +34,7 @@ export interface ShowcaseInteriorDesignPromptValues extends ShowcaseStyleValues 
 }
 
 export function normalizeShowcaseStyle(value?: unknown): Required<ShowcaseStyleValues>;
-export function normalizeShowcaseExhibitItems(value?: unknown): Array<{ url: string; label: string; maxSideMm: number }>;
+export function normalizeShowcaseExhibitItems(value?: unknown): Array<{ url: string; label: string; heightMm: number }>;
 export function colorMaterialTextFromPreset(preset?: unknown): string;
 export function buildShowcaseInteriorScaleReferenceSvg(values?: ShowcaseInteriorDesignPromptValues): string;
 export function buildShowcaseInteriorScaleReferenceDataUrl(values?: ShowcaseInteriorDesignPromptValues): string;

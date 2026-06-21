@@ -105,7 +105,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: 'exhibition-outline-split', label: '展陈大纲拆分', category: 'exhibition', description: '读取展陈资料文档，按指定单元数或自动模式拆分大纲并提炼总结，输出多段文本', icon: 'ListTree', color: 'cyan' },
   { type: 'exhibition-plan-layout', label: '平面自动布局', category: 'exhibition', description: '根据建筑平面图和展陈大纲自动生成展陈平面布局图，支持动线、标注和说明文字开关', icon: 'Map', color: 'cyan' },
   { type: 'unit-panel-design', label: '单元板设计', category: 'exhibition', description: '生成单元板/整套板式设计图：两级文字提炼、多语言排序、材质选择、色材参考和尺寸标注', icon: 'PanelsTopLeft', color: 'cyan' },
-  { type: 'showcase-interior-design', label: '柜内设计', category: 'exhibition', description: '展柜内部陈列设计：展柜尺寸、展品图与最长边、色彩材质预设、尺寸标注和爆炸图输出', icon: 'Archive', color: 'cyan' },
+  { type: 'showcase-interior-design', label: '柜内设计', category: 'exhibition', description: '展柜内部陈列设计：展柜尺寸、展品图与展品高度、色彩材质预设、尺寸标注和爆炸图输出', icon: 'Archive', color: 'cyan' },
   { type: 'multi-angle-visual', label: '可视化多角度', category: 'toolbox', description: '可视化调节方位 / 俯仰 / 远近，支持批量角度、Prompt 模式、前后缀、镜头收藏、JSON 导入/导出与紧凑双栏 UI', icon: 'Compass', color: 'pink' },
   { type: 'portrait-master', label: '肖像大师', category: 'toolbox', description: '捏人 Prompt 设计器：五官、发型、服饰、配饰、气质神情等 9 大类词库，支持随机、锁定、权重和运行输出文本', icon: 'UserRoundCog', color: 'pink' },
   { type: 'pose-master', label: '姿势大师', category: 'toolbox', description: '人体线稿姿态编辑器：支持多人姿势、抓取移动、OpenPose/COCO 预览输出、keypoints JSON 与中英文 prompt', icon: 'PersonStanding', color: 'pink' },

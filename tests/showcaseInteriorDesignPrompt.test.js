@@ -40,21 +40,24 @@ test('showcase prompt includes four showcase dimensions and cap switch in Chines
   });
 });
 
-test('showcase prompt keeps exhibit order and longest side in millimeters', () => {
+test('showcase prompt keeps exhibit order and display height in millimeters', () => {
   const items = normalizeShowcaseExhibitItems([
-    { url: '/files/input/a.png', label: '青铜器', maxSideMm: 420 },
-    { url: '/files/input/b.png', label: '陶俑', maxSideMm: 260 },
+    { url: '/files/input/a.png', label: '青铜器', heightMm: 420 },
+    { url: '/files/input/b.png', label: '陶俑', heightMm: 260 },
   ]);
-  assert.deepEqual(items.map((item) => item.maxSideMm), [420, 260]);
+  assert.deepEqual(items.map((item) => item.heightMm), [420, 260]);
 
   const prompt = buildShowcaseInteriorDesignPrompt({ exhibitItems: items, showcaseStyle: { widthMm: 1200, glassHeightMm: 1400 } });
-  assert.ok(prompt.indexOf('1. 青铜器：最长边 420 mm') < prompt.indexOf('2. 陶俑：最长边 260 mm'));
+  assert.ok(prompt.indexOf('1. 青铜器：高度 420 mm') < prompt.indexOf('2. 陶俑：高度 260 mm'));
   assert.match(prompt, /第 1 张参考图是“尺寸合成参考图”/);
   assert.match(prompt, /参考图顺序：第 2 张参考图 = 展品 1/);
   assert.match(prompt, /严格比例规则/);
   assert.match(prompt, /展柜宽度 1200 mm 的 35%/);
   assert.match(prompt, /玻璃区高度 1400 mm 的 18\.6%/);
   assert.match(prompt, /相对尺寸审计/);
+
+  const legacy = normalizeShowcaseExhibitItems([{ url: '/files/input/legacy.png', maxSideMm: 188 }]);
+  assert.equal(legacy[0].heightMm, 188);
 });
 
 test('showcase prompt switches dimension marks and exploded view requirements', () => {
@@ -76,7 +79,7 @@ test('showcase prompt switches dimension marks and exploded view requirements', 
 
 test('showcase prompt separates exhibit images from color material reference', () => {
   const prompt = buildShowcaseInteriorDesignPrompt({
-    exhibitItems: [{ url: '/files/input/exhibit.png', label: '展品图', maxSideMm: 300 }],
+    exhibitItems: [{ url: '/files/input/exhibit.png', label: '展品图', heightMm: 300 }],
     colorMaterialPresetText: '深灰金属、暖光、低反射玻璃',
     manualColorMaterial: '背板使用细腻织物肌理',
     colorMaterialReferenceTone: '主色调：深蓝、香槟金',
@@ -85,10 +88,10 @@ test('showcase prompt separates exhibit images from color material reference', (
   assert.match(prompt, /普通 image 输入均视为展品图/);
   assert.match(prompt, /独立 color-material-reference 输入/);
   assert.match(prompt, /它不是展品图/);
-  assert.match(prompt, /不得套用任何最长边尺寸/);
+  assert.match(prompt, /不得套用任何展品高度尺寸/);
   assert.match(prompt, /共享色彩与材质预设作为次级补充/);
   assert.match(prompt, /手动色彩与材质补充/);
-  assert.match(prompt, /展品图：最长边 300 mm/);
+  assert.match(prompt, /展品图：高度 300 mm/);
 });
 
 test('showcase color material preset keeps only color and material constraints', () => {
@@ -118,15 +121,15 @@ test('showcase scale reference image encodes cabinet and exhibit millimeter cons
   const values = {
     showcaseStyle: { widthMm: 1200, baseHeightMm: 300, glassHeightMm: 1400, capHeightMm: 180, hasCap: true },
     exhibitItems: [
-      { url: '/files/input/a.png', label: '青铜器', maxSideMm: 420 },
-      { url: '/files/input/b.png', label: '陶俑', maxSideMm: 260 },
+      { url: '/files/input/a.png', label: '青铜器', heightMm: 420 },
+      { url: '/files/input/b.png', label: '陶俑', heightMm: 260 },
     ],
   };
   const svg = buildShowcaseInteriorScaleReferenceSvg(values);
   assert.match(svg, /柜内设计比例控制图/);
   assert.match(svg, /展柜宽 1200 mm/);
-  assert.match(svg, /最长边 420 mm/);
-  assert.match(svg, /最长边 260 mm/);
+  assert.match(svg, /高度 420 mm/);
+  assert.match(svg, /高度 260 mm/);
 
   const dataUrl = buildShowcaseInteriorScaleReferenceDataUrl(values);
   assert.match(dataUrl, /^data:image\/svg\+xml;base64,/);

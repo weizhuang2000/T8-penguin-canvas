@@ -59,9 +59,9 @@ export function normalizeShowcaseExhibitItems(value = []) {
     .map((item, index) => {
       const url = cleanText(item?.url || item?.imageUrl || '', 1000);
       const label = cleanText(item?.label || item?.name || `展品 ${index + 1}`, 80);
-      const maxSideMm = normalizeNumber(item?.maxSideMm ?? item?.longestSideMm ?? item?.sizeMm, 300, 1, 99999);
+      const heightMm = normalizeNumber(item?.heightMm ?? item?.displayHeightMm ?? item?.maxSideMm ?? item?.longestSideMm ?? item?.sizeMm, 300, 1, 99999);
       if (!url && !label) return null;
-      return { url, label: label || `展品 ${index + 1}`, maxSideMm };
+      return { url, label: label || `展品 ${index + 1}`, heightMm };
     })
     .filter(Boolean);
 }
@@ -101,24 +101,24 @@ function exhibitItemsText(items, style, values = {}) {
   }
 
   const lines = [
-    '运行时第 1 张参考图是“尺寸合成参考图”：展品原图已经按最长边 mm 缩放后放入展柜比例框中。最终效果图必须优先对齐这张图里的展品显示大小。',
+    '运行时第 1 张参考图是“尺寸合成参考图”：展品原图已经按设定高度 mm 缩放后放入展柜比例框中。最终效果图必须优先对齐这张图里的展品显示高度。',
     '普通 image 输入均视为展品图，只用于提取展品外观、体量、轮廓、材质和摆放重点，不作为色彩材质风格参考。',
     '参考图顺序：第 2 张参考图 = 展品 1，第 3 张参考图 = 展品 2，以此类推。必须按这个顺序匹配展品图片和尺寸。',
-    '严格比例规则：每件展品只能按“最长边 mm”缩放，不能按原图像素、裁切大小、主体在参考图里看起来的大小或视觉重要性缩放。',
-    '尺寸合成参考图中的展品图像外接框就是该展品最长边的真实比例范围；最终展品必须保持同等视觉大小，不得明显放大或缩小。',
+    '严格比例规则：每件展品只能按“高度 mm”缩放，不能按原图像素、裁切大小、主体在参考图里看起来的大小或视觉重要性缩放。',
+    '尺寸合成参考图中的展品图像高度就是该展品设定高度的真实比例范围；最终展品必须保持同等视觉高度，不得明显放大或缩小。',
   ];
 
   normalized.forEach((item, index) => {
-    const widthPercent = s.widthMm > 0 ? (item.maxSideMm / s.widthMm) * 100 : 0;
-    const glassPercent = s.glassHeightMm > 0 ? (item.maxSideMm / s.glassHeightMm) * 100 : 0;
-    lines.push(`${index + 1}. ${item.label}：最长边 ${item.maxSideMm} mm；参考图 URL：${item.url || '[上游展品图]'}`);
-    lines.push(`   比例校验：展品 ${index + 1} 的最长边约为展柜宽度 ${s.widthMm} mm 的 ${formatPercent(widthPercent)}%，约为玻璃区高度 ${s.glassHeightMm} mm 的 ${formatPercent(glassPercent)}%。`);
+    const widthPercent = s.widthMm > 0 ? (item.heightMm / s.widthMm) * 100 : 0;
+    const glassPercent = s.glassHeightMm > 0 ? (item.heightMm / s.glassHeightMm) * 100 : 0;
+    lines.push(`${index + 1}. ${item.label}：高度 ${item.heightMm} mm；参考图 URL：${item.url || '[上游展品图]'}`);
+    lines.push(`   比例校验：展品 ${index + 1} 的显示高度约为展柜宽度 ${s.widthMm} mm 的 ${formatPercent(widthPercent)}%，约为玻璃区高度 ${s.glassHeightMm} mm 的 ${formatPercent(glassPercent)}%。`);
   });
 
   if (values.hasColorMaterialReferenceImage === true) {
-    lines.push('色彩材质参考图使用独立 color-material-reference 输入，并且排在所有展品图之后；它不是展品图，不得套用任何最长边尺寸。');
+    lines.push('色彩材质参考图使用独立 color-material-reference 输入，并且排在所有展品图之后；它不是展品图，不得套用任何展品高度尺寸。');
   }
-  lines.push('相对尺寸审计：如果两张展品参考图看起来差不多大，但最长边数值不同，最终必须按毫米数显示出明显的物理大小差异。');
+  lines.push('相对尺寸审计：如果两张展品参考图看起来差不多大，但高度数值不同，最终必须按毫米数显示出明显的物理高度差异。');
   lines.push('渲染前最终检查：逐一比较每件展品与展柜宽度、玻璃区高度和尺寸合成参考图。小尺寸展品必须保持小件感，大尺寸展品只有在数值足够大时才可以成为视觉主体。');
   return lines.join('\n');
 }
@@ -147,7 +147,7 @@ function outputRequirementText(values) {
   return [
     values.perspectiveEnabled === false
       ? '透视效果：关闭。必须输出完全平面的正立面/二维方案效果，不要任何 3D 透视、斜视角、消失点、近大远小、景深、透视玻璃边或空间纵深；所有水平线和垂直线必须保持平行，像正投影立面图。'
-      : '透视效果：开启。可以使用轻微、克制的 3D 透视来表现展柜深度、玻璃厚度和柜内层次，但不得破坏展品最长边的物理比例。',
+      : '透视效果：开启。可以使用轻微、克制的 3D 透视来表现展柜深度、玻璃厚度和柜内层次，但不得破坏展品高度的物理比例。',
     values.dimensionMarksEnabled === true
       ? '尺寸标注：开启。输出中可加入清晰的工程尺寸标注、毫米单位和关键高度/宽度标注，但文字必须简洁、整洁，像方案图标注。'
       : '尺寸标注：关闭。不要绘制尺寸线、毫米数字、红色测量标注、工程尺或标注符号，但仍要按给定尺寸比例生成。',
@@ -180,7 +180,7 @@ export function buildShowcaseInteriorScaleReferenceSvg(values = {}) {
   const slotCount = Math.max(exhibits.length, 1);
   const slotW = Math.max(80, (cabinetW - exhibitGap * (slotCount + 1)) / slotCount);
   const exhibitEls = exhibits.map((item, index) => {
-    const box = Math.max(8, item.maxSideMm * scale);
+    const box = Math.max(8, item.heightMm * scale);
     const clamped = Math.min(box, Math.max(24, slotW), Math.max(24, glassH * 0.86));
     const cx = x + exhibitGap + slotW * index + exhibitGap * index + slotW / 2;
     const bottom = baseY - Math.max(26, glassH * 0.08);
@@ -190,7 +190,7 @@ export function buildShowcaseInteriorScaleReferenceSvg(values = {}) {
       `<rect x="${bx.toFixed(2)}" y="${by.toFixed(2)}" width="${clamped.toFixed(2)}" height="${clamped.toFixed(2)}" rx="8" fill="rgba(14,165,233,0.12)" stroke="#0284c7" stroke-width="4" stroke-dasharray="10 8"/>`,
       `<line x1="${cx.toFixed(2)}" y1="${bottom.toFixed(2)}" x2="${cx.toFixed(2)}" y2="${(bottom + 34).toFixed(2)}" stroke="#334155" stroke-width="3"/>`,
       `<text x="${cx.toFixed(2)}" y="${(by - 18).toFixed(2)}" text-anchor="middle" font-size="28" font-weight="700" fill="#0f172a">展品 ${index + 1}</text>`,
-      `<text x="${cx.toFixed(2)}" y="${(by + clamped / 2 + 10).toFixed(2)}" text-anchor="middle" font-size="24" fill="#075985">最长边 ${item.maxSideMm} mm</text>`,
+      `<text x="${cx.toFixed(2)}" y="${(by + clamped / 2 + 10).toFixed(2)}" text-anchor="middle" font-size="24" fill="#075985">高度 ${item.heightMm} mm</text>`,
       `<text x="${cx.toFixed(2)}" y="${(bottom + 70).toFixed(2)}" text-anchor="middle" font-size="20" fill="#334155">${escapeXml(item.label).slice(0, 18)}</text>`,
     ].join('\n');
   }).join('\n');
@@ -213,7 +213,7 @@ ${capEls}
 <line x1="${x.toFixed(2)}" y1="${(baseY + baseH + 52).toFixed(2)}" x2="${(x + cabinetW).toFixed(2)}" y2="${(baseY + baseH + 52).toFixed(2)}" stroke="#0f172a" stroke-width="4"/>
 <text x="${(x + cabinetW / 2).toFixed(2)}" y="${(baseY + baseH + 92).toFixed(2)}" text-anchor="middle" font-size="26" fill="#0f172a">展柜宽度 ${style.widthMm} mm</text>
 ${exhibitEls || `<text x="${(x + cabinetW / 2).toFixed(2)}" y="${(glassY + glassH / 2).toFixed(2)}" text-anchor="middle" font-size="30" fill="#64748b">无展品图，使用抽象占位体块</text>`}
-<text x="60" y="1510" font-size="24" fill="#475569">要求：展品外观来自后续展品参考图，但最长边必须贴合本图蓝色占位框的毫米比例。</text>
+<text x="60" y="1510" font-size="24" fill="#475569">要求：展品外观来自后续展品参考图，但显示高度必须贴合本图蓝色占位框的毫米比例。</text>
 </svg>`;
 }
 
