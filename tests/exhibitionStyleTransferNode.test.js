@@ -10,6 +10,8 @@ test('exhibition style transfer node is registered in exhibition tools', () => {
   assert.match(read('src/types/canvas.ts'), /'exhibition-style-transfer'/);
   assert.match(read('src/config/nodeRegistry.ts'), /type: 'exhibition-style-transfer', label: '风格迁移', category: 'exhibition'/);
   assert.match(read('src/components/Canvas.tsx'), /ExhibitionStyleTransferNode/);
+  assert.match(read('backend/src/auth/toolPermissions.js'), /'exhibition-style-transfer'/);
+  assert.match(read('backend/src/routes/proxy.js'), /'exhibition-style-transfer'/);
 });
 
 test('exhibition style transfer node exposes image ports and shared controls', () => {

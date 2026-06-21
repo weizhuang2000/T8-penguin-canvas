@@ -56,6 +56,22 @@ test('tool permissions resolve admin, user, role, and defaults', () => withTempD
   assert.equal(permissions.canUseNode({ id: 'admin', role: 'admin' }, 'rh-config'), true);
 }));
 
+test('tool permissions include exhibition style transfer as a valid grant', () => withTempData(() => {
+  permissions.writeDb({
+    defaultVisibleNodeTypes: ['text'],
+    roleRules: {
+      designer: { mode: 'custom', allowedNodeTypes: ['exhibition-style-transfer'], deniedNodeTypes: [] },
+    },
+    userRules: {},
+  });
+
+  const resolved = permissions.resolveToolPermissions({ id: 'u2', role: 'designer' });
+  assert.equal(permissions.ALL_NODE_TYPES.includes('exhibition-style-transfer'), true);
+  assert.equal(permissions.DEFAULT_VISIBLE_NODE_TYPES.includes('exhibition-style-transfer'), true);
+  assert.equal(resolved.allowedNodeTypes.includes('exhibition-style-transfer'), true);
+  assert.equal(permissions.canUseNode({ id: 'u2', role: 'designer' }, 'exhibition-style-transfer'), true);
+}));
+
 test('findUnauthorizedNewNodes allows existing blocked nodes but rejects new ones', () => withTempData(() => {
   permissions.writeDb({
     defaultVisibleNodeTypes: ['text'],
