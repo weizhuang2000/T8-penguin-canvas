@@ -46,16 +46,20 @@ test('showcase prompt keeps exhibit order and display height in millimeters', ()
   assert.deepEqual(items.map((item) => item.heightMm), [420, 260]);
 
   const prompt = buildShowcaseInteriorDesignPrompt({ exhibitItems: items, showcaseStyle: { widthMm: 1200, glassHeightMm: 1400 } });
-  assert.ok(prompt.indexOf('1. 青铜器：高度 420 mm') < prompt.indexOf('2. 陶俑：高度 260 mm'));
+  assert.ok(prompt.indexOf('1. 青铜器：设定高度 420 mm，生图显示高度 294 mm') < prompt.indexOf('2. 陶俑：设定高度 260 mm，生图显示高度 182 mm'));
   assert.match(prompt, /参考图顺序：第 1 张参考图 = 展品 1，第 2 张参考图 = 展品 2/);
   assert.doesNotMatch(prompt, /尺寸合成参考图/);
   assert.doesNotMatch(prompt, /第 2 张参考图 = 展品 1/);
   assert.match(prompt, /严格比例规则/);
+  assert.match(prompt, /生图时展品本体显示高度按设定高度的 70% 生成/);
+  assert.match(prompt, /展柜宽度、底座高度、玻璃区高度、柜帽高度和柜体总高度保持设定尺寸不变/);
+  assert.match(prompt, /展品、展柜和构件的标注文字仍必须标注用户设定尺寸/);
   assert.match(prompt, /高度只指展品本体的可见垂直高度，不包含托台、托盘、标签牌、底座、支架、阴影、留白或说明文字/);
   assert.match(prompt, /不得为了构图、焦点或视觉美观而随意放大或缩小/);
   assert.match(prompt, /保留充足柜内空白，为以后继续放置其它展品预留空间/);
-  assert.match(prompt, /玻璃区高度 1400 mm 的 18\.6%/);
-  assert.match(prompt, /本体可见高度不得超过玻璃区高度的 20\.4%/);
+  assert.match(prompt, /玻璃区高度 1400 mm 的 21%/);
+  assert.match(prompt, /仍标注为 420 mm，不标注为 294 mm/);
+  assert.match(prompt, /本体可见高度不得超过玻璃区高度的 23\.1%/);
   assert.doesNotMatch(prompt, /显示高度约为展柜宽度/);
   assert.match(prompt, /相对尺寸审计/);
 
@@ -67,6 +71,8 @@ test('showcase prompt switches dimension marks and exploded view requirements', 
   const marked = buildShowcaseInteriorDesignPrompt({ perspectiveEnabled: true, dimensionMarksEnabled: true, explodedViewEnabled: true });
   assert.match(marked, /透视效果：开启/);
   assert.match(marked, /尺寸标注：开启/);
+  assert.match(marked, /所有标注必须使用用户设定尺寸/);
+  assert.match(marked, /展品标注为设定高度，不标注 70% 后的显示高度/);
   assert.match(marked, /分解爆炸图：开启/);
   assert.match(marked, /柜体、玻璃罩、底座、柜帽、托架、展品、灯光组件/);
 
@@ -76,6 +82,7 @@ test('showcase prompt switches dimension marks and exploded view requirements', 
   assert.match(unmarked, /不要任何 3D 透视/);
   assert.match(unmarked, /所有水平线和垂直线必须保持平行/);
   assert.match(unmarked, /尺寸标注：关闭/);
+  assert.match(unmarked, /展品视觉高度按设定高度的 70%，展柜尺寸不变/);
   assert.match(unmarked, /分解爆炸图：关闭/);
   assert.match(unmarked, /完整组装后的柜内陈列效果图/);
 });
@@ -95,7 +102,7 @@ test('showcase prompt separates exhibit images from color material reference', (
   assert.match(prompt, /不得套用任何展品高度尺寸/);
   assert.match(prompt, /共享色彩与材质预设作为次级补充/);
   assert.match(prompt, /手动色彩与材质补充/);
-  assert.match(prompt, /展品图：高度 300 mm/);
+  assert.match(prompt, /展品图：设定高度 300 mm，生图显示高度 210 mm/);
 });
 
 test('showcase color material preset keeps only color and material constraints', () => {

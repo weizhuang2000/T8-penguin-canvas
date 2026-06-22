@@ -5,6 +5,7 @@ const DEFAULT_SHOWCASE_STYLE = {
   capHeightMm: 180,
   hasCap: true,
 };
+const EXHIBIT_RENDER_HEIGHT_SCALE = 0.7;
 
 function cleanText(value, max = 12000) {
   return String(value || '').replace(/\r\n?/g, '\n').trim().slice(0, max);
@@ -90,15 +91,19 @@ function exhibitItemsText(items, style, values = {}) {
     '普通 image 输入均视为展品图，只用于提取展品外观、体量、轮廓、材质和摆放重点，不作为色彩材质风格参考。',
     '参考图顺序：第 1 张参考图 = 展品 1，第 2 张参考图 = 展品 2，以此类推。必须按这个顺序匹配展品图片和尺寸。',
     '严格比例规则：每件展品只能按“高度 mm”缩放，不能按原图像素、裁切大小、主体在参考图里看起来的大小或视觉重要性缩放。',
+    '生成缩放规则：生图时展品本体显示高度按设定高度的 70% 生成；展柜宽度、底座高度、玻璃区高度、柜帽高度和柜体总高度保持设定尺寸不变。',
+    '标注规则：如果开启尺寸标注，展品、展柜和构件的标注文字仍必须标注用户设定尺寸，不标注 70% 后的显示高度；70% 只影响画面里展品本体的视觉占比。',
     '高度定义：高度只指展品本体的可见垂直高度，不包含托台、托盘、标签牌、底座、支架、阴影、留白或说明文字。',
-    '最终展品本体必须严格按设定高度形成真实比例范围，不得为了构图、焦点或视觉美观而随意放大或缩小。',
+    '最终展品本体必须严格按设定高度的 70% 形成真实显示比例范围，不得为了构图、焦点或视觉美观而随意放大或缩小。',
     '柜内设计宁可多留空，也不要把展品撑满画面；应保留充足柜内空白，为以后继续放置其它展品预留空间。',
   ];
 
   normalized.forEach((item, index) => {
-    const glassPercent = s.glassHeightMm > 0 ? (item.heightMm / s.glassHeightMm) * 100 : 0;
-    lines.push(`${index + 1}. ${item.label}：高度 ${item.heightMm} mm；参考图 URL：${item.url || '[上游展品图]'}`);
-    lines.push(`   比例校验：展品 ${index + 1} 的显示高度约为玻璃区高度 ${s.glassHeightMm} mm 的 ${formatPercent(glassPercent)}%。`);
+    const renderHeightMm = normalizeNumber(item.heightMm * EXHIBIT_RENDER_HEIGHT_SCALE, item.heightMm, 1, 99999);
+    const glassPercent = s.glassHeightMm > 0 ? (renderHeightMm / s.glassHeightMm) * 100 : 0;
+    lines.push(`${index + 1}. ${item.label}：设定高度 ${item.heightMm} mm，生图显示高度 ${renderHeightMm} mm（设定高度的 70%）；参考图 URL：${item.url || '[上游展品图]'}`);
+    lines.push(`   比例校验：展品 ${index + 1} 的生图显示高度约为玻璃区高度 ${s.glassHeightMm} mm 的 ${formatPercent(glassPercent)}%。`);
+    lines.push(`   标注校验：如输出尺寸标注，展品 ${index + 1} 仍标注为 ${item.heightMm} mm，不标注为 ${renderHeightMm} mm。`);
     lines.push(`   上限约束：展品 ${index + 1} 的本体可见高度不得超过玻璃区高度的 ${formatPercent(glassPercent * 1.1)}%；如果不确定，宁可略小，不要放大。`);
   });
 
@@ -136,8 +141,8 @@ function outputRequirementText(values) {
       ? '透视效果：关闭。必须输出完全平面的正立面/二维方案效果，不要任何 3D 透视、斜视角、消失点、近大远小、景深、透视玻璃边或空间纵深；所有水平线和垂直线必须保持平行，像正投影立面图。'
       : '透视效果：开启。可以使用轻微、克制的 3D 透视来表现展柜深度、玻璃厚度和柜内层次，但不得破坏展品高度的物理比例。',
     values.dimensionMarksEnabled === true
-      ? '尺寸标注：开启。输出中可加入清晰的工程尺寸标注、毫米单位和关键高度/宽度标注，但文字必须简洁、整洁，像方案图标注。'
-      : '尺寸标注：关闭。不要绘制尺寸线、毫米数字、红色测量标注、工程尺或标注符号，但仍要按给定尺寸比例生成。',
+      ? '尺寸标注：开启。输出中可加入清晰的工程尺寸标注、毫米单位和关键高度/宽度标注，但文字必须简洁、整洁，像方案图标注。所有标注必须使用用户设定尺寸：展柜尺寸不变，展品标注为设定高度，不标注 70% 后的显示高度。'
+      : '尺寸标注：关闭。不要绘制尺寸线、毫米数字、红色测量标注、工程尺或标注符号，但仍要按给定尺寸比例生成；展品视觉高度按设定高度的 70%，展柜尺寸不变。',
     values.explodedViewEnabled === true
       ? '分解爆炸图：开启。输出应表现柜体、玻璃罩、底座、柜帽、托架、展品、灯光组件的分解关系，可用轻微错位或爆炸图形式展示结构层级。'
       : '分解爆炸图：关闭。输出应为完整组装后的柜内陈列效果图，不要把柜体构件拆散漂浮。',
