@@ -123,6 +123,25 @@ function sameJson(a: unknown, b: unknown) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+function ratioValue(value: string): number | null {
+  const match = String(value || '').trim().match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
+  if (!match) return null;
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (!width || !height) return null;
+  return width / height;
+}
+
+function closestAspectRatio(sourceRatio: number, options: string[]): string {
+  const candidates = options
+    .map((value) => ({ value, ratio: ratioValue(value) }))
+    .filter((item): item is { value: string; ratio: number } => item.ratio !== null);
+  if (candidates.length === 0) return options.find((item) => item !== 'Auto') || '1:1';
+  return candidates.reduce((best, item) => (
+    Math.abs(item.ratio - sourceRatio) < Math.abs(best.ratio - sourceRatio) ? item : best
+  )).value;
+}
+
 const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
@@ -164,6 +183,11 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
   const status = String(d.status || 'idle');
   const busy = status === 'generating';
   const showcaseStyle = normalizeShowcaseStyle(d.showcaseStyle);
+  const autoAspectRatio = useMemo(() => {
+    const totalHeightMm = showcaseStyle.baseHeightMm + showcaseStyle.glassHeightMm + (showcaseStyle.hasCap ? showcaseStyle.capHeightMm : 0);
+    if (showcaseStyle.widthMm <= 0 || totalHeightMm <= 0) return modelDef.defaultAspectRatio || '1:1';
+    return closestAspectRatio(showcaseStyle.widthMm / totalHeightMm, modelDef.aspectRatios.length ? modelDef.aspectRatios : ['1:1', '16:9', '9:16']);
+  }, [modelDef.aspectRatios, modelDef.defaultAspectRatio, showcaseStyle.baseHeightMm, showcaseStyle.capHeightMm, showcaseStyle.glassHeightMm, showcaseStyle.hasCap, showcaseStyle.widthMm]);
   const selectedColorMaterialPreset = useMemo(
     () => colorMaterialPresets.find((preset) => preset.id === d.colorMaterialPreset) || null,
     [colorMaterialPresets, d.colorMaterialPreset],
@@ -204,6 +228,14 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
   useEffect(() => {
     getElevationPromptPresets().then((presets) => setColorMaterialPresets(presets.colorMaterial || [])).catch(() => setColorMaterialPresets([]));
   }, []);
+
+  useEffect(() => {
+    if (isReadonly || busy) return;
+    const totalHeightMm = showcaseStyle.baseHeightMm + showcaseStyle.glassHeightMm + (showcaseStyle.hasCap ? showcaseStyle.capHeightMm : 0);
+    const aspectRatioSource = `${showcaseStyle.widthMm}x${totalHeightMm}|${modelDef.id}`;
+    if (d.aspectRatio === autoAspectRatio && d.aspectRatioSource === aspectRatioSource) return;
+    update({ aspectRatio: autoAspectRatio, aspectRatioSource });
+  }, [autoAspectRatio, busy, d.aspectRatio, d.aspectRatioSource, isReadonly, modelDef.id, showcaseStyle.baseHeightMm, showcaseStyle.capHeightMm, showcaseStyle.glassHeightMm, showcaseStyle.hasCap, showcaseStyle.widthMm, update]);
 
   useEffect(() => {
     if (!sameJson(d.exhibitItems || [], exhibitItems)) update({ exhibitItems });
@@ -548,6 +580,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
                 <select className={FIELD} value={aspectRatio} disabled={isReadonly || busy} onChange={(event) => update({ aspectRatio: event.target.value })}>
                   {(modelDef.aspectRatios.length ? modelDef.aspectRatios : ['1:1', '16:9', '9:16']).map((item) => <option key={item} value={item}>{item}</option>)}
                 </select>
+                <span className="text-[9px] text-cyan-100/65">按展柜宽高自动匹配：{autoAspectRatio}</span>
               </label>
               <label className="space-y-1">
                 <span className="text-[10px] text-white/55">尺寸</span>

@@ -46,6 +46,11 @@ test('showcase interior design component wires shared controls and generation se
   assert.match(source, /exhibitItems/);
   assert.match(source, /heightMm/);
   assert.match(source, /高度 mm/);
+  assert.match(source, /function ratioValue/);
+  assert.match(source, /function closestAspectRatio/);
+  assert.match(source, /showcaseStyle\.widthMm \/ totalHeightMm/);
+  assert.match(source, /aspectRatioSource/);
+  assert.match(source, /按展柜宽高自动匹配/);
   assert.match(source, /perspectiveEnabled/);
   assert.match(source, /透视效果/);
   assert.match(source, /dimensionMarksEnabled/);
