@@ -3,7 +3,7 @@ const DEFAULT_SHOWCASE_STYLE = {
   baseHeightMm: 300,
   glassHeightMm: 1400,
   capHeightMm: 180,
-  hasCap: true,
+  hasCap: false,
 };
 const EXHIBIT_RENDER_HEIGHT_SCALE = 0.7;
 
@@ -36,7 +36,7 @@ export function normalizeShowcaseStyle(value = {}) {
     baseHeightMm: normalizeNumber(source.baseHeightMm ?? source.baseHeight, DEFAULT_SHOWCASE_STYLE.baseHeightMm),
     glassHeightMm: normalizeNumber(source.glassHeightMm ?? source.glassHeight, DEFAULT_SHOWCASE_STYLE.glassHeightMm),
     capHeightMm: normalizeNumber(source.capHeightMm ?? source.capHeight, DEFAULT_SHOWCASE_STYLE.capHeightMm),
-    hasCap: source.hasCap !== false,
+    hasCap: source.hasCap === true,
   };
 }
 

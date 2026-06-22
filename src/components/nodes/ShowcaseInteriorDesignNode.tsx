@@ -298,6 +298,16 @@ function ShowcaseManualLayoutModal({
   const heightMm = Math.max(1, showcaseStyle.glassHeightMm);
   const sortedItems = useMemo(() => items.slice().sort((a, b) => a.zIndex - b.zIndex), [items]);
   const selectedItem = items.find((item) => item.url === selectedUrl) || sortedItems[sortedItems.length - 1] || null;
+  const verticalGuideLines = useMemo(() => {
+    const lines: number[] = [];
+    for (let x = 100; x < widthMm; x += 100) lines.push(x);
+    return lines;
+  }, [widthMm]);
+  const horizontalGuideLines = useMemo(() => {
+    const lines: number[] = [];
+    for (let y = 100; y < heightMm; y += 100) lines.push(y);
+    return lines;
+  }, [heightMm]);
 
   useEffect(() => {
     if (!open) return;
@@ -412,19 +422,20 @@ function ShowcaseManualLayoutModal({
                 }}
                 onPointerDown={() => setSelectedUrl('')}
               >
-                <div
-                  className="pointer-events-none absolute inset-0 opacity-45"
-                  style={{
-                    backgroundImage: 'linear-gradient(to right, rgba(14,165,233,0.22) 1px, transparent 1px), linear-gradient(to bottom, rgba(14,165,233,0.22) 1px, transparent 1px)',
-                    backgroundSize: `${(100 / widthMm) * 100}% ${(100 / heightMm) * 100}%`,
-                  }}
-                />
+                <svg className="pointer-events-none absolute inset-0 z-0 h-full w-full" viewBox={`0 0 ${widthMm} ${heightMm}`} preserveAspectRatio="none" aria-hidden="true">
+                  {verticalGuideLines.map((x) => (
+                    <line key={`x-${x}`} x1={x} y1={0} x2={x} y2={heightMm} stroke="rgba(14,165,233,0.45)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+                  ))}
+                  {horizontalGuideLines.map((y) => (
+                    <line key={`y-${y}`} x1={0} y1={y} x2={widthMm} y2={y} stroke="rgba(14,165,233,0.45)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+                  ))}
+                </svg>
                 {sortedItems.map((item) => {
                   const selected = item.url === selectedUrl;
                   return (
                     <div
                       key={item.url}
-                      className={`absolute touch-none select-none border ${selected ? 'border-cyan-500 shadow-[0_0_0_2px_rgba(14,165,233,0.35)]' : 'border-slate-500/40'} bg-white/85`}
+                      className={`absolute z-10 touch-none select-none border ${selected ? 'border-cyan-500 shadow-[0_0_0_2px_rgba(14,165,233,0.35)]' : 'border-slate-500/40'} bg-white/85`}
                       style={{
                         left: `${(item.xMm / widthMm) * 100}%`,
                         top: `${(item.yMm / heightMm) * 100}%`,

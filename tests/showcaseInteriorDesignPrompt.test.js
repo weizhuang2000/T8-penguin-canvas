@@ -34,7 +34,7 @@ test('showcase prompt includes four showcase dimensions and cap switch in Chines
     baseHeightMm: 300,
     glassHeightMm: 1400,
     capHeightMm: 180,
-    hasCap: true,
+    hasCap: false,
   });
 });
 

@@ -18,7 +18,7 @@ test('showcase interior design node is registered in frontend and permissions', 
   assert.match(read('src/components/Canvas.tsx'), /baseHeightMm: 300/);
   assert.match(read('src/components/Canvas.tsx'), /glassHeightMm: 1400/);
   assert.match(read('src/components/Canvas.tsx'), /capHeightMm: 180/);
-  assert.match(read('src/components/Canvas.tsx'), /hasCap: true/);
+  assert.match(read('src/components/Canvas.tsx'), /hasCap: false/);
   assert.match(read('src/components/Canvas.tsx'), /perspectiveEnabled: true/);
   assert.match(read('src/components/Canvas.tsx'), /explodedViewEnabled: false/);
   assert.match(read('src/config/portTypes.ts'), /'showcase-interior-design': \{ inputs: \['image'\], outputs: \['image'\] \}/);
@@ -56,10 +56,15 @@ test('showcase interior design component wires shared controls and generation se
   assert.match(source, /排版/);
   assert.match(source, /layoutMode === 'manual'[\s\S]*manualLayoutReferenceImage/);
   assert.match(source, /\.\.\.\(layoutMode === 'manual' \? \[manualLayoutReferenceImage\] : exhibitItems\.map\(\(item\) => item\.url\)\)/);
-  assert.match(source, /backgroundSize: `\$\{\(100 \/ widthMm\) \* 100\}% \$\{\(100 \/ heightMm\) \* 100\}%`/);
+  assert.match(source, /verticalGuideLines/);
+  assert.match(source, /horizontalGuideLines/);
+  assert.match(source, /viewBox=\{`0 0 \$\{widthMm\} \$\{heightMm\}`\}/);
+  assert.match(source, /x \+= 100/);
+  assert.match(source, /y \+= 100/);
   assert.doesNotMatch(source, /ctx\.fillText\(`手动布局参考图/);
   assert.doesNotMatch(source, /ctx\.strokeRect\(x, y, w, h\)/);
   assert.doesNotMatch(source, /const grid = 100/);
+  assert.doesNotMatch(source, /backgroundSize: `\$\{\(100 \/ widthMm\) \* 100\}%/);
   assert.match(source, /function ratioValue/);
   assert.match(source, /function closestAspectRatio/);
   assert.match(source, /showcaseStyle\.widthMm \/ totalHeightMm/);

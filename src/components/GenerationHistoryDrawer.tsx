@@ -3,6 +3,7 @@ import {
   ChevronDown,
   Clock3,
   Copy,
+  Download,
   Eye,
   Image as ImageIcon,
   Info,
@@ -89,6 +90,12 @@ function dragKindForHistoryItem(item: GenerationHistoryItem): GenerationHistoryK
 
 function dragSourceNodeId(item: GenerationHistoryItem): string {
   return item.sourceNodeId || `generation-history-${item.id}`;
+}
+
+function downloadNameForHistoryItem(item: GenerationHistoryItem): string {
+  const fallback = `generation-${item.kind}-${item.id}`;
+  const raw = String(item.fileName || item.title || fallback).trim() || fallback;
+  return raw.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 180) || fallback;
 }
 
 function uniqueText(values: unknown[]): string[] {
@@ -496,6 +503,22 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
     }
   };
 
+  const downloadItem = (item: GenerationHistoryItem) => {
+    if (typeof document === 'undefined' || !item.url) {
+      setMsg('没有可下载的文件');
+      return;
+    }
+    const a = document.createElement('a');
+    a.href = item.url;
+    a.download = downloadNameForHistoryItem(item);
+    a.target = '_blank';
+    a.rel = 'noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setMsg('已触发下载');
+  };
+
   if (!open) return null;
 
   const panelCls = isPixel
@@ -683,6 +706,7 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
                       <Info size={13} />
                     </button>
                     {item.kind === 'image' && (
+                      <>
                       <button
                         onClick={() => copyPrompt(item)}
                         disabled={!String(item.prompt || '').trim()}
@@ -691,6 +715,15 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
                       >
                         <Copy size={13} />
                       </button>
+                      <button
+                        onClick={() => downloadItem(item)}
+                        disabled={!item.url}
+                        className="absolute right-1.5 top-[94px] h-7 w-7 rounded-full bg-black/55 text-white flex items-center justify-center disabled:cursor-not-allowed disabled:opacity-45"
+                        title={item.url ? '下载图片' : '没有可下载的文件'}
+                      >
+                        <Download size={13} />
+                      </button>
+                      </>
                     )}
                   </div>
                   <div className="p-2 space-y-1.5">
