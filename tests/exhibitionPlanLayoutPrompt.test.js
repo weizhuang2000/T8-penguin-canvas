@@ -63,7 +63,7 @@ test('exhibition plan layout prompt follows the requested template order', () =>
   });
   const expectedOrder = [
     'Use case: exhibition-floor-plan-layout.',
-    'Primary request: 基于输入的原始建筑平面图，生成一张专业展陈平面布局透明叠加层',
+    'Primary request: 基于输入的原始建筑平面图，在原图上进行绘制专业展陈平面布局透明叠加层，覆盖在原图上完成最终平面布局图，原图在最底层并且不要进行任何改动',
     '输入图像说明：图1是唯一建筑平面图依据。平面布局默认使用如下风格',
     '结构锁定模式：开启。请只生成透明背景的展陈布局叠加层 overlay',
     '平面图解析说明：总体宽30米，长40米，蓝色线条代表墙体，灰色方块代表柱子，都不可移动，红色指向图中心的箭头是入口，指向图外侧的是出口',

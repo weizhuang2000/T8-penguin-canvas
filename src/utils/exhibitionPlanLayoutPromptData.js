@@ -221,7 +221,7 @@ export function buildExhibitionPlanLayoutPrompt(values = {}) {
   return [
     'Use case: exhibition-floor-plan-layout.',
     structureLock
-      ? 'Primary request: 基于输入的原始建筑平面图，生成一张专业展陈平面布局透明叠加层，用于覆盖在原图上完成最终平面布局图。最终图必须是俯视平面 overlay，不是室内效果图、透视图、海报或鸟瞰渲染。'
+      ? 'Primary request: 基于输入的原始建筑平面图，在原图上进行绘制专业展陈平面布局透明叠加层，覆盖在原图上完成最终平面布局图，原图在最底层并且不要进行任何改动。不要改成室内效果图、透视图、海报或鸟瞰渲染。'
       : 'Primary request: 基于输入的原始建筑平面图，生成一张专业展陈平面布局图。最终图必须是俯视平面布局，不是室内效果图、透视图、海报或鸟瞰渲染。',
     styleText,
     outputModeText,
