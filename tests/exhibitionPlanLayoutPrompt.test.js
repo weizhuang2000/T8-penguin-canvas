@@ -47,6 +47,47 @@ test('exhibition plan layout prompt uses built-in layout style only', () => {
   assert.match(prompt, /白色汇报底图/);
   assert.doesNotMatch(prompt, /图2/);
   assert.doesNotMatch(prompt, /样式参考图/);
+  assert.match(prompt, /平面图解析说明：未填写/);
+});
+
+test('exhibition plan layout prompt follows the requested template order', () => {
+  const prompt = buildExhibitionPlanLayoutPrompt({
+    layoutOutlineText: '展览主题：丝路酒脉：千年丝路，美酒飘香\n\n1. 序厅：丝路酒脉形象区\n以动态丝绸之路浮雕地图统领全展。',
+    planInterpretation: '总体宽30米，长40米，蓝色线条代表墙体，灰色方块代表柱子，都不可移动，红色指向图中心的箭头是入口，指向图外侧的是出口',
+    layoutPresetId: 'balanced',
+    insertItems: ['large-sculpture', 'relief', 'group-sculpture', 'art-installation', 'multimedia-equipment', 'showcase', 'scene', 'artwork'],
+    excludeItems: ['readable-wrong-text', 'real-brand-logo', 'instruction-table', 'crowded-people', 'messy-cables', 'cartoon-style', 'blurry-low-quality', 'floating-islands', 'isolated-columns'],
+    showRoute: true,
+    showLabels: true,
+    showDescriptions: true,
+  });
+  const expectedOrder = [
+    'Use case: exhibition-floor-plan-layout.',
+    'Primary request: 基于输入的原始建筑平面图，生成一张专业展陈平面布局透明叠加层',
+    '输入图像说明：图1是唯一建筑平面图依据。平面布局默认使用如下风格',
+    '结构锁定模式：开启。请只生成透明背景的展陈布局叠加层 overlay',
+    '平面图解析说明：总体宽30米，长40米，蓝色线条代表墙体，灰色方块代表柱子，都不可移动，红色指向图中心的箭头是入口，指向图外侧的是出口',
+    '必须严格保留图1的建筑外轮廓、墙体边界、柱网、门洞、入口、通道宽度关系和房间几何',
+    '展陈大纲目录：',
+    '展览主题：丝路酒脉：千年丝路，美酒飘香',
+    '布局要求预设：按展陈大纲均衡分配各展区面积',
+    '植入项展示手段：大型雕塑、浮雕、群雕、艺术装置、多媒体设备、文物柜/展柜、场景复原和艺术品/主题展项',
+    '排除项：可读错字/乱码文字、真实品牌标识、说明表格、过多人群、杂乱线缆、卡通低幼风格、低清晰度/模糊画面、孤立漂浮展区和孤零零不连接任何物体的柱子',
+    '显示动线：开启。',
+    '显示标注文字：开启。',
+    '显示说明文字：开启。',
+    '空间通行硬约束：',
+    '单元分隔要求：',
+    '柱网与孤立物约束：',
+    '图面表达：',
+    '质量约束：',
+  ];
+  let cursor = -1;
+  for (const part of expectedOrder) {
+    const next = prompt.indexOf(part);
+    assert.ok(next > cursor, `expected "${part}" after index ${cursor}`);
+    cursor = next;
+  }
 });
 
 test('exhibition plan layout prompt includes preset and custom requirement', () => {
