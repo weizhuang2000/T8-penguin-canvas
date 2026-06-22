@@ -626,6 +626,18 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
   }, [d.manualLayoutItems, manualLayoutItems, update]);
 
   useEffect(() => {
+    if (layoutMode !== 'manual') return;
+    let cancelled = false;
+    buildManualLayoutReferenceImage(manualLayoutItems, showcaseStyle).then((image) => {
+      if (cancelled || !image || d.manualLayoutReferenceImage === image) return;
+      update({ manualLayoutReferenceImage: image });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [d.manualLayoutReferenceImage, layoutMode, manualLayoutItems, showcaseStyle.glassHeightMm, showcaseStyle.widthMm, update]);
+
+  useEffect(() => {
     if (
       d.prompt !== previewPrompt ||
       d.outputText !== previewPrompt ||
@@ -658,9 +670,10 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
 
   const runGenerate = useCallback(async () => {
     if (isReadonly || busy) return;
-    const manualLayoutReferenceImage = layoutMode === 'manual'
+    const generatedManualLayoutReferenceImage = layoutMode === 'manual'
       ? await buildManualLayoutReferenceImage(manualLayoutItems, showcaseStyle)
       : '';
+    const manualLayoutReferenceImage = generatedManualLayoutReferenceImage || (layoutMode === 'manual' ? String(d.manualLayoutReferenceImage || '') : '');
     const imagePrompt = buildShowcaseInteriorDesignPrompt({
       showcaseStyle,
       exhibitItems,
@@ -697,6 +710,9 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
       error: '',
       imageUrls: [],
       urls: [],
+      prompt: imagePrompt,
+      outputText: imagePrompt,
+      text: imagePrompt,
       lastPrompt: imagePrompt,
       lastSeed: runSeed,
       manualLayoutReferenceImage,
@@ -763,6 +779,8 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
           text: imagePrompt,
           lastPrompt: imagePrompt,
           lastSeed: runSeed,
+          manualLayoutReferenceImage,
+          referenceImages: runtimeReferenceImages,
           taskId: res.taskId || d.taskId,
           error: '',
         });
@@ -820,6 +838,8 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
         text: imagePrompt,
         lastPrompt: imagePrompt,
         lastSeed: runSeed,
+        manualLayoutReferenceImage,
+        referenceImages: runtimeReferenceImages,
         error: '',
       });
       logBus.success(`柜内设计生成完成 ${urls.length} 张`, src);
@@ -830,7 +850,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`柜内设计生成失败: ${msg}`, src);
       throw error;
     }
-  }, [activeCanvasId, apiModel, aspectRatio, busy, colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.explodedViewEnabled, d.perspectiveEnabled, d.providerParams, d.supplement, d.taskId, exhibitItems, externalProviderModel, id, isExternalSelected, isReadonly, layoutMode, manualLayoutItems, modelDef.id, modelDef.paramKind, outputFormat, providerSelection.provider, seed, selectedColorMaterialPreset, showcaseStyle, sizeLevel, update]);
+  }, [activeCanvasId, apiModel, aspectRatio, busy, colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.explodedViewEnabled, d.manualLayoutReferenceImage, d.perspectiveEnabled, d.providerParams, d.supplement, d.taskId, exhibitItems, externalProviderModel, id, isExternalSelected, isReadonly, layoutMode, manualLayoutItems, modelDef.id, modelDef.paramKind, outputFormat, providerSelection.provider, seed, selectedColorMaterialPreset, showcaseStyle, sizeLevel, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
