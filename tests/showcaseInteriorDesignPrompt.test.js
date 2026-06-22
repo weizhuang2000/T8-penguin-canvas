@@ -49,10 +49,13 @@ test('showcase prompt keeps exhibit order and display height in millimeters', ()
 
   const prompt = buildShowcaseInteriorDesignPrompt({ exhibitItems: items, showcaseStyle: { widthMm: 1200, glassHeightMm: 1400 } });
   assert.ok(prompt.indexOf('1. 青铜器：高度 420 mm') < prompt.indexOf('2. 陶俑：高度 260 mm'));
-  assert.match(prompt, /第 1 张参考图是“尺寸合成参考图”/);
-  assert.match(prompt, /参考图顺序：第 2 张参考图 = 展品 1/);
+  assert.match(prompt, /参考图顺序：第 1 张参考图 = 展品 1，第 2 张参考图 = 展品 2/);
+  assert.match(prompt, /所有展品图之后还有 1 张“尺寸合成参考图”/);
+  assert.doesNotMatch(prompt, /第 2 张参考图 = 展品 1/);
   assert.match(prompt, /严格比例规则/);
+  assert.match(prompt, /高度只指展品本体的可见垂直高度，不包含托台、托盘、标签牌、底座、支架、阴影、留白或说明文字/);
   assert.match(prompt, /玻璃区高度 1400 mm 的 18\.6%/);
+  assert.match(prompt, /本体可见高度不得超过玻璃区高度的 20\.4%/);
   assert.doesNotMatch(prompt, /显示高度约为展柜宽度/);
   assert.match(prompt, /相对尺寸审计/);
 
@@ -128,8 +131,9 @@ test('showcase scale reference image encodes cabinet and exhibit millimeter cons
   const svg = buildShowcaseInteriorScaleReferenceSvg(values);
   assert.match(svg, /柜内设计比例控制图/);
   assert.match(svg, /展柜宽 1200 mm/);
-  assert.match(svg, /高度 420 mm/);
-  assert.match(svg, /高度 260 mm/);
+  assert.match(svg, /本体高 420 mm/);
+  assert.match(svg, /本体高 260 mm/);
+  assert.match(svg, /托台和标签不计入展品高度/);
 
   const dataUrl = buildShowcaseInteriorScaleReferenceDataUrl(values);
   assert.match(dataUrl, /^data:image\/svg\+xml;base64,/);

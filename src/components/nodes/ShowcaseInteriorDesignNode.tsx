@@ -205,10 +205,10 @@ async function buildScaledExhibitReferenceImage(
     const targetDrawHeight = Math.min(targetHeight, maxByGlass);
     const iw = img.naturalWidth || img.width || targetDrawHeight;
     const ih = img.naturalHeight || img.height || targetDrawHeight;
-    const drawScale = targetDrawHeight / Math.max(ih, 1);
-    const dw = iw * drawScale;
-    const dh = targetDrawHeight;
-    const frameW = Math.min(Math.max(dw, 24), maxBySlot);
+    const widthLimitedScale = Math.min(targetDrawHeight / Math.max(ih, 1), (maxBySlot * 0.72) / Math.max(iw, 1));
+    const dw = iw * widthLimitedScale;
+    const dh = ih * widthLimitedScale;
+    const frameW = Math.max(Math.min(dw, maxBySlot * 0.72), 24);
     const cx = x + exhibitGap + slotW * index + exhibitGap * index + slotW / 2;
     const bottom = baseY - Math.max(26, glassH * 0.08);
     const dx = cx - dw / 2;
@@ -218,13 +218,13 @@ async function buildScaledExhibitReferenceImage(
     ctx.strokeStyle = '#0369a1';
     ctx.lineWidth = 3;
     ctx.setLineDash([8, 6]);
-    ctx.strokeRect(cx - frameW / 2, bottom - targetDrawHeight, frameW, targetDrawHeight);
+    ctx.strokeRect(cx - frameW / 2, bottom - dh, frameW, dh);
     ctx.setLineDash([]);
     ctx.drawImage(img, dx, dy, dw, dh);
     ctx.fillStyle = '#0f172a';
     ctx.font = '700 24px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`展品 ${index + 1}: 高度 ${item.heightMm} mm`, cx, bottom + 104);
+    ctx.fillText(`展品 ${index + 1}: 本体高 ${item.heightMm} mm`, cx, bottom + 104);
     ctx.restore();
   });
   try {
@@ -300,8 +300,8 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
   }), [colorMaterialReferenceImage, exhibitItems, showcaseStyle]);
 
   const previewReferenceImages = useMemo(() => [
-    previewScaleReferenceImage,
     ...exhibitItems.map((item) => item.url),
+    previewScaleReferenceImage,
     colorMaterialReferenceImage,
   ].filter(Boolean), [colorMaterialReferenceImage, exhibitItems, previewScaleReferenceImage]);
 
@@ -370,8 +370,8 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
     });
     const scaleReferenceImage = await buildScaledExhibitReferenceImage(scaleReferenceDataUrl, exhibitItems, showcaseStyle);
     const runtimeReferenceImages = [
-      scaleReferenceImage,
       ...exhibitItems.map((item) => item.url),
+      scaleReferenceImage,
       colorMaterialReferenceImage,
     ].filter(Boolean);
     const runSeed = seed > 0 ? seed : randomImageSeed();

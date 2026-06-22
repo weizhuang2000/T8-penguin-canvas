@@ -34,6 +34,8 @@ test('showcase interior design component wires shared controls and generation se
   assert.match(source, /buildShowcaseInteriorDesignPrompt/);
   assert.match(source, /buildShowcaseInteriorScaleReferenceDataUrl/);
   assert.match(source, /buildScaledExhibitReferenceImage/);
+  assert.match(source, /\.\.\.exhibitItems\.map\(\(item\) => item\.url\),\s*previewScaleReferenceImage/);
+  assert.match(source, /\.\.\.exhibitItems\.map\(\(item\) => item\.url\),\s*scaleReferenceImage/);
   assert.match(source, /imageDataUrlToPngDataUrl/);
   assert.match(source, /scaleReferenceImage/);
   assert.match(source, /generateExternalImage/);
