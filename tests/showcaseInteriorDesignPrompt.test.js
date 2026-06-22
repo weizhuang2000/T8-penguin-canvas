@@ -105,6 +105,10 @@ test('showcase prompt supports manual layout mode without auto height scaling', 
   assert.match(prompt, /手动排版合成图/);
   assert.match(prompt, /第 1 张参考图 = 手动排版合成图/);
   assert.match(prompt, /不要再把展品原图逐张当作独立参考图理解/);
+  assert.match(prompt, /玻璃区正投影模板/);
+  assert.match(prompt, /必须保持合成图中每个展品的像素占比/);
+  assert.match(prompt, /不得重新居中/);
+  assert.match(prompt, /不得自动适配画面/);
   assert.match(prompt, /不要套用自动尺寸模式中的“高度 mm”或“设定高度 70%”规则/);
   assert.match(prompt, /宽 1500 mm，高 1400 mm/);
   assert.match(prompt, /第 2 张参考图 = 色彩材质参考图/);
@@ -113,6 +117,7 @@ test('showcase prompt supports manual layout mode without auto height scaling', 
   assert.doesNotMatch(prompt, /参考图 URL/);
   assert.doesNotMatch(prompt, /生图显示高度 294 mm/);
   assert.doesNotMatch(prompt, /本体显示高度按设定高度的 70% 生成/);
+  assert.doesNotMatch(prompt, /展品视觉高度按设定高度的 70%/);
 });
 
 test('showcase prompt separates exhibit images from color material reference', () => {
