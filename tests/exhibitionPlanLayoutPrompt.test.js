@@ -96,11 +96,15 @@ test('exhibition plan outline prompt and parser support json and text fallback',
 test('exhibition plan layout prompt uses attachment style and hard layout constraints', () => {
   const prompt = buildExhibitionPlanLayoutPrompt({
     layoutOutlineText: '序厅：开篇\n第一单元：历史根脉\n第二单元：城市印记',
+    planInterpretation: '总体宽30米，长40米，蓝色线条代表墙体，灰色方块代表柱子，都不可移动',
     insertItems: ['showcase', 'art-installation'],
     excludeItems: ['isolated-columns'],
     showRoute: true,
   });
   assert.match(prompt, /平面布局默认使用如下风格/);
+  assert.match(prompt, /平面图解析说明：总体宽30米，长40米，蓝色线条代表墙体，灰色方块代表柱子，都不可移动/);
+  assert.match(prompt, /比例、尺寸、颜色含义、墙体、柱子、门洞、入口、不可移动结构和可布展范围/);
+  assert.match(prompt, /必须优先遵守，不得与图1冲突/);
   assert.match(prompt, /结构锁定模式：开启/);
   assert.match(prompt, /只生成透明背景的展陈布局叠加层 overlay/);
   assert.match(prompt, /这些建筑结构会由程序直接保留图1原始底图并在最后合成/);

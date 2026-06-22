@@ -15,6 +15,7 @@ test('exhibition plan layout node is registered across frontend and permissions'
   assert.match(read('src/components/Canvas.tsx'), /ExhibitionPlanLayoutNode/);
   assert.match(read('src/components/Canvas.tsx'), /'exhibition-plan-layout': ExhibitionPlanLayoutNode/);
   assert.match(read('src/components/Canvas.tsx'), /layoutPresetId: 'balanced'/);
+  assert.match(read('src/components/Canvas.tsx'), /planInterpretation: ''/);
   assert.match(read('src/components/Canvas.tsx'), /insertItems: \['large-sculpture'/);
   assert.match(read('src/components/Canvas.tsx'), /excludeItems: \['readable-wrong-text'/);
   assert.match(read('src/components/Canvas.tsx'), /showRoute: true/);
@@ -39,6 +40,9 @@ test('exhibition plan layout node wires llm and image generation providers', () 
   assert.match(source, /generationOutputFormat = structureLock \? 'png' : outputFormat/);
   assert.match(source, /overlayUrl/);
   assert.match(source, /structureLockedBaseUrl/);
+  assert.match(source, /planInterpretation/);
+  assert.match(source, /平面图解析/);
+  assert.match(source, /总体宽30米，长40米，蓝色线条代表墙体，灰色方块代表柱子，都不可移动/);
   assert.match(source, /EXHIBITION_PLAN_LAYOUT_PRESETS/);
   assert.match(source, /EXHIBITION_PLAN_LAYOUT_INSERT_ITEMS/);
   assert.match(source, /EXHIBITION_PLAN_LAYOUT_EXCLUDE_ITEMS/);

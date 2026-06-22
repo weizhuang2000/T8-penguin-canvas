@@ -260,6 +260,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
 
   const buildPrompt = useCallback((outlineText: string) => buildExhibitionPlanLayoutPrompt({
     layoutOutlineText: outlineText,
+    planInterpretation: d.planInterpretation,
     layoutRequirement: d.layoutRequirement,
     layoutPresetId,
     showRoute,
@@ -270,7 +271,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
     excludeItems: selectedExcludeIds,
     insertItemOptions: insertOptions,
     excludeItemOptions: excludeOptions,
-  }), [d.layoutRequirement, excludeOptions, insertOptions, layoutPresetId, selectedExcludeIds, selectedInsertIds, showDescriptions, showLabels, showRoute, structureLock]);
+  }), [d.layoutRequirement, d.planInterpretation, excludeOptions, insertOptions, layoutPresetId, selectedExcludeIds, selectedInsertIds, showDescriptions, showLabels, showRoute, structureLock]);
 
   const pickDocument = useCallback(async (file?: File) => {
     if (!file || isReadonly || busy) return;
@@ -546,8 +547,19 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
         {isReadonly && <div className="rounded border border-amber-300/30 bg-amber-300/10 px-2 py-1.5 text-[10px] text-amber-100">当前画布为只读，仅可查看结果。</div>}
         {d.error && <div className="rounded border border-red-300/25 bg-red-400/10 px-2 py-1.5 text-[10px] text-red-200">{d.error}</div>}
 
-        <section>
+        <section className="grid grid-cols-2 gap-2">
           <ImageSlot title="原始建筑平面图" subtitle="图1，唯一建筑结构依据，必须连接" url={planImage} />
+          <div className="rounded border border-white/10 bg-black/15 p-2">
+            <div className="mb-1 text-[11px] font-semibold text-cyan-100">平面图解析</div>
+            <div className="mb-2 text-[10px] leading-snug text-white/45">定义图1的比例、尺寸、颜色、墙体、柱子和不可移动结构</div>
+            <textarea
+              className={`${FIELD} h-32 resize-y`}
+              value={d.planInterpretation || ''}
+              disabled={isReadonly || busy}
+              placeholder="例如：总体宽30米，长40米，蓝色线条代表墙体，灰色方块代表柱子，都不可移动"
+              onChange={(event) => update({ planInterpretation: event.target.value })}
+            />
+          </div>
         </section>
 
         <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">

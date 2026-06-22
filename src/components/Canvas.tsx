@@ -463,6 +463,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     sourceText: '',
     useUpstream: true,
     documentMeta: null,
+    planInterpretation: '',
     layoutOutlineText: '',
     layoutRequirement: '',
     layoutPresetId: 'balanced',

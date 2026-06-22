@@ -36,6 +36,7 @@ export interface ExhibitionPlanOutlinePromptValues {
 export interface ExhibitionPlanLayoutPromptValues {
   outlineText?: string;
   layoutOutlineText?: string;
+  planInterpretation?: string;
   layoutRequirement?: string;
   layoutPresetId?: string;
   layoutPresetText?: string;
