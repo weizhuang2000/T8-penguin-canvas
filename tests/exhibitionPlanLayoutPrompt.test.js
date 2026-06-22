@@ -43,7 +43,7 @@ test('exhibition plan layout prompt uses built-in layout style only', () => {
     layoutOutlineText: '城市记忆展区：老城历史',
   });
   assert.match(prompt, /图1是唯一建筑平面图依据/);
-  assert.match(prompt, /平面布局默认使用如下风格/);
+  assert.match(prompt, /在上面添加的元素使用如下风格/);
   assert.match(prompt, /白色汇报底图/);
   assert.doesNotMatch(prompt, /图2/);
   assert.doesNotMatch(prompt, /样式参考图/);
@@ -64,7 +64,7 @@ test('exhibition plan layout prompt follows the requested template order', () =>
   const expectedOrder = [
     'Use case: exhibition-floor-plan-layout.',
     'Primary request: 基于输入的原始建筑平面图，在原图上进行绘制专业展陈平面布局透明叠加层，覆盖在原图上完成最终平面布局图，原图在最底层并且不要进行任何改动',
-    '输入图像说明：图1是唯一建筑平面图依据。平面布局默认使用如下风格',
+    '输入图像说明：图1是唯一建筑平面图依据。在上面添加的元素使用如下风格',
     '结构锁定模式：开启。请只生成透明背景的展陈布局叠加层 overlay',
     '平面图解析说明：总体宽30米，长40米，蓝色线条代表墙体，灰色方块代表柱子，都不可移动，红色指向图中心的箭头是入口，指向图外侧的是出口',
     '必须严格保留图1的建筑外轮廓、墙体边界、柱网、门洞、入口、通道宽度关系和房间几何',
@@ -142,14 +142,14 @@ test('exhibition plan layout prompt uses attachment style and hard layout constr
     excludeItems: ['isolated-columns'],
     showRoute: true,
   });
-  assert.match(prompt, /平面布局默认使用如下风格/);
+  assert.match(prompt, /在上面添加的元素使用如下风格/);
   assert.match(prompt, /平面图解析说明：总体宽30米，长40米，蓝色线条代表墙体，灰色方块代表柱子，都不可移动/);
   assert.match(prompt, /比例、尺寸、颜色含义、墙体、柱子、门洞、入口、不可移动结构和可布展范围/);
   assert.match(prompt, /必须优先遵守，不得与图1冲突/);
   assert.match(prompt, /结构锁定模式：开启/);
   assert.match(prompt, /只生成透明背景的展陈布局叠加层 overlay/);
   assert.match(prompt, /这些建筑结构会由程序直接保留图1原始底图并在最后合成/);
-  assert.match(prompt, /不要重画、描摹、修改或新增任何建筑墙体、柱子/);
+  assert.match(prompt, /不要重画、描摹、修改或新增任何原建筑平面图上的墙体、柱子/);
   assert.match(prompt, /空白区域保持透明/);
   assert.match(prompt, /红色虚线参观动线和箭头/);
   assert.match(prompt, /动线必须从入口到出口连续穿过所有展陈单元和展区/);
