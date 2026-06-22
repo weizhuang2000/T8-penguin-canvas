@@ -556,6 +556,8 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
       hasCap: false,
     },
     exhibitItems: [],
+    emptyExhibitMode: 'empty',
+    emptyExhibitQuery: '',
     layoutMode: 'manual',
     manualLayoutItems: [],
     manualLayoutReferenceImage: '',

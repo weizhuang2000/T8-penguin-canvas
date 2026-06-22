@@ -566,6 +566,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
   const status = String(d.status || 'idle');
   const busy = status === 'generating';
   const layoutMode = normalizeLayoutMode(d.layoutMode);
+  const emptyExhibitMode: 'search' | 'empty' = d.emptyExhibitMode === 'search' ? 'search' : 'empty';
   const showcaseStyle = normalizeShowcaseStyle(d.showcaseStyle);
   const autoAspectRatio = useMemo(() => {
     const totalHeightMm = showcaseStyle.baseHeightMm + showcaseStyle.glassHeightMm + (showcaseStyle.hasCap ? showcaseStyle.capHeightMm : 0);
@@ -604,6 +605,8 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
   const previewPrompt = useMemo(() => buildShowcaseInteriorDesignPrompt({
     showcaseStyle,
     exhibitItems,
+    emptyExhibitMode,
+    emptyExhibitQuery: d.emptyExhibitQuery,
     layoutMode,
     manualLayoutItems,
     colorMaterialPresetText: colorMaterialTextFromPreset(selectedColorMaterialPreset),
@@ -614,7 +617,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
     dimensionMarksEnabled: d.dimensionMarksEnabled === true,
     explodedViewEnabled: d.explodedViewEnabled === true,
     supplement: d.supplement,
-  }), [colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.explodedViewEnabled, d.perspectiveEnabled, d.supplement, exhibitItems, layoutMode, manualLayoutItems, selectedColorMaterialPreset, showcaseStyle.baseHeightMm, showcaseStyle.capHeightMm, showcaseStyle.glassHeightMm, showcaseStyle.hasCap, showcaseStyle.widthMm]);
+  }), [colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.emptyExhibitQuery, d.explodedViewEnabled, d.perspectiveEnabled, d.supplement, emptyExhibitMode, exhibitItems, layoutMode, manualLayoutItems, selectedColorMaterialPreset, showcaseStyle.baseHeightMm, showcaseStyle.capHeightMm, showcaseStyle.glassHeightMm, showcaseStyle.hasCap, showcaseStyle.widthMm]);
 
   useEffect(() => {
     getElevationPromptPresets().then((presets) => setColorMaterialPresets(presets.colorMaterial || [])).catch(() => setColorMaterialPresets([]));
@@ -688,6 +691,8 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
     const imagePrompt = buildShowcaseInteriorDesignPrompt({
       showcaseStyle,
       exhibitItems,
+      emptyExhibitMode,
+      emptyExhibitQuery: d.emptyExhibitQuery,
       layoutMode,
       manualLayoutItems,
       colorMaterialPresetText: colorMaterialTextFromPreset(selectedColorMaterialPreset),
@@ -860,7 +865,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`柜内设计生成失败: ${msg}`, src);
       throw error;
     }
-  }, [activeCanvasId, apiModel, aspectRatio, busy, colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.explodedViewEnabled, d.manualLayoutReferenceImage, d.perspectiveEnabled, d.providerParams, d.supplement, d.taskId, exhibitItems, externalProviderModel, id, isExternalSelected, isReadonly, layoutMode, manualLayoutItems, modelDef.id, modelDef.paramKind, outputFormat, providerSelection.provider, seed, selectedColorMaterialPreset, showcaseStyle, sizeLevel, update]);
+  }, [activeCanvasId, apiModel, aspectRatio, busy, colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.emptyExhibitQuery, d.explodedViewEnabled, d.manualLayoutReferenceImage, d.perspectiveEnabled, d.providerParams, d.supplement, d.taskId, emptyExhibitMode, exhibitItems, externalProviderModel, id, isExternalSelected, isReadonly, layoutMode, manualLayoutItems, modelDef.id, modelDef.paramKind, outputFormat, providerSelection.provider, seed, selectedColorMaterialPreset, showcaseStyle, sizeLevel, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -948,7 +953,34 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
               ))}
             </div>
           ) : (
-            <div className="rounded border border-dashed border-white/15 p-3 text-center text-[10px] text-white/35">连接图像素材作为展品图后，可逐件填写高度 mm</div>
+            <div className="space-y-2 rounded border border-dashed border-white/15 p-2">
+              <div className="text-[10px] text-white/45">未连接展品图像时的生成方式</div>
+              <div className="grid grid-cols-2 gap-1 rounded bg-black/20 p-1">
+                {([
+                  ['search', '自动搜索相关展品'],
+                  ['empty', '空展柜'],
+                ] as const).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    disabled={isReadonly || busy}
+                    onClick={() => update({ emptyExhibitMode: mode })}
+                    className={`rounded px-2 py-1.5 text-[10px] font-semibold transition-all ${emptyExhibitMode === mode ? 'bg-cyan-300/20 text-cyan-100' : 'text-white/45 hover:bg-white/[0.08] hover:text-white/75'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {emptyExhibitMode === 'search' && (
+                <input
+                  className={FIELD}
+                  value={d.emptyExhibitQuery || ''}
+                  disabled={isReadonly || busy}
+                  placeholder="输入展品主题，例如：汉代陶俑、青铜礼器、海洋化石"
+                  onChange={(event) => update({ emptyExhibitQuery: event.target.value })}
+                />
+              )}
+            </div>
           )}
         </section>
 

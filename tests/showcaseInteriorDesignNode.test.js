@@ -19,6 +19,8 @@ test('showcase interior design node is registered in frontend and permissions', 
   assert.match(read('src/components/Canvas.tsx'), /glassHeightMm: 1400/);
   assert.match(read('src/components/Canvas.tsx'), /capHeightMm: 180/);
   assert.match(read('src/components/Canvas.tsx'), /hasCap: false/);
+  assert.match(read('src/components/Canvas.tsx'), /emptyExhibitMode: 'empty'/);
+  assert.match(read('src/components/Canvas.tsx'), /emptyExhibitQuery: ''/);
   assert.match(read('src/components/Canvas.tsx'), /layoutMode: 'manual'/);
   assert.match(read('src/components/Canvas.tsx'), /manualLayoutItems: \[\]/);
   assert.match(read('src/components/Canvas.tsx'), /manualLayoutReferenceImage: ''/);
@@ -50,6 +52,11 @@ test('showcase interior design component wires shared controls and generation se
   assert.match(source, /heightMm/);
   assert.match(source, /高度 mm/);
   assert.match(source, /layoutMode/);
+  assert.match(source, /emptyExhibitMode/);
+  assert.match(source, /emptyExhibitQuery/);
+  assert.match(source, /自动搜索相关展品/);
+  assert.match(source, /空展柜/);
+  assert.match(source, /输入展品主题/);
   assert.match(source, /manualLayoutItems/);
   assert.match(source, /manualLayoutReferenceImage/);
   assert.match(source, /ShowcaseManualLayoutModal/);

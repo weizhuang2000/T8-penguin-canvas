@@ -22,6 +22,8 @@ test('showcase prompt includes four showcase dimensions and cap switch in Chines
   assert.match(withCap, /玻璃区高度：1400 mm/);
   assert.match(withCap, /柜帽：开启，柜帽高度 180 mm/);
   assert.match(withCap, /推导总高度：1880 mm/);
+  assert.match(withCap, /比例要求：展柜宽度、底座高度、玻璃区高度、柜帽高度必须形成可信比例；玻璃区应是主要陈列空间，底座承托稳定。/);
+  assert.doesNotMatch(withCap, /柜帽仅在开启时出现/);
 
   const withoutCap = buildShowcaseInteriorDesignPrompt({
     showcaseStyle: { widthMm: 1200, baseHeightMm: 300, glassHeightMm: 1400, capHeightMm: 180, hasCap: false },
@@ -85,6 +87,27 @@ test('showcase prompt switches dimension marks and exploded view requirements', 
   assert.match(unmarked, /展品视觉高度按设定高度的 70%，展柜尺寸不变/);
   assert.match(unmarked, /分解爆炸图：关闭/);
   assert.match(unmarked, /完整组装后的柜内陈列效果图/);
+});
+
+test('showcase prompt supports empty exhibit fallback modes', () => {
+  const search = buildShowcaseInteriorDesignPrompt({
+    exhibitItems: [],
+    emptyExhibitMode: 'search',
+    emptyExhibitQuery: '汉代陶俑',
+  });
+  assert.match(search, /当前选择：自动搜索相关展品/);
+  assert.match(search, /展品搜索\/生成关键词：汉代陶俑/);
+  assert.match(search, /自动寻找或生成可信的相关展品外观/);
+  assert.doesNotMatch(search, /当前选择：空展柜/);
+
+  const empty = buildShowcaseInteriorDesignPrompt({
+    exhibitItems: [],
+    emptyExhibitMode: 'empty',
+  });
+  assert.match(empty, /当前选择：空展柜/);
+  assert.match(empty, /没有展品的空展柜内部设计效果/);
+  assert.match(empty, /不要自动添加展品/);
+  assert.doesNotMatch(empty, /自动搜索相关展品/);
 });
 
 test('showcase prompt supports manual layout mode without auto height scaling', () => {

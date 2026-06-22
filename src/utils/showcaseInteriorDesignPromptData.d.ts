@@ -34,6 +34,8 @@ export interface ShowcaseInteriorDesignPromptValues extends ShowcaseStyleValues 
   showcaseStyle?: ShowcaseStyleValues;
   dimensions?: ShowcaseStyleValues;
   exhibitItems?: ShowcaseExhibitItem[];
+  emptyExhibitMode?: 'search' | 'empty';
+  emptyExhibitQuery?: string;
   layoutMode?: 'auto' | 'manual';
   manualLayoutItems?: ShowcaseManualLayoutItem[];
   colorMaterialPresetText?: string;

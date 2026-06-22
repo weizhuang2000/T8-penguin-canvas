@@ -102,9 +102,22 @@ function exhibitItemsText(items, style, values = {}) {
   const s = normalizeShowcaseStyle(style);
   const layoutMode = values.layoutMode === 'manual' ? 'manual' : 'auto';
   if (!normalized.length) {
+    const emptyMode = values.emptyExhibitMode === 'search' ? 'search' : 'empty';
+    const query = cleanText(values.emptyExhibitQuery, 600);
+    if (emptyMode === 'search') {
+      return [
+        '未接入展品图。当前选择：自动搜索相关展品。',
+        query
+          ? `展品搜索/生成关键词：${query}。请根据该主题自动寻找或生成可信的相关展品外观，用于柜内陈列设计。`
+          : '展品搜索/生成关键词未填写。请生成与展陈主题相符的少量通用博物馆展品，但不要生成杂乱商品或无关装饰。',
+        '自动生成的展品应保持博物馆级真实感、数量克制、尺度可信，并预留充足柜内空白；不要把展品撑满玻璃区。',
+        '需要配置托架、支撑、低反射保护、重点照明和清晰的柜内层次，不要生成可读说明文字。',
+      ].join('\n');
+    }
     return [
-      '未接入展品图。可以生成抽象展品占位体块，但必须遵守真实博物馆展柜陈列尺度。',
-      '需要配置托架、支撑、低反射保护、重点照明和清晰的柜内层次，不要生成可读说明文字。',
+      '未接入展品图。当前选择：空展柜。',
+      '请生成没有展品的空展柜内部设计效果，只表现展柜结构、玻璃区、底座、背板、托架预留位、灯光和材料关系。',
+      '不要自动添加展品、占位体块、商品、雕塑、器物或说明牌；柜内可以保留干净空白，为后续放置展品预留空间。',
     ].join('\n');
   }
 
@@ -205,7 +218,7 @@ export function buildShowcaseInteriorDesignPrompt(values = {}) {
     '1. 展柜样式与尺寸',
     showcaseStyleText(style),
     '',
-    '比例要求：展柜宽度、底座高度、玻璃区高度、柜帽高度必须形成可信比例；玻璃区应是主要陈列空间，底座承托稳定，柜帽仅在开启时出现。',
+    '比例要求：展柜宽度、底座高度、玻璃区高度、柜帽高度必须形成可信比例；玻璃区应是主要陈列空间，底座承托稳定。',
     '',
     '2. 展品输入与物理尺寸约束',
     exhibitItemsText(values.exhibitItems, style, values),
