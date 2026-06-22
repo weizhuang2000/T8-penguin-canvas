@@ -87,6 +87,31 @@ test('showcase prompt switches dimension marks and exploded view requirements', 
   assert.match(unmarked, /完整组装后的柜内陈列效果图/);
 });
 
+test('showcase prompt supports manual layout mode without auto height scaling', () => {
+  const prompt = buildShowcaseInteriorDesignPrompt({
+    layoutMode: 'manual',
+    showcaseStyle: { widthMm: 1500, glassHeightMm: 1400 },
+    exhibitItems: [
+      { url: '/files/input/a.png', label: '青铜器', heightMm: 420 },
+      { url: '/files/input/b.png', label: '陶俑', heightMm: 260 },
+    ],
+    manualLayoutItems: [
+      { url: '/files/input/a.png', label: '青铜器', xMm: 120, yMm: 300, widthMm: 180, heightMm: 240, zIndex: 2 },
+      { url: '/files/input/b.png', label: '陶俑', xMm: 520, yMm: 360, widthMm: 150, heightMm: 210, zIndex: 1 },
+    ],
+    hasColorMaterialReferenceImage: true,
+  });
+  assert.match(prompt, /手动排版模式/);
+  assert.match(prompt, /手动布局参考图/);
+  assert.match(prompt, /不要套用自动尺寸模式中的“高度 mm”或“设定高度 70%”规则/);
+  assert.match(prompt, /宽 1500 mm，高 1400 mm，只对应玻璃区内部/);
+  assert.match(prompt, /陶俑：左上角 x=520 mm，y=360 mm，显示宽度 150 mm，显示高度 210 mm，层级 1/);
+  assert.match(prompt, /青铜器：左上角 x=120 mm，y=300 mm，显示宽度 180 mm，显示高度 240 mm，层级 2/);
+  assert.match(prompt, /排在手动布局参考图之后/);
+  assert.doesNotMatch(prompt, /生图显示高度 294 mm/);
+  assert.doesNotMatch(prompt, /本体显示高度按设定高度的 70% 生成/);
+});
+
 test('showcase prompt separates exhibit images from color material reference', () => {
   const prompt = buildShowcaseInteriorDesignPrompt({
     exhibitItems: [{ url: '/files/input/exhibit.png', label: '展品图', heightMm: 300 }],

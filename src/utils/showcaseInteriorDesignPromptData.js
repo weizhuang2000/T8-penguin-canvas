@@ -53,6 +53,26 @@ export function normalizeShowcaseExhibitItems(value = []) {
     .filter(Boolean);
 }
 
+export function normalizeShowcaseManualLayoutItems(value = []) {
+  const list = Array.isArray(value) ? value : [];
+  return list
+    .map((item, index) => {
+      const url = cleanText(item?.url || item?.imageUrl || '', 1000);
+      const label = cleanText(item?.label || item?.name || `展品 ${index + 1}`, 80);
+      if (!url && !label) return null;
+      return {
+        url,
+        label: label || `展品 ${index + 1}`,
+        xMm: normalizeNumber(item?.xMm ?? item?.x ?? item?.leftMm, 0, 0, 999999),
+        yMm: normalizeNumber(item?.yMm ?? item?.y ?? item?.topMm, 0, 0, 999999),
+        widthMm: normalizeNumber(item?.widthMm ?? item?.wMm ?? item?.width, 120, 1, 999999),
+        heightMm: normalizeNumber(item?.heightMm ?? item?.hMm ?? item?.height, 120, 1, 999999),
+        zIndex: Math.round(normalizeNumber(item?.zIndex, index + 1, 0, 999999)),
+      };
+    })
+    .filter(Boolean);
+}
+
 export function colorMaterialTextFromPreset(preset) {
   if (!preset) return '';
   const materialKeywords = /(色|颜色|色彩|色调|主色|配色|冷色|暖色|灰|白|黑|金|银|铜|红|蓝|绿|黄|紫|橙|棕|米|材质|材料|质感|肌理|纹理|金属|玻璃|亚克力|木|石|布|织物|皮革|漆|哑光|亮光|磨砂|透明|反射|color|colour|palette|tone|hue|material|texture|metal|glass|acrylic|wood|stone|fabric|leather|matte|gloss|transparent|reflective)/i;
@@ -80,11 +100,36 @@ function showcaseStyleText(style) {
 function exhibitItemsText(items, style, values = {}) {
   const normalized = normalizeShowcaseExhibitItems(items);
   const s = normalizeShowcaseStyle(style);
+  const layoutMode = values.layoutMode === 'manual' ? 'manual' : 'auto';
   if (!normalized.length) {
     return [
       '未接入展品图。可以生成抽象展品占位体块，但必须遵守真实博物馆展柜陈列尺度。',
       '需要配置托架、支撑、低反射保护、重点照明和清晰的柜内层次，不要生成可读说明文字。',
     ].join('\n');
+  }
+
+  if (layoutMode === 'manual') {
+    const manualItems = normalizeShowcaseManualLayoutItems(values.manualLayoutItems);
+    const sortedItems = manualItems.slice().sort((a, b) => a.zIndex - b.zIndex);
+    const lines = [
+      '普通 image 输入均视为展品图，只用于提取展品外观、轮廓和材质，不作为色彩材质风格参考。',
+      '参考图顺序：第 1 张参考图 = 展品 1，第 2 张参考图 = 展品 2，以此类推；所有展品原图之后有 1 张“手动布局参考图”。',
+      '手动排版模式：展品位置、显示大小和相对层级完全以手动布局参考图与下方 mm 坐标为准。',
+      '不要套用自动尺寸模式中的“高度 mm”或“设定高度 70%”规则；不要为了画面美观擅自重新放大、缩小或改动展品位置。',
+      `手动布局画布：宽 ${s.widthMm} mm，高 ${s.glassHeightMm} mm，只对应玻璃区内部，坐标原点为玻璃区左上角。`,
+    ];
+    if (sortedItems.length > 0) {
+      sortedItems.forEach((item, index) => {
+        lines.push(`${index + 1}. ${item.label}：左上角 x=${item.xMm} mm，y=${item.yMm} mm，显示宽度 ${item.widthMm} mm，显示高度 ${item.heightMm} mm，层级 ${item.zIndex}；参考图 URL：${item.url || '[上游展品图]'}`);
+      });
+    } else {
+      lines.push('当前没有有效手动布局项；如果仍需生成，请保持玻璃区空置或使用极简占位，不要自行放大展品。');
+    }
+    if (values.hasColorMaterialReferenceImage === true) {
+      lines.push('色彩材质参考图使用独立 color-material-reference 输入，并且排在手动布局参考图之后；它不是展品图，不得套用任何展品布局尺寸。');
+    }
+    lines.push('渲染前最终检查：逐一对齐手动布局参考图中的展品位置、大小、间距和层级；展柜宽度、玻璃区高度、底座和柜帽仍保持设定尺寸。');
+    return lines.join('\n');
   }
 
   const lines = [

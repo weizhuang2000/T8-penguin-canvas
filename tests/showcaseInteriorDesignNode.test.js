@@ -34,7 +34,7 @@ test('showcase interior design component wires shared controls and generation se
   assert.match(source, /buildShowcaseInteriorDesignPrompt/);
   assert.match(source, /previewReferenceImages = useMemo\(\(\) => \[/);
   assert.match(source, /runtimeReferenceImages = \[/);
-  assert.match(source, /\.\.\.exhibitItems\.map\(\(item\) => item\.url\),\s*colorMaterialReferenceImage/);
+  assert.match(source, /\.\.\.exhibitItems\.map\(\(item\) => item\.url\),\s*layoutMode === 'manual' \? d\.manualLayoutReferenceImage : '',\s*colorMaterialReferenceImage/);
   assert.doesNotMatch(source, /buildShowcaseInteriorScaleReferenceDataUrl/);
   assert.doesNotMatch(source, /buildScaledExhibitReferenceImage/);
   assert.doesNotMatch(source, /imageDataUrlToPngDataUrl/);
@@ -46,6 +46,16 @@ test('showcase interior design component wires shared controls and generation se
   assert.match(source, /exhibitItems/);
   assert.match(source, /heightMm/);
   assert.match(source, /高度 mm/);
+  assert.match(source, /layoutMode/);
+  assert.match(source, /manualLayoutItems/);
+  assert.match(source, /manualLayoutReferenceImage/);
+  assert.match(source, /ShowcaseManualLayoutModal/);
+  assert.match(source, /buildManualLayoutReferenceImage/);
+  assert.match(source, /手动排版模式/);
+  assert.match(source, /setManualLayoutOpen\(true\)/);
+  assert.match(source, /排版/);
+  assert.match(source, /layoutMode === 'manual'[\s\S]*manualLayoutReferenceImage/);
+  assert.match(source, /\.\.\.exhibitItems\.map\(\(item\) => item\.url\),\s*manualLayoutReferenceImage,\s*colorMaterialReferenceImage/);
   assert.match(source, /function ratioValue/);
   assert.match(source, /function closestAspectRatio/);
   assert.match(source, /showcaseStyle\.widthMm \/ totalHeightMm/);

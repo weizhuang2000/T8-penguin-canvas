@@ -2,6 +2,7 @@ import {
   buildShowcaseInteriorDesignPrompt,
   colorMaterialTextFromPreset,
   normalizeShowcaseExhibitItems,
+  normalizeShowcaseManualLayoutItems,
   normalizeShowcaseStyle,
 } from './showcaseInteriorDesignPromptData.js';
 
@@ -25,10 +26,24 @@ export interface ShowcaseExhibitItem {
   sizeMm?: number;
 }
 
+export interface ShowcaseManualLayoutItem {
+  url?: string;
+  imageUrl?: string;
+  label?: string;
+  name?: string;
+  xMm?: number;
+  yMm?: number;
+  widthMm?: number;
+  heightMm?: number;
+  zIndex?: number;
+}
+
 export interface ShowcaseInteriorDesignPromptValues extends ShowcaseStyleValues {
   showcaseStyle?: ShowcaseStyleValues;
   dimensions?: ShowcaseStyleValues;
   exhibitItems?: ShowcaseExhibitItem[];
+  layoutMode?: 'auto' | 'manual';
+  manualLayoutItems?: ShowcaseManualLayoutItem[];
   colorMaterialPresetText?: string;
   colorMaterial?: string;
   manualColorMaterial?: string;
@@ -44,5 +59,6 @@ export {
   buildShowcaseInteriorDesignPrompt,
   colorMaterialTextFromPreset,
   normalizeShowcaseExhibitItems,
+  normalizeShowcaseManualLayoutItems,
   normalizeShowcaseStyle,
 };

@@ -18,10 +18,24 @@ export interface ShowcaseExhibitItem {
   sizeMm?: number;
 }
 
+export interface ShowcaseManualLayoutItem {
+  url?: string;
+  imageUrl?: string;
+  label?: string;
+  name?: string;
+  xMm?: number;
+  yMm?: number;
+  widthMm?: number;
+  heightMm?: number;
+  zIndex?: number;
+}
+
 export interface ShowcaseInteriorDesignPromptValues extends ShowcaseStyleValues {
   showcaseStyle?: ShowcaseStyleValues;
   dimensions?: ShowcaseStyleValues;
   exhibitItems?: ShowcaseExhibitItem[];
+  layoutMode?: 'auto' | 'manual';
+  manualLayoutItems?: ShowcaseManualLayoutItem[];
   colorMaterialPresetText?: string;
   colorMaterial?: string;
   manualColorMaterial?: string;
@@ -35,5 +49,6 @@ export interface ShowcaseInteriorDesignPromptValues extends ShowcaseStyleValues 
 
 export function normalizeShowcaseStyle(value?: unknown): Required<ShowcaseStyleValues>;
 export function normalizeShowcaseExhibitItems(value?: unknown): Array<{ url: string; label: string; heightMm: number }>;
+export function normalizeShowcaseManualLayoutItems(value?: unknown): Array<{ url: string; label: string; xMm: number; yMm: number; widthMm: number; heightMm: number; zIndex: number }>;
 export function colorMaterialTextFromPreset(preset?: unknown): string;
 export function buildShowcaseInteriorDesignPrompt(values?: ShowcaseInteriorDesignPromptValues): string;
