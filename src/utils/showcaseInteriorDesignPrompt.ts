@@ -1,7 +1,5 @@
 import {
   buildShowcaseInteriorDesignPrompt,
-  buildShowcaseInteriorScaleReferenceDataUrl,
-  buildShowcaseInteriorScaleReferenceSvg,
   colorMaterialTextFromPreset,
   normalizeShowcaseExhibitItems,
   normalizeShowcaseStyle,
@@ -44,8 +42,6 @@ export interface ShowcaseInteriorDesignPromptValues extends ShowcaseStyleValues 
 
 export {
   buildShowcaseInteriorDesignPrompt,
-  buildShowcaseInteriorScaleReferenceDataUrl,
-  buildShowcaseInteriorScaleReferenceSvg,
   colorMaterialTextFromPreset,
   normalizeShowcaseExhibitItems,
   normalizeShowcaseStyle,

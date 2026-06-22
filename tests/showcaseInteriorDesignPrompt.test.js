@@ -2,8 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildShowcaseInteriorDesignPrompt,
-  buildShowcaseInteriorScaleReferenceDataUrl,
-  buildShowcaseInteriorScaleReferenceSvg,
   colorMaterialTextFromPreset,
   normalizeShowcaseExhibitItems,
   normalizeShowcaseStyle,
@@ -50,10 +48,12 @@ test('showcase prompt keeps exhibit order and display height in millimeters', ()
   const prompt = buildShowcaseInteriorDesignPrompt({ exhibitItems: items, showcaseStyle: { widthMm: 1200, glassHeightMm: 1400 } });
   assert.ok(prompt.indexOf('1. 青铜器：高度 420 mm') < prompt.indexOf('2. 陶俑：高度 260 mm'));
   assert.match(prompt, /参考图顺序：第 1 张参考图 = 展品 1，第 2 张参考图 = 展品 2/);
-  assert.match(prompt, /所有展品图之后还有 1 张“尺寸合成参考图”/);
+  assert.doesNotMatch(prompt, /尺寸合成参考图/);
   assert.doesNotMatch(prompt, /第 2 张参考图 = 展品 1/);
   assert.match(prompt, /严格比例规则/);
   assert.match(prompt, /高度只指展品本体的可见垂直高度，不包含托台、托盘、标签牌、底座、支架、阴影、留白或说明文字/);
+  assert.match(prompt, /不得为了构图、焦点或视觉美观而随意放大或缩小/);
+  assert.match(prompt, /保留充足柜内空白，为以后继续放置其它展品预留空间/);
   assert.match(prompt, /玻璃区高度 1400 mm 的 18\.6%/);
   assert.match(prompt, /本体可见高度不得超过玻璃区高度的 20\.4%/);
   assert.doesNotMatch(prompt, /显示高度约为展柜宽度/);
@@ -90,6 +90,7 @@ test('showcase prompt separates exhibit images from color material reference', (
   });
   assert.match(prompt, /普通 image 输入均视为展品图/);
   assert.match(prompt, /独立 color-material-reference 输入/);
+  assert.match(prompt, /排在所有展品图之后/);
   assert.match(prompt, /它不是展品图/);
   assert.match(prompt, /不得套用任何展品高度尺寸/);
   assert.match(prompt, /共享色彩与材质预设作为次级补充/);
@@ -118,23 +119,4 @@ test('showcase color material preset keeps only color and material constraints',
   const prompt = buildShowcaseInteriorDesignPrompt({ colorMaterialPresetText: presetText });
   assert.match(prompt, /仅采用色彩和材质信息/);
   assert.match(prompt, /忽略其中所有图案、纹样、文字、符号、logo、排版约定/);
-});
-
-test('showcase scale reference image encodes cabinet and exhibit millimeter constraints', () => {
-  const values = {
-    showcaseStyle: { widthMm: 1200, baseHeightMm: 300, glassHeightMm: 1400, capHeightMm: 180, hasCap: true },
-    exhibitItems: [
-      { url: '/files/input/a.png', label: '青铜器', heightMm: 420 },
-      { url: '/files/input/b.png', label: '陶俑', heightMm: 260 },
-    ],
-  };
-  const svg = buildShowcaseInteriorScaleReferenceSvg(values);
-  assert.match(svg, /柜内设计比例控制图/);
-  assert.match(svg, /展柜宽 1200 mm/);
-  assert.match(svg, /本体高 420 mm/);
-  assert.match(svg, /本体高 260 mm/);
-  assert.match(svg, /托台和标签不计入展品高度/);
-
-  const dataUrl = buildShowcaseInteriorScaleReferenceDataUrl(values);
-  assert.match(dataUrl, /^data:image\/svg\+xml;base64,/);
 });

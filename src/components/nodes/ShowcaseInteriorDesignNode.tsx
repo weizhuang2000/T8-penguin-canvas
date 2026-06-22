@@ -12,7 +12,6 @@ import {
 } from '../../utils/advancedProviders';
 import {
   buildShowcaseInteriorDesignPrompt,
-  buildShowcaseInteriorScaleReferenceDataUrl,
   colorMaterialTextFromPreset,
   normalizeShowcaseExhibitItems,
   normalizeShowcaseStyle,
@@ -124,116 +123,6 @@ function sameJson(a: unknown, b: unknown) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-async function imageDataUrlToPngDataUrl(dataUrl: string): Promise<string> {
-  if (typeof document === 'undefined' || typeof Image === 'undefined') return dataUrl;
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth || 1200;
-        canvas.height = img.naturalHeight || 1600;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          resolve(dataUrl);
-          return;
-        }
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0);
-        resolve(canvas.toDataURL('image/png'));
-      } catch {
-        resolve(dataUrl);
-      }
-    };
-    img.onerror = () => resolve(dataUrl);
-    img.src = dataUrl;
-  });
-}
-
-function loadImageLoose(src: string): Promise<HTMLImageElement | null> {
-  if (typeof Image === 'undefined') return Promise.resolve(null);
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
-    img.src = src;
-  });
-}
-
-async function buildScaledExhibitReferenceImage(
-  scaleReferenceDataUrl: string,
-  exhibitItems: Array<{ url: string; label: string; heightMm: number }>,
-  showcaseStyle: ReturnType<typeof normalizeShowcaseStyle>,
-): Promise<string> {
-  if (typeof document === 'undefined') return imageDataUrlToPngDataUrl(scaleReferenceDataUrl);
-  const base = await loadImageLoose(scaleReferenceDataUrl);
-  if (!base) return imageDataUrlToPngDataUrl(scaleReferenceDataUrl);
-  const canvas = document.createElement('canvas');
-  canvas.width = base.naturalWidth || 1200;
-  canvas.height = base.naturalHeight || 1600;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return imageDataUrlToPngDataUrl(scaleReferenceDataUrl);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(base, 0, 0);
-
-  const totalHeightMm = showcaseStyle.baseHeightMm + showcaseStyle.glassHeightMm + (showcaseStyle.hasCap ? showcaseStyle.capHeightMm : 0);
-  const chartW = 760;
-  const chartH = 1160;
-  const margin = 120;
-  const scale = Math.min(chartW / Math.max(showcaseStyle.widthMm, 1), chartH / Math.max(totalHeightMm, 1));
-  const cabinetW = showcaseStyle.widthMm * scale;
-  const glassH = showcaseStyle.glassHeightMm * scale;
-  const capH = (showcaseStyle.hasCap ? showcaseStyle.capHeightMm : 0) * scale;
-  const baseH = showcaseStyle.baseHeightMm * scale;
-  const x = margin + (chartW - cabinetW) / 2;
-  const y = 260 + (chartH - (capH + glassH + baseH)) / 2;
-  const baseY = y + capH + glassH;
-  const exhibitGap = 24;
-  const slotCount = Math.max(exhibitItems.length, 1);
-  const slotW = Math.max(80, (cabinetW - exhibitGap * (slotCount + 1)) / slotCount);
-
-  const loaded = await Promise.all(exhibitItems.map((item) => loadImageLoose(item.url)));
-  loaded.forEach((img, index) => {
-    const item = exhibitItems[index];
-    if (!img || !item) return;
-    const targetHeight = Math.max(8, item.heightMm * scale);
-    const maxBySlot = Math.max(24, slotW);
-    const maxByGlass = Math.max(24, glassH * 0.86);
-    const targetDrawHeight = Math.min(targetHeight, maxByGlass);
-    const iw = img.naturalWidth || img.width || targetDrawHeight;
-    const ih = img.naturalHeight || img.height || targetDrawHeight;
-    const widthLimitedScale = Math.min(targetDrawHeight / Math.max(ih, 1), (maxBySlot * 0.72) / Math.max(iw, 1));
-    const dw = iw * widthLimitedScale;
-    const dh = ih * widthLimitedScale;
-    const frameW = Math.max(Math.min(dw, maxBySlot * 0.72), 24);
-    const cx = x + exhibitGap + slotW * index + exhibitGap * index + slotW / 2;
-    const bottom = baseY - Math.max(26, glassH * 0.08);
-    const dx = cx - dw / 2;
-    const dy = bottom - dh;
-    ctx.save();
-    ctx.fillStyle = 'rgba(255,255,255,0.82)';
-    ctx.strokeStyle = '#0369a1';
-    ctx.lineWidth = 3;
-    ctx.setLineDash([8, 6]);
-    ctx.strokeRect(cx - frameW / 2, bottom - dh, frameW, dh);
-    ctx.setLineDash([]);
-    ctx.drawImage(img, dx, dy, dw, dh);
-    ctx.fillStyle = '#0f172a';
-    ctx.font = '700 24px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(`展品 ${index + 1}: 本体高 ${item.heightMm} mm`, cx, bottom + 104);
-    ctx.restore();
-  });
-  try {
-    return canvas.toDataURL('image/png');
-  } catch {
-    return imageDataUrlToPngDataUrl(scaleReferenceDataUrl);
-  }
-}
-
 const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
@@ -293,17 +182,11 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
     });
   }, [d.exhibitItems, exhibitImages]);
 
-  const previewScaleReferenceImage = useMemo(() => buildShowcaseInteriorScaleReferenceDataUrl({
-    showcaseStyle,
-    exhibitItems,
-    hasColorMaterialReferenceImage: !!colorMaterialReferenceImage,
-  }), [colorMaterialReferenceImage, exhibitItems, showcaseStyle]);
 
   const previewReferenceImages = useMemo(() => [
     ...exhibitItems.map((item) => item.url),
-    previewScaleReferenceImage,
     colorMaterialReferenceImage,
-  ].filter(Boolean), [colorMaterialReferenceImage, exhibitItems, previewScaleReferenceImage]);
+  ].filter(Boolean), [colorMaterialReferenceImage, exhibitItems]);
 
   const previewPrompt = useMemo(() => buildShowcaseInteriorDesignPrompt({
     showcaseStyle,
@@ -363,15 +246,8 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
       explodedViewEnabled: d.explodedViewEnabled === true,
       supplement: d.supplement,
     });
-    const scaleReferenceDataUrl = buildShowcaseInteriorScaleReferenceDataUrl({
-      showcaseStyle,
-      exhibitItems,
-      hasColorMaterialReferenceImage: !!colorMaterialReferenceImage,
-    });
-    const scaleReferenceImage = await buildScaledExhibitReferenceImage(scaleReferenceDataUrl, exhibitItems, showcaseStyle);
     const runtimeReferenceImages = [
       ...exhibitItems.map((item) => item.url),
-      scaleReferenceImage,
       colorMaterialReferenceImage,
     ].filter(Boolean);
     const runSeed = seed > 0 ? seed : randomImageSeed();
@@ -393,7 +269,6 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
       urls: [],
       lastPrompt: imagePrompt,
       lastSeed: runSeed,
-      scaleReferenceImage,
       referenceImages: runtimeReferenceImages,
     });
     try {

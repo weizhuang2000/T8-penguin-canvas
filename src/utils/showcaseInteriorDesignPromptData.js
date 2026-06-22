@@ -28,20 +28,6 @@ function textSegments(value) {
     .filter(Boolean);
 }
 
-function escapeXml(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function encodeBase64Utf8(value) {
-  if (typeof Buffer !== 'undefined') return Buffer.from(value, 'utf8').toString('base64');
-  const encoded = encodeURIComponent(value).replace(/%([0-9A-F]{2})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
-  return btoa(encoded);
-}
-
 export function normalizeShowcaseStyle(value = {}) {
   const source = value && typeof value === 'object' ? value : {};
   return {
@@ -103,10 +89,10 @@ function exhibitItemsText(items, style, values = {}) {
   const lines = [
     '普通 image 输入均视为展品图，只用于提取展品外观、体量、轮廓、材质和摆放重点，不作为色彩材质风格参考。',
     '参考图顺序：第 1 张参考图 = 展品 1，第 2 张参考图 = 展品 2，以此类推。必须按这个顺序匹配展品图片和尺寸。',
-    '所有展品图之后还有 1 张“尺寸合成参考图”：展品原图已经按设定高度 mm 缩放后放入展柜比例框中。最终效果图必须优先对齐这张图里的展品显示高度。',
     '严格比例规则：每件展品只能按“高度 mm”缩放，不能按原图像素、裁切大小、主体在参考图里看起来的大小或视觉重要性缩放。',
     '高度定义：高度只指展品本体的可见垂直高度，不包含托台、托盘、标签牌、底座、支架、阴影、留白或说明文字。',
-    '尺寸合成参考图中的展品本体高度就是该展品设定高度的真实比例范围；最终展品本体必须保持同等视觉高度，不得明显放大或缩小。',
+    '最终展品本体必须严格按设定高度形成真实比例范围，不得为了构图、焦点或视觉美观而随意放大或缩小。',
+    '柜内设计宁可多留空，也不要把展品撑满画面；应保留充足柜内空白，为以后继续放置其它展品预留空间。',
   ];
 
   normalized.forEach((item, index) => {
@@ -117,10 +103,10 @@ function exhibitItemsText(items, style, values = {}) {
   });
 
   if (values.hasColorMaterialReferenceImage === true) {
-    lines.push('色彩材质参考图使用独立 color-material-reference 输入，并且排在展品图与尺寸合成参考图之后；它不是展品图，不得套用任何展品高度尺寸。');
+    lines.push('色彩材质参考图使用独立 color-material-reference 输入，并且排在所有展品图之后；它不是展品图，不得套用任何展品高度尺寸。');
   }
   lines.push('相对尺寸审计：如果两张展品参考图看起来差不多大，但高度数值不同，最终必须按毫米数显示出明显的物理高度差异。');
-  lines.push('渲染前最终检查：逐一比较每件展品与展柜宽度、玻璃区高度和尺寸合成参考图。小尺寸展品必须保持小件感，大尺寸展品只有在数值足够大时才可以成为视觉主体。');
+  lines.push('渲染前最终检查：逐一比较每件展品与展柜宽度、玻璃区高度。小尺寸展品必须保持小件感，大尺寸展品只有在数值足够大时才可以成为视觉主体。');
   return lines.join('\n');
 }
 
@@ -158,79 +144,13 @@ function outputRequirementText(values) {
   ].join('\n');
 }
 
-export function buildShowcaseInteriorScaleReferenceSvg(values = {}) {
-  const style = normalizeShowcaseStyle(values.showcaseStyle || values.dimensions || values);
-  const exhibits = normalizeShowcaseExhibitItems(values.exhibitItems);
-  const totalHeightMm = style.baseHeightMm + style.glassHeightMm + (style.hasCap ? style.capHeightMm : 0);
-  const canvasW = 1200;
-  const canvasH = 1600;
-  const margin = 120;
-  const chartW = 760;
-  const chartH = 1160;
-  const scale = Math.min(chartW / Math.max(style.widthMm, 1), chartH / Math.max(totalHeightMm, 1));
-  const cabinetW = style.widthMm * scale;
-  const baseH = style.baseHeightMm * scale;
-  const glassH = style.glassHeightMm * scale;
-  const capH = (style.hasCap ? style.capHeightMm : 0) * scale;
-  const x = margin + (chartW - cabinetW) / 2;
-  const y = 260 + (chartH - (baseH + glassH + capH)) / 2;
-  const capY = y;
-  const glassY = y + capH;
-  const baseY = glassY + glassH;
-  const exhibitGap = 24;
-  const slotCount = Math.max(exhibits.length, 1);
-  const slotW = Math.max(80, (cabinetW - exhibitGap * (slotCount + 1)) / slotCount);
-  const exhibitEls = exhibits.map((item, index) => {
-    const boxH = Math.max(8, item.heightMm * scale);
-    const clampedH = Math.min(boxH, Math.max(24, glassH * 0.86));
-    const boxW = Math.min(Math.max(28, slotW * 0.55), Math.max(28, clampedH * 0.58));
-    const cx = x + exhibitGap + slotW * index + exhibitGap * index + slotW / 2;
-    const bottom = baseY - Math.max(26, glassH * 0.08);
-    const bx = cx - boxW / 2;
-    const by = bottom - clampedH;
-    return [
-      `<rect x="${bx.toFixed(2)}" y="${by.toFixed(2)}" width="${boxW.toFixed(2)}" height="${clampedH.toFixed(2)}" rx="8" fill="rgba(14,165,233,0.10)" stroke="#0284c7" stroke-width="4" stroke-dasharray="10 8"/>`,
-      `<line x1="${(bx - 18).toFixed(2)}" y1="${by.toFixed(2)}" x2="${(bx - 18).toFixed(2)}" y2="${bottom.toFixed(2)}" stroke="#0284c7" stroke-width="4"/>`,
-      `<line x1="${cx.toFixed(2)}" y1="${bottom.toFixed(2)}" x2="${cx.toFixed(2)}" y2="${(bottom + 34).toFixed(2)}" stroke="#334155" stroke-width="3"/>`,
-      `<text x="${cx.toFixed(2)}" y="${(by - 18).toFixed(2)}" text-anchor="middle" font-size="28" font-weight="700" fill="#0f172a">展品 ${index + 1}</text>`,
-      `<text x="${cx.toFixed(2)}" y="${(by + clampedH / 2 + 10).toFixed(2)}" text-anchor="middle" font-size="24" fill="#075985">本体高 ${item.heightMm} mm</text>`,
-      `<text x="${cx.toFixed(2)}" y="${(bottom + 70).toFixed(2)}" text-anchor="middle" font-size="20" fill="#334155">${escapeXml(item.label).slice(0, 18)}</text>`,
-    ].join('\n');
-  }).join('\n');
-
-  const capEls = style.hasCap
-    ? `<rect x="${x.toFixed(2)}" y="${capY.toFixed(2)}" width="${cabinetW.toFixed(2)}" height="${capH.toFixed(2)}" fill="#e2e8f0" stroke="#334155" stroke-width="4"/>
-<text x="${(x + cabinetW + 34).toFixed(2)}" y="${(capY + capH / 2 + 8).toFixed(2)}" font-size="24" fill="#334155">柜帽 ${style.capHeightMm} mm</text>`
-    : `<text x="${x.toFixed(2)}" y="${(glassY - 24).toFixed(2)}" font-size="24" fill="#334155">无柜帽</text>`;
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${canvasW}" height="${canvasH}" viewBox="0 0 ${canvasW} ${canvasH}">
-<rect width="${canvasW}" height="${canvasH}" fill="#f8fafc"/>
-<text x="60" y="82" font-size="42" font-weight="800" fill="#0f172a">柜内设计比例控制图</text>
-<text x="60" y="130" font-size="26" fill="#475569">仅用于约束尺寸比例：最终效果图需按此图控制展柜与展品大小关系</text>
-<text x="60" y="176" font-size="24" fill="#0f172a">展柜宽 ${style.widthMm} mm，总高 ${totalHeightMm} mm，玻璃区 ${style.glassHeightMm} mm，底座 ${style.baseHeightMm} mm</text>
-<rect x="${x.toFixed(2)}" y="${glassY.toFixed(2)}" width="${cabinetW.toFixed(2)}" height="${glassH.toFixed(2)}" fill="rgba(186,230,253,0.24)" stroke="#0284c7" stroke-width="5"/>
-${capEls}
-<rect x="${x.toFixed(2)}" y="${baseY.toFixed(2)}" width="${cabinetW.toFixed(2)}" height="${baseH.toFixed(2)}" fill="#cbd5e1" stroke="#334155" stroke-width="4"/>
-<text x="${(x + cabinetW + 34).toFixed(2)}" y="${(glassY + glassH / 2).toFixed(2)}" font-size="24" fill="#075985">玻璃区 ${style.glassHeightMm} mm</text>
-<text x="${(x + cabinetW + 34).toFixed(2)}" y="${(baseY + baseH / 2 + 8).toFixed(2)}" font-size="24" fill="#334155">底座 ${style.baseHeightMm} mm</text>
-<line x1="${x.toFixed(2)}" y1="${(baseY + baseH + 52).toFixed(2)}" x2="${(x + cabinetW).toFixed(2)}" y2="${(baseY + baseH + 52).toFixed(2)}" stroke="#0f172a" stroke-width="4"/>
-<text x="${(x + cabinetW / 2).toFixed(2)}" y="${(baseY + baseH + 92).toFixed(2)}" text-anchor="middle" font-size="26" fill="#0f172a">展柜宽度 ${style.widthMm} mm</text>
-${exhibitEls || `<text x="${(x + cabinetW / 2).toFixed(2)}" y="${(glassY + glassH / 2).toFixed(2)}" text-anchor="middle" font-size="30" fill="#64748b">无展品图，使用抽象占位体块</text>`}
-<text x="60" y="1510" font-size="24" fill="#475569">要求：展品外观来自后续展品参考图；只按蓝色高度框控制展品本体可见高度，托台和标签不计入展品高度。</text>
-</svg>`;
-}
-
-export function buildShowcaseInteriorScaleReferenceDataUrl(values = {}) {
-  return `data:image/svg+xml;base64,${encodeBase64Utf8(buildShowcaseInteriorScaleReferenceSvg(values))}`;
-}
-
 export function buildShowcaseInteriorDesignPrompt(values = {}) {
   const style = values.showcaseStyle || values.dimensions || values;
   const supplement = cleanText(values.supplement, 3000);
   const lines = [
     '用途：博物馆 / 展陈柜内设计图生成。',
     '',
-    '核心任务：根据展柜尺寸、比例控制图、展品参考图和柜内形式设计风格，生成一张专业、真实、可落地的展柜内部陈列设计效果图。',
+    '核心任务：根据展柜尺寸、展品参考图和柜内形式设计风格，生成一张专业、真实、可落地的展柜内部陈列设计效果图。',
     '',
     '1. 展柜样式与尺寸',
     showcaseStyleText(style),
