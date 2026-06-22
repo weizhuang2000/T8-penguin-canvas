@@ -14,6 +14,7 @@ const VIDEO_EXT = new Set(['.mp4', '.webm', '.mov', '.m4v', '.mkv', '.avi']);
 const AUDIO_EXT = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.aac']);
 const UNARCHIVED_PROJECT_ID = '__unarchived__';
 const MAX_LIST_LIMIT = 200;
+let mergedItemsCache = null;
 
 function now() {
   return Date.now();
@@ -99,6 +100,18 @@ function dbFile() {
   return path.join(config.DATA_DIR, 'generation_history.json');
 }
 
+function mtimeMs(file) {
+  try {
+    return fs.statSync(file).mtimeMs || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function invalidateMergedItemsCache() {
+  mergedItemsCache = null;
+}
+
 function normalizeItem(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const url = safeText(raw.url || raw.fileUrl);
@@ -158,6 +171,7 @@ function writeDb(db) {
   const tmp = `${file}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(db, null, 2), 'utf-8');
   fs.renameSync(tmp, file);
+  invalidateMergedItemsCache();
 }
 
 function loadCanvasList() {
@@ -343,6 +357,17 @@ function scanOutputItems() {
 }
 
 function collectMergedItems() {
+  const cacheKey = `${dbFile()}|${path.resolve(config.OUTPUT_DIR)}`;
+  const dbMtimeMs = mtimeMs(dbFile());
+  const outputMtimeMs = mtimeMs(config.OUTPUT_DIR);
+  if (
+    mergedItemsCache &&
+    mergedItemsCache.cacheKey === cacheKey &&
+    mergedItemsCache.dbMtimeMs === dbMtimeMs &&
+    mergedItemsCache.outputMtimeMs === outputMtimeMs
+  ) {
+    return mergedItemsCache.items;
+  }
   const db = readDb();
   const seen = new Set();
   const merged = [];
@@ -358,6 +383,7 @@ function collectMergedItems() {
       merged.push(item);
     }
   }
+  mergedItemsCache = { cacheKey, dbMtimeMs, outputMtimeMs, items: merged };
   return merged;
 }
 

@@ -56,8 +56,10 @@ test('showcase interior design component wires shared controls and generation se
   assert.match(source, /排版/);
   assert.match(source, /layoutMode === 'manual'[\s\S]*manualLayoutReferenceImage/);
   assert.match(source, /\.\.\.\(layoutMode === 'manual' \? \[manualLayoutReferenceImage\] : exhibitItems\.map\(\(item\) => item\.url\)\)/);
+  assert.match(source, /backgroundSize: `\$\{\(100 \/ widthMm\) \* 100\}% \$\{\(100 \/ heightMm\) \* 100\}%`/);
   assert.doesNotMatch(source, /ctx\.fillText\(`手动布局参考图/);
   assert.doesNotMatch(source, /ctx\.strokeRect\(x, y, w, h\)/);
+  assert.doesNotMatch(source, /const grid = 100/);
   assert.match(source, /function ratioValue/);
   assert.match(source, /function closestAspectRatio/);
   assert.match(source, /showcaseStyle\.widthMm \/ totalHeightMm/);

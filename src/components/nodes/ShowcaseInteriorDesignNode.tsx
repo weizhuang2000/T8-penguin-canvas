@@ -412,7 +412,13 @@ function ShowcaseManualLayoutModal({
                 }}
                 onPointerDown={() => setSelectedUrl('')}
               >
-                <div className="pointer-events-none absolute inset-0 opacity-45" style={{ backgroundImage: 'linear-gradient(to right, rgba(14,165,233,0.22) 1px, transparent 1px), linear-gradient(to bottom, rgba(14,165,233,0.22) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+                <div
+                  className="pointer-events-none absolute inset-0 opacity-45"
+                  style={{
+                    backgroundImage: 'linear-gradient(to right, rgba(14,165,233,0.22) 1px, transparent 1px), linear-gradient(to bottom, rgba(14,165,233,0.22) 1px, transparent 1px)',
+                    backgroundSize: `${(100 / widthMm) * 100}% ${(100 / heightMm) * 100}%`,
+                  }}
+                />
                 {sortedItems.map((item) => {
                   const selected = item.url === selectedUrl;
                   return (
