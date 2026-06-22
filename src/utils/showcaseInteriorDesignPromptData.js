@@ -109,10 +109,9 @@ function exhibitItemsText(items, style, values = {}) {
   ];
 
   normalized.forEach((item, index) => {
-    const widthPercent = s.widthMm > 0 ? (item.heightMm / s.widthMm) * 100 : 0;
     const glassPercent = s.glassHeightMm > 0 ? (item.heightMm / s.glassHeightMm) * 100 : 0;
     lines.push(`${index + 1}. ${item.label}：高度 ${item.heightMm} mm；参考图 URL：${item.url || '[上游展品图]'}`);
-    lines.push(`   比例校验：展品 ${index + 1} 的显示高度约为展柜宽度 ${s.widthMm} mm 的 ${formatPercent(widthPercent)}%，约为玻璃区高度 ${s.glassHeightMm} mm 的 ${formatPercent(glassPercent)}%。`);
+    lines.push(`   比例校验：展品 ${index + 1} 的显示高度约为玻璃区高度 ${s.glassHeightMm} mm 的 ${formatPercent(glassPercent)}%。`);
   });
 
   if (values.hasColorMaterialReferenceImage === true) {

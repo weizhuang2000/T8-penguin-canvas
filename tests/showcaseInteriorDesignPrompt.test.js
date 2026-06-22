@@ -52,8 +52,8 @@ test('showcase prompt keeps exhibit order and display height in millimeters', ()
   assert.match(prompt, /第 1 张参考图是“尺寸合成参考图”/);
   assert.match(prompt, /参考图顺序：第 2 张参考图 = 展品 1/);
   assert.match(prompt, /严格比例规则/);
-  assert.match(prompt, /展柜宽度 1200 mm 的 35%/);
   assert.match(prompt, /玻璃区高度 1400 mm 的 18\.6%/);
+  assert.doesNotMatch(prompt, /显示高度约为展柜宽度/);
   assert.match(prompt, /相对尺寸审计/);
 
   const legacy = normalizeShowcaseExhibitItems([{ url: '/files/input/legacy.png', maxSideMm: 188 }]);
