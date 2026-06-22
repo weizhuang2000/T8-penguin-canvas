@@ -109,26 +109,17 @@ function exhibitItemsText(items, style, values = {}) {
   }
 
   if (layoutMode === 'manual') {
-    const manualItems = normalizeShowcaseManualLayoutItems(values.manualLayoutItems);
-    const sortedItems = manualItems.slice().sort((a, b) => a.zIndex - b.zIndex);
     const lines = [
-      '普通 image 输入均视为展品图，只用于提取展品外观、轮廓和材质，不作为色彩材质风格参考。',
-      '参考图顺序：第 1 张参考图 = 展品 1，第 2 张参考图 = 展品 2，以此类推；所有展品原图之后有 1 张“手动布局参考图”。',
-      '手动排版模式：展品位置、显示大小和相对层级完全以手动布局参考图与下方 mm 坐标为准。',
+      '手动排版模式：已将所有展品原图按排版窗口中的位置、大小和层级合成为一张“手动排版合成图”。',
+      '参考图顺序：第 1 张参考图 = 手动排版合成图，包含全部展品的最终排版、相对大小、位置和层级。',
+      '不要再把展品原图逐张当作独立参考图理解，也不要根据文字坐标重新排版；展品外观、显示大小、位置和层级全部以第 1 张手动排版合成图为准。',
       '不要套用自动尺寸模式中的“高度 mm”或“设定高度 70%”规则；不要为了画面美观擅自重新放大、缩小或改动展品位置。',
-      `手动布局画布：宽 ${s.widthMm} mm，高 ${s.glassHeightMm} mm，只对应玻璃区内部，坐标原点为玻璃区左上角。`,
+      `手动排版合成图对应玻璃区内部：宽 ${s.widthMm} mm，高 ${s.glassHeightMm} mm；展柜宽度、玻璃区高度、底座和柜帽仍保持设定尺寸。`,
     ];
-    if (sortedItems.length > 0) {
-      sortedItems.forEach((item, index) => {
-        lines.push(`${index + 1}. ${item.label}：左上角 x=${item.xMm} mm，y=${item.yMm} mm，显示宽度 ${item.widthMm} mm，显示高度 ${item.heightMm} mm，层级 ${item.zIndex}；参考图 URL：${item.url || '[上游展品图]'}`);
-      });
-    } else {
-      lines.push('当前没有有效手动布局项；如果仍需生成，请保持玻璃区空置或使用极简占位，不要自行放大展品。');
-    }
     if (values.hasColorMaterialReferenceImage === true) {
-      lines.push('色彩材质参考图使用独立 color-material-reference 输入，并且排在手动布局参考图之后；它不是展品图，不得套用任何展品布局尺寸。');
+      lines.push('参考图顺序：第 2 张参考图 = 色彩材质参考图，仅用于柜内背景、底座、背板、托架、灯光和材料气质；它不是展品图，不得改变第 1 张合成图中的展品排版。');
     }
-    lines.push('渲染前最终检查：逐一对齐手动布局参考图中的展品位置、大小、间距和层级；展柜宽度、玻璃区高度、底座和柜帽仍保持设定尺寸。');
+    lines.push('渲染前最终检查：只对齐第 1 张手动排版合成图中的展品位置、大小、间距和层级；不要使用文字坐标推导另一套布局。');
     return lines.join('\n');
   }
 

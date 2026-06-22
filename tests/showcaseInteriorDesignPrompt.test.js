@@ -102,12 +102,15 @@ test('showcase prompt supports manual layout mode without auto height scaling', 
     hasColorMaterialReferenceImage: true,
   });
   assert.match(prompt, /手动排版模式/);
-  assert.match(prompt, /手动布局参考图/);
+  assert.match(prompt, /手动排版合成图/);
+  assert.match(prompt, /第 1 张参考图 = 手动排版合成图/);
+  assert.match(prompt, /不要再把展品原图逐张当作独立参考图理解/);
   assert.match(prompt, /不要套用自动尺寸模式中的“高度 mm”或“设定高度 70%”规则/);
-  assert.match(prompt, /宽 1500 mm，高 1400 mm，只对应玻璃区内部/);
-  assert.match(prompt, /陶俑：左上角 x=520 mm，y=360 mm，显示宽度 150 mm，显示高度 210 mm，层级 1/);
-  assert.match(prompt, /青铜器：左上角 x=120 mm，y=300 mm，显示宽度 180 mm，显示高度 240 mm，层级 2/);
-  assert.match(prompt, /排在手动布局参考图之后/);
+  assert.match(prompt, /宽 1500 mm，高 1400 mm/);
+  assert.match(prompt, /第 2 张参考图 = 色彩材质参考图/);
+  assert.doesNotMatch(prompt, /左上角 x=/);
+  assert.doesNotMatch(prompt, /显示宽度 150 mm/);
+  assert.doesNotMatch(prompt, /参考图 URL/);
   assert.doesNotMatch(prompt, /生图显示高度 294 mm/);
   assert.doesNotMatch(prompt, /本体显示高度按设定高度的 70% 生成/);
 });

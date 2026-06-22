@@ -249,27 +249,6 @@ async function buildManualLayoutReferenceImage(
   const sy = canvas.height / heightMm;
   ctx.fillStyle = '#f8fafc';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = '#bae6fd';
-  ctx.lineWidth = 2;
-  const grid = 100;
-  for (let x = grid; x < widthMm; x += grid) {
-    ctx.beginPath();
-    ctx.moveTo(x * sx, 0);
-    ctx.lineTo(x * sx, canvas.height);
-    ctx.stroke();
-  }
-  for (let y = grid; y < heightMm; y += grid) {
-    ctx.beginPath();
-    ctx.moveTo(0, y * sy);
-    ctx.lineTo(canvas.width, y * sy);
-    ctx.stroke();
-  }
-  ctx.strokeStyle = '#0369a1';
-  ctx.lineWidth = 5;
-  ctx.strokeRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#0f172a';
-  ctx.font = '700 26px sans-serif';
-  ctx.fillText(`手动布局参考图：玻璃区 ${widthMm} x ${heightMm} mm`, 28, 46);
 
   const sorted = manualLayoutItems.slice().sort((a, b) => a.zIndex - b.zIndex);
   const loaded = await Promise.all(sorted.map((item) => loadLooseImage(item.url)));
@@ -280,19 +259,12 @@ async function buildManualLayoutReferenceImage(
     const h = item.heightMm * sy;
     const image = loaded[index];
     ctx.save();
-    ctx.fillStyle = 'rgba(255,255,255,0.86)';
-    ctx.fillRect(x, y, w, h);
     if (image) {
       ctx.drawImage(image, x, y, w, h);
+    } else {
+      ctx.fillStyle = 'rgba(226,232,240,0.9)';
+      ctx.fillRect(x, y, w, h);
     }
-    ctx.strokeStyle = '#0ea5e9';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(x, y, w, h);
-    ctx.fillStyle = 'rgba(15,23,42,0.84)';
-    ctx.fillRect(x, Math.max(0, y - 32), Math.min(w, 260), 32);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '700 20px sans-serif';
-    ctx.fillText(`展品 ${index + 1}`, x + 10, Math.max(22, y - 9));
     ctx.restore();
   });
   try {
@@ -585,8 +557,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
   const [manualLayoutOpen, setManualLayoutOpen] = useState(false);
 
   const previewReferenceImages = useMemo(() => [
-    ...exhibitItems.map((item) => item.url),
-    layoutMode === 'manual' ? d.manualLayoutReferenceImage : '',
+    ...(layoutMode === 'manual' ? [d.manualLayoutReferenceImage] : exhibitItems.map((item) => item.url)),
     colorMaterialReferenceImage,
   ].filter(Boolean), [colorMaterialReferenceImage, d.manualLayoutReferenceImage, exhibitItems, layoutMode]);
 
@@ -689,8 +660,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
       supplement: d.supplement,
     });
     const runtimeReferenceImages = [
-      ...exhibitItems.map((item) => item.url),
-      manualLayoutReferenceImage,
+      ...(layoutMode === 'manual' ? [manualLayoutReferenceImage] : exhibitItems.map((item) => item.url)),
       colorMaterialReferenceImage,
     ].filter(Boolean);
     const runSeed = seed > 0 ? seed : randomImageSeed();
