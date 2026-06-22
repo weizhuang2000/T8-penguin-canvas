@@ -293,11 +293,13 @@ function ShowcaseManualLayoutModal({
 }) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<LayoutDragSession | null>(null);
+  const draftItemsRef = useRef<ManualLayoutItem[]>(items);
+  const [draftItems, setDraftItemsState] = useState<ManualLayoutItem[]>(items);
   const [selectedUrl, setSelectedUrl] = useState('');
   const widthMm = Math.max(1, showcaseStyle.widthMm);
   const heightMm = Math.max(1, showcaseStyle.glassHeightMm);
-  const sortedItems = useMemo(() => items.slice().sort((a, b) => a.zIndex - b.zIndex), [items]);
-  const selectedItem = items.find((item) => item.url === selectedUrl) || sortedItems[sortedItems.length - 1] || null;
+  const sortedItems = useMemo(() => draftItems.slice().sort((a, b) => a.zIndex - b.zIndex), [draftItems]);
+  const selectedItem = draftItems.find((item) => item.url === selectedUrl) || sortedItems[sortedItems.length - 1] || null;
   const verticalGuideLines = useMemo(() => {
     const lines: number[] = [];
     for (let x = 100; x < widthMm; x += 100) lines.push(x);
@@ -311,8 +313,24 @@ function ShowcaseManualLayoutModal({
 
   useEffect(() => {
     if (!open) return;
+    if (dragRef.current) return;
+    if (!sameJson(draftItemsRef.current, items)) {
+      draftItemsRef.current = items;
+      setDraftItemsState(items);
+    }
     setSelectedUrl((current) => (items.some((item) => item.url === current) ? current : (items[0]?.url || '')));
   }, [items, open]);
+
+  const setDraftItems = (next: ManualLayoutItem[]) => {
+    draftItemsRef.current = next;
+    setDraftItemsState(next);
+  };
+
+  const commitDraftItems = (next = draftItemsRef.current) => {
+    draftItemsRef.current = next;
+    setDraftItemsState(next);
+    onChange(next);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -322,15 +340,16 @@ function ShowcaseManualLayoutModal({
         const target = event.target as HTMLElement | null;
         if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
         event.preventDefault();
-        onChange(items.filter((item) => item.url !== selectedItem.url));
+        commitDraftItems(draftItems.filter((item) => item.url !== selectedItem.url));
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [disabled, items, onChange, onClose, open, selectedItem]);
+  }, [disabled, draftItems, onClose, open, selectedItem]);
 
   const updateItem = (url: string, patch: Partial<ManualLayoutItem>) => {
-    onChange(items.map((item) => item.url === url ? { ...item, ...patch } : item));
+    const next = draftItemsRef.current.map((item) => item.url === url ? { ...item, ...patch } : item);
+    setDraftItems(next);
   };
 
   const stageScale = () => {
@@ -384,16 +403,20 @@ function ShowcaseManualLayoutModal({
   const endDrag = () => {
     dragRef.current = null;
     window.removeEventListener('pointermove', moveDrag, true);
+    commitDraftItems();
   };
 
   const removeSelected = () => {
     if (!selectedItem || disabled) return;
-    onChange(items.filter((item) => item.url !== selectedItem.url));
+    commitDraftItems(draftItems.filter((item) => item.url !== selectedItem.url));
   };
 
   const moveLayer = (direction: 1 | -1) => {
     if (!selectedItem || disabled) return;
-    updateItem(selectedItem.url, { zIndex: Math.max(0, selectedItem.zIndex + direction) });
+    const next = draftItemsRef.current.map((item) => item.url === selectedItem.url
+      ? { ...item, zIndex: Math.max(0, selectedItem.zIndex + direction) }
+      : item);
+    commitDraftItems(next);
   };
 
   if (!open || typeof document === 'undefined') return null;
@@ -888,9 +911,13 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
               <button
                 key={mode}
                 type="button"
-                disabled={isReadonly || busy}
-                onClick={() => update({ layoutMode: mode })}
-                className={`rounded px-2 py-1.5 text-[10px] font-semibold transition-all ${layoutMode === mode ? 'bg-cyan-300/20 text-cyan-100' : 'text-white/45 hover:bg-white/[0.08] hover:text-white/75'}`}
+                disabled={isReadonly || busy || mode === 'auto'}
+                title={mode === 'auto' ? '自动尺寸模式暂不可用' : undefined}
+                onClick={() => {
+                  if (mode === 'auto') return;
+                  update({ layoutMode: mode });
+                }}
+                className={`rounded px-2 py-1.5 text-[10px] font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-35 ${layoutMode === mode ? 'bg-cyan-300/20 text-cyan-100' : 'text-white/45 hover:bg-white/[0.08] hover:text-white/75 disabled:hover:bg-transparent disabled:hover:text-white/45'}`}
               >
                 {label}
               </button>

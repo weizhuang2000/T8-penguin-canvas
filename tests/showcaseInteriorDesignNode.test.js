@@ -19,6 +19,9 @@ test('showcase interior design node is registered in frontend and permissions', 
   assert.match(read('src/components/Canvas.tsx'), /glassHeightMm: 1400/);
   assert.match(read('src/components/Canvas.tsx'), /capHeightMm: 180/);
   assert.match(read('src/components/Canvas.tsx'), /hasCap: false/);
+  assert.match(read('src/components/Canvas.tsx'), /layoutMode: 'manual'/);
+  assert.match(read('src/components/Canvas.tsx'), /manualLayoutItems: \[\]/);
+  assert.match(read('src/components/Canvas.tsx'), /manualLayoutReferenceImage: ''/);
   assert.match(read('src/components/Canvas.tsx'), /perspectiveEnabled: true/);
   assert.match(read('src/components/Canvas.tsx'), /explodedViewEnabled: false/);
   assert.match(read('src/config/portTypes.ts'), /'showcase-interior-design': \{ inputs: \['image'\], outputs: \['image'\] \}/);
@@ -51,7 +54,14 @@ test('showcase interior design component wires shared controls and generation se
   assert.match(source, /manualLayoutReferenceImage/);
   assert.match(source, /ShowcaseManualLayoutModal/);
   assert.match(source, /buildManualLayoutReferenceImage/);
+  assert.match(source, /draftItemsRef/);
+  assert.match(source, /setDraftItemsState/);
+  assert.match(source, /commitDraftItems/);
+  assert.match(source, /window\.addEventListener\('pointerup', endDrag/);
   assert.match(source, /手动排版模式/);
+  assert.match(source, /mode === 'auto'/);
+  assert.match(source, /自动尺寸模式暂不可用/);
+  assert.match(source, /disabled=\{isReadonly \|\| busy \|\| mode === 'auto'\}/);
   assert.match(source, /setManualLayoutOpen\(true\)/);
   assert.match(source, /排版/);
   assert.match(source, /layoutMode === 'manual'[\s\S]*manualLayoutReferenceImage/);
