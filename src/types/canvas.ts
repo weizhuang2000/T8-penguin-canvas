@@ -66,6 +66,7 @@ export type NodeType =
   | 'elevation-prompt'
   | 'exhibition-img2img'
   | 'exhibition-style-transfer'
+  | 'exhibition-recolor'
   | 'exhibition-creative-image'
   | 'exhibition-outline-split'
   | 'exhibition-plan-layout'

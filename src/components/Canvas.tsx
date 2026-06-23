@@ -113,6 +113,7 @@ import ToolboxParamNode from './nodes/ToolboxParamNode';
 import ElevationPromptNode from './nodes/ElevationPromptNode';
 import ExhibitionImg2ImgNode from './nodes/ExhibitionImg2ImgNode';
 import ExhibitionStyleTransferNode from './nodes/ExhibitionStyleTransferNode';
+import ExhibitionRecolorNode from './nodes/ExhibitionRecolorNode';
 import ExhibitionCreativeImageNode from './nodes/ExhibitionCreativeImageNode';
 import ExhibitionOutlineSplitNode from './nodes/ExhibitionOutlineSplitNode';
 import ExhibitionPlanLayoutNode from './nodes/ExhibitionPlanLayoutNode';
@@ -208,6 +209,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'elevation-prompt': ElevationPromptNode,
   'exhibition-img2img': ExhibitionImg2ImgNode,
   'exhibition-style-transfer': ExhibitionStyleTransferNode,
+  'exhibition-recolor': ExhibitionRecolorNode,
   'exhibition-creative-image': ExhibitionCreativeImageNode,
   'exhibition-outline-split': ExhibitionOutlineSplitNode,
   'exhibition-plan-layout': ExhibitionPlanLayoutNode,
@@ -384,6 +386,35 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     outputText: '',
     text: '',
     imageUrls: [],
+    referenceImages: [],
+    status: 'idle',
+    error: '',
+  },
+  'exhibition-recolor': {
+    model: 'gpt-image-2',
+    apiModel: 'gpt-image-2-all',
+    aspectRatio: '16:9',
+    sizeLevel: '2K',
+    outputFormat: 'jpg',
+    palettePresetId: '',
+    palettePresetInitialized: false,
+    primaryColor: '#1f5f8b',
+    secondaryColor: '#c7a76c',
+    accentColor: '#e94b35',
+    brightness: 0,
+    excludeItems: ['exhibit', 'sand-table', 'sculpture'],
+    manualExclusions: '',
+    providerSource: 'zhenzhen',
+    providerId: '',
+    providerModel: '',
+    providerParams: {},
+    seed: 0,
+    prompt: '',
+    outputText: '',
+    text: '',
+    imageUrl: '',
+    imageUrls: [],
+    urls: [],
     referenceImages: [],
     status: 'idle',
     error: '',

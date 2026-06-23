@@ -449,6 +449,27 @@ export interface ExhibitionPlanLayoutPromptPresetMap {
   exclusions: ExhibitionPlanLayoutExcludePresetItem[];
 }
 
+export interface ExhibitionRecolorPalettePresetItem {
+  id: string;
+  label: string;
+  primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
+  description: string;
+  order: number;
+}
+
+export interface ExhibitionRecolorExcludePresetItem {
+  id: string;
+  label: string;
+  order: number;
+}
+
+export interface ExhibitionRecolorPromptPresetMap {
+  palettes: ExhibitionRecolorPalettePresetItem[];
+  exclusions: ExhibitionRecolorExcludePresetItem[];
+}
+
 export interface UnitPanelMaterialItem {
   id: string;
   category: string;
@@ -618,6 +639,39 @@ export async function updateExhibitionPlanLayoutExcludePresets(
 ): Promise<ExhibitionPlanLayoutExcludePresetItem[]> {
   const res = await request<{ success: boolean; data: ExhibitionPlanLayoutExcludePresetItem[] }>(
     `${BASE}/prompt-library/exhibition-plan-layout/presets/exclusions`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ presets }),
+    },
+  );
+  return res.data || [];
+}
+
+export async function getExhibitionRecolorPromptPresets(): Promise<ExhibitionRecolorPromptPresetMap> {
+  const res = await request<{ success: boolean; data: ExhibitionRecolorPromptPresetMap }>(
+    `${BASE}/prompt-library/exhibition-recolor/presets`,
+  );
+  return res.data || { palettes: [], exclusions: [] };
+}
+
+export async function updateExhibitionRecolorPalettePresets(
+  presets: Array<Pick<ExhibitionRecolorPalettePresetItem, 'label' | 'primaryColor' | 'secondaryColor' | 'accentColor'> & Partial<Pick<ExhibitionRecolorPalettePresetItem, 'id' | 'description' | 'order'>>>,
+): Promise<ExhibitionRecolorPalettePresetItem[]> {
+  const res = await request<{ success: boolean; data: ExhibitionRecolorPalettePresetItem[] }>(
+    `${BASE}/prompt-library/exhibition-recolor/presets/palettes`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ presets }),
+    },
+  );
+  return res.data || [];
+}
+
+export async function updateExhibitionRecolorExcludePresets(
+  presets: Array<Pick<ExhibitionRecolorExcludePresetItem, 'label'> & Partial<Pick<ExhibitionRecolorExcludePresetItem, 'id' | 'order'>>>,
+): Promise<ExhibitionRecolorExcludePresetItem[]> {
+  const res = await request<{ success: boolean; data: ExhibitionRecolorExcludePresetItem[] }>(
+    `${BASE}/prompt-library/exhibition-recolor/presets/exclusions`,
     {
       method: 'PUT',
       body: JSON.stringify({ presets }),

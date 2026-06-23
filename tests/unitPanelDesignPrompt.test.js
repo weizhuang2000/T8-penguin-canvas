@@ -4,7 +4,9 @@ import {
   buildUnitPanelExtractPrompt,
   buildUnitPanelImagePrompt,
   UNIT_PANEL_LANGUAGES,
+  normalizeUnitPanelLanguageTextDirections,
   normalizeUnitPanelLanguages,
+  normalizeUnitPanelTextDirection,
   normalizeUnitPanelTextLayoutBounds,
   parseUnitPanelExtractJson,
 } from '../src/utils/unitPanelDesignPromptData.js';
@@ -190,4 +192,24 @@ test('unit panel language normalization defaults to Chinese and English', () => 
   assert.deepEqual(normalizeUnitPanelLanguages(['ja', 'zh', 'ja', 'bad']), ['ja', 'zh']);
   assert.ok(UNIT_PANEL_LANGUAGES.some((item) => item.id === 'mn-trad' && /Traditional Mongolian/.test(item.promptName)));
   assert.deepEqual(normalizeUnitPanelLanguages(['mn-trad', 'zh']), ['mn-trad', 'zh']);
+});
+
+test('unit panel prompt supports per-language text directions', () => {
+  assert.equal(normalizeUnitPanelTextDirection('vertical'), 'vertical');
+  assert.equal(normalizeUnitPanelTextDirection('bad'), 'horizontal');
+  assert.deepEqual(
+    normalizeUnitPanelLanguageTextDirections({ zh: 'vertical', en: 'bad' }, ['zh', 'en']),
+    { zh: 'vertical', en: 'horizontal' },
+  );
+
+  const prompt = buildUnitPanelImagePrompt({
+    languages: ['zh', 'en'],
+    languageTextDirections: { zh: 'vertical', en: 'horizontal' },
+    translations: {
+      zh: { title: '中文标题', body: '中文说明' },
+      en: { title: 'English Title', body: 'English body.' },
+    },
+  });
+  assert.match(prompt, /Chinese\): Text direction: vertical text layout/);
+  assert.match(prompt, /English\): Text direction: horizontal text layout/);
 });

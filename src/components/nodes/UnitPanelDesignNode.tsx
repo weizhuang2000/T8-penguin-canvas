@@ -27,9 +27,11 @@ import {
   languageMeta,
   normalizeUnitPanelBodyFont,
   normalizeUnitPanelDimensions,
+  normalizeUnitPanelLanguageTextDirections,
   normalizeUnitPanelLanguages,
   normalizeUnitPanelOutputMode,
   normalizeUnitPanelTextLayoutBounds,
+  normalizeUnitPanelTextDirection,
   normalizeUnitPanelTitleFont,
   parseUnitPanelExtractJson,
   parseUnitPanelTranslateJson,
@@ -38,6 +40,7 @@ import {
   UNIT_PANEL_TITLE_FONTS,
   type UnitPanelFontOption,
   type UnitPanelLanguage,
+  type UnitPanelTextDirection,
 } from '../../utils/unitPanelDesignPrompt';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
@@ -250,6 +253,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
   const dimensions = normalizeUnitPanelDimensions(d.dimensions);
   const textLayoutBounds = normalizeUnitPanelTextLayoutBounds(d.textLayoutBounds);
   const languages: string[] = normalizeUnitPanelLanguages(d.languages);
+  const languageTextDirections = normalizeUnitPanelLanguageTextDirections(d.languageTextDirections, languages);
   const titleFont = normalizeUnitPanelTitleFont(d.titleFont);
   const bodyFont = normalizeUnitPanelBodyFont(d.bodyFont);
   const translations = d.translations && typeof d.translations === 'object' ? d.translations : {};
@@ -287,6 +291,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
     dimensions,
     textLayoutBounds,
     languages,
+    languageTextDirections,
     translations,
     titleText,
     bodyText,
@@ -301,7 +306,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
     colorMaterialReferenceTone,
     manualColorMaterial: d.colorMaterial,
     hasColorMaterialReferenceImage: !!colorMaterialReferenceImage,
-  }), [bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.backgroundMode, d.colorMaterial, d.dimensionMarksEnabled, d.imageDisplayEnabled, d.mixedLanguageLayoutEnabled, d.specialShapeEnabled, d.splitDesignEnabled, d.subtitleEnabled, dimensions, languages, outputMode, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, subtitleText, textLayoutBounds, titleFont, titleText, translations]);
+  }), [bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.backgroundMode, d.colorMaterial, d.dimensionMarksEnabled, d.imageDisplayEnabled, d.mixedLanguageLayoutEnabled, d.specialShapeEnabled, d.splitDesignEnabled, d.subtitleEnabled, dimensions, languageTextDirections, languages, outputMode, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, subtitleText, textLayoutBounds, titleFont, titleText, translations]);
 
   useEffect(() => {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
@@ -422,6 +427,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
       dimensions,
       textLayoutBounds,
       languages,
+      languageTextDirections,
       translations,
       titleText,
       bodyText,
@@ -546,7 +552,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`单元板设计生图失败: ${msg}`, src);
       throw error;
     }
-  }, [activeCanvasId, apiModel, aspectRatio, bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.backgroundMode, d.colorMaterial, d.dimensionMarksEnabled, d.imageDisplayEnabled, d.mixedLanguageLayoutEnabled, d.providerParams, d.specialShapeEnabled, d.splitDesignEnabled, d.subtitleEnabled, dimensions, externalProviderModel, id, isExternalSelected, isReadonly, languages, modelDef.id, modelDef.paramKind, outputFormat, outputMode, providerSelection.provider, seed, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, sizeLevel, subtitleText, textLayoutBounds, titleFont, titleText, translations, update]);
+  }, [activeCanvasId, apiModel, aspectRatio, bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.backgroundMode, d.colorMaterial, d.dimensionMarksEnabled, d.imageDisplayEnabled, d.mixedLanguageLayoutEnabled, d.providerParams, d.specialShapeEnabled, d.splitDesignEnabled, d.subtitleEnabled, dimensions, externalProviderModel, id, isExternalSelected, isReadonly, languageTextDirections, languages, modelDef.id, modelDef.paramKind, outputFormat, outputMode, providerSelection.provider, seed, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, sizeLevel, subtitleText, textLayoutBounds, titleFont, titleText, translations, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -561,6 +567,10 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
   const updateTextLayoutBound = (key: 'lowerMeters' | 'upperMeters', value: string) => {
     const n = Number(value);
     update({ textLayoutBounds: { ...textLayoutBounds, [key]: Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : 0 } });
+  };
+  const updateLanguageTextDirection = (lang: string, direction: UnitPanelTextDirection) => {
+    if (!languages.includes(lang)) return;
+    update({ languageTextDirections: { ...languageTextDirections, [lang]: normalizeUnitPanelTextDirection(direction) } });
   };
 
   const moveLanguage = (lang: string, delta: number) => {
@@ -706,6 +716,16 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
               return (
                 <div key={lang} className="flex items-center gap-2 rounded border border-white/10 bg-black/15 p-2">
                   <span className="min-w-0 flex-1 text-[10px] font-semibold text-white/70">{index + 1}. {meta.label}</span>
+                  <select
+                    className={`${FIELD} h-7 w-20 px-1 py-0 text-[10px]`}
+                    value={languageTextDirections[lang] || 'horizontal'}
+                    disabled={isReadonly || busy}
+                    onChange={(e) => updateLanguageTextDirection(lang, e.target.value as UnitPanelTextDirection)}
+                    title="文字方向"
+                  >
+                    <option value="horizontal">横排</option>
+                    <option value="vertical">竖排</option>
+                  </select>
                   <button type="button" className={BUTTON} disabled={isReadonly || busy || index === 0} onClick={() => moveLanguage(lang, -1)}><ArrowUp size={12} /></button>
                   <button type="button" className={BUTTON} disabled={isReadonly || busy || index === languages.length - 1} onClick={() => moveLanguage(lang, 1)}><ArrowDown size={12} /></button>
                   {languages.length > 1 && <button type="button" className={BUTTON} disabled={isReadonly || busy} onClick={() => update({ languages: languages.filter((languageId: string) => languageId !== lang) })}>删除</button>}

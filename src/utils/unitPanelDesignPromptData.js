@@ -32,6 +32,7 @@ export const UNIT_PANEL_BODY_FONTS = [
 const LANGUAGE_IDS = new Set(UNIT_PANEL_LANGUAGES.map((item) => item.id));
 const TITLE_FONT_IDS = new Set(UNIT_PANEL_TITLE_FONTS.map((item) => item.id));
 const BODY_FONT_IDS = new Set(UNIT_PANEL_BODY_FONTS.map((item) => item.id));
+const TEXT_DIRECTIONS = new Set(['horizontal', 'vertical']);
 
 export function cleanUnitPanelText(value, max = 12000) {
   return String(value || '').replace(/\r\n?/g, '\n').trim().slice(0, max);
@@ -53,6 +54,20 @@ export function normalizeUnitPanelLanguages(value) {
     out.push(text);
   }
   return out.length ? out : ['zh', 'en'];
+}
+
+export function normalizeUnitPanelTextDirection(value) {
+  const text = String(value || '').trim();
+  return TEXT_DIRECTIONS.has(text) ? text : 'horizontal';
+}
+
+export function normalizeUnitPanelLanguageTextDirections(value, languages = ['zh', 'en']) {
+  const source = value && typeof value === 'object' ? value : {};
+  const out = {};
+  for (const id of normalizeUnitPanelLanguages(languages)) {
+    out[id] = normalizeUnitPanelTextDirection(source[id]);
+  }
+  return out;
 }
 
 export function languageMeta(id) {
@@ -153,12 +168,16 @@ export function unitPanelMaterialsText(primaryMaterial, secondaryMaterials = [])
   return lines.join('\n');
 }
 
-function translationLine(id, translations = {}, titleText = '', bodyText = '') {
+function translationLine(id, translations = {}, titleText = '', bodyText = '', textDirections = {}) {
   const meta = languageMeta(id);
   const t = translations && typeof translations === 'object' ? translations[id] : null;
   const title = cleanUnitPanelText(t?.title || (id === 'zh' ? titleText : ''), 500);
   const body = cleanUnitPanelText(t?.body || (id === 'zh' ? bodyText : ''), 2000);
-  return `${meta.label}（${meta.promptName}）：标题字="${title || '[待翻译标题]'}"；说明文字="${body || '[待翻译说明]'}"`;
+  const direction = normalizeUnitPanelTextDirection(textDirections[id]);
+  const directionText = direction === 'vertical'
+    ? 'vertical text layout, top-to-bottom columns when appropriate'
+    : 'horizontal text layout, left-to-right or native horizontal reading order';
+  return `${meta.label} (${meta.promptName}): Text direction: ${directionText}; Title "${title || '[pending title translation]'}"; Body "${body || '[pending body translation]'}"`;
 }
 
 export function buildUnitPanelExtractPrompt(values = {}) {
@@ -257,7 +276,8 @@ export function buildUnitPanelImagePrompt(values = {}) {
   const titleFont = unitPanelTitleFontMeta(values.titleFont);
   const bodyFont = unitPanelBodyFontMeta(values.bodyFont);
   const translations = values.translations && typeof values.translations === 'object' ? values.translations : {};
-  const languageLines = languages.map((id) => translationLine(id, translations, titleText, bodyText));
+  const languageTextDirections = normalizeUnitPanelLanguageTextDirections(values.languageTextDirections, languages);
+  const languageLines = languages.map((id) => translationLine(id, translations, titleText, bodyText, languageTextDirections));
   const materialPriority = [
     !referenceOverridesStyle && materials && `1. 首先严格执行已选择的主材质和辅助材质：\n${materials}`,
     colorMaterialReferenceTone && `2. 其次参考色彩与材质参考图读取到的主色调：${colorMaterialReferenceTone}`,

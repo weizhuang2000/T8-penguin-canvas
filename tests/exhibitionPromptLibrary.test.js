@@ -66,6 +66,54 @@ test('regular users can manage personal entries but cannot create team entries',
   assert.equal(team.status, 403);
 });
 
+test('exhibition recolor presets are readable and admin managed', async (t) => {
+  const userBase = await startApp(t, { id: 'u1', username: 'alice', name: 'Alice', role: 'designer' });
+  const defaults = await fetch(`${userBase}/api/prompt-library/exhibition-recolor/presets`).then((res) => res.json());
+  assert.equal(defaults.success, true);
+  assert.ok(defaults.data.palettes.length >= 1);
+  assert.equal(defaults.data.palettes[0].primaryColor, '#1f5f8b');
+  assert.deepEqual(defaults.data.exclusions.map((item) => item.id).slice(0, 3), ['exhibit', 'sand-table', 'sculpture']);
+
+  const denied = await fetch(`${userBase}/api/prompt-library/exhibition-recolor/presets/exclusions`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ presets: [{ label: '普通用户不能保存' }] }),
+  });
+  assert.equal(denied.status, 403);
+
+  const adminBase = await startApp(t, { id: 'admin', username: 'root', name: 'Root', role: 'admin' });
+  const palettes = await fetch(`${adminBase}/api/prompt-library/exhibition-recolor/presets/palettes`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      presets: [
+        {
+          id: 'custom',
+          label: '自定义配色',
+          primaryColor: '#ABC',
+          secondaryColor: '#123456',
+          accentColor: 'bad',
+          description: '测试配色',
+        },
+      ],
+    }),
+  }).then((res) => res.json());
+
+  assert.equal(palettes.success, true);
+  assert.deepEqual(
+    palettes.data.map((item) => [item.id, item.label, item.primaryColor, item.secondaryColor, item.accentColor, item.description, item.order]),
+    [['custom', '自定义配色', '#aabbcc', '#123456', '#e94b35', '测试配色', 0]],
+  );
+
+  const exclusions = await fetch(`${adminBase}/api/prompt-library/exhibition-recolor/presets/exclusions`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ presets: [{ id: 'hero-case', label: '重点展柜' }] }),
+  }).then((res) => res.json());
+  assert.equal(exclusions.success, true);
+  assert.deepEqual(exclusions.data.map((item) => [item.id, item.label, item.order]), [['hero-case', '重点展柜', 0]]);
+});
+
 test('admin can manage team entries and reject invalid dimensions', async (t) => {
   const base = await startApp(t, { id: 'admin', username: 'root', name: 'Root', role: 'manager' });
 

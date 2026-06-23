@@ -12,6 +12,7 @@ const DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition.json');
 const ELEVATION_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_elevation.json');
 const CREATIVE_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition_creative.json');
 const PLAN_LAYOUT_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition_plan_layout.json');
+const RECOLOR_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition_recolor.json');
 const UNIT_PANEL_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_unit_panel.json');
 const DIMENSIONS = new Set([
   'spaceType',
@@ -178,6 +179,23 @@ const DEFAULT_EXHIBITION_PLAN_LAYOUT_EXCLUDE_PRESETS = [
   { id: 'blurry-low-quality', label: '低清晰度/模糊画面' },
   { id: 'floating-islands', label: '孤立漂浮展区' },
   { id: 'isolated-columns', label: '孤零零不连接任何物体的柱子' },
+].map((item, index) => ({ ...item, order: index }));
+
+const DEFAULT_EXHIBITION_RECOLOR_PALETTE_PRESETS = [
+  { id: 'deep-blue-warm-gold', label: '深蓝暖金', primaryColor: '#1f5f8b', secondaryColor: '#c7a76c', accentColor: '#e94b35', description: '沉稳蓝色主调，暖金辅助，适合历史文化与综合展陈' },
+  { id: 'graphite-copper-cyan', label: '石墨铜青', primaryColor: '#2f3742', secondaryColor: '#b98248', accentColor: '#2bb3c0', description: '深灰空间基底，铜色收边，青色点缀，适合科技与产业展' },
+  { id: 'warm-white-wood-red', label: '暖白木色', primaryColor: '#f2eee6', secondaryColor: '#9a6b45', accentColor: '#b73b35', description: '明亮温和的展墙基底，木色辅助，红色作为叙事强调' },
+].map((item, index) => ({ ...item, order: index }));
+
+const DEFAULT_EXHIBITION_RECOLOR_EXCLUDE_PRESETS = [
+  { id: 'exhibit', label: '展品' },
+  { id: 'sand-table', label: '沙盘' },
+  { id: 'sculpture', label: '雕塑' },
+  { id: 'relic', label: '文物' },
+  { id: 'artwork', label: '艺术品' },
+  { id: 'model', label: '模型' },
+  { id: 'description-text', label: '说明文字' },
+  { id: 'brand-signage', label: '品牌/标识' },
 ].map((item, index) => ({ ...item, order: index }));
 
 function now() {
@@ -394,6 +412,66 @@ function normalizePlanLayoutExcludePresetList(value) {
     .map((item, index) => ({ ...item, order: index }));
 }
 
+function normalizeHexColor(value, fallback) {
+  const text = safeText(value, 32);
+  if (/^#[0-9a-f]{6}$/i.test(text)) return text.toLowerCase();
+  if (/^#[0-9a-f]{3}$/i.test(text)) {
+    return `#${text[1]}${text[1]}${text[2]}${text[2]}${text[3]}${text[3]}`.toLowerCase();
+  }
+  return fallback;
+}
+
+function normalizeRecolorPalettePresetList(value) {
+  const source = Array.isArray(value) && value.length > 0 ? value : DEFAULT_EXHIBITION_RECOLOR_PALETTE_PRESETS;
+  const used = new Set();
+  return source
+    .map((raw, index) => {
+      const label = safeText(raw?.label || raw?.text, 120);
+      if (!label) return null;
+      let id = safeText(raw?.id, 96).replace(/[^a-zA-Z0-9_-]/g, '');
+      if (!id) id = `palette_${index + 1}`;
+      while (used.has(id)) id = `${id}_${index + 1}`;
+      used.add(id);
+      const fallback = DEFAULT_EXHIBITION_RECOLOR_PALETTE_PRESETS[index % DEFAULT_EXHIBITION_RECOLOR_PALETTE_PRESETS.length] || DEFAULT_EXHIBITION_RECOLOR_PALETTE_PRESETS[0];
+      return {
+        id,
+        label,
+        primaryColor: normalizeHexColor(raw?.primaryColor || raw?.primary_color, fallback.primaryColor),
+        secondaryColor: normalizeHexColor(raw?.secondaryColor || raw?.secondary_color, fallback.secondaryColor),
+        accentColor: normalizeHexColor(raw?.accentColor || raw?.accent_color, fallback.accentColor),
+        description: safeText(raw?.description || raw?.info, 1000),
+        order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 120)
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+    .map((item, index) => ({ ...item, order: index }));
+}
+
+function normalizeRecolorExcludePresetList(value) {
+  const source = Array.isArray(value) && value.length > 0 ? value : DEFAULT_EXHIBITION_RECOLOR_EXCLUDE_PRESETS;
+  const used = new Set();
+  return source
+    .map((raw, index) => {
+      const label = safeText(raw?.label || raw?.text, 120);
+      if (!label) return null;
+      let id = safeText(raw?.id, 96).replace(/[^a-zA-Z0-9_-]/g, '');
+      if (!id) id = `exclude_${index + 1}`;
+      while (used.has(id)) id = `${id}_${index + 1}`;
+      used.add(id);
+      return {
+        id,
+        label,
+        order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 120)
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+    .map((item, index) => ({ ...item, order: index }));
+}
+
 const DEFAULT_UNIT_PANEL_MATERIALS = [
   {
     id: 'dark-blue-matte-metal',
@@ -578,6 +656,39 @@ function writePlanLayoutDb(db) {
     JSON.stringify({
       insertPresets: normalizePlanLayoutInsertPresetList(db?.insertPresets),
       excludePresets: normalizePlanLayoutExcludePresetList(db?.excludePresets),
+    }, null, 2),
+    'utf-8',
+  );
+}
+
+function readRecolorDb() {
+  try {
+    if (!fs.existsSync(RECOLOR_DB_FILE)) {
+      return {
+        palettePresets: normalizeRecolorPalettePresetList(DEFAULT_EXHIBITION_RECOLOR_PALETTE_PRESETS),
+        excludePresets: normalizeRecolorExcludePresetList(DEFAULT_EXHIBITION_RECOLOR_EXCLUDE_PRESETS),
+      };
+    }
+    const raw = JSON.parse(fs.readFileSync(RECOLOR_DB_FILE, 'utf-8'));
+    return {
+      palettePresets: normalizeRecolorPalettePresetList(raw?.palettePresets || raw?.palettes),
+      excludePresets: normalizeRecolorExcludePresetList(raw?.excludePresets || raw?.exclusions),
+    };
+  } catch {
+    return {
+      palettePresets: normalizeRecolorPalettePresetList(DEFAULT_EXHIBITION_RECOLOR_PALETTE_PRESETS),
+      excludePresets: normalizeRecolorExcludePresetList(DEFAULT_EXHIBITION_RECOLOR_EXCLUDE_PRESETS),
+    };
+  }
+}
+
+function writeRecolorDb(db) {
+  fs.mkdirSync(path.dirname(RECOLOR_DB_FILE), { recursive: true });
+  fs.writeFileSync(
+    RECOLOR_DB_FILE,
+    JSON.stringify({
+      palettePresets: normalizeRecolorPalettePresetList(db?.palettePresets),
+      excludePresets: normalizeRecolorExcludePresetList(db?.excludePresets),
     }, null, 2),
     'utf-8',
   );
@@ -835,6 +946,39 @@ router.put('/exhibition-plan-layout/presets/exclusions', (req, res) => {
   const db = readPlanLayoutDb();
   const presets = normalizePlanLayoutExcludePresetList(req.body?.presets);
   writePlanLayoutDb({ ...db, excludePresets: presets });
+  res.json({ success: true, data: presets });
+});
+
+router.get('/exhibition-recolor/presets', (_req, res) => {
+  const db = readRecolorDb();
+  res.json({
+    success: true,
+    data: {
+      palettes: normalizeRecolorPalettePresetList(db.palettePresets),
+      exclusions: normalizeRecolorExcludePresetList(db.excludePresets),
+    },
+  });
+});
+
+router.put('/exhibition-recolor/presets/palettes', (req, res) => {
+  const user = req.user;
+  if (!isAdminRole(user?.role)) {
+    return res.status(403).json({ success: false, error: '只有系统管理员或经理可以维护主色调更换配色预设' });
+  }
+  const db = readRecolorDb();
+  const presets = normalizeRecolorPalettePresetList(req.body?.presets);
+  writeRecolorDb({ ...db, palettePresets: presets });
+  res.json({ success: true, data: presets });
+});
+
+router.put('/exhibition-recolor/presets/exclusions', (req, res) => {
+  const user = req.user;
+  if (!isAdminRole(user?.role)) {
+    return res.status(403).json({ success: false, error: '只有系统管理员或经理可以维护主色调更换保护排除项预设' });
+  }
+  const db = readRecolorDb();
+  const presets = normalizeRecolorExcludePresetList(req.body?.presets);
+  writeRecolorDb({ ...db, excludePresets: presets });
   res.json({ success: true, data: presets });
 });
 

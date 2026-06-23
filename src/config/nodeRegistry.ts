@@ -101,6 +101,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: 'elevation-prompt', label: '立面提示词', category: 'exhibition', description: '解析 DOCX / 文本 PDF / TXT，AI 提炼内容并生成彩立面概念 Prompt 与准确图文工艺排版清单', icon: 'PanelsTopLeft', color: 'cyan' },
   { type: 'exhibition-img2img', label: '展陈图生图', category: 'exhibition', description: '双参考图展陈图生图：结构示意图 + 空间表现效果图，支持工艺版式与优先级控制', icon: 'Boxes', color: 'cyan' },
   { type: 'exhibition-style-transfer', label: '风格迁移', category: 'exhibition', description: '展陈空间风格迁移：原始图像结构不变，仅迁移设计风格、色彩、材质与表面质感', icon: 'Shuffle', color: 'cyan' },
+  { type: 'exhibition-recolor', label: '主色调更换', category: 'exhibition', description: '展陈空间主色调更换：输入原始图像，使用主色、辅助色、点缀色和明暗度进行语义换色，并保护指定展品对象', icon: 'Palette', color: 'cyan' },
   { type: 'exhibition-creative-image', label: '展陈创意生图', category: 'exhibition', description: '面向序厅、尾厅和重亮点展项空间：单空间图约束建筑空间，LLM 创意描述后多次图生图', icon: 'Layers3', color: 'cyan' },
   { type: 'exhibition-outline-split', label: '展陈大纲拆分', category: 'exhibition', description: '读取展陈资料文档，按指定单元数或自动模式拆分大纲并提炼总结，输出多段文本', icon: 'ListTree', color: 'cyan' },
   { type: 'exhibition-plan-layout', label: '平面自动布局', category: 'exhibition', description: '根据建筑平面图和展陈大纲自动生成展陈平面布局图，支持动线、标注和说明文字开关', icon: 'Map', color: 'cyan' },

@@ -6,9 +6,11 @@ import {
   languageMeta,
   normalizeUnitPanelBodyFont,
   normalizeUnitPanelDimensions,
+  normalizeUnitPanelLanguageTextDirections,
   normalizeUnitPanelLanguages,
   normalizeUnitPanelOutputMode,
   normalizeUnitPanelTextLayoutBounds,
+  normalizeUnitPanelTextDirection,
   normalizeUnitPanelTitleFont,
   parseUnitPanelExtractJson,
   parseUnitPanelTranslateJson,
@@ -48,6 +50,8 @@ export interface UnitPanelTextLayoutBounds {
   upperMeters: number;
 }
 
+export type UnitPanelTextDirection = 'horizontal' | 'vertical';
+
 export interface UnitPanelMaterialLike {
   id?: string;
   category?: string;
@@ -69,6 +73,7 @@ export interface UnitPanelImagePromptValues {
   dimensions?: Partial<UnitPanelDimensions>;
   textLayoutBounds?: Partial<UnitPanelTextLayoutBounds>;
   languages?: string[];
+  languageTextDirections?: Record<string, UnitPanelTextDirection>;
   translations?: Record<string, { title?: string; body?: string }>;
   titleText?: string;
   bodyText?: string;
@@ -95,9 +100,11 @@ export {
   languageMeta,
   normalizeUnitPanelBodyFont,
   normalizeUnitPanelDimensions,
+  normalizeUnitPanelLanguageTextDirections,
   normalizeUnitPanelLanguages,
   normalizeUnitPanelOutputMode,
   normalizeUnitPanelTextLayoutBounds,
+  normalizeUnitPanelTextDirection,
   normalizeUnitPanelTitleFont,
   parseUnitPanelExtractJson,
   parseUnitPanelTranslateJson,

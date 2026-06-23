@@ -53,6 +53,10 @@ test('showcase prompt keeps exhibit order and display height in millimeters', ()
   assert.doesNotMatch(prompt, /尺寸合成参考图/);
   assert.doesNotMatch(prompt, /第 2 张参考图 = 展品 1/);
   assert.match(prompt, /严格比例规则/);
+  assert.match(prompt, /展品视角要求/);
+  assert.match(prompt, /侧视图或正侧视图/);
+  assert.match(prompt, /保持平视/);
+  assert.match(prompt, /倾斜旋转/);
   assert.match(prompt, /生图时展品本体显示高度按设定高度的 70% 生成/);
   assert.match(prompt, /展柜宽度、底座高度、玻璃区高度、柜帽高度和柜体总高度保持设定尺寸不变/);
   assert.match(prompt, /展品、展柜和构件的标注文字仍必须标注用户设定尺寸/);
@@ -98,6 +102,9 @@ test('showcase prompt supports empty exhibit fallback modes', () => {
   assert.match(search, /当前选择：自动搜索相关展品/);
   assert.match(search, /展品搜索\/生成关键词：汉代陶俑/);
   assert.match(search, /自动寻找或生成可信的相关展品外观/);
+  assert.match(search, /展品视角要求/);
+  assert.match(search, /侧视图或正侧视图/);
+  assert.match(search, /不要俯拍、仰拍、斜拍、倾斜摆放/);
   assert.doesNotMatch(search, /当前选择：空展柜/);
 
   const empty = buildShowcaseInteriorDesignPrompt({
@@ -128,6 +135,9 @@ test('showcase prompt supports manual layout mode without auto height scaling', 
   assert.match(prompt, /手动排版合成图/);
   assert.match(prompt, /第 1 张参考图 = 手动排版合成图/);
   assert.match(prompt, /不要再把展品原图逐张当作独立参考图理解/);
+  assert.match(prompt, /展品视角要求/);
+  assert.match(prompt, /侧视图或正侧视图、平视角度/);
+  assert.match(prompt, /不要倾斜摆放/);
   assert.match(prompt, /玻璃区正投影模板/);
   assert.match(prompt, /必须保持合成图中每个展品的像素占比/);
   assert.match(prompt, /不得重新居中/);

@@ -1,0 +1,35 @@
+import {
+  buildExhibitionRecolorPrompt,
+  exhibitionRecolorExcludeItemsText,
+  EXHIBITION_RECOLOR_DEFAULT_COLORS,
+  EXHIBITION_RECOLOR_EXCLUDE_ITEMS,
+  normalizeExhibitionRecolorBrightness,
+  normalizeExhibitionRecolorColor,
+  normalizeExhibitionRecolorExcludeItems,
+} from './exhibitionRecolorPromptData.js';
+
+export interface ExhibitionRecolorPresetItem {
+  id: string;
+  label: string;
+  order?: number;
+}
+
+export interface ExhibitionRecolorPromptValues {
+  primaryColor?: string;
+  secondaryColor?: string;
+  accentColor?: string;
+  brightness?: number;
+  excludeItems?: string[];
+  excludeItemOptions?: ExhibitionRecolorPresetItem[];
+  manualExclusions?: string;
+}
+
+export {
+  buildExhibitionRecolorPrompt,
+  exhibitionRecolorExcludeItemsText,
+  EXHIBITION_RECOLOR_DEFAULT_COLORS,
+  EXHIBITION_RECOLOR_EXCLUDE_ITEMS,
+  normalizeExhibitionRecolorBrightness,
+  normalizeExhibitionRecolorColor,
+  normalizeExhibitionRecolorExcludeItems,
+};

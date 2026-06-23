@@ -23,6 +23,8 @@ export interface UnitPanelTextLayoutBounds {
   upperMeters: number;
 }
 
+export type UnitPanelTextDirection = 'horizontal' | 'vertical';
+
 export interface UnitPanelMaterialLike {
   id?: string;
   category?: string;
@@ -44,6 +46,7 @@ export interface UnitPanelImagePromptValues {
   dimensions?: Partial<UnitPanelDimensions>;
   textLayoutBounds?: Partial<UnitPanelTextLayoutBounds>;
   languages?: string[];
+  languageTextDirections?: Record<string, UnitPanelTextDirection>;
   translations?: Record<string, { title?: string; body?: string }>;
   titleText?: string;
   bodyText?: string;
@@ -69,6 +72,8 @@ export const UNIT_PANEL_BODY_FONTS: UnitPanelFontOption[];
 export function cleanUnitPanelText(value: unknown, max?: number): string;
 export function normalizeUnitPanelOutputMode(value: unknown): 'set' | 'single';
 export function normalizeUnitPanelLanguages(value: unknown): string[];
+export function normalizeUnitPanelTextDirection(value: unknown): UnitPanelTextDirection;
+export function normalizeUnitPanelLanguageTextDirections(value: unknown, languages?: string[]): Record<string, UnitPanelTextDirection>;
 export function languageMeta(id: unknown): UnitPanelLanguage;
 export function normalizeUnitPanelTitleFont(value: unknown): string;
 export function normalizeUnitPanelBodyFont(value: unknown): string;
