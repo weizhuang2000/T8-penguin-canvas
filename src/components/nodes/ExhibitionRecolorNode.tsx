@@ -285,7 +285,7 @@ function PaletteEditorModal({
         </div>
         {error && <div className="mb-2 rounded border border-red-300/25 bg-red-400/10 px-2 py-1.5 text-[10px] text-red-200">{error}</div>}
         <div className="mb-3 space-y-2 rounded border border-emerald-300/20 bg-emerald-300/5 p-2">
-          <div className="flex items-center gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <input
               className={FIELD}
               value={aiRequirement}
@@ -294,7 +294,7 @@ function PaletteEditorModal({
               onChange={(event) => setAiRequirement(event.target.value)}
             />
             <select
-              className={`${FIELD} w-48 shrink-0`}
+              className={FIELD}
               value={activeLlmConfig?.id || 'default'}
               disabled={saving || aiGenerating}
               onChange={(event) => setAiLlmKeyId(event.target.value)}
@@ -305,12 +305,12 @@ function PaletteEditorModal({
                 </option>
               ))}
             </select>
-            <button type="button" className={`${BUTTON} shrink-0 border-emerald-300/30 bg-emerald-300/15 text-emerald-100`} disabled={saving || aiGenerating} onClick={() => void generateAiPreset()}>
-              {aiGenerating ? <Loader2 size={12} className="animate-spin" /> : <Palette size={12} />} AI 增加预设
-            </button>
           </div>
           <div className="flex items-center justify-between gap-2 text-[10px] text-white/45">
             <span className="truncate">模型：{aiLlmModel}</span>
+            <button type="button" className={`${BUTTON} shrink-0 border-emerald-300/30 bg-emerald-300/15 text-emerald-100`} disabled={saving || aiGenerating} onClick={() => void generateAiPreset()}>
+              {aiGenerating ? <Loader2 size={12} className="animate-spin" /> : <Palette size={12} />} AI 增加预设
+            </button>
             {aiError && <span className="shrink-0 text-red-200">{aiError}</span>}
           </div>
         </div>
