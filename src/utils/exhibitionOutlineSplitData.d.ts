@@ -20,12 +20,17 @@ export interface ExhibitionOutlineSplitPromptValues {
   extraInstruction?: string;
 }
 
+export interface ExhibitionOutlineCreatePromptValues {
+  theme?: string;
+}
+
 export const MAX_OUTLINE_SEGMENT_COUNT: number;
 export function normalizeOutlineSplitMode(value: unknown): 'auto' | 'manual' | 'heading';
 export function normalizeOutlineSegmentCount(value: unknown): number;
 export function normalizeOutlineLevel(value: unknown): number;
 export function cleanOutlineText(value: unknown, max?: number): string;
 export function buildExhibitionOutlineSplitPrompt(values: ExhibitionOutlineSplitPromptValues): string;
+export function buildExhibitionOutlineCreatePrompt(values?: ExhibitionOutlineCreatePromptValues): string;
 export function normalizeWeightPercents(weights: unknown, count: number): number[];
 export function normalizeOutlineSegments(value: unknown): ExhibitionOutlineSegment[];
 export function parseExhibitionOutlineSplitJson(content: string): ExhibitionOutlineSplitResult;

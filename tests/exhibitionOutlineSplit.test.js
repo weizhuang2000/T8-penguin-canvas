@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
+  buildExhibitionOutlineCreatePrompt,
   buildExhibitionOutlineSplitPrompt,
   fallbackOutlineSplit,
   formatOutlineSegments,
@@ -11,6 +15,10 @@ import {
   parseExhibitionOutlineSplitJson,
   splitOutlineByHeadingLevel,
 } from '../src/utils/exhibitionOutlineSplitData.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(__dirname, '..');
+const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 
 test('exhibition outline split prompt supports manual and auto modes', () => {
   const manual = buildExhibitionOutlineSplitPrompt({
@@ -30,6 +38,42 @@ test('exhibition outline split prompt supports manual and auto modes', () => {
   });
   assert.match(auto, /分段模式：自动/);
   assert.match(auto, /自动判断合理单元数量/);
+});
+
+test('exhibition outline create prompt asks for editable plain-text outline', () => {
+  const prompt = buildExhibitionOutlineCreatePrompt({
+    theme: '城市更新与产业创新主题展',
+  });
+
+  assert.match(prompt, /城市更新与产业创新主题展/);
+  assert.match(prompt, /普通文本/);
+  assert.match(prompt, /不要输出 JSON/);
+  assert.match(prompt, /不要使用 Markdown 代码块/);
+  assert.match(prompt, /序厅/);
+  assert.match(prompt, /主题单元/);
+
+  const empty = buildExhibitionOutlineCreatePrompt({ theme: '   ' });
+  assert.match(empty, /未填写/);
+  assert.doesNotMatch(empty, /主题描述：\s+$/);
+});
+
+test('exhibition outline split node wires mutually exclusive LLM outline creation', () => {
+  const source = read('src/components/nodes/ExhibitionOutlineSplitNode.tsx');
+  const canvas = read('src/components/Canvas.tsx');
+
+  assert.match(source, /sourceMode/);
+  assert.match(source, /outlineCreateTheme/);
+  assert.match(source, /autoSplitAfterCreate/);
+  assert.match(source, /buildExhibitionOutlineCreatePrompt/);
+  assert.match(source, /status:\s*'creating-outline'/);
+  assert.match(source, /documentMeta:\s*null/);
+  assert.match(source, /documentImages:\s*\[\]/);
+  assert.match(source, /sourceText:\s*createdText/);
+  assert.match(source, /clearOutlineOutputPatch\(\)/);
+  assert.match(source, /await runSplit\(createdText\)/);
+  assert.match(canvas, /sourceMode:\s*'document'/);
+  assert.match(canvas, /outlineCreateTheme:\s*''/);
+  assert.match(canvas, /autoSplitAfterCreate:\s*false/);
 });
 
 test('exhibition outline split parser accepts fenced JSON and normalizes segments', () => {

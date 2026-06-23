@@ -492,6 +492,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     error: '',
   },
   'exhibition-outline-split': {
+    sourceMode: 'document',
     splitMode: 'manual',
     segmentCount: 4,
     outlineLevel: 1,
@@ -499,6 +500,8 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     projectTheme: '',
     extraInstruction: '',
     sourceText: '',
+    outlineCreateTheme: '',
+    autoSplitAfterCreate: false,
     documentMeta: null,
     llmKeyId: '',
     llmModel: '',

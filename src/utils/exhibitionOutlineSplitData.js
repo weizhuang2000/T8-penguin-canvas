@@ -43,6 +43,23 @@ export function buildExhibitionOutlineSplitPrompt(values = {}) {
   return lines.join('\n');
 }
 
+export function buildExhibitionOutlineCreatePrompt(values = {}) {
+  const theme = cleanOutlineText(values.theme, 1200);
+  const lines = [
+    '请根据展陈项目主题描述，创建一份可继续编辑、可再拆分的中文文本大纲资料。',
+    '输出应是普通文本，不要输出 JSON，不要使用 Markdown 代码块，不要包裹解释性前后缀。',
+    '大纲结构建议包含：项目总题、策展主旨、叙事线索、序厅、若干主题单元、重点展项/互动展项建议、尾厅或总结区。',
+    '每个单元请包含清晰标题和 2 到 5 句内容说明，内容要适合后续展陈大纲拆分节点继续提炼为展陈单元。',
+    '请保持展陈策划语气，信息具体、层次清楚、可落地；可以合理补充常见展陈结构，但不要编造具体历史事实、数据、人名或机构名。',
+  ];
+  if (theme) {
+    lines.push(`主题描述：${theme}`);
+  } else {
+    lines.push('主题描述：未填写。请生成一份通用的文化展陈项目文本大纲模板，保留可替换占位语义。');
+  }
+  return lines.join('\n');
+}
+
 function parsePercent(value) {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   const match = String(value ?? '').match(/-?\d+(?:\.\d+)?/);

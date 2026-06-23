@@ -13,6 +13,7 @@ import { useUpstreamMaterials } from './useUpstreamMaterials';
 import { materialSetItemsToData, type MaterialSetItem } from '../../utils/materialSet';
 import { placeSingleNode } from '../../utils/nodePlacement';
 import {
+  buildExhibitionOutlineCreatePrompt,
   buildExhibitionOutlineSplitPrompt,
   cleanOutlineText,
   fallbackOutlineSplit,
@@ -31,6 +32,21 @@ const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 tex
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
 const OUTLINE_TEXT_HANDLE = 'outline-text';
 const OUTLINE_IMAGE_HANDLE = 'outline-image';
+
+function clearOutlineOutputPatch() {
+  return {
+    outlineSegments: [],
+    textSegments: [],
+    segments: [],
+    outputSegmentIndex: 0,
+    imageUrl: '',
+    imageUrls: [],
+    urls: [],
+    text: '',
+    outputText: '',
+    prompt: '',
+  };
+}
 
 function documentLabel(meta?: Omit<ExtractedDocument, 'text'> | null) {
   if (!meta) return '未选择文档';
@@ -90,7 +106,10 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
   const splitMode = normalizeOutlineSplitMode(d.splitMode);
   const segmentCount = normalizeOutlineSegmentCount(d.segmentCount);
   const outlineLevel = normalizeOutlineLevel(d.outlineLevel);
+  const sourceMode = d.sourceMode === 'llm' ? 'llm' : 'document';
   const sourceText = String(d.sourceText || '');
+  const outlineCreateTheme = String(d.outlineCreateTheme || '');
+  const autoSplitAfterCreate = d.autoSplitAfterCreate === true;
   const upstreamText = useMemo(() => upstream.texts.map((item) => item.url).join('\n\n'), [upstream.texts]);
   const useUpstream = d.useUpstream !== false;
   const effectiveSourceText = [useUpstream ? upstreamText : '', sourceText].filter((item) => item.trim()).join('\n\n');
@@ -99,7 +118,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
   const segments = useMemo(() => segmentsFromData(d.outlineSegments), [d.outlineSegments]);
   const outputText = useMemo(() => formatOutlineSegments(segments), [segments]);
   const status = String(d.status || 'idle');
-  const busy = status === 'extracting' || status === 'splitting';
+  const busy = status === 'extracting' || status === 'splitting' || status === 'creating-outline';
 
   const documentImages = useMemo(
     () => (Array.isArray(d.documentImages) ? d.documentImages : []),
@@ -268,9 +287,9 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
     }
   }, [d.documentMeta?.name, documentImages, id, isReadonly, rf]);
 
-  const runSplit = useCallback(async () => {
+  const runSplit = useCallback(async (sourceOverride?: string) => {
     if (isReadonly || busy) return;
-    const text = effectiveSourceText.trim();
+    const text = (sourceOverride ?? effectiveSourceText).trim();
     if (splitMode === 'heading' && text) {
       update({ status: 'splitting', progress: `按 ${outlineLevel} 级目录拆分中...`, error: '' });
       const nextSegments = splitOutlineByHeadingLevel(text, outlineLevel);
@@ -370,6 +389,53 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
     }
   }, [activeLlmConfig?.id, busy, createOutlineMaterialSets, effectiveSourceText, extraInstruction, isReadonly, llmModel, outlineLevel, projectTheme, segmentCount, splitMode, update]);
 
+  const createOutlineFromTheme = useCallback(async () => {
+    if (isReadonly || busy) return;
+    const theme = outlineCreateTheme.trim();
+    if (!theme) {
+      update({ status: 'error', error: '请先输入主题描述。', progress: '' });
+      return;
+    }
+    update({ status: 'creating-outline', progress: 'LLM 创建文本大纲中...', error: '' });
+    try {
+      const response = await generateLlm({
+        model: llmModel,
+        llmKeyId: activeLlmConfig?.id,
+        temperature: 0.35,
+        max_tokens: 3600,
+        messages: [
+          {
+            role: 'system',
+            content: '你是资深展陈策划专家。请输出普通中文文本大纲，不要输出 JSON 或 Markdown 代码块。',
+          },
+          {
+            role: 'user',
+            content: buildExhibitionOutlineCreatePrompt({ theme }),
+          },
+        ],
+      });
+      const createdText = cleanOutlineText(response.content || '', 60000);
+      if (!createdText) throw new Error('LLM 未返回有效文本大纲');
+      const patch = {
+        ...clearOutlineOutputPatch(),
+        sourceMode: 'llm',
+        documentMeta: null,
+        documentImages: [],
+        sourceText: createdText,
+        status: 'idle',
+        progress: '',
+        error: '',
+        outlineCreateAt: Date.now(),
+      };
+      update(patch);
+      if (autoSplitAfterCreate) {
+        await runSplit(createdText);
+      }
+    } catch (error: any) {
+      update({ status: 'error', error: llmErrorMessage(error), progress: '' });
+    }
+  }, [activeLlmConfig?.id, autoSplitAfterCreate, busy, isReadonly, llmModel, outlineCreateTheme, runSplit, update]);
+
   const pickDocument = useCallback(async (file?: File) => {
     if (!file || isReadonly || busy) return;
     if (file.size > MAX_DOCUMENT_FILE_SIZE) {
@@ -381,19 +447,12 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
       const extracted = await extractDocument(file);
       const { text, ...documentMeta } = extracted;
       update({
+        ...clearOutlineOutputPatch(),
+        sourceMode: 'document',
+        outlineCreateTheme: '',
         documentMeta,
         documentImages: extracted.images || [],
         sourceText: text,
-        outlineSegments: [],
-        textSegments: [],
-        segments: [],
-        outputSegmentIndex: 0,
-        imageUrl: '',
-        imageUrls: [],
-        urls: [],
-        text: '',
-        outputText: '',
-        prompt: '',
         status: 'idle',
         progress: '',
         error: '',
@@ -438,10 +497,44 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
           <div className="flex items-center gap-1.5">
             <FileText size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">创意资料文档</span>
-            <button type="button" className={`${BUTTON} ml-auto`} disabled={isReadonly || busy} onClick={() => fileRef.current?.click()}>
-              <Upload size={12} />
-              导入
-            </button>
+            <div className="ml-auto flex rounded border border-white/10 bg-black/20 p-0.5">
+              {[
+                ['document', '导入文档'],
+                ['llm', 'LLM 创建'],
+              ].map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={`h-6 rounded px-2 text-[10px] ${sourceMode === mode ? 'bg-cyan-300/20 text-cyan-100' : 'text-white/55 hover:bg-white/[0.08]'}`}
+                  disabled={isReadonly || busy}
+                  onClick={() => {
+                    if (mode === sourceMode) return;
+                    if (mode === 'document') {
+                      update({ sourceMode: 'document', outlineCreateTheme: '', status: 'idle', progress: '', error: '' });
+                      return;
+                    }
+                    update({
+                      ...clearOutlineOutputPatch(),
+                      sourceMode: 'llm',
+                      documentMeta: null,
+                      documentImages: [],
+                      sourceText: '',
+                      status: 'idle',
+                      progress: '',
+                      error: '',
+                    });
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {sourceMode === 'document' && (
+              <button type="button" className={BUTTON} disabled={isReadonly || busy} onClick={() => fileRef.current?.click()}>
+                <Upload size={12} />
+                导入
+              </button>
+            )}
             <input
               ref={fileRef}
               type="file"
@@ -450,14 +543,60 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
               onChange={(event) => void pickDocument(event.target.files?.[0])}
             />
           </div>
-          <div className="truncate text-[10px] text-white/55" title={documentLabel(d.documentMeta)}>
-            {documentLabel(d.documentMeta)}
-          </div>
-          {documentImages.length > 0 && (
-            <div className="text-[10px] text-cyan-100/70">已提取 {documentImages.length} 张文档图片，拆分后会生成图片素材集</div>
-          )}
-          {Array.isArray(d.documentMeta?.warnings) && d.documentMeta.warnings.length > 0 && (
-            <div className="text-[10px] text-amber-200/80">{d.documentMeta.warnings.join('；')}</div>
+          {sourceMode === 'document' ? (
+            <>
+              <div className="truncate text-[10px] text-white/55" title={documentLabel(d.documentMeta)}>
+                {documentLabel(d.documentMeta)}
+              </div>
+              {documentImages.length > 0 && (
+                <div className="text-[10px] text-cyan-100/70">已提取 {documentImages.length} 张文档图片，拆分后会生成图片素材集</div>
+              )}
+              {Array.isArray(d.documentMeta?.warnings) && d.documentMeta.warnings.length > 0 && (
+                <div className="text-[10px] text-amber-200/80">{d.documentMeta.warnings.join('；')}</div>
+              )}
+            </>
+          ) : (
+            <div className="space-y-2 rounded border border-cyan-300/15 bg-cyan-300/[0.05] p-2">
+              <textarea
+                className={`${FIELD} min-h-[68px] resize-y`}
+                value={outlineCreateTheme}
+                disabled={isReadonly || busy}
+                placeholder="主题描述：例如展览主题、城市/产业/文化关键词、目标观众、希望突出的叙事方向"
+                onChange={(event) => update({ outlineCreateTheme: event.target.value })}
+              />
+              <div className="grid grid-cols-2 gap-1">
+                <select
+                  className={FIELD}
+                  disabled={isReadonly || busy}
+                  value={`llm-key:${activeLlmConfig?.id || 'default'}`}
+                  onChange={(event) => {
+                    const nextId = event.target.value;
+                    if (nextId.startsWith('llm-key:')) update({ llmKeyId: nextId.slice(8), llmModel: '' });
+                  }}
+                >
+                  {llmConfigOptions.map((item) => (
+                    <option key={item.id} value={`llm-key:${item.id}`}>
+                      {item.label || item.id}{item.model ? ` · ${item.model}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <input className={FIELD} disabled value={llmModel} title="模型由所选 LLM 配置决定" />
+              </div>
+              <label className="flex items-center gap-1.5 text-[10px] text-white/60">
+                <input
+                  type="checkbox"
+                  className="h-3 w-3 accent-cyan-300"
+                  checked={autoSplitAfterCreate}
+                  disabled={isReadonly || busy}
+                  onChange={(event) => update({ autoSplitAfterCreate: event.target.checked })}
+                />
+                创建后自动拆分
+              </label>
+              <button type="button" className="t8-btn min-h-8 w-full px-2 text-[11px]" disabled={isReadonly || busy || !outlineCreateTheme.trim()} onClick={() => void createOutlineFromTheme()}>
+                {status === 'creating-outline' ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                {status === 'creating-outline' ? (d.progress || '创建中...') : '创建文本大纲'}
+              </button>
+            </div>
           )}
           <textarea
             className={`${FIELD} min-h-[96px] resize-y`}

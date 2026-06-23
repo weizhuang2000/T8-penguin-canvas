@@ -1,5 +1,6 @@
 import {
   buildExhibitionOutlineSplitPrompt,
+  buildExhibitionOutlineCreatePrompt,
   cleanOutlineText,
   fallbackOutlineSplit,
   formatOutlineSegments,
@@ -16,11 +17,13 @@ import {
 export type {
   ExhibitionOutlineSegment,
   ExhibitionOutlineSplitPromptValues,
+  ExhibitionOutlineCreatePromptValues,
   ExhibitionOutlineSplitResult,
 } from './exhibitionOutlineSplitData.js';
 
 export {
   buildExhibitionOutlineSplitPrompt,
+  buildExhibitionOutlineCreatePrompt,
   cleanOutlineText,
   fallbackOutlineSplit,
   formatOutlineSegments,
