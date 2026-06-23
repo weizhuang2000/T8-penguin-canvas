@@ -717,7 +717,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
                 <div key={lang} className="flex items-center gap-2 rounded border border-white/10 bg-black/15 p-2">
                   <span className="min-w-0 flex-1 text-[10px] font-semibold text-white/70">{index + 1}. {meta.label}</span>
                   <select
-                    className={`${FIELD} h-7 w-[20%] px-1 py-0 text-[10px]`}
+                    className={`${FIELD} h-7 w-4 px-1 py-0 text-[10px]`}
                     value={languageTextDirections[lang] || 'horizontal'}
                     disabled={isReadonly || busy}
                     onChange={(e) => updateLanguageTextDirection(lang, e.target.value as UnitPanelTextDirection)}
