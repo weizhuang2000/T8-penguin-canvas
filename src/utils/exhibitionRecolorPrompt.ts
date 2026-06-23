@@ -22,6 +22,8 @@ export interface ExhibitionRecolorPromptValues {
   excludeItems?: string[];
   excludeItemOptions?: ExhibitionRecolorPresetItem[];
   manualExclusions?: string;
+  floorPrompt?: string;
+  ceilingPrompt?: string;
 }
 
 export {

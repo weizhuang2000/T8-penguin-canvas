@@ -465,9 +465,18 @@ export interface ExhibitionRecolorExcludePresetItem {
   order: number;
 }
 
+export interface ExhibitionRecolorSurfacePresetItem {
+  id: string;
+  label: string;
+  prompt: string;
+  order: number;
+}
+
 export interface ExhibitionRecolorPromptPresetMap {
   palettes: ExhibitionRecolorPalettePresetItem[];
   exclusions: ExhibitionRecolorExcludePresetItem[];
+  floors: ExhibitionRecolorSurfacePresetItem[];
+  ceilings: ExhibitionRecolorSurfacePresetItem[];
 }
 
 export interface UnitPanelMaterialItem {
@@ -651,7 +660,7 @@ export async function getExhibitionRecolorPromptPresets(): Promise<ExhibitionRec
   const res = await request<{ success: boolean; data: ExhibitionRecolorPromptPresetMap }>(
     `${BASE}/prompt-library/exhibition-recolor/presets`,
   );
-  return res.data || { palettes: [], exclusions: [] };
+  return res.data || { palettes: [], exclusions: [], floors: [], ceilings: [] };
 }
 
 export async function updateExhibitionRecolorPalettePresets(
@@ -672,6 +681,32 @@ export async function updateExhibitionRecolorExcludePresets(
 ): Promise<ExhibitionRecolorExcludePresetItem[]> {
   const res = await request<{ success: boolean; data: ExhibitionRecolorExcludePresetItem[] }>(
     `${BASE}/prompt-library/exhibition-recolor/presets/exclusions`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ presets }),
+    },
+  );
+  return res.data || [];
+}
+
+export async function updateExhibitionRecolorFloorPresets(
+  presets: Array<Pick<ExhibitionRecolorSurfacePresetItem, 'label' | 'prompt'> & Partial<Pick<ExhibitionRecolorSurfacePresetItem, 'id' | 'order'>>>,
+): Promise<ExhibitionRecolorSurfacePresetItem[]> {
+  const res = await request<{ success: boolean; data: ExhibitionRecolorSurfacePresetItem[] }>(
+    `${BASE}/prompt-library/exhibition-recolor/presets/floors`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ presets }),
+    },
+  );
+  return res.data || [];
+}
+
+export async function updateExhibitionRecolorCeilingPresets(
+  presets: Array<Pick<ExhibitionRecolorSurfacePresetItem, 'label' | 'prompt'> & Partial<Pick<ExhibitionRecolorSurfacePresetItem, 'id' | 'order'>>>,
+): Promise<ExhibitionRecolorSurfacePresetItem[]> {
+  const res = await request<{ success: boolean; data: ExhibitionRecolorSurfacePresetItem[] }>(
+    `${BASE}/prompt-library/exhibition-recolor/presets/ceilings`,
     {
       method: 'PUT',
       body: JSON.stringify({ presets }),

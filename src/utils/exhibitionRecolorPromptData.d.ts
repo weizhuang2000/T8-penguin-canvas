@@ -18,6 +18,8 @@ export interface ExhibitionRecolorPromptValues {
   excludeItems?: string[];
   excludeItemOptions?: ExhibitionRecolorPresetItem[];
   manualExclusions?: string;
+  floorPrompt?: string;
+  ceilingPrompt?: string;
 }
 
 export const EXHIBITION_RECOLOR_DEFAULT_COLORS: ExhibitionRecolorColorSet;

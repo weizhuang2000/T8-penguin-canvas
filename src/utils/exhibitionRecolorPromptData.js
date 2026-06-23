@@ -65,6 +65,8 @@ export function buildExhibitionRecolorPrompt(values = {}) {
   const protectPresetText = exhibitionRecolorExcludeItemsText(values.excludeItems, values.excludeItemOptions);
   const manualExclusions = cleanText(values.manualExclusions, 1000);
   const protectionText = [protectPresetText, manualExclusions].filter(Boolean).join('、');
+  const floorPrompt = cleanText(values.floorPrompt, 1200);
+  const ceilingPrompt = cleanText(values.ceilingPrompt, 1200);
   const lines = [
     '任务：对一张既有展陈空间图像进行主色调更换，输出真实、可落地的展陈空间效果图。',
     '',
@@ -77,6 +79,11 @@ export function buildExhibitionRecolorPrompt(values = {}) {
     '',
     '禁止改变：除颜色和整体明暗度之外，不改变任何形态、数量、位置、尺寸、材质纹理、文字内容、标识排版、图像内容、展陈手段、空间结构或摄影构图。',
   ];
+  if (floorPrompt || ceilingPrompt) {
+    lines.push('', '地面与天花板专项调整：');
+    if (floorPrompt) lines.push(`地面：${floorPrompt}。只作用于地面表面表现，不改变地面边界、台阶、坡度、铺装透视、动线和任何展品对象。`);
+    if (ceilingPrompt) lines.push(`天花板：${ceilingPrompt}。只作用于天花板表面表现，不改变天花结构、层高、灯具/喷淋/风口设备位置、梁位和空间比例。`);
+  }
   if (protectionText) {
     lines.push(
       '',

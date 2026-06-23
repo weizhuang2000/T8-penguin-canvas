@@ -25,7 +25,9 @@ test('exhibition style transfer node exposes image ports and shared controls', (
   assert.match(source, /UnitPanelMaterialEditorModal/);
   assert.match(source, /outputFormat/);
   assert.match(source, /\['jpg', 'png'\]/);
-  assert.match(source, /> run\s*</);
+  assert.match(source, /NODE_RUN_BUTTON/);
+  assert.match(source, /absolute -right-2 -top-3/);
+  assert.match(source, /bg-emerald-400\/90/);
   assert.match(source, /closestAspectRatio/);
   assert.match(source, /aspectRatioSource/);
 });

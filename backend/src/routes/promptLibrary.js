@@ -198,6 +198,22 @@ const DEFAULT_EXHIBITION_RECOLOR_EXCLUDE_PRESETS = [
   { id: 'brand-signage', label: '品牌/标识' },
 ].map((item, index) => ({ ...item, order: index }));
 
+const DEFAULT_EXHIBITION_RECOLOR_FLOOR_PRESETS = [
+  { id: 'keep-floor', label: '保持地面原状', prompt: '地面保持原有材质、铺装分缝、反射和明暗层次，仅随整体色调做轻微自然匹配' },
+  { id: 'dark-matte-stone', label: '深色哑光石材', prompt: '地面调整为深色哑光石材或微水泥质感，低反射、耐磨、分缝克制，保持原有地面边界和透视' },
+  { id: 'light-neutral-stone', label: '浅灰中性石材', prompt: '地面调整为浅灰中性石材或大板砖，干净明亮、反射柔和，保持原有铺装方向和空间比例' },
+  { id: 'warm-wood-floor', label: '暖木色地面', prompt: '地面调整为温润木色或木纹饰面，纹理克制、适合人文展陈，保持原有地面结构和动线' },
+  { id: 'terrazzo-floor', label: '水磨石地面', prompt: '地面调整为细颗粒水磨石质感，色彩与主色调协调，保持原有地面轮廓、坡度和台阶关系' },
+].map((item, index) => ({ ...item, order: index }));
+
+const DEFAULT_EXHIBITION_RECOLOR_CEILING_PRESETS = [
+  { id: 'keep-ceiling', label: '保持天花原状', prompt: '天花板保持原有造型、设备、灯位、标高和明暗层次，仅随整体色调做轻微自然匹配' },
+  { id: 'dark-concealed-ceiling', label: '深色隐藏顶', prompt: '天花板调整为深色隐藏顶或黑色设备顶，弱化设备存在感，保持原有灯位、喷淋、风口和标高关系' },
+  { id: 'soft-film-light-ceiling', label: '软膜发光顶', prompt: '天花板调整为均匀柔和的软膜发光顶效果，亮度克制不过曝，保持原有天花边界和灯光逻辑' },
+  { id: 'linear-light-ceiling', label: '线性灯带顶', prompt: '天花板加入或强化线性灯带氛围，色温与主色调协调，但不改变原有天花分区、灯具位置和结构关系' },
+  { id: 'white-clean-ceiling', label: '白色洁净顶', prompt: '天花板调整为白色或浅灰洁净顶，整体更明亮通透，保持原有设备点位、梁位和层高关系' },
+].map((item, index) => ({ ...item, order: index }));
+
 function now() {
   return Date.now();
 }
@@ -472,6 +488,39 @@ function normalizeRecolorExcludePresetList(value) {
     .map((item, index) => ({ ...item, order: index }));
 }
 
+function normalizeRecolorSurfacePresetList(value, fallback, prefix) {
+  const source = Array.isArray(value) && value.length > 0 ? value : fallback;
+  const used = new Set();
+  return source
+    .map((raw, index) => {
+      const label = safeText(raw?.label || raw?.text, 120);
+      const prompt = safeText(raw?.prompt || raw?.description || raw?.text, 1200);
+      if (!label || !prompt) return null;
+      let id = safeText(raw?.id, 96).replace(/[^a-zA-Z0-9_-]/g, '');
+      if (!id) id = `${prefix}_${index + 1}`;
+      while (used.has(id)) id = `${id}_${index + 1}`;
+      used.add(id);
+      return {
+        id,
+        label,
+        prompt,
+        order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 120)
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+    .map((item, index) => ({ ...item, order: index }));
+}
+
+function normalizeRecolorFloorPresetList(value) {
+  return normalizeRecolorSurfacePresetList(value, DEFAULT_EXHIBITION_RECOLOR_FLOOR_PRESETS, 'floor');
+}
+
+function normalizeRecolorCeilingPresetList(value) {
+  return normalizeRecolorSurfacePresetList(value, DEFAULT_EXHIBITION_RECOLOR_CEILING_PRESETS, 'ceiling');
+}
+
 const DEFAULT_UNIT_PANEL_MATERIALS = [
   {
     id: 'dark-blue-matte-metal',
@@ -667,17 +716,23 @@ function readRecolorDb() {
       return {
         palettePresets: normalizeRecolorPalettePresetList(DEFAULT_EXHIBITION_RECOLOR_PALETTE_PRESETS),
         excludePresets: normalizeRecolorExcludePresetList(DEFAULT_EXHIBITION_RECOLOR_EXCLUDE_PRESETS),
+        floorPresets: normalizeRecolorFloorPresetList(DEFAULT_EXHIBITION_RECOLOR_FLOOR_PRESETS),
+        ceilingPresets: normalizeRecolorCeilingPresetList(DEFAULT_EXHIBITION_RECOLOR_CEILING_PRESETS),
       };
     }
     const raw = JSON.parse(fs.readFileSync(RECOLOR_DB_FILE, 'utf-8'));
     return {
       palettePresets: normalizeRecolorPalettePresetList(raw?.palettePresets || raw?.palettes),
       excludePresets: normalizeRecolorExcludePresetList(raw?.excludePresets || raw?.exclusions),
+      floorPresets: normalizeRecolorFloorPresetList(raw?.floorPresets || raw?.floors),
+      ceilingPresets: normalizeRecolorCeilingPresetList(raw?.ceilingPresets || raw?.ceilings),
     };
   } catch {
     return {
       palettePresets: normalizeRecolorPalettePresetList(DEFAULT_EXHIBITION_RECOLOR_PALETTE_PRESETS),
       excludePresets: normalizeRecolorExcludePresetList(DEFAULT_EXHIBITION_RECOLOR_EXCLUDE_PRESETS),
+      floorPresets: normalizeRecolorFloorPresetList(DEFAULT_EXHIBITION_RECOLOR_FLOOR_PRESETS),
+      ceilingPresets: normalizeRecolorCeilingPresetList(DEFAULT_EXHIBITION_RECOLOR_CEILING_PRESETS),
     };
   }
 }
@@ -689,6 +744,8 @@ function writeRecolorDb(db) {
     JSON.stringify({
       palettePresets: normalizeRecolorPalettePresetList(db?.palettePresets),
       excludePresets: normalizeRecolorExcludePresetList(db?.excludePresets),
+      floorPresets: normalizeRecolorFloorPresetList(db?.floorPresets),
+      ceilingPresets: normalizeRecolorCeilingPresetList(db?.ceilingPresets),
     }, null, 2),
     'utf-8',
   );
@@ -956,6 +1013,8 @@ router.get('/exhibition-recolor/presets', (_req, res) => {
     data: {
       palettes: normalizeRecolorPalettePresetList(db.palettePresets),
       exclusions: normalizeRecolorExcludePresetList(db.excludePresets),
+      floors: normalizeRecolorFloorPresetList(db.floorPresets),
+      ceilings: normalizeRecolorCeilingPresetList(db.ceilingPresets),
     },
   });
 });
@@ -979,6 +1038,28 @@ router.put('/exhibition-recolor/presets/exclusions', (req, res) => {
   const db = readRecolorDb();
   const presets = normalizeRecolorExcludePresetList(req.body?.presets);
   writeRecolorDb({ ...db, excludePresets: presets });
+  res.json({ success: true, data: presets });
+});
+
+router.put('/exhibition-recolor/presets/floors', (req, res) => {
+  const user = req.user;
+  if (!isAdminRole(user?.role)) {
+    return res.status(403).json({ success: false, error: '只有系统管理员或经理可以维护主色调更换地面预设' });
+  }
+  const db = readRecolorDb();
+  const presets = normalizeRecolorFloorPresetList(req.body?.presets);
+  writeRecolorDb({ ...db, floorPresets: presets });
+  res.json({ success: true, data: presets });
+});
+
+router.put('/exhibition-recolor/presets/ceilings', (req, res) => {
+  const user = req.user;
+  if (!isAdminRole(user?.role)) {
+    return res.status(403).json({ success: false, error: '只有系统管理员或经理可以维护主色调更换天花板预设' });
+  }
+  const db = readRecolorDb();
+  const presets = normalizeRecolorCeilingPresetList(req.body?.presets);
+  writeRecolorDb({ ...db, ceilingPresets: presets });
   res.json({ success: true, data: presets });
 });
 

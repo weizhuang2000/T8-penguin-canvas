@@ -5,11 +5,14 @@ import { IMAGE_MODELS } from '../../providers/models';
 import {
   getCurrentUser,
   getExhibitionRecolorPromptPresets,
+  updateExhibitionRecolorCeilingPresets,
   updateExhibitionRecolorExcludePresets,
+  updateExhibitionRecolorFloorPresets,
   updateExhibitionRecolorPalettePresets,
   type AuthUser,
   type ExhibitionRecolorExcludePresetItem,
   type ExhibitionRecolorPalettePresetItem,
+  type ExhibitionRecolorSurfacePresetItem,
 } from '../../services/api';
 import {
   generateExternalImage,
@@ -38,6 +41,7 @@ import { useUpdateNodeData } from './useUpdateNodeData';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
+const NODE_RUN_BUTTON = 'nodrag nopan absolute -right-2 -top-3 z-20 inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-emerald-300/45 bg-emerald-400/90 px-3 text-[11px] font-semibold text-slate-950 shadow-lg shadow-emerald-500/25 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50';
 const MAX_IMAGE_SEED = 2147483647;
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
@@ -283,6 +287,73 @@ function ExclusionEditorModal({
   );
 }
 
+function SurfacePresetEditorModal({
+  open,
+  title,
+  presets,
+  saving,
+  error,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  title: string;
+  presets: ExhibitionRecolorSurfacePresetItem[];
+  saving: boolean;
+  error: string;
+  onClose: () => void;
+  onSave: (items: ExhibitionRecolorSurfacePresetItem[]) => void;
+}) {
+  const [drafts, setDrafts] = useState<ExhibitionRecolorSurfacePresetItem[]>([]);
+  useEffect(() => {
+    if (open) setDrafts(presets.map((item) => ({ ...item })));
+  }, [open, presets]);
+  if (!open) return null;
+  const patch = (index: number, patchValue: Partial<ExhibitionRecolorSurfacePresetItem>) => {
+    setDrafts((items) => items.map((item, i) => (i === index ? { ...item, ...patchValue } : item)));
+  };
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4">
+      <div className="w-[720px] max-w-[95vw] rounded-xl border border-white/15 bg-zinc-950 p-3 shadow-2xl">
+        <div className="mb-3 flex items-center gap-2">
+          <SlidersHorizontal size={16} className="text-cyan-200" />
+          <div className="text-sm font-semibold text-white">{title}</div>
+          <button type="button" className={`${BUTTON} ml-auto`} onClick={onClose} disabled={saving}><X size={12} /> 关闭</button>
+        </div>
+        {error && <div className="mb-2 rounded border border-red-300/25 bg-red-400/10 px-2 py-1.5 text-[10px] text-red-200">{error}</div>}
+        <div className="max-h-[520px] space-y-2 overflow-y-auto">
+          {drafts.map((item, index) => (
+            <div key={item.id || index} className="grid grid-cols-[160px_1fr_32px] gap-2 rounded border border-white/10 bg-white/[0.035] p-2">
+              <input className={FIELD} value={item.label} disabled={saving} placeholder="预设名称" onChange={(event) => patch(index, { label: event.target.value })} />
+              <textarea className={`${FIELD} min-h-16 resize-y`} value={item.prompt} disabled={saving} placeholder="调整要求" onChange={(event) => patch(index, { prompt: event.target.value })} />
+              <button
+                type="button"
+                className="flex h-full min-h-16 items-center justify-center rounded border border-white/10 bg-white/[0.04] text-white/55 hover:bg-red-400/15 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={saving || drafts.length <= 1}
+                title="删除预设"
+                onClick={() => setDrafts((items) => items.filter((_, i) => i !== index).map((next, i) => ({ ...next, order: i })))}
+              >
+                <X size={13} />
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex justify-between">
+          <button type="button" className={BUTTON} disabled={saving} onClick={() => setDrafts((items) => [...items, {
+            id: `surface-${Date.now()}`,
+            label: '新预设',
+            prompt: '保持原有结构关系，只调整表面表现',
+            order: items.length,
+          }])}>新增预设</button>
+          <button type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={saving} onClick={() => onSave(drafts)}>
+            {saving ? <Loader2 size={12} className="animate-spin" /> : <Settings size={12} />} 保存
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ImageSlot({ url }: { url: string }) {
   return (
     <div className="rounded border border-white/10 bg-black/15 p-2">
@@ -309,12 +380,20 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [palettes, setPalettes] = useState<ExhibitionRecolorPalettePresetItem[]>([]);
   const [exclusions, setExclusions] = useState<ExhibitionRecolorExcludePresetItem[]>([]);
+  const [floorPresets, setFloorPresets] = useState<ExhibitionRecolorSurfacePresetItem[]>([]);
+  const [ceilingPresets, setCeilingPresets] = useState<ExhibitionRecolorSurfacePresetItem[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [exclusionOpen, setExclusionOpen] = useState(false);
+  const [floorOpen, setFloorOpen] = useState(false);
+  const [ceilingOpen, setCeilingOpen] = useState(false);
   const [paletteSaving, setPaletteSaving] = useState(false);
   const [exclusionSaving, setExclusionSaving] = useState(false);
+  const [floorSaving, setFloorSaving] = useState(false);
+  const [ceilingSaving, setCeilingSaving] = useState(false);
   const [paletteError, setPaletteError] = useState('');
   const [exclusionError, setExclusionError] = useState('');
+  const [floorError, setFloorError] = useState('');
+  const [ceilingError, setCeilingError] = useState('');
 
   const status = String(d.status || 'idle');
   const busy = status === 'generating';
@@ -350,6 +429,8 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
     ? providerSelection.providerId
     : (allowZhenzhenFallback ? 'zhenzhen' : (firstImageAdvancedProvider?.id || ''));
   const selectedPalette = palettes.find((item) => item.id === d.palettePresetId) || null;
+  const selectedFloor = floorPresets.find((item) => item.id === d.floorPresetId) || null;
+  const selectedCeiling = ceilingPresets.find((item) => item.id === d.ceilingPresetId) || null;
 
   const prompt = useMemo(() => buildExhibitionRecolorPrompt({
     primaryColor,
@@ -359,7 +440,9 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
     excludeItems: selectedExcludeItems,
     excludeItemOptions: exclusions,
     manualExclusions: d.manualExclusions,
-  }), [accentColor, brightness, d.manualExclusions, exclusions, primaryColor, secondaryColor, selectedExcludeItems]);
+    floorPrompt: selectedFloor?.prompt,
+    ceilingPrompt: selectedCeiling?.prompt,
+  }), [accentColor, brightness, d.manualExclusions, exclusions, primaryColor, secondaryColor, selectedCeiling?.prompt, selectedExcludeItems, selectedFloor?.prompt]);
 
   useEffect(() => {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
@@ -367,10 +450,14 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
       .then((presets) => {
         setPalettes(presets.palettes || []);
         setExclusions(presets.exclusions || []);
+        setFloorPresets(presets.floors || []);
+        setCeilingPresets(presets.ceilings || []);
       })
       .catch(() => {
         setPalettes([]);
         setExclusions([]);
+        setFloorPresets([]);
+        setCeilingPresets([]);
       });
   }, []);
 
@@ -385,6 +472,16 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
       accentColor: first.accentColor,
     });
   }, [d.palettePresetId, d.palettePresetInitialized, palettes, update]);
+
+  useEffect(() => {
+    if (!floorPresets.length || d.floorPresetId || d.floorPresetInitialized) return;
+    update({ floorPresetId: floorPresets[0].id, floorPresetInitialized: true });
+  }, [d.floorPresetId, d.floorPresetInitialized, floorPresets, update]);
+
+  useEffect(() => {
+    if (!ceilingPresets.length || d.ceilingPresetId || d.ceilingPresetInitialized) return;
+    update({ ceilingPresetId: ceilingPresets[0].id, ceilingPresetInitialized: true });
+  }, [d.ceilingPresetId, d.ceilingPresetInitialized, ceilingPresets, update]);
 
   useEffect(() => {
     if (!originalImage || isReadonly || busy) return;
@@ -458,6 +555,36 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
       setExclusionError(error?.message || '保存保护排除项失败');
     } finally {
       setExclusionSaving(false);
+    }
+  };
+
+  const saveFloors = async (items: ExhibitionRecolorSurfacePresetItem[]) => {
+    if (!canManageTeam) return;
+    setFloorSaving(true);
+    setFloorError('');
+    try {
+      const saved = await updateExhibitionRecolorFloorPresets(items);
+      setFloorPresets(saved);
+      setFloorOpen(false);
+    } catch (error: any) {
+      setFloorError(error?.message || '保存地面预设失败');
+    } finally {
+      setFloorSaving(false);
+    }
+  };
+
+  const saveCeilings = async (items: ExhibitionRecolorSurfacePresetItem[]) => {
+    if (!canManageTeam) return;
+    setCeilingSaving(true);
+    setCeilingError('');
+    try {
+      const saved = await updateExhibitionRecolorCeilingPresets(items);
+      setCeilingPresets(saved);
+      setCeilingOpen(false);
+    } catch (error: any) {
+      setCeilingError(error?.message || '保存天花板预设失败');
+    } finally {
+      setCeilingSaving(false);
     }
   };
 
@@ -651,6 +778,10 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
     >
       <Handle id="original-image" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-amber-300" style={{ top: '28%' }} title="输入：原始图像" />
       <Handle type="source" position={Position.Right} className="!bg-cyan-300 !border-0" title="输出：换色结果图像" />
+      <button type="button" className={NODE_RUN_BUTTON} disabled={isReadonly || busy} onClick={() => void runGenerate()} title="运行">
+        {busy ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
+        run
+      </button>
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex h-8 w-8 items-center justify-center rounded bg-cyan-300/15 text-cyan-200">
           <Palette size={16} />
@@ -659,10 +790,6 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
           <div className="text-sm font-semibold text-white">主色调更换</div>
           <div className="truncate text-[10px] text-white/45">只替换色彩与明暗度 / 保护展品与指定对象</div>
         </div>
-        <button type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy} onClick={() => void runGenerate()}>
-          <Play size={12} /> run
-        </button>
-        {busy && <Loader2 size={15} className="animate-spin text-cyan-200" />}
       </div>
 
       <div className="nodrag nopan max-h-[760px] space-y-2 overflow-y-auto p-2.5" onMouseDown={(event) => event.stopPropagation()}>
@@ -705,6 +832,44 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
               onChange={(event) => update({ brightness: normalizeExhibitionRecolorBrightness(event.target.value) })}
             />
           </label>
+        </section>
+
+        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><SlidersHorizontal size={13} /> 地面与天花板</div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="space-y-1 rounded border border-white/10 bg-black/15 p-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-white/55">地面调整</span>
+                {canManageTeam && (
+                  <button type="button" className={`${BUTTON} ml-auto h-6 px-1.5`} disabled={busy || floorSaving} onClick={() => setFloorOpen(true)}>
+                    <Settings size={10} /> 编辑
+                  </button>
+                )}
+              </div>
+              <select className={FIELD} value={d.floorPresetId || ''} disabled={isReadonly || busy} onChange={(event) => update({ floorPresetId: event.target.value })}>
+                <option value="">不指定</option>
+                {floorPresets.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+              </select>
+              {selectedFloor?.prompt && <div className="line-clamp-3 text-[10px] leading-snug text-white/45">{selectedFloor.prompt}</div>}
+            </label>
+            <label className="space-y-1 rounded border border-white/10 bg-black/15 p-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-white/55">天花板调整</span>
+                {canManageTeam && (
+                  <button type="button" className={`${BUTTON} ml-auto h-6 px-1.5`} disabled={busy || ceilingSaving} onClick={() => setCeilingOpen(true)}>
+                    <Settings size={10} /> 编辑
+                  </button>
+                )}
+              </div>
+              <select className={FIELD} value={d.ceilingPresetId || ''} disabled={isReadonly || busy} onChange={(event) => update({ ceilingPresetId: event.target.value })}>
+                <option value="">不指定</option>
+                {ceilingPresets.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+              </select>
+              {selectedCeiling?.prompt && <div className="line-clamp-3 text-[10px] leading-snug text-white/45">{selectedCeiling.prompt}</div>}
+            </label>
+          </div>
         </section>
 
         <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
@@ -847,6 +1012,24 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
         error={exclusionError}
         onClose={() => setExclusionOpen(false)}
         onSave={saveExclusions}
+      />
+      <SurfacePresetEditorModal
+        open={floorOpen}
+        title="地面调整预设"
+        presets={floorPresets}
+        saving={floorSaving || busy}
+        error={floorError}
+        onClose={() => setFloorOpen(false)}
+        onSave={saveFloors}
+      />
+      <SurfacePresetEditorModal
+        open={ceilingOpen}
+        title="天花板调整预设"
+        presets={ceilingPresets}
+        saving={ceilingSaving || busy}
+        error={ceilingError}
+        onClose={() => setCeilingOpen(false)}
+        onSave={saveCeilings}
       />
     </div>
   );

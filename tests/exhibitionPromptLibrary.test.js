@@ -73,6 +73,8 @@ test('exhibition recolor presets are readable and admin managed', async (t) => {
   assert.ok(defaults.data.palettes.length >= 1);
   assert.equal(defaults.data.palettes[0].primaryColor, '#1f5f8b');
   assert.deepEqual(defaults.data.exclusions.map((item) => item.id).slice(0, 3), ['exhibit', 'sand-table', 'sculpture']);
+  assert.equal(defaults.data.floors[0].id, 'keep-floor');
+  assert.equal(defaults.data.ceilings[0].id, 'keep-ceiling');
 
   const denied = await fetch(`${userBase}/api/prompt-library/exhibition-recolor/presets/exclusions`, {
     method: 'PUT',
@@ -80,6 +82,12 @@ test('exhibition recolor presets are readable and admin managed', async (t) => {
     body: JSON.stringify({ presets: [{ label: '普通用户不能保存' }] }),
   });
   assert.equal(denied.status, 403);
+  const deniedFloors = await fetch(`${userBase}/api/prompt-library/exhibition-recolor/presets/floors`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ presets: [{ label: '普通用户不能保存', prompt: 'deny' }] }),
+  });
+  assert.equal(deniedFloors.status, 403);
 
   const adminBase = await startApp(t, { id: 'admin', username: 'root', name: 'Root', role: 'admin' });
   const palettes = await fetch(`${adminBase}/api/prompt-library/exhibition-recolor/presets/palettes`, {
@@ -112,6 +120,22 @@ test('exhibition recolor presets are readable and admin managed', async (t) => {
   }).then((res) => res.json());
   assert.equal(exclusions.success, true);
   assert.deepEqual(exclusions.data.map((item) => [item.id, item.label, item.order]), [['hero-case', '重点展柜', 0]]);
+
+  const floors = await fetch(`${adminBase}/api/prompt-library/exhibition-recolor/presets/floors`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ presets: [{ id: 'custom-floor', label: '自定义地面', prompt: '地面改为浅灰石材' }] }),
+  }).then((res) => res.json());
+  assert.equal(floors.success, true);
+  assert.deepEqual(floors.data.map((item) => [item.id, item.label, item.prompt, item.order]), [['custom-floor', '自定义地面', '地面改为浅灰石材', 0]]);
+
+  const ceilings = await fetch(`${adminBase}/api/prompt-library/exhibition-recolor/presets/ceilings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ presets: [{ id: 'custom-ceiling', label: '自定义天花', prompt: '天花改为线性灯带顶' }] }),
+  }).then((res) => res.json());
+  assert.equal(ceilings.success, true);
+  assert.deepEqual(ceilings.data.map((item) => [item.id, item.label, item.prompt, item.order]), [['custom-ceiling', '自定义天花', '天花改为线性灯带顶', 0]]);
 });
 
 test('admin can manage team entries and reject invalid dimensions', async (t) => {
