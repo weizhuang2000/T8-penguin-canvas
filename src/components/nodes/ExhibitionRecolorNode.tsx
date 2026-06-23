@@ -42,6 +42,7 @@ import { useUpdateNodeData } from './useUpdateNodeData';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
+const NODE_RUN_BUTTON = 'nodrag nopan absolute -right-2 -top-3 z-20 inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-emerald-300/45 bg-emerald-400/90 px-3 text-[11px] font-semibold text-slate-950 shadow-lg shadow-emerald-500/25 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50';
 const MAX_IMAGE_SEED = 2147483647;
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
@@ -229,6 +230,12 @@ function PaletteEditorModal({
     if (open) setDrafts(palettes.map((item) => ({ ...item })));
   }, [open, palettes]);
   if (!open) return null;
+  const draftGroups = Array.from(drafts.reduce((groups, item, index) => {
+    const category = String(item.category || '未分类').trim() || '未分类';
+    groups.set(category, [...(groups.get(category) || []), { item, index }]);
+    return groups;
+  }, new Map<string, Array<{ item: ExhibitionRecolorPalettePresetItem; index: number }>>()).entries())
+    .map(([category, items]) => ({ category, items }));
   const patch = (index: number, patchValue: Partial<ExhibitionRecolorPalettePresetItem>) => {
     setDrafts((items) => items.map((item, i) => (i === index ? { ...item, ...patchValue } : item)));
   };
@@ -315,32 +322,40 @@ function PaletteEditorModal({
           </div>
         </div>
         <div className="max-h-[520px] space-y-2 overflow-y-auto">
-          {drafts.map((item, index) => (
-            <div key={item.id || index} className="grid grid-cols-[1fr_92px_92px_92px_32px] gap-2 rounded border border-white/10 bg-white/[0.035] p-2">
-              <div className="space-y-1">
-                <input className={FIELD} value={item.label} disabled={saving} placeholder="预设名称" onChange={(event) => patch(index, { label: event.target.value })} />
-                <input className={FIELD} value={item.category || ''} disabled={saving} placeholder="分类" onChange={(event) => patch(index, { category: event.target.value })} />
-                <input className={FIELD} value={item.description || ''} disabled={saving} placeholder="说明" onChange={(event) => patch(index, { description: event.target.value })} />
+          {draftGroups.map((group) => (
+            <div key={group.category} className="space-y-2 rounded border border-white/10 bg-white/[0.025] p-2">
+              <div className="flex items-center justify-between gap-2 text-[10px] font-semibold text-cyan-100">
+                <span>{group.category}</span>
+                <span className="text-white/35">{group.items.length} 项</span>
               </div>
-              {(['primaryColor', 'secondaryColor', 'accentColor'] as const).map((key) => (
-                <input
-                  key={key}
-                  type="color"
-                  className="h-full min-h-16 w-full rounded border border-white/10 bg-transparent"
-                  value={normalizeExhibitionRecolorColor(item[key], EXHIBITION_RECOLOR_DEFAULT_COLORS[key])}
-                  disabled={saving}
-                  onChange={(event) => patch(index, { [key]: event.target.value } as any)}
-                />
+              {group.items.map(({ item, index }) => (
+                <div key={item.id || index} className="grid grid-cols-[1fr_92px_92px_92px_32px] gap-2 rounded border border-white/10 bg-white/[0.035] p-2">
+                  <div className="space-y-1">
+                    <input className={FIELD} value={item.label} disabled={saving} placeholder="预设名称" onChange={(event) => patch(index, { label: event.target.value })} />
+                    <input className={FIELD} value={item.category || ''} disabled={saving} placeholder="分类" onChange={(event) => patch(index, { category: event.target.value })} />
+                    <input className={FIELD} value={item.description || ''} disabled={saving} placeholder="说明" onChange={(event) => patch(index, { description: event.target.value })} />
+                  </div>
+                  {(['primaryColor', 'secondaryColor', 'accentColor'] as const).map((key) => (
+                    <input
+                      key={key}
+                      type="color"
+                      className="h-full min-h-16 w-full rounded border border-white/10 bg-transparent"
+                      value={normalizeExhibitionRecolorColor(item[key], EXHIBITION_RECOLOR_DEFAULT_COLORS[key])}
+                      disabled={saving}
+                      onChange={(event) => patch(index, { [key]: event.target.value } as any)}
+                    />
+                  ))}
+                  <button
+                    type="button"
+                    className="flex h-full min-h-16 items-center justify-center rounded border border-white/10 bg-white/[0.04] text-white/55 hover:bg-red-400/15 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={saving || drafts.length <= 1}
+                    title="删除预设"
+                    onClick={() => setDrafts((items) => items.filter((_, i) => i !== index).map((next, i) => ({ ...next, order: i })))}
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
               ))}
-              <button
-                type="button"
-                className="flex h-full min-h-16 items-center justify-center rounded border border-white/10 bg-white/[0.04] text-white/55 hover:bg-red-400/15 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-40"
-                disabled={saving || drafts.length <= 1}
-                title="删除预设"
-                onClick={() => setDrafts((items) => items.filter((_, i) => i !== index).map((next, i) => ({ ...next, order: i })))}
-              >
-                <X size={13} />
-              </button>
             </div>
           ))}
         </div>
@@ -912,6 +927,10 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
     >
       <Handle id="original-image" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-amber-300" style={{ top: '28%' }} title="输入：原始图像" />
       <Handle type="source" position={Position.Right} className="!bg-cyan-300 !border-0" title="输出：换色结果图像" />
+      <button type="button" className={NODE_RUN_BUTTON} disabled={isReadonly || busy} onClick={() => void runGenerate()} title="运行">
+        {busy ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
+        run
+      </button>
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex h-8 w-8 items-center justify-center rounded bg-cyan-300/15 text-cyan-200">
           <Palette size={16} />
