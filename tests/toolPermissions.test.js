@@ -72,6 +72,21 @@ test('tool permissions include exhibition style transfer as a valid grant', () =
   assert.equal(permissions.canUseNode({ id: 'u2', role: 'designer' }, 'exhibition-style-transfer'), true);
 }));
 
+test('tool permissions merge new default-visible nodes into old configs', () => withTempData(() => {
+  const oldDefaults = permissions.DEFAULT_VISIBLE_NODE_TYPES.filter((type) => type !== 'exhibition-lighting-heatmap');
+  permissions.writeDb({
+    defaultVisibleNodeTypes: oldDefaults,
+    roleRules: {},
+    userRules: {},
+  });
+
+  const resolved = permissions.resolveToolPermissions({ id: 'u2', role: 'designer' });
+  assert.equal(permissions.ALL_NODE_TYPES.includes('exhibition-lighting-heatmap'), true);
+  assert.equal(permissions.DEFAULT_VISIBLE_NODE_TYPES.includes('exhibition-lighting-heatmap'), true);
+  assert.equal(resolved.visibleNodeTypes.includes('exhibition-lighting-heatmap'), true);
+  assert.equal(permissions.canUseNode({ id: 'u2', role: 'designer' }, 'exhibition-lighting-heatmap'), true);
+}));
+
 test('findUnauthorizedNewNodes allows existing blocked nodes but rejects new ones', () => withTempData(() => {
   permissions.writeDb({
     defaultVisibleNodeTypes: ['text'],

@@ -168,6 +168,21 @@ function normalizeNodeTypes(value, fallback = []) {
   return out.length ? out : [...fallback];
 }
 
+function normalizeDefaultVisibleNodeTypes(value) {
+  const normalized = normalizeNodeTypes(value, DEFAULT_VISIBLE_NODE_TYPES);
+  const rawLength = asArray(value).length;
+  const looksLikeSavedDefault = rawLength === 0 || normalized.length >= Math.max(1, DEFAULT_VISIBLE_NODE_TYPES.length - 8);
+  if (!looksLikeSavedDefault) return normalized;
+  const seen = new Set(normalized);
+  for (const type of DEFAULT_VISIBLE_NODE_TYPES) {
+    if (!seen.has(type)) {
+      seen.add(type);
+      normalized.push(type);
+    }
+  }
+  return normalized;
+}
+
 function normalizeRule(raw = {}) {
   return {
     mode: raw.mode === 'custom' ? 'custom' : 'inherit',
@@ -196,7 +211,7 @@ function readDb() {
     raw = null;
   }
   const db = emptyDb();
-  db.defaultVisibleNodeTypes = normalizeNodeTypes(raw?.defaultVisibleNodeTypes, DEFAULT_VISIBLE_NODE_TYPES);
+  db.defaultVisibleNodeTypes = normalizeDefaultVisibleNodeTypes(raw?.defaultVisibleNodeTypes);
   for (const [role, rule] of Object.entries(raw?.roleRules || {})) {
     const key = String(role || '').trim();
     if (key) db.roleRules[key] = normalizeRule(rule);
@@ -221,7 +236,7 @@ function writeDb(db) {
 
 function normalizeDb(raw = {}) {
   const db = emptyDb();
-  db.defaultVisibleNodeTypes = normalizeNodeTypes(raw.defaultVisibleNodeTypes, DEFAULT_VISIBLE_NODE_TYPES);
+  db.defaultVisibleNodeTypes = normalizeDefaultVisibleNodeTypes(raw.defaultVisibleNodeTypes);
   for (const [role, rule] of Object.entries(raw.roleRules || {})) {
     const key = String(role || '').trim();
     if (key) db.roleRules[key] = normalizeRule(rule);
