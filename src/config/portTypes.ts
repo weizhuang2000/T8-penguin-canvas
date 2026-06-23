@@ -155,6 +155,7 @@ export const NODE_PORTS: Record<string, NodePorts> = {
   'exhibition-img2img': { inputs: ['image'], outputs: ['image'] },
   'exhibition-style-transfer': { inputs: ['image'], outputs: ['image'] },
   'exhibition-recolor': { inputs: ['image'], outputs: ['image'] },
+  'exhibition-lighting-heatmap': { inputs: ['image'], outputs: ['image'] },
   'exhibition-creative-image': { inputs: ['text', 'image'], outputs: ['image'] },
   'exhibition-outline-split': { inputs: ['text'], outputs: ['text', 'image'] },
   'exhibition-plan-layout': { inputs: ['text', 'image'], outputs: ['image', 'text'] },

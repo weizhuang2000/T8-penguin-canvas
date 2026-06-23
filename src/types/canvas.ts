@@ -67,6 +67,7 @@ export type NodeType =
   | 'exhibition-img2img'
   | 'exhibition-style-transfer'
   | 'exhibition-recolor'
+  | 'exhibition-lighting-heatmap'
   | 'exhibition-creative-image'
   | 'exhibition-outline-split'
   | 'exhibition-plan-layout'

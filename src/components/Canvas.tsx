@@ -114,6 +114,7 @@ import ElevationPromptNode from './nodes/ElevationPromptNode';
 import ExhibitionImg2ImgNode from './nodes/ExhibitionImg2ImgNode';
 import ExhibitionStyleTransferNode from './nodes/ExhibitionStyleTransferNode';
 import ExhibitionRecolorNode from './nodes/ExhibitionRecolorNode';
+import ExhibitionLightingHeatmapNode from './nodes/ExhibitionLightingHeatmapNode';
 import ExhibitionCreativeImageNode from './nodes/ExhibitionCreativeImageNode';
 import ExhibitionOutlineSplitNode from './nodes/ExhibitionOutlineSplitNode';
 import ExhibitionPlanLayoutNode from './nodes/ExhibitionPlanLayoutNode';
@@ -210,6 +211,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'exhibition-img2img': ExhibitionImg2ImgNode,
   'exhibition-style-transfer': ExhibitionStyleTransferNode,
   'exhibition-recolor': ExhibitionRecolorNode,
+  'exhibition-lighting-heatmap': ExhibitionLightingHeatmapNode,
   'exhibition-creative-image': ExhibitionCreativeImageNode,
   'exhibition-outline-split': ExhibitionOutlineSplitNode,
   'exhibition-plan-layout': ExhibitionPlanLayoutNode,
@@ -409,6 +411,30 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     floorPresetInitialized: false,
     ceilingPresetId: '',
     ceilingPresetInitialized: false,
+    providerSource: 'zhenzhen',
+    providerId: '',
+    providerModel: '',
+    providerParams: {},
+    seed: 0,
+    prompt: '',
+    outputText: '',
+    text: '',
+    imageUrl: '',
+    imageUrls: [],
+    urls: [],
+    referenceImages: [],
+    status: 'idle',
+    error: '',
+  },
+  'exhibition-lighting-heatmap': {
+    model: 'gpt-image-2',
+    apiModel: 'gpt-image-2-all',
+    aspectRatio: '16:9',
+    sizeLevel: '2K',
+    outputFormat: 'jpg',
+    heatmapMode: 'overlay',
+    focusItems: ['uniformity', 'accent-lighting', 'glare-risk', 'dark-zones'],
+    supplement: '',
     providerSource: 'zhenzhen',
     providerId: '',
     providerModel: '',
@@ -790,6 +816,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'cinematic', 'video-motion', 'multi-angle-visual', 'portrait-master', 'pose-master',
   'elevation-prompt',
   'exhibition-img2img',
+  'exhibition-lighting-heatmap',
   'exhibition-creative-image',
   'exhibition-outline-split',
   'exhibition-plan-layout',
