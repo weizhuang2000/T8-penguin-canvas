@@ -558,6 +558,17 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
             </>
           ) : (
             <div className="space-y-2 rounded border border-cyan-300/15 bg-cyan-300/[0.05] p-2">
+              <label className="grid grid-cols-[72px_1fr] items-center gap-2">
+                <span className="text-[10px] font-bold text-cyan-100">目标字数</span>
+                <input
+                  className={FIELD}
+                  type="number"
+                  value={outlineCreateWordCount}
+                  disabled={isReadonly || busy}
+                  placeholder="5000"
+                  onChange={(event) => update({ outlineCreateWordCount: event.target.value })}
+                />
+              </label>
               <textarea
                 className={`${FIELD} min-h-[68px] resize-y`}
                 value={outlineCreateTheme}
@@ -583,17 +594,6 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
                 </select>
                 <input className={FIELD} disabled value={llmModel} title="模型由所选 LLM 配置决定" />
               </div>
-              <label className="space-y-1">
-                <span className="text-[10px] font-bold text-white/65">字数控制</span>
-                <input
-                  className={FIELD}
-                  type="number"
-                  value={outlineCreateWordCount}
-                  disabled={isReadonly || busy}
-                  placeholder="5000"
-                  onChange={(event) => update({ outlineCreateWordCount: event.target.value })}
-                />
-              </label>
               <label className="flex items-center gap-1.5 text-[10px] text-white/60">
                 <input
                   type="checkbox"
