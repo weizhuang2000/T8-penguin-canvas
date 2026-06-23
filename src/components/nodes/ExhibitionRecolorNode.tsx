@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
-import { Image as ImageIcon, Loader2, Palette, Play, Settings, SlidersHorizontal, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Image as ImageIcon, Loader2, Palette, Play, Settings, SlidersHorizontal, X } from 'lucide-react';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
 import {
   getCurrentUser,
@@ -218,6 +218,7 @@ function PaletteEditorModal({
   const [aiLlmKeyId, setAiLlmKeyId] = useState('');
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiError, setAiError] = useState('');
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const llmConfigOptions = useMemo(() => {
     const saved = (Array.isArray(llmConfigs) ? llmConfigs : []).filter((item) => item && (item.hasApiKey || item.apiKey || item.baseUrl || item.model));
     return saved.length > 0 ? saved : [{ id: 'default', label: '默认 LLM', model: defaultLlmModel }];
@@ -227,7 +228,10 @@ function PaletteEditorModal({
     || llmConfigOptions[0];
   const aiLlmModel = activeLlmConfig?.model || defaultLlmModel;
   useEffect(() => {
-    if (open) setDrafts(palettes.map((item) => ({ ...item })));
+    if (open) {
+      setDrafts(palettes.map((item) => ({ ...item })));
+      setExpandedCategories(new Set());
+    }
   }, [open, palettes]);
   if (!open) return null;
   const draftGroups = Array.from(drafts.reduce((groups, item, index) => {
@@ -238,6 +242,14 @@ function PaletteEditorModal({
     .map(([category, items]) => ({ category, items }));
   const patch = (index: number, patchValue: Partial<ExhibitionRecolorPalettePresetItem>) => {
     setDrafts((items) => items.map((item, i) => (i === index ? { ...item, ...patchValue } : item)));
+  };
+  const toggleCategory = (category: string) => {
+    setExpandedCategories((current) => {
+      const next = new Set(current);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
   };
   const generateAiPreset = async () => {
     const requirement = aiRequirement.trim();
@@ -324,11 +336,18 @@ function PaletteEditorModal({
         <div className="max-h-[520px] space-y-2 overflow-y-auto">
           {draftGroups.map((group) => (
             <div key={group.category} className="space-y-2 rounded border border-white/10 bg-white/[0.025] p-2">
-              <div className="flex items-center justify-between gap-2 text-[10px] font-semibold text-cyan-100">
-                <span>{group.category}</span>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between gap-2 rounded px-1 py-1 text-[10px] font-semibold text-cyan-100 hover:bg-white/[0.05]"
+                onClick={() => toggleCategory(group.category)}
+              >
+                <span className="flex min-w-0 items-center gap-1.5">
+                  {expandedCategories.has(group.category) ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                  <span className="truncate">{group.category}</span>
+                </span>
                 <span className="text-white/35">{group.items.length} 项</span>
-              </div>
-              {group.items.map(({ item, index }) => (
+              </button>
+              {expandedCategories.has(group.category) && group.items.map(({ item, index }) => (
                 <div key={item.id || index} className="grid grid-cols-[1fr_92px_92px_92px_32px] gap-2 rounded border border-white/10 bg-white/[0.035] p-2">
                   <div className="space-y-1">
                     <input className={FIELD} value={item.label} disabled={saving} placeholder="预设名称" onChange={(event) => patch(index, { label: event.target.value })} />
