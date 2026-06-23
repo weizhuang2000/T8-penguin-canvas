@@ -11,6 +11,7 @@ export interface ExhibitionRecolorPresetItem {
 }
 
 export interface ExhibitionRecolorPromptValues {
+  toneEnabled?: boolean;
   primaryColor?: string;
   secondaryColor?: string;
   accentColor?: string;

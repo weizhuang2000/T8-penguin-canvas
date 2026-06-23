@@ -16,6 +16,7 @@ test('exhibition recolor node is registered across frontend and permissions', ()
   assert.match(read('src/components/Canvas.tsx'), /ExhibitionRecolorNode/);
   assert.match(read('src/components/Canvas.tsx'), /'exhibition-recolor': ExhibitionRecolorNode/);
   assert.match(read('src/components/Canvas.tsx'), /primaryColor: '#1f5f8b'/);
+  assert.match(read('src/components/Canvas.tsx'), /toneEnabled: true/);
   assert.match(read('src/components/Canvas.tsx'), /excludeItems: \['exhibit', 'sand-table', 'sculpture'\]/);
   assert.match(read('src/components/Canvas.tsx'), /floorPresetId: ''/);
   assert.match(read('src/components/Canvas.tsx'), /ceilingPresetId: ''/);
@@ -33,6 +34,15 @@ test('exhibition recolor node wires presets, color controls and image generation
   assert.match(source, /type="color"/);
   assert.match(source, /type="range"/);
   assert.match(source, /manualExclusions/);
+  assert.match(source, /toneEnabled/);
+  assert.match(source, /checked=\{toneEnabled\}/);
+  assert.match(source, /update\(\{ toneEnabled: event\.target\.checked \}\)/);
+  assert.match(source, /generateLlm/);
+  assert.match(source, /parsePalettePresetFromLlm/);
+  assert.match(source, /AI 增加预设/);
+  assert.match(source, /primaryColor, secondaryColor, accentColor/);
+  assert.match(source, /llmConfigs=\{llmConfigs\}/);
+  assert.match(source, /defaultLlmModel=\{configuredLlmModel\}/);
   assert.match(source, /generateExternalImage/);
   assert.match(source, /queryExternalImageStatus/);
   assert.match(source, /submitImageAsync/);

@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
 import { Image as ImageIcon, Loader2, Palette, Play, Settings, SlidersHorizontal, X } from 'lucide-react';
-import { IMAGE_MODELS } from '../../providers/models';
+import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
 import {
   getCurrentUser,
   getExhibitionRecolorPromptPresets,
@@ -16,6 +16,7 @@ import {
 } from '../../services/api';
 import {
   generateExternalImage,
+  generateLlm,
   queryExternalImageStatus,
   queryImageStatus,
   submitImageAsync,
@@ -128,6 +129,36 @@ function closestAspectRatio(sourceRatio: number, options: string[]): string {
   )).value;
 }
 
+function parsePalettePresetFromLlm(text: string, fallbackLabel: string): Omit<ExhibitionRecolorPalettePresetItem, 'id' | 'order'> {
+  const raw = String(text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+  const candidates = [raw];
+  const firstBrace = raw.indexOf('{');
+  const lastBrace = raw.lastIndexOf('}');
+  if (firstBrace >= 0 && lastBrace > firstBrace) candidates.push(raw.slice(firstBrace, lastBrace + 1));
+  let parsed: any = null;
+  for (const candidate of candidates) {
+    try {
+      parsed = JSON.parse(candidate);
+      break;
+    } catch {
+      // Try the next candidate.
+    }
+  }
+  const source = Array.isArray(parsed)
+    ? parsed[0]
+    : (Array.isArray(parsed?.palettes) ? parsed.palettes[0] : (parsed?.palette || parsed?.preset || parsed));
+  if (!source || typeof source !== 'object') throw new Error('LLM 未返回有效配色 JSON');
+  const label = String(source.label || source.name || fallbackLabel || 'AI 配色预设').trim().slice(0, 40) || 'AI 配色预设';
+  const description = String(source.description || source.desc || source.reason || '').trim().slice(0, 240);
+  return {
+    label,
+    primaryColor: normalizeExhibitionRecolorColor(source.primaryColor || source.primary || source.mainColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.primaryColor),
+    secondaryColor: normalizeExhibitionRecolorColor(source.secondaryColor || source.secondary || source.supportColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.secondaryColor),
+    accentColor: normalizeExhibitionRecolorColor(source.accentColor || source.accent || source.highlightColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.accentColor),
+    description,
+  };
+}
+
 function ColorControl({
   label,
   value,
@@ -167,6 +198,8 @@ function PaletteEditorModal({
   palettes,
   saving,
   error,
+  llmConfigs,
+  defaultLlmModel,
   onClose,
   onSave,
 }: {
@@ -174,16 +207,73 @@ function PaletteEditorModal({
   palettes: ExhibitionRecolorPalettePresetItem[];
   saving: boolean;
   error: string;
+  llmConfigs: any[];
+  defaultLlmModel: string;
   onClose: () => void;
   onSave: (items: ExhibitionRecolorPalettePresetItem[]) => void;
 }) {
   const [drafts, setDrafts] = useState<ExhibitionRecolorPalettePresetItem[]>([]);
+  const [aiRequirement, setAiRequirement] = useState('');
+  const [aiLlmKeyId, setAiLlmKeyId] = useState('');
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const llmConfigOptions = useMemo(() => {
+    const saved = (Array.isArray(llmConfigs) ? llmConfigs : []).filter((item) => item && (item.hasApiKey || item.apiKey || item.baseUrl || item.model));
+    return saved.length > 0 ? saved : [{ id: 'default', label: '默认 LLM', model: defaultLlmModel }];
+  }, [defaultLlmModel, llmConfigs]);
+  const activeLlmConfig = llmConfigOptions.find((item) => item.id === aiLlmKeyId)
+    || llmConfigOptions.find((item) => item.isDefault)
+    || llmConfigOptions[0];
+  const aiLlmModel = activeLlmConfig?.model || defaultLlmModel;
   useEffect(() => {
     if (open) setDrafts(palettes.map((item) => ({ ...item })));
   }, [open, palettes]);
   if (!open) return null;
   const patch = (index: number, patchValue: Partial<ExhibitionRecolorPalettePresetItem>) => {
     setDrafts((items) => items.map((item, i) => (i === index ? { ...item, ...patchValue } : item)));
+  };
+  const generateAiPreset = async () => {
+    const requirement = aiRequirement.trim();
+    if (!requirement) {
+      setAiError('请输入配色需求');
+      return;
+    }
+    setAiGenerating(true);
+    setAiError('');
+    try {
+      const response = await generateLlm({
+        model: aiLlmModel,
+        llmKeyId: activeLlmConfig?.id,
+        temperature: 0.35,
+        max_tokens: 600,
+        messages: [
+          {
+            role: 'system',
+            content: '你是资深展陈空间色彩设计师。只输出严格 JSON，不要 Markdown，不要解释。',
+          },
+          {
+            role: 'user',
+            content: [
+              '根据用户需求创建一个展陈空间三色色调预设。',
+              '只返回 JSON 对象，字段必须是：label, primaryColor, secondaryColor, accentColor, description。',
+              '颜色必须是 #RRGGBB 格式；description 用中文说明色彩气质、适用展陈场景和使用注意，不超过 80 字。',
+              `用户需求：${requirement}`,
+            ].join('\n'),
+          },
+        ],
+      });
+      const preset = parsePalettePresetFromLlm(response.content || '', requirement.slice(0, 16) || 'AI 配色预设');
+      setDrafts((items) => [...items, {
+        id: `palette-ai-${Date.now()}`,
+        ...preset,
+        order: items.length,
+      }]);
+      setAiRequirement('');
+    } catch (err: any) {
+      setAiError(err?.message || 'LLM 生成配色预设失败');
+    } finally {
+      setAiGenerating(false);
+    }
   };
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4">
@@ -194,6 +284,36 @@ function PaletteEditorModal({
           <button type="button" className={`${BUTTON} ml-auto`} onClick={onClose} disabled={saving}><X size={12} /> 关闭</button>
         </div>
         {error && <div className="mb-2 rounded border border-red-300/25 bg-red-400/10 px-2 py-1.5 text-[10px] text-red-200">{error}</div>}
+        <div className="mb-3 space-y-2 rounded border border-emerald-300/20 bg-emerald-300/5 p-2">
+          <div className="flex items-center gap-2">
+            <input
+              className={FIELD}
+              value={aiRequirement}
+              disabled={saving || aiGenerating}
+              placeholder="输入配色需求，例如：科技感、温暖亲子、红色文化、低饱和高级灰"
+              onChange={(event) => setAiRequirement(event.target.value)}
+            />
+            <select
+              className={`${FIELD} w-48 shrink-0`}
+              value={activeLlmConfig?.id || 'default'}
+              disabled={saving || aiGenerating}
+              onChange={(event) => setAiLlmKeyId(event.target.value)}
+            >
+              {llmConfigOptions.map((item) => (
+                <option key={item.id || 'default'} value={item.id || 'default'}>
+                  {item.label || item.id || '默认 LLM'}
+                </option>
+              ))}
+            </select>
+            <button type="button" className={`${BUTTON} shrink-0 border-emerald-300/30 bg-emerald-300/15 text-emerald-100`} disabled={saving || aiGenerating} onClick={() => void generateAiPreset()}>
+              {aiGenerating ? <Loader2 size={12} className="animate-spin" /> : <Palette size={12} />} AI 增加预设
+            </button>
+          </div>
+          <div className="flex items-center justify-between gap-2 text-[10px] text-white/45">
+            <span className="truncate">模型：{aiLlmModel}</span>
+            {aiError && <span className="shrink-0 text-red-200">{aiError}</span>}
+          </div>
+        </div>
         <div className="max-h-[520px] space-y-2 overflow-y-auto">
           {drafts.map((item, index) => (
             <div key={item.id || index} className="grid grid-cols-[1fr_92px_92px_92px_32px] gap-2 rounded border border-white/10 bg-white/[0.035] p-2">
@@ -377,6 +497,8 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
   const isReadonly = activeCanvas?.access?.canEdit === false;
   const advancedProviders = useApiKeysStore((state) => state.settings.advancedProviders);
   const allowZhenzhenFallback = useApiKeysStore((state) => state.settings.enableZhenzhenFallback !== false);
+  const configuredLlmModel = useApiKeysStore((state) => state.settings.llmModel)?.trim() || DEFAULT_LLM_MODEL;
+  const llmConfigs = useApiKeysStore((state) => state.settings.llmConfigs || state.settings.llmApiKeys) || [];
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [palettes, setPalettes] = useState<ExhibitionRecolorPalettePresetItem[]>([]);
   const [exclusions, setExclusions] = useState<ExhibitionRecolorExcludePresetItem[]>([]);
@@ -405,6 +527,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
   const sizeLevel = d.sizeLevel || '2K';
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
+  const toneEnabled = d.toneEnabled !== false;
   const primaryColor = normalizeExhibitionRecolorColor(d.primaryColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.primaryColor);
   const secondaryColor = normalizeExhibitionRecolorColor(d.secondaryColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.secondaryColor);
   const accentColor = normalizeExhibitionRecolorColor(d.accentColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.accentColor);
@@ -433,6 +556,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
   const selectedCeiling = ceilingPresets.find((item) => item.id === d.ceilingPresetId) || null;
 
   const prompt = useMemo(() => buildExhibitionRecolorPrompt({
+    toneEnabled,
     primaryColor,
     secondaryColor,
     accentColor,
@@ -442,7 +566,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
     manualExclusions: d.manualExclusions,
     floorPrompt: selectedFloor?.prompt,
     ceilingPrompt: selectedCeiling?.prompt,
-  }), [accentColor, brightness, d.manualExclusions, exclusions, primaryColor, secondaryColor, selectedCeiling?.prompt, selectedExcludeItems, selectedFloor?.prompt]);
+  }), [accentColor, brightness, d.manualExclusions, exclusions, primaryColor, secondaryColor, selectedCeiling?.prompt, selectedExcludeItems, selectedFloor?.prompt, toneEnabled]);
 
   useEffect(() => {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
@@ -801,21 +925,31 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
         <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><Palette size={13} /> 色调</div>
+            <label className="ml-auto inline-flex items-center gap-1.5 text-[10px] text-white/65">
+              <input
+                type="checkbox"
+                className="h-3 w-3 accent-emerald-300"
+                checked={toneEnabled}
+                disabled={isReadonly || busy}
+                onChange={(event) => update({ toneEnabled: event.target.checked })}
+              />
+              有效
+            </label>
             {canManageTeam && (
-              <button type="button" className={`${BUTTON} ml-auto`} disabled={busy || paletteSaving} onClick={() => setPaletteOpen(true)}>
+              <button type="button" className={BUTTON} disabled={busy || paletteSaving} onClick={() => setPaletteOpen(true)}>
                 <Settings size={11} /> 编辑预设
               </button>
             )}
           </div>
-          <select className={FIELD} value={d.palettePresetId || ''} disabled={isReadonly || busy} onChange={(event) => applyPalette(event.target.value)}>
+          <select className={FIELD} value={d.palettePresetId || ''} disabled={isReadonly || busy || !toneEnabled} onChange={(event) => applyPalette(event.target.value)}>
             <option value="">自定义当前色块</option>
             {palettes.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
           </select>
           {selectedPalette?.description && <div className="rounded border border-cyan-300/15 bg-cyan-300/5 px-2 py-1 text-[10px] leading-snug text-cyan-50/70">{selectedPalette.description}</div>}
           <div className="grid grid-cols-3 gap-2">
-            <ColorControl label="主色调" value={primaryColor} disabled={isReadonly || busy} onChange={(value) => update({ primaryColor: value, palettePresetId: '' })} />
-            <ColorControl label="辅助色调" value={secondaryColor} disabled={isReadonly || busy} onChange={(value) => update({ secondaryColor: value, palettePresetId: '' })} />
-            <ColorControl label="点缀色" value={accentColor} disabled={isReadonly || busy} onChange={(value) => update({ accentColor: value, palettePresetId: '' })} />
+            <ColorControl label="主色调" value={primaryColor} disabled={isReadonly || busy || !toneEnabled} onChange={(value) => update({ primaryColor: value, palettePresetId: '' })} />
+            <ColorControl label="辅助色调" value={secondaryColor} disabled={isReadonly || busy || !toneEnabled} onChange={(value) => update({ secondaryColor: value, palettePresetId: '' })} />
+            <ColorControl label="点缀色" value={accentColor} disabled={isReadonly || busy || !toneEnabled} onChange={(value) => update({ accentColor: value, palettePresetId: '' })} />
           </div>
           <label className="block rounded border border-white/10 bg-black/15 p-2">
             <div className="mb-1 flex items-center justify-between text-[10px] text-white/55">
@@ -827,7 +961,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
               min={-50}
               max={50}
               value={brightness}
-              disabled={isReadonly || busy}
+              disabled={isReadonly || busy || !toneEnabled}
               className="w-full accent-cyan-300"
               onChange={(event) => update({ brightness: normalizeExhibitionRecolorBrightness(event.target.value) })}
             />
@@ -1002,6 +1136,8 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
         palettes={palettes}
         saving={paletteSaving || busy}
         error={paletteError}
+        llmConfigs={llmConfigs}
+        defaultLlmModel={configuredLlmModel}
         onClose={() => setPaletteOpen(false)}
         onSave={savePalettes}
       />

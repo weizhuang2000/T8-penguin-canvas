@@ -43,3 +43,22 @@ test('exhibition recolor prompt clamps brightness and normalizes invalid colors'
   assert.match(prompt, /主色调 #1f5f8b/);
   assert.match(prompt, /整体明暗度降低 50%/);
 });
+
+test('exhibition recolor prompt can disable tone recoloring', () => {
+  const prompt = buildExhibitionRecolorPrompt({
+    toneEnabled: false,
+    primaryColor: '#123456',
+    secondaryColor: '#abcdef',
+    accentColor: '#fedcba',
+    brightness: 30,
+    floorPrompt: '地面改为浅灰石材',
+  });
+
+  assert.match(prompt, /色调模块：已关闭/);
+  assert.match(prompt, /不要执行主色调、辅助色调、点缀色或明暗度调整/);
+  assert.doesNotMatch(prompt, /主色调 #123456/);
+  assert.doesNotMatch(prompt, /辅助色调 #abcdef/);
+  assert.doesNotMatch(prompt, /点缀色 #fedcba/);
+  assert.doesNotMatch(prompt, /整体明暗度提高 30%/);
+  assert.match(prompt, /地面：地面改为浅灰石材/);
+});

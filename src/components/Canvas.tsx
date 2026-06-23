@@ -396,6 +396,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     aspectRatio: '16:9',
     sizeLevel: '2K',
     outputFormat: 'jpg',
+    toneEnabled: true,
     palettePresetId: '',
     palettePresetInitialized: false,
     primaryColor: '#1f5f8b',

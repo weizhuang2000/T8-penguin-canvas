@@ -59,6 +59,7 @@ function brightnessText(value) {
 }
 
 export function buildExhibitionRecolorPrompt(values = {}) {
+  const toneEnabled = values.toneEnabled !== false;
   const primaryColor = normalizeExhibitionRecolorColor(values.primaryColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.primaryColor);
   const secondaryColor = normalizeExhibitionRecolorColor(values.secondaryColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.secondaryColor);
   const accentColor = normalizeExhibitionRecolorColor(values.accentColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.accentColor);
@@ -79,6 +80,16 @@ export function buildExhibitionRecolorPrompt(values = {}) {
     '',
     '禁止改变：除颜色和整体明暗度之外，不改变任何形态、数量、位置、尺寸、材质纹理、文字内容、标识排版、图像内容、展陈手段、空间结构或摄影构图。',
   ];
+  if (!toneEnabled) {
+    lines[0] = '任务：对一张既有展陈空间图像进行局部专项调整，输出真实、可落地的展陈空间效果图。';
+    lines.splice(
+      4,
+      6,
+      '色调模块：已关闭。不要执行主色调、辅助色调、点缀色或明暗度调整；保持原图的环境色彩、原有色温和明暗关系。',
+      '',
+      '禁止改变：不改变任何形态、数量、位置、尺寸、材质纹理、文字内容、标识排版、图像内容、展陈手段、空间结构或摄影构图。',
+    );
+  }
   if (floorPrompt || ceilingPrompt) {
     lines.push('', '地面与天花板专项调整：');
     if (floorPrompt) lines.push(`地面：${floorPrompt}。只作用于地面表面表现，不改变地面边界、台阶、坡度、铺装透视、动线和任何展品对象。`);
@@ -94,7 +105,9 @@ export function buildExhibitionRecolorPrompt(values = {}) {
     '',
     '文字与标识约束：保留原图文字和标识所在区域、层级和排版关系；不要生成新的可读文字，不要改写原有文字，不要把提示词字段渲染到画面里。',
     '',
-    '最终输出：画面必须一眼可识别为同一张原始展陈空间图，只在主色调、辅助色调、点缀色和明暗度上完成换色。',
+    toneEnabled
+      ? '最终输出：画面必须一眼可识别为同一张原始展陈空间图，只在主色调、辅助色调、点缀色和明暗度上完成换色。'
+      : '最终输出：画面必须一眼可识别为同一张原始展陈空间图，不执行色调换色，只应用已启用的其他专项调整。',
   );
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
