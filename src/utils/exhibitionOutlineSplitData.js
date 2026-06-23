@@ -43,6 +43,30 @@ export function buildExhibitionOutlineSplitPrompt(values = {}) {
   return lines.join('\n');
 }
 
+export function buildExhibitionOutlineSplitOnlyPrompt(values = {}) {
+  const mode = normalizeOutlineSplitMode(values.mode);
+  const segmentCount = normalizeOutlineSegmentCount(values.segmentCount);
+  const sourceText = cleanOutlineText(values.sourceText, 60000);
+  const projectTheme = cleanOutlineText(values.projectTheme, 500);
+  const extraInstruction = cleanOutlineText(values.extraInstruction, 1200);
+  const lines = [
+    '请把以下展陈项目资料只做结构拆分，不要提炼、改写、概括或压缩内容。',
+    mode === 'auto'
+      ? '分段模式：自动。请根据资料自身结构、目录、叙事阶段和主题边界，自动判断合理单元数量。建议 3 到 8 个单元，资料特别复杂时最多 12 个。'
+      : `分段模式：指定数量。请严格拆分为 ${segmentCount} 个单元，不要多也不要少。`,
+    '拆分原则：尽量保留原文表达和原始信息顺序；只在必要处按展陈单元边界切开；不要新增事实，不要重新组织成总结性语言。',
+    '输出要求：每个单元输出 title、summary、keywords、weightPercent、sourceHint。summary 必须是该单元对应的原文内容或尽量接近原文的内容片段，不要提炼成 120 到 220 字摘要。',
+    '权重要求：请根据各单元原文内容量和信息密度分配 weightPercent。所有单元的 weightPercent 必须合计 100，使用整数百分比，不要带百分号。',
+    '只输出严格 JSON，不要 Markdown，不要代码块，不要解释。',
+    'JSON 格式：{"mode":"auto|manual","segmentCount":数字,"segments":[{"title":"...","summary":"...","keywords":["..."],"weightPercent":数字,"sourceHint":"..."}]}',
+  ];
+  if (projectTheme) lines.push(`项目主题/关键词：${projectTheme}`);
+  if (extraInstruction) lines.push(`额外拆分要求：${extraInstruction}`);
+  lines.push('原始资料：');
+  lines.push(sourceText);
+  return lines.join('\n');
+}
+
 export function buildExhibitionOutlineCreatePrompt(values = {}) {
   const theme = cleanOutlineText(values.theme, 1200);
   const targetWords = cleanOutlineText(values.targetWords ?? values.wordCount ?? 5000, 80) || '5000';

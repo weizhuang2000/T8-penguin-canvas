@@ -14,6 +14,7 @@ import { materialSetItemsToData, type MaterialSetItem } from '../../utils/materi
 import { placeSingleNode } from '../../utils/nodePlacement';
 import {
   buildExhibitionOutlineCreatePrompt,
+  buildExhibitionOutlineSplitOnlyPrompt,
   buildExhibitionOutlineSplitPrompt,
   cleanOutlineText,
   fallbackOutlineSplit,
@@ -288,7 +289,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
     }
   }, [d.documentMeta?.name, documentImages, id, isReadonly, rf]);
 
-  const runSplit = useCallback(async (sourceOverride?: string) => {
+  const runSplit = useCallback(async (sourceOverride?: string, splitOnly = false) => {
     if (isReadonly || busy) return;
     const text = (sourceOverride ?? effectiveSourceText).trim();
     if (splitMode === 'heading' && text) {
@@ -322,19 +323,22 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
     }
     update({ status: 'splitting', progress: splitMode === 'auto' ? '自动判断单元中...' : `拆分为 ${segmentCount} 个单元中...`, error: '' });
     try {
+      const promptBuilder = splitOnly ? buildExhibitionOutlineSplitOnlyPrompt : buildExhibitionOutlineSplitPrompt;
       const response = await generateLlm({
         model: llmModel,
         llmKeyId: activeLlmConfig?.id,
-        temperature: splitMode === 'auto' ? 0.28 : 0.2,
-        max_tokens: splitMode === 'auto' ? 3200 : Math.min(32000, 1200 + segmentCount * 260),
+        temperature: splitOnly ? 0.12 : (splitMode === 'auto' ? 0.28 : 0.2),
+        max_tokens: splitOnly ? Math.min(32000, 2200 + segmentCount * 900) : (splitMode === 'auto' ? 3200 : Math.min(32000, 1200 + segmentCount * 260)),
         messages: [
           {
             role: 'system',
-            content: '你是资深展陈策划与内容大纲整理专家。你只输出严格 JSON，擅长把资料拆成展陈叙事单元并提炼可落地总结。',
+            content: splitOnly
+              ? '你是资深展陈资料整理专家。你只输出严格 JSON，只做资料结构拆分，不提炼、不概括、不改写。'
+              : '你是资深展陈策划与内容大纲整理专家。你只输出严格 JSON，擅长把资料拆成展陈叙事单元并提炼可落地总结。',
           },
           {
             role: 'user',
-            content: buildExhibitionOutlineSplitPrompt({
+            content: promptBuilder({
               sourceText: text,
               mode: splitMode,
               segmentCount,
@@ -707,10 +711,16 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
             </select>
             <input className={FIELD} disabled value={llmModel} title="模型由所选 LLM 配置决定" />
           </div>
-          <button type="button" className="t8-btn min-h-8 w-full px-2 text-[11px]" disabled={isReadonly || busy} onClick={() => void runSplit()}>
-            {busy ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-            {busy ? (d.progress || '处理中...') : '拆分并总结'}
-          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" className="t8-btn min-h-8 px-2 text-[11px]" disabled={isReadonly || busy} onClick={() => void runSplit()}>
+              {busy ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+              {busy ? (d.progress || '处理中...') : '拆分并总结'}
+            </button>
+            <button type="button" className={BUTTON} disabled={isReadonly || busy} onClick={() => void runSplit(undefined, true)}>
+              {busy ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+              只拆分
+            </button>
+          </div>
         </section>
 
         <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">

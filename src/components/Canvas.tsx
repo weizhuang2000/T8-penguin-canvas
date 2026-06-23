@@ -140,6 +140,7 @@ import TextSplitNode from './nodes/TextSplitNode';
 import ImportCamProjectNode from './nodes/ImportCamProjectNode';
 import MaterialSetNode from './nodes/MaterialSetNode';
 import UploadNode from './nodes/UploadNode';
+import Model3DPreviewNode from './nodes/Model3DPreviewNode';
 import OutputNode from './nodes/OutputNode';
 import GroupBoxNode from './nodes/GroupBoxNode';
 import CodexCliAgentNode from './nodes/CodexCliAgentNode';
@@ -222,6 +223,8 @@ const SPECIFIC_NODES: Record<string, any> = {
   'pose-master': PoseMasterNode,
   // Input (1) - 上传素材
   upload: UploadNode,
+  'model-3d-upload': UploadNode,
+  'model-3d-preview': Model3DPreviewNode,
   // Output (1) - 输出素材(文本/图像/视频/音频 预览 + 文本双击编辑)
   output: OutputNode,
   // Agent (3) - AI Agent 工作台节点
@@ -744,6 +747,8 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     history: [],
   },
   upload: { uploadType: null },
+  'model-3d-upload': { uploadType: 'model3d', lockedUploadType: 'model3d' },
+  'model-3d-preview': { modelPreviewAutoRotate: true },
   'material-set': { materialSetKind: null, materialSetItems: [] },
   'import-cam-project': { camOutputRoot: 'C:\\cam-output' },
   // RH 工具节点（v1.2.10.1+）：启动器状态字段 + 运行状态字段（与 RunningHubNode 对齐）

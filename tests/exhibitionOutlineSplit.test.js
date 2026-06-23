@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   buildExhibitionOutlineCreatePrompt,
+  buildExhibitionOutlineSplitOnlyPrompt,
   buildExhibitionOutlineSplitPrompt,
   fallbackOutlineSplit,
   formatOutlineSegments,
@@ -40,6 +41,20 @@ test('exhibition outline split prompt supports manual and auto modes', () => {
   assert.match(auto, /自动判断合理单元数量/);
 });
 
+test('exhibition outline split-only prompt keeps original content without summarizing', () => {
+  const prompt = buildExhibitionOutlineSplitOnlyPrompt({
+    sourceText: '第一部分介绍城市源起。第二部分介绍产业成果。',
+    mode: 'manual',
+    segmentCount: 2,
+  });
+
+  assert.match(prompt, /只做结构拆分/);
+  assert.match(prompt, /不要提炼、改写、概括或压缩内容/);
+  assert.match(prompt, /严格拆分为 2 个单元/);
+  assert.match(prompt, /summary 必须是该单元对应的原文内容/);
+  assert.match(prompt, /weightPercent/);
+});
+
 test('exhibition outline create prompt asks for editable plain-text outline', () => {
   const prompt = buildExhibitionOutlineCreatePrompt({
     theme: '城市更新与产业创新主题展',
@@ -69,6 +84,10 @@ test('exhibition outline split node wires mutually exclusive LLM outline creatio
   assert.match(source, /outlineCreateWordCount/);
   assert.match(source, /autoSplitAfterCreate/);
   assert.match(source, /buildExhibitionOutlineCreatePrompt/);
+  assert.match(source, /buildExhibitionOutlineSplitOnlyPrompt/);
+  assert.match(source, /splitOnly = false/);
+  assert.match(source, /runSplit\(undefined, true\)/);
+  assert.match(source, /只拆分/);
   assert.match(source, /status:\s*'creating-outline'/);
   assert.match(source, /documentMeta:\s*null/);
   assert.match(source, /documentImages:\s*\[\]/);

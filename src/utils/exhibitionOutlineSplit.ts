@@ -1,6 +1,7 @@
 import {
   buildExhibitionOutlineSplitPrompt,
   buildExhibitionOutlineCreatePrompt,
+  buildExhibitionOutlineSplitOnlyPrompt,
   cleanOutlineText,
   fallbackOutlineSplit,
   formatOutlineSegments,
@@ -24,6 +25,7 @@ export type {
 export {
   buildExhibitionOutlineSplitPrompt,
   buildExhibitionOutlineCreatePrompt,
+  buildExhibitionOutlineSplitOnlyPrompt,
   cleanOutlineText,
   fallbackOutlineSplit,
   formatOutlineSegments,
