@@ -45,9 +45,11 @@ export function buildExhibitionOutlineSplitPrompt(values = {}) {
 
 export function buildExhibitionOutlineCreatePrompt(values = {}) {
   const theme = cleanOutlineText(values.theme, 1200);
+  const targetWords = cleanOutlineText(values.targetWords ?? values.wordCount ?? 5000, 80) || '5000';
   const lines = [
     '请根据展陈项目主题描述，创建一份可继续编辑、可再拆分的中文文本大纲资料。',
     '输出应是普通文本，不要输出 JSON，不要使用 Markdown 代码块，不要包裹解释性前后缀。',
+    `字数控制：目标约 ${targetWords} 字。可以根据内容完整性自然浮动，不要为了凑字重复表达。`,
     '大纲结构建议包含：项目总题、策展主旨、叙事线索、序厅、若干主题单元、重点展项/互动展项建议、尾厅或总结区。',
     '每个单元请包含清晰标题和 2 到 5 句内容说明，内容要适合后续展陈大纲拆分节点继续提炼为展陈单元。',
     '请保持展陈策划语气，信息具体、层次清楚、可落地；可以合理补充常见展陈结构，但不要编造具体历史事实、数据、人名或机构名。',

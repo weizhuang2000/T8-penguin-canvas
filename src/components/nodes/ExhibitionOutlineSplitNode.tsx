@@ -109,6 +109,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
   const sourceMode = d.sourceMode === 'llm' ? 'llm' : 'document';
   const sourceText = String(d.sourceText || '');
   const outlineCreateTheme = String(d.outlineCreateTheme || '');
+  const outlineCreateWordCount = String(d.outlineCreateWordCount ?? '5000');
   const autoSplitAfterCreate = d.autoSplitAfterCreate === true;
   const upstreamText = useMemo(() => upstream.texts.map((item) => item.url).join('\n\n'), [upstream.texts]);
   const useUpstream = d.useUpstream !== false;
@@ -410,7 +411,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
           },
           {
             role: 'user',
-            content: buildExhibitionOutlineCreatePrompt({ theme }),
+            content: buildExhibitionOutlineCreatePrompt({ theme, targetWords: outlineCreateWordCount }),
           },
         ],
       });
@@ -434,7 +435,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
     } catch (error: any) {
       update({ status: 'error', error: llmErrorMessage(error), progress: '' });
     }
-  }, [activeLlmConfig?.id, autoSplitAfterCreate, busy, isReadonly, llmModel, outlineCreateTheme, runSplit, update]);
+  }, [activeLlmConfig?.id, autoSplitAfterCreate, busy, isReadonly, llmModel, outlineCreateTheme, outlineCreateWordCount, runSplit, update]);
 
   const pickDocument = useCallback(async (file?: File) => {
     if (!file || isReadonly || busy) return;
@@ -582,6 +583,17 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
                 </select>
                 <input className={FIELD} disabled value={llmModel} title="模型由所选 LLM 配置决定" />
               </div>
+              <label className="space-y-1">
+                <span className="text-[10px] font-bold text-white/65">字数控制</span>
+                <input
+                  className={FIELD}
+                  type="number"
+                  value={outlineCreateWordCount}
+                  disabled={isReadonly || busy}
+                  placeholder="5000"
+                  onChange={(event) => update({ outlineCreateWordCount: event.target.value })}
+                />
+              </label>
               <label className="flex items-center gap-1.5 text-[10px] text-white/60">
                 <input
                   type="checkbox"

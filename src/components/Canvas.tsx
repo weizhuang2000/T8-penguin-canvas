@@ -501,6 +501,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     extraInstruction: '',
     sourceText: '',
     outlineCreateTheme: '',
+    outlineCreateWordCount: '5000',
     autoSplitAfterCreate: false,
     documentMeta: null,
     llmKeyId: '',

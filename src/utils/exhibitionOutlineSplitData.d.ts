@@ -22,6 +22,8 @@ export interface ExhibitionOutlineSplitPromptValues {
 
 export interface ExhibitionOutlineCreatePromptValues {
   theme?: string;
+  targetWords?: string | number;
+  wordCount?: string | number;
 }
 
 export const MAX_OUTLINE_SEGMENT_COUNT: number;

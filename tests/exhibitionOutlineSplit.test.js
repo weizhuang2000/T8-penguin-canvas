@@ -43,9 +43,11 @@ test('exhibition outline split prompt supports manual and auto modes', () => {
 test('exhibition outline create prompt asks for editable plain-text outline', () => {
   const prompt = buildExhibitionOutlineCreatePrompt({
     theme: '城市更新与产业创新主题展',
+    targetWords: 8000,
   });
 
   assert.match(prompt, /城市更新与产业创新主题展/);
+  assert.match(prompt, /目标约 8000 字/);
   assert.match(prompt, /普通文本/);
   assert.match(prompt, /不要输出 JSON/);
   assert.match(prompt, /不要使用 Markdown 代码块/);
@@ -54,6 +56,7 @@ test('exhibition outline create prompt asks for editable plain-text outline', ()
 
   const empty = buildExhibitionOutlineCreatePrompt({ theme: '   ' });
   assert.match(empty, /未填写/);
+  assert.match(empty, /目标约 5000 字/);
   assert.doesNotMatch(empty, /主题描述：\s+$/);
 });
 
@@ -63,6 +66,7 @@ test('exhibition outline split node wires mutually exclusive LLM outline creatio
 
   assert.match(source, /sourceMode/);
   assert.match(source, /outlineCreateTheme/);
+  assert.match(source, /outlineCreateWordCount/);
   assert.match(source, /autoSplitAfterCreate/);
   assert.match(source, /buildExhibitionOutlineCreatePrompt/);
   assert.match(source, /status:\s*'creating-outline'/);
@@ -73,6 +77,7 @@ test('exhibition outline split node wires mutually exclusive LLM outline creatio
   assert.match(source, /await runSplit\(createdText\)/);
   assert.match(canvas, /sourceMode:\s*'document'/);
   assert.match(canvas, /outlineCreateTheme:\s*''/);
+  assert.match(canvas, /outlineCreateWordCount:\s*'5000'/);
   assert.match(canvas, /autoSplitAfterCreate:\s*false/);
 });
 
