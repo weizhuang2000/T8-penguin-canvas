@@ -1,9 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   buildExhibitionImg2ImgPrompt,
   normalizeExhibitionImg2ImgPriority,
 } from '../src/utils/exhibitionImg2ImgPromptData.js';
+
+test('exhibition img2img node accepts document text input', () => {
+  const ports = readFileSync(new URL('../src/config/portTypes.ts', import.meta.url), 'utf8');
+  assert.match(ports, /'exhibition-img2img':\s*\{\s*inputs:\s*\['text', 'image'\],\s*outputs:\s*\['image'\]\s*\}/);
+});
 
 test('exhibition img2img prompt defaults to structure priority', () => {
   const order = normalizeExhibitionImg2ImgPriority();

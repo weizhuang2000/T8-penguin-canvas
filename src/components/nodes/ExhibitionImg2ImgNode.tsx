@@ -394,6 +394,49 @@ function isGptImage2Model(value: unknown): boolean {
   return /^gpt-image-2(?:$|-|_)/i.test(String(value || '').trim());
 }
 
+function textValuesFromData(data: any): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (value: any) => {
+    if (typeof value !== 'string') return;
+    const text = value.trim();
+    if (!text || seen.has(text)) return;
+    seen.add(text);
+    out.push(text);
+  };
+  const arrayFields = ['textSegments', 'segments', 'texts'];
+  const arrayField = arrayFields.find((field) => Array.isArray(data?.[field]) && data[field].length > 0);
+  if (arrayField) {
+    data[arrayField].forEach(push);
+    return out;
+  }
+  push(data?.outputText);
+  push(data?.reply);
+  push(data?.prompt);
+  push(data?.text);
+  return out;
+}
+
+function useInputDocumentText(nodeId: string): string {
+  const conns = useNodeConnections({ id: nodeId, handleType: 'target' });
+  const sourceIds = useMemo(
+    () => Array.from(new Set(conns
+      .filter((conn: any) => conn.targetHandle === 'document-text')
+      .map((conn: any) => conn.source)
+      .filter(Boolean))),
+    [conns],
+  );
+  const nodesData = useNodesData(sourceIds);
+  return useMemo(() => {
+    const list = Array.isArray(nodesData) ? nodesData : [nodesData];
+    const texts: string[] = [];
+    for (const node of list) {
+      texts.push(...textValuesFromData((node as any)?.data || {}));
+    }
+    return texts.join('\n\n').trim();
+  }, [nodesData]);
+}
+
 function imagesFromData(data: any): string[] {
   const out: string[] = [];
   const push = (value: any) => {
@@ -696,6 +739,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const legacyStyleInputImage = useHandleImage(id, 'style');
   const colorMaterialReferenceImage = colorMaterialReferenceInputImage || legacyStyleInputImage;
   const exhibitReferenceInputImages = useHandleImages(id, 'exhibit-reference', 'exhibits');
+  const inputDocumentText = useInputDocumentText(id);
   const exhibitReferenceImageUrls = useMemo(() => exhibitReferenceInputImages.map((item) => item.url), [exhibitReferenceInputImages]);
   const exhibitReferenceItems = useMemo(() => {
     const saved: ExhibitReferenceItem[] = Array.isArray(d.exhibitReferenceItems) ? d.exhibitReferenceItems : [];
@@ -917,6 +961,12 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     )));
   }, [id, rf]);
 
+  const disconnectDocumentTextInput = useCallback(() => {
+    rf.setEdges((eds) => eds.filter((edge: any) => (
+      edge.target !== id || (edge.targetHandle || '') !== 'document-text'
+    )));
+  }, [id, rf]);
+
   const renderColorMaterialMarkSettings = (
     title: string,
     settings: ReferenceMarkSettings,
@@ -1000,6 +1050,24 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       update(patch);
     }
   }, [activeColorMaterialReferenceImage, d.imageUrl, d.outputText, d.prompt, d.referenceImages, d.text, exhibitReferenceImageUrls, prompt, structureImage, update]);
+
+  useEffect(() => {
+    if (!inputDocumentText || isReadonly) return;
+    const patch: Record<string, any> = {};
+    if (!contentEnabled) patch.contentPlanningEnabled = true;
+    if (sourceText !== inputDocumentText) {
+      patch.documentMeta = null;
+      patch.sourceText = inputDocumentText;
+      patch.analysis = null;
+      patch.walls = [];
+      patch.contentPlanningPrompt = '';
+      patch.contentWalls = [];
+      patch.contentLayoutSchedule = '';
+      patch.contentConceptPrompts = [];
+      patch.error = '';
+    }
+    if (Object.keys(patch).length > 0) update(patch);
+  }, [contentEnabled, inputDocumentText, isReadonly, sourceText, update]);
 
   useEffect(() => {
     const saved: ExhibitReferenceItem[] = Array.isArray(d.exhibitReferenceItems) ? d.exhibitReferenceItems : [];
@@ -1292,6 +1360,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       update({ status: 'error', error: `文档不能超过 ${MAX_DOCUMENT_FILE_SIZE_MB}MB` });
       return;
     }
+    disconnectDocumentTextInput();
     update({ status: 'extracting', error: '' });
     try {
       const extracted = await extractDocument(file);
@@ -1495,6 +1564,14 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       style={{ background: 'rgba(17,24,39,.96)', backdropFilter: 'blur(8px)' }}
     >
       <Handle type="source" position={Position.Right} className="!bg-cyan-300 !border-0" title="输出：展陈图生图结果（图像）" />
+      <Handle
+        id="document-text"
+        type="target"
+        position={Position.Left}
+        className="!h-3 !w-3 !border-0 !bg-sky-300"
+        style={{ top: '69%' }}
+        title="输入：展墙内容文本（接入后自动启用展墙内容设计）"
+      />
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex h-8 w-8 items-center justify-center rounded bg-cyan-300/15 text-cyan-200">
           <Boxes size={16} />
@@ -1831,7 +1908,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                   />
                 </div>
                 <div className="truncate text-[10px] text-white/55" title={documentLabel(d.documentMeta)}>
-                  {documentLabel(d.documentMeta)}
+                  {inputDocumentText ? '已接入上游文本，文件导入已让位给文本输入' : documentLabel(d.documentMeta)}
                 </div>
                 {Array.isArray(d.documentMeta?.warnings) && d.documentMeta.warnings.length > 0 && (
                   <div className="mt-1 text-[10px] text-amber-200/80">{d.documentMeta.warnings.join('；')}</div>
@@ -1839,7 +1916,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                 <textarea
                   className={`${FIELD} mt-2 min-h-[72px] resize-y`}
                   value={sourceText}
-                  disabled={isReadonly || contentBusy}
+                  disabled={isReadonly || contentBusy || !!inputDocumentText}
                   placeholder="上传 DOCX、文本型 PDF、TXT，或直接粘贴项目文案"
                   onChange={(event) => update({ sourceText: event.target.value })}
                 />
