@@ -72,6 +72,7 @@ test('exhibition recolor presets are readable and admin managed', async (t) => {
   assert.equal(defaults.success, true);
   assert.ok(defaults.data.palettes.length >= 1);
   assert.equal(defaults.data.palettes[0].primaryColor, '#1f5f8b');
+  assert.equal(defaults.data.palettes[0].category, '文化展陈');
   assert.deepEqual(defaults.data.exclusions.map((item) => item.id).slice(0, 3), ['exhibit', 'sand-table', 'sculpture']);
   assert.equal(defaults.data.floors[0].id, 'keep-floor');
   assert.equal(defaults.data.ceilings[0].id, 'keep-ceiling');
@@ -98,6 +99,7 @@ test('exhibition recolor presets are readable and admin managed', async (t) => {
         {
           id: 'custom',
           label: '自定义配色',
+          category: '品牌展厅',
           primaryColor: '#ABC',
           secondaryColor: '#123456',
           accentColor: 'bad',
@@ -109,8 +111,8 @@ test('exhibition recolor presets are readable and admin managed', async (t) => {
 
   assert.equal(palettes.success, true);
   assert.deepEqual(
-    palettes.data.map((item) => [item.id, item.label, item.primaryColor, item.secondaryColor, item.accentColor, item.description, item.order]),
-    [['custom', '自定义配色', '#aabbcc', '#123456', '#e94b35', '测试配色', 0]],
+    palettes.data.map((item) => [item.id, item.label, item.category, item.primaryColor, item.secondaryColor, item.accentColor, item.description, item.order]),
+    [['custom', '自定义配色', '品牌展厅', '#aabbcc', '#123456', '#e94b35', '测试配色', 0]],
   );
 
   const exclusions = await fetch(`${adminBase}/api/prompt-library/exhibition-recolor/presets/exclusions`, {

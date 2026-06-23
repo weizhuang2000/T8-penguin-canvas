@@ -152,6 +152,7 @@ function parsePalettePresetFromLlm(text: string, fallbackLabel: string): Omit<Ex
   const description = String(source.description || source.desc || source.reason || '').trim().slice(0, 240);
   return {
     label,
+    category: String(source.category || source.group || 'AI 生成').trim().slice(0, 40) || 'AI 生成',
     primaryColor: normalizeExhibitionRecolorColor(source.primaryColor || source.primary || source.mainColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.primaryColor),
     secondaryColor: normalizeExhibitionRecolorColor(source.secondaryColor || source.secondary || source.supportColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.secondaryColor),
     accentColor: normalizeExhibitionRecolorColor(source.accentColor || source.accent || source.highlightColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.accentColor),
@@ -255,7 +256,7 @@ function PaletteEditorModal({
             role: 'user',
             content: [
               '根据用户需求创建一个展陈空间三色色调预设。',
-              '只返回 JSON 对象，字段必须是：label, primaryColor, secondaryColor, accentColor, description。',
+              '只返回 JSON 对象，字段必须是：label, category, primaryColor, secondaryColor, accentColor, description。',
               '颜色必须是 #RRGGBB 格式；description 用中文说明色彩气质、适用展陈场景和使用注意，不超过 80 字。',
               `用户需求：${requirement}`,
             ].join('\n'),
@@ -319,6 +320,7 @@ function PaletteEditorModal({
             <div key={item.id || index} className="grid grid-cols-[1fr_92px_92px_92px_32px] gap-2 rounded border border-white/10 bg-white/[0.035] p-2">
               <div className="space-y-1">
                 <input className={FIELD} value={item.label} disabled={saving} placeholder="预设名称" onChange={(event) => patch(index, { label: event.target.value })} />
+                <input className={FIELD} value={item.category || ''} disabled={saving} placeholder="分类" onChange={(event) => patch(index, { category: event.target.value })} />
                 <input className={FIELD} value={item.description || ''} disabled={saving} placeholder="说明" onChange={(event) => patch(index, { description: event.target.value })} />
               </div>
               {(['primaryColor', 'secondaryColor', 'accentColor'] as const).map((key) => (
@@ -347,6 +349,7 @@ function PaletteEditorModal({
           <button type="button" className={BUTTON} disabled={saving} onClick={() => setDrafts((items) => [...items, {
             id: `palette-${Date.now()}`,
             label: '新配色',
+            category: '未分类',
             primaryColor: EXHIBITION_RECOLOR_DEFAULT_COLORS.primaryColor,
             secondaryColor: EXHIBITION_RECOLOR_DEFAULT_COLORS.secondaryColor,
             accentColor: EXHIBITION_RECOLOR_DEFAULT_COLORS.accentColor,
@@ -551,6 +554,14 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
   const providerSelectValue = isExternalSelected
     ? providerSelection.providerId
     : (allowZhenzhenFallback ? 'zhenzhen' : (firstImageAdvancedProvider?.id || ''));
+  const paletteGroups = useMemo(() => {
+    const groups = new Map<string, ExhibitionRecolorPalettePresetItem[]>();
+    palettes.forEach((item) => {
+      const category = String(item.category || '未分类').trim() || '未分类';
+      groups.set(category, [...(groups.get(category) || []), item]);
+    });
+    return Array.from(groups.entries()).map(([category, items]) => ({ category, items }));
+  }, [palettes]);
   const selectedPalette = palettes.find((item) => item.id === d.palettePresetId) || null;
   const selectedFloor = floorPresets.find((item) => item.id === d.floorPresetId) || null;
   const selectedCeiling = ceilingPresets.find((item) => item.id === d.ceilingPresetId) || null;
@@ -943,7 +954,11 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
           </div>
           <select className={FIELD} value={d.palettePresetId || ''} disabled={isReadonly || busy || !toneEnabled} onChange={(event) => applyPalette(event.target.value)}>
             <option value="">自定义当前色块</option>
-            {palettes.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+            {paletteGroups.map((group) => (
+              <optgroup key={group.category} label={group.category}>
+                {group.items.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+              </optgroup>
+            ))}
           </select>
           {selectedPalette?.description && <div className="rounded border border-cyan-300/15 bg-cyan-300/5 px-2 py-1 text-[10px] leading-snug text-cyan-50/70">{selectedPalette.description}</div>}
           <div className="grid grid-cols-3 gap-2">

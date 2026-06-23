@@ -40,7 +40,10 @@ test('exhibition recolor node wires presets, color controls and image generation
   assert.match(source, /generateLlm/);
   assert.match(source, /parsePalettePresetFromLlm/);
   assert.match(source, /AI 增加预设/);
-  assert.match(source, /primaryColor, secondaryColor, accentColor/);
+  assert.match(source, /category, primaryColor, secondaryColor, accentColor/);
+  assert.match(source, /placeholder="分类"/);
+  assert.match(source, /paletteGroups/);
+  assert.match(source, /<optgroup key=\{group\.category\} label=\{group\.category\}>/);
   assert.match(source, /llmConfigs=\{llmConfigs\}/);
   assert.match(source, /defaultLlmModel=\{configuredLlmModel\}/);
   assert.match(source, /generateExternalImage/);

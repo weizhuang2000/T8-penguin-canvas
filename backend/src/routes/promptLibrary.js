@@ -182,9 +182,9 @@ const DEFAULT_EXHIBITION_PLAN_LAYOUT_EXCLUDE_PRESETS = [
 ].map((item, index) => ({ ...item, order: index }));
 
 const DEFAULT_EXHIBITION_RECOLOR_PALETTE_PRESETS = [
-  { id: 'deep-blue-warm-gold', label: '深蓝暖金', primaryColor: '#1f5f8b', secondaryColor: '#c7a76c', accentColor: '#e94b35', description: '沉稳蓝色主调，暖金辅助，适合历史文化与综合展陈' },
-  { id: 'graphite-copper-cyan', label: '石墨铜青', primaryColor: '#2f3742', secondaryColor: '#b98248', accentColor: '#2bb3c0', description: '深灰空间基底，铜色收边，青色点缀，适合科技与产业展' },
-  { id: 'warm-white-wood-red', label: '暖白木色', primaryColor: '#f2eee6', secondaryColor: '#9a6b45', accentColor: '#b73b35', description: '明亮温和的展墙基底，木色辅助，红色作为叙事强调' },
+  { id: 'deep-blue-warm-gold', label: '深蓝暖金', category: '文化展陈', primaryColor: '#1f5f8b', secondaryColor: '#c7a76c', accentColor: '#e94b35', description: '沉稳蓝色主调，暖金辅助，适合历史文化与综合展陈' },
+  { id: 'graphite-copper-cyan', label: '石墨铜青', category: '科技产业', primaryColor: '#2f3742', secondaryColor: '#b98248', accentColor: '#2bb3c0', description: '深灰空间基底，铜色收边，青色点缀，适合科技与产业展' },
+  { id: 'warm-white-wood-red', label: '暖白木色', category: '通用温暖', primaryColor: '#f2eee6', secondaryColor: '#9a6b45', accentColor: '#b73b35', description: '明亮温和的展墙基底，木色辅助，红色作为叙事强调' },
 ].map((item, index) => ({ ...item, order: index }));
 
 const DEFAULT_EXHIBITION_RECOLOR_EXCLUDE_PRESETS = [
@@ -452,6 +452,7 @@ function normalizeRecolorPalettePresetList(value) {
       return {
         id,
         label,
+        category: safeText(raw?.category || raw?.group || fallback.category || '未分类', 120) || '未分类',
         primaryColor: normalizeHexColor(raw?.primaryColor || raw?.primary_color, fallback.primaryColor),
         secondaryColor: normalizeHexColor(raw?.secondaryColor || raw?.secondary_color, fallback.secondaryColor),
         accentColor: normalizeHexColor(raw?.accentColor || raw?.accent_color, fallback.accentColor),
