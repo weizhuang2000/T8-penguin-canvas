@@ -825,6 +825,8 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'cinematic', 'video-motion', 'multi-angle-visual', 'portrait-master', 'pose-master',
   'elevation-prompt',
   'exhibition-img2img',
+  'exhibition-style-transfer',
+  'exhibition-recolor',
   'exhibition-lighting-heatmap',
   'exhibition-creative-image',
   'exhibition-outline-split',

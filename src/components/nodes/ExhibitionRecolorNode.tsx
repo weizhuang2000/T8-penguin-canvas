@@ -42,7 +42,6 @@ import { useUpdateNodeData } from './useUpdateNodeData';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
-const NODE_RUN_BUTTON = 'nodrag nopan absolute -right-2 -top-3 z-20 inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-emerald-300/45 bg-emerald-400/90 px-3 text-[11px] font-semibold text-slate-950 shadow-lg shadow-emerald-500/25 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50';
 const MAX_IMAGE_SEED = 2147483647;
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
@@ -913,10 +912,6 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
     >
       <Handle id="original-image" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-amber-300" style={{ top: '28%' }} title="输入：原始图像" />
       <Handle type="source" position={Position.Right} className="!bg-cyan-300 !border-0" title="输出：换色结果图像" />
-      <button type="button" className={NODE_RUN_BUTTON} disabled={isReadonly || busy} onClick={() => void runGenerate()} title="运行">
-        {busy ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
-        run
-      </button>
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex h-8 w-8 items-center justify-center rounded bg-cyan-300/15 text-cyan-200">
           <Palette size={16} />
