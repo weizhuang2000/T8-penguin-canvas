@@ -55,10 +55,10 @@ test('exhibition recolor prompt can disable tone recoloring', () => {
   });
 
   assert.match(prompt, /色调模块：已关闭/);
-  assert.match(prompt, /不要执行主色调、辅助色调、点缀色或明暗度调整/);
+  assert.match(prompt, /不要执行主色调、辅助色调或点缀色调整/);
   assert.doesNotMatch(prompt, /主色调 #123456/);
   assert.doesNotMatch(prompt, /辅助色调 #abcdef/);
   assert.doesNotMatch(prompt, /点缀色 #fedcba/);
-  assert.doesNotMatch(prompt, /整体明暗度提高 30%/);
+  assert.match(prompt, /整体明暗度提高 30%/);
   assert.match(prompt, /地面：地面改为浅灰石材/);
 });

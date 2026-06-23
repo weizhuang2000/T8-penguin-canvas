@@ -961,7 +961,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
               min={-50}
               max={50}
               value={brightness}
-              disabled={isReadonly || busy || !toneEnabled}
+              disabled={isReadonly || busy}
               className="w-full accent-cyan-300"
               onChange={(event) => update({ brightness: normalizeExhibitionRecolorBrightness(event.target.value) })}
             />
