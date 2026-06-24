@@ -17,6 +17,8 @@ const { addHistoryItems } = require('../utils/generationHistory');
 
 const router = express.Router();
 const EXTERNAL_GENERATION_TIMEOUT_MS = 60 * 60 * 1000;
+const EXTERNAL_IMAGE_JOB_TTL_MS = 2 * 60 * 60 * 1000;
+const externalImageJobs = new Map();
 
 function generationTimeoutMs(value) {
   const n = Number(value);
@@ -213,6 +215,153 @@ function imageTaskRunningResult(result, code = 'running') {
     code,
     status: 'running',
   };
+}
+
+function clonePlain(value) {
+  try {
+    return JSON.parse(JSON.stringify(value || {}));
+  } catch {
+    return {};
+  }
+}
+
+function pruneExternalImageJobs() {
+  const now = Date.now();
+  for (const [id, job] of externalImageJobs.entries()) {
+    if (now - Number(job.updatedAt || job.createdAt || 0) > EXTERNAL_IMAGE_JOB_TTL_MS) {
+      externalImageJobs.delete(id);
+    }
+  }
+}
+
+function localImageJobPayload(job) {
+  return {
+    taskId: job.id,
+    upstreamTaskId: job.upstreamTaskId || undefined,
+    status: job.status,
+    code: job.code,
+    imageUrls: Array.isArray(job.imageUrls) ? job.imageUrls : [],
+    remoteImageUrls: Array.isArray(job.remoteImageUrls) ? job.remoteImageUrls : [],
+    error: job.error || undefined,
+    raw: job.raw,
+    provider: safeProviderForResponse(job.provider),
+  };
+}
+
+function setLocalImageJobRunning(job, patch = {}) {
+  Object.assign(job, {
+    ...patch,
+    status: 'running',
+    code: patch.code || job.code || 'running',
+    updatedAt: Date.now(),
+  });
+}
+
+function setLocalImageJobFailed(job, result) {
+  Object.assign(job, {
+    status: 'failed',
+    code: result?.code || 'failed',
+    error: result?.error || '扩展平台图像任务失败。',
+    raw: result?.raw,
+    updatedAt: Date.now(),
+  });
+}
+
+async function setLocalImageJobCompleted(job, result) {
+  const remoteImageUrls = Array.isArray(result.imageUrls) ? result.imageUrls : [];
+  const imageUrls = await saveImageOutputs(remoteImageUrls, { outputFormat: job.body?.outputFormat });
+  Object.assign(job, {
+    status: 'completed',
+    code: 'completed',
+    imageUrls,
+    remoteImageUrls,
+    upstreamTaskId: result.taskId || job.upstreamTaskId || '',
+    raw: result.raw,
+    updatedAt: Date.now(),
+  });
+  rememberExternalOutputs({ body: job.body, user: job.user }, imageUrls, 'image', job.provider, { taskId: job.upstreamTaskId || result.taskId || job.id });
+}
+
+async function runLocalImageJob(job) {
+  try {
+    const result = await generateImageWithProvider(job.provider, job.body, {
+      timeoutMs: generationTimeoutMs(job.body?.timeoutMs),
+      baseUrl: `http://127.0.0.1:${config.PORT}`,
+    });
+    if (!result.ok) {
+      if (canContinueImageTask(result)) {
+        setLocalImageJobRunning(job, {
+          code: 'running',
+          upstreamTaskId: result.taskId || job.upstreamTaskId || '',
+          raw: result.raw,
+        });
+        return;
+      }
+      setLocalImageJobFailed(job, result);
+      return;
+    }
+    await setLocalImageJobCompleted(job, result);
+  } catch (e) {
+    setLocalImageJobFailed(job, {
+      code: e?.name === 'AbortError' ? 'timeout' : 'network_error',
+      error: e?.message || String(e),
+    });
+  }
+}
+
+function createLocalImageJob(req, provider) {
+  pruneExternalImageJobs();
+  const id = `external-image-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+  const job = {
+    id,
+    provider,
+    body: clonePlain(req.body),
+    user: req.user || null,
+    status: 'running',
+    code: 'running',
+    imageUrls: [],
+    remoteImageUrls: [],
+    upstreamTaskId: '',
+    raw: undefined,
+    error: '',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+  externalImageJobs.set(id, job);
+  setImmediate(() => {
+    runLocalImageJob(job).catch((e) => {
+      setLocalImageJobFailed(job, {
+        code: e?.name === 'AbortError' ? 'timeout' : 'network_error',
+        error: e?.message || String(e),
+      });
+    });
+  });
+  return job;
+}
+
+async function refreshLocalImageJob(job, query = {}) {
+  if (job.status !== 'running' || !job.upstreamTaskId) return job;
+  const result = await queryImageTaskWithProvider(job.provider, job.upstreamTaskId, {
+    timeoutMs: Number(query?.timeoutMs) || undefined,
+    baseUrl: `http://127.0.0.1:${config.PORT}`,
+  });
+  if (!result.ok) {
+    if (canContinueImageTask(result)) {
+      setLocalImageJobRunning(job, { code: 'transient_error', raw: result.raw });
+      return job;
+    }
+    setLocalImageJobFailed(job, result);
+    return job;
+  }
+  if (Array.isArray(result.imageUrls) && result.imageUrls.length) {
+    await setLocalImageJobCompleted(job, result);
+    return job;
+  }
+  setLocalImageJobRunning(job, {
+    code: result.code || 'running',
+    raw: result.raw,
+  });
+  return job;
 }
 
 router.post('/test-provider', async (req, res) => {
