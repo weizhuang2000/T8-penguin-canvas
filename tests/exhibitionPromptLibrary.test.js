@@ -313,16 +313,16 @@ test('elevation craft presets are managed by admin and manager only', async (t) 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       presets: [
-        { label: '定制工艺', prompt: '定制工艺提示词' },
+        { category: '展柜', label: '定制工艺', prompt: '定制工艺提示词' },
         { label: '第二工艺', prompt: '第二工艺提示词' },
       ],
     }),
   }).then((res) => res.json());
 
   assert.equal(saved.success, true);
-  assert.deepEqual(saved.data.map((item) => [item.label, item.prompt, item.order]), [
-    ['定制工艺', '定制工艺提示词', 0],
-    ['第二工艺', '第二工艺提示词', 1],
+  assert.deepEqual(saved.data.map((item) => [item.category, item.label, item.prompt, item.order]), [
+    ['展柜', '定制工艺', '定制工艺提示词', 0],
+    ['其它', '第二工艺', '第二工艺提示词', 1],
   ]);
 
   const userBase = await startApp(t, { id: 'u1', username: 'alice', name: 'Alice', role: 'designer' });

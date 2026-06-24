@@ -83,6 +83,8 @@ import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
 const DEFAULT_CRAFTS = ['panel', 'dimensional-letters', 'soft-film-lightbox'];
+const CRAFT_CATEGORIES = ['装饰', '多媒体', '艺术品', '展陈', '展柜', '展台', '顶部', '其它'] as const;
+const DEFAULT_CRAFT_CATEGORY = '其它';
 const MAX_IMAGE_SEED = 2147483647;
 const EXTERNAL_SIZE_LEVELS = ['1K', '2K', '4K'];
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
@@ -758,7 +760,12 @@ function useHandleImages(nodeId: string, targetHandle: string, includeLegacyHand
 }
 
 function craftPresetEditorText(presets: ElevationCraftPresetItem[]): string {
-  return presets.map((preset) => `${preset.label}｜${preset.prompt}`).join('\n');
+  return presets.map((preset) => `${normalizeCraftCategory(preset.category)}｜${preset.label}｜${preset.prompt}`).join('\n');
+}
+
+function normalizeCraftCategory(value: unknown) {
+  const raw = String(value || '').trim();
+  return (CRAFT_CATEGORIES as readonly string[]).includes(raw) ? raw : DEFAULT_CRAFT_CATEGORY;
 }
 
 function parseCraftPresetEditorText(text: string) {
@@ -767,18 +774,23 @@ function parseCraftPresetEditorText(text: string) {
     .map((line, index) => {
       const raw = line.trim();
       if (!raw) return null;
-      const [labelRaw, ...rest] = raw.split(/[｜|]/);
+      const parts = raw.split(/[｜|]/).map((part) => part.trim()).filter(Boolean);
+      const hasCategory = parts.length >= 3 && (CRAFT_CATEGORIES as readonly string[]).includes(parts[0]);
+      const category = hasCategory ? parts[0] : DEFAULT_CRAFT_CATEGORY;
+      const labelRaw = hasCategory ? parts[1] : parts[0];
+      const rest = hasCategory ? parts.slice(2) : parts.slice(1);
       const label = String(labelRaw || '').trim();
       const prompt = rest.join('｜').trim();
       if (!label || !prompt) return null;
       return {
         id: `${label.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'craft'}-${index + 1}`,
+        category,
         label,
         prompt,
         order: index,
       };
     })
-    .filter(Boolean) as Array<{ id: string; label: string; prompt: string; order: number }>;
+    .filter(Boolean) as Array<{ id: string; category: string; label: string; prompt: string; order: number }>;
 }
 
 function excludePresetEditorText(presets: ExhibitionImg2ImgExcludePresetItem[]) {
@@ -831,6 +843,16 @@ function buildColorMaterialPresetPayload(presets: ElevationColorMaterialPresetIt
     features: preset.features || '',
     usage: preset.usage || '',
     info: preset.info || '',
+    order: index,
+  }));
+}
+
+function buildCraftPresetPayload(presets: ElevationCraftPresetItem[]) {
+  return presets.map((preset, index) => ({
+    id: preset.id,
+    category: normalizeCraftCategory(preset.category),
+    label: preset.label,
+    prompt: preset.prompt,
     order: index,
   }));
 }
@@ -1650,6 +1672,13 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     () => (craftPresets.length > 0 ? craftPresets : ELEVATION_CRAFTS),
     [craftPresets],
   );
+  const craftGroups = useMemo(
+    () => CRAFT_CATEGORIES.map((category) => ({
+      category,
+      crafts: craftPresetOptions.filter((craft) => normalizeCraftCategory(craft.category) === category),
+    })).filter((group) => group.crafts.length > 0),
+    [craftPresetOptions],
+  );
   const excludeOptions = useMemo<ExhibitionImg2ImgExcludeItem[]>(
     () => (excludePresets.length > 0 ? excludePresets : EXHIBITION_IMG2IMG_EXCLUDE_ITEMS),
     [excludePresets],
@@ -2257,7 +2286,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     setCraftSaving(true);
     setCraftError('');
     try {
-      const saved = await updateElevationCraftPresets(presets);
+      const saved = await updateElevationCraftPresets(buildCraftPresetPayload(presets));
       setCraftPresets(saved);
       setCraftEditorOpen(false);
     } catch (error: any) {
@@ -2712,28 +2741,35 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               </button>
             )}
           </div>
-          <div className="grid grid-cols-4 gap-1">
-            {craftPresetOptions.map((craft) => {
-              const active = selectedCrafts.includes(craft.id);
-              return (
-                <button
-                  key={craft.id}
-                  type="button"
-                  disabled={isReadonly}
-                  className={`min-w-0 rounded border px-1.5 py-1 text-[10px] ${
-                    active ? 'border-cyan-300/55 bg-cyan-300/15 text-cyan-100' : 'border-white/10 bg-black/15 text-white/55 hover:bg-white/[0.08]'
-                  } disabled:opacity-50`}
-                  onClick={() => toggleCraft(craft.id)}
-                  title={craft.prompt}
-                >
-                  <span className="block truncate">{craft.label}</span>
-                </button>
-              );
-            })}
+          <div className="space-y-1.5">
+            {craftGroups.map((group) => (
+              <div key={group.category} className="space-y-1">
+                <div className="text-[9px] font-semibold text-white/40">{group.category}</div>
+                <div className="grid grid-cols-4 gap-1">
+                  {group.crafts.map((craft) => {
+                    const active = selectedCrafts.includes(craft.id);
+                    return (
+                      <button
+                        key={craft.id}
+                        type="button"
+                        disabled={isReadonly}
+                        className={`min-w-0 rounded border px-1.5 py-1 text-[10px] ${
+                          active ? 'border-cyan-300/55 bg-cyan-300/15 text-cyan-100' : 'border-white/10 bg-black/15 text-white/55 hover:bg-white/[0.08]'
+                        } disabled:opacity-50`}
+                        onClick={() => toggleCraft(craft.id)}
+                        title={`${group.category}｜${craft.prompt}`}
+                      >
+                        <span className="block truncate">{craft.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
           {canManageTeam && craftEditorOpen && (
             <div className="mt-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
-              <div className="mb-1 text-[10px] text-white/45">每行一个工艺预设：名称｜提示词。</div>
+              <div className="mb-1 text-[10px] text-white/45">每行一个工艺预设：分类｜名称｜提示词。分类可用：装饰、多媒体、艺术品、展陈、展柜、展台、顶部、其它。</div>
               <textarea className={`${FIELD} min-h-[96px] resize-y font-mono`} value={craftEditorValue} disabled={craftSaving} onChange={(event) => setCraftEditorValue(event.target.value)} />
               {craftError && <div className="mt-1 text-[10px] text-red-300">{craftError}</div>}
               <div className="mt-1.5 flex justify-end gap-1">

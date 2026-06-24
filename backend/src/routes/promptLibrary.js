@@ -137,6 +137,8 @@ const DEFAULT_EXHIBITION_CREATIVE_INSERT_PRESETS = [
   { id: 'artwork', label: '艺术品' },
 ].map((item, index) => ({ ...item, order: index }));
 
+const ELEVATION_CRAFT_CATEGORIES = new Set(['装饰', '多媒体', '艺术品', '展陈', '展柜', '展台', '顶部', '其它']);
+
 const DEFAULT_EXHIBITION_CREATIVE_EXCLUDE_PRESETS = [
   { id: 'readable-wrong-text', label: '可读错字/乱码文字' },
   { id: 'real-brand-logo', label: '真实品牌标识' },
@@ -312,8 +314,10 @@ function normalizeElevationCraftPresetList(value) {
       if (!id) id = `craft_${index + 1}`;
       while (used.has(id)) id = `${id}_${index + 1}`;
       used.add(id);
+      const category = safeText(raw?.category, 40);
       return {
         id,
+        category: ELEVATION_CRAFT_CATEGORIES.has(category) ? category : '其它',
         label,
         prompt,
         order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,

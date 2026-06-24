@@ -22,6 +22,16 @@ test('exhibition img2img node exposes mutually exclusive plan layout input', () 
   assert.match(canvas, /exclusiveExhibitionImg2ImgHandle/);
 });
 
+test('exhibition img2img craft presets are grouped by category', () => {
+  const node = readFileSync(new URL('../src/components/nodes/ExhibitionImg2ImgNode.tsx', import.meta.url), 'utf8');
+  const backend = readFileSync(new URL('../backend/src/routes/promptLibrary.js', import.meta.url), 'utf8');
+  assert.match(node, /CRAFT_CATEGORIES = \['装饰', '多媒体', '艺术品', '展陈', '展柜', '展台', '顶部', '其它'\]/);
+  assert.match(node, /分类｜名称｜提示词/);
+  assert.match(node, /craftGroups\.map/);
+  assert.match(backend, /ELEVATION_CRAFT_CATEGORIES/);
+  assert.match(backend, /category: ELEVATION_CRAFT_CATEGORIES\.has\(category\) \? category : '其它'/);
+});
+
 test('exhibition img2img prompt can use plan layout camera mode', () => {
   const prompt = buildExhibitionImg2ImgPrompt({
     spatialInputMode: 'plan-camera',

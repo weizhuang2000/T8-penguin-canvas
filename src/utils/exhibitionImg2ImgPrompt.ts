@@ -27,7 +27,7 @@ export interface ExhibitionImg2ImgExcludeItem {
 export interface ExhibitionImg2ImgPromptValues {
   priorityOrder?: ExhibitionImg2ImgPriorityId[];
   selectedCrafts?: string[];
-  craftPresets?: Array<{ id: string; label: string; prompt: string; order?: number }>;
+  craftPresets?: Array<{ id: string; category?: string; label: string; prompt: string; order?: number }>;
   customCraft?: string;
   density?: string;
   dimensions?: string;

@@ -1,5 +1,6 @@
 export interface ElevationCraft {
   id: string;
+  category?: string;
   label: string;
   prompt: string;
   order?: number;

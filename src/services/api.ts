@@ -398,6 +398,7 @@ export interface ElevationColorMaterialPresetItem {
 
 export interface ElevationCraftPresetItem {
   id: string;
+  category?: string;
   label: string;
   prompt: string;
   order: number;
@@ -576,7 +577,7 @@ export async function updateElevationColorMaterialPresets(
 }
 
 export async function updateElevationCraftPresets(
-  presets: Array<Pick<ElevationCraftPresetItem, 'label' | 'prompt'> & Partial<Pick<ElevationCraftPresetItem, 'id' | 'order'>>>,
+  presets: Array<Pick<ElevationCraftPresetItem, 'label' | 'prompt'> & Partial<Pick<ElevationCraftPresetItem, 'id' | 'category' | 'order'>>>,
 ): Promise<ElevationCraftPresetItem[]> {
   const res = await request<{ success: boolean; data: ElevationCraftPresetItem[] }>(
     `${BASE}/prompt-library/elevation/presets/crafts`,
