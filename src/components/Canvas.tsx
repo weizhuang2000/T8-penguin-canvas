@@ -475,7 +475,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     sizeLevel: '2K',
     outputFormat: 'jpg',
     spaceType: 'intro-hall',
-    generationCount: 4,
+    generationCount: 1,
     insertItems: ['large-sculpture', 'relief', 'group-sculpture', 'art-installation', 'multimedia-equipment', 'showcase', 'scene', 'artwork'],
     regenerateEachTime: true,
     projectTheme: '',

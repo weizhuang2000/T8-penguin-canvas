@@ -503,6 +503,38 @@ function planCameraOutputSize(ratio: string): { width: number; height: number } 
   return { width: Math.round(PLAN_CAMERA_OUTPUT_MAX_SIDE * ratioValue), height: PLAN_CAMERA_OUTPUT_MAX_SIDE };
 }
 
+function planCameraViewportLayout(
+  sourceWidth: number,
+  sourceHeight: number,
+  width: number,
+  height: number,
+  viewport: PlanCameraViewport,
+) {
+  if (!sourceWidth || !sourceHeight || !width || !height) {
+    return {
+      drawWidth: width,
+      drawHeight: height,
+      overflowX: 0,
+      overflowY: 0,
+      centerX: width / 2,
+      centerY: height / 2,
+    };
+  }
+  const containScale = Math.min(width / sourceWidth, height / sourceHeight);
+  const drawWidth = sourceWidth * containScale * viewport.scale;
+  const drawHeight = sourceHeight * containScale * viewport.scale;
+  const overflowX = Math.max(0, (drawWidth - width) / 2);
+  const overflowY = Math.max(0, (drawHeight - height) / 2);
+  return {
+    drawWidth,
+    drawHeight,
+    overflowX,
+    overflowY,
+    centerX: width / 2 + viewport.offsetX * overflowX,
+    centerY: height / 2 + viewport.offsetY * overflowY,
+  };
+}
+
 function drawPlanLayoutToViewport(
   ctx: CanvasRenderingContext2D,
   image: HTMLImageElement,
@@ -512,13 +544,7 @@ function drawPlanLayoutToViewport(
 ) {
   const imageWidth = image.naturalWidth || image.width;
   const imageHeight = image.naturalHeight || image.height;
-  const containScale = Math.min(width / imageWidth, height / imageHeight);
-  const drawWidth = imageWidth * containScale * viewport.scale;
-  const drawHeight = imageHeight * containScale * viewport.scale;
-  const overflowX = Math.max(0, (drawWidth - width) / 2);
-  const overflowY = Math.max(0, (drawHeight - height) / 2);
-  const centerX = width / 2 + viewport.offsetX * overflowX;
-  const centerY = height / 2 + viewport.offsetY * overflowY;
+  const { drawWidth, drawHeight, centerX, centerY } = planCameraViewportLayout(imageWidth, imageHeight, width, height, viewport);
   ctx.drawImage(image, centerX - drawWidth / 2, centerY - drawHeight / 2, drawWidth, drawHeight);
 }
 
@@ -1173,6 +1199,8 @@ function PlanCameraModalEditor({
   const [open, setOpen] = useState(false);
   const [draftCamera, setDraftCamera] = useState<PlanCameraState | null>(camera || null);
   const [draftViewport, setDraftViewport] = useState<PlanCameraViewport>(() => normalizePlanCameraViewport(viewport));
+  const [sourceSize, setSourceSize] = useState({ width: 0, height: 0 });
+  const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const [dragMode, setDragMode] = useState<'image' | 'move' | 'angle' | PlanCameraCropDragMode | null>(null);
   const dragStartRef = useRef<{ x: number; y: number; offsetX: number; offsetY: number; scale: number } | null>(null);
   const activeCamera = draftCamera || camera || defaultPlanCameraState();
@@ -1200,6 +1228,29 @@ function PlanCameraModalEditor({
     setDraftCamera(camera || null);
     setDraftViewport(normalizePlanCameraViewport(viewport));
   }, [camera, open, viewport]);
+
+  useEffect(() => {
+    if (!open) return;
+    const el = stageRef.current;
+    if (!el) return;
+    const updateSize = () => {
+      const rect = el.getBoundingClientRect();
+      setStageSize({ width: rect.width, height: rect.height });
+    };
+    updateSize();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [open, activeViewport.ratio]);
+
+  const previewLayout = planCameraViewportLayout(
+    sourceSize.width,
+    sourceSize.height,
+    stageSize.width,
+    stageSize.height,
+    activeViewport,
+  );
 
   const pointFromEvent = (event: PointerEvent<HTMLDivElement>) => {
     const rect = stageRef.current?.getBoundingClientRect();
@@ -1250,8 +1301,8 @@ function PlanCameraModalEditor({
     if (!canEdit || !dragStartRef.current) return;
     const rect = stageRef.current?.getBoundingClientRect();
     if (!rect || !rect.width || !rect.height) return;
-    const maxDeltaX = Math.max(1, rect.width * 0.35);
-    const maxDeltaY = Math.max(1, rect.height * 0.35);
+    const maxDeltaX = Math.max(1, previewLayout.overflowX);
+    const maxDeltaY = Math.max(1, previewLayout.overflowY);
     setDraftViewport({
       ...activeViewport,
       offsetX: clampNumber(dragStartRef.current.offsetX + (event.clientX - dragStartRef.current.x) / maxDeltaX, -1, 1, 0),
@@ -1357,11 +1408,19 @@ function PlanCameraModalEditor({
               <img
                 src={sourceImage}
                 alt=""
-                className={`absolute left-1/2 top-1/2 h-full w-full max-w-none select-none object-contain ${canEdit ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                className={`absolute max-w-none select-none ${canEdit ? 'cursor-grab active:cursor-grabbing' : ''}`}
                 style={{
-                  transform: `translate(calc(-50% + ${activeViewport.offsetX * 35}%), calc(-50% + ${activeViewport.offsetY * 35}%)) scale(${activeViewport.scale})`,
+                  left: `${previewLayout.centerX}px`,
+                  top: `${previewLayout.centerY}px`,
+                  width: `${previewLayout.drawWidth}px`,
+                  height: `${previewLayout.drawHeight}px`,
+                  transform: 'translate(-50%, -50%)',
                 }}
                 draggable={false}
+                onLoad={(event) => {
+                  const img = event.currentTarget;
+                  setSourceSize({ width: img.naturalWidth || img.width, height: img.naturalHeight || img.height });
+                }}
                 onPointerDown={startImageDrag}
               />
               <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 1000 1000" preserveAspectRatio="none">
