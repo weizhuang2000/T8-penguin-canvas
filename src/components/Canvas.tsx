@@ -380,6 +380,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     outputFormat: 'jpg',
     priorityOrder: ['structureAnnotations', 'craftLayout', 'colorMaterialReference'],
     selectedCrafts: ['panel', 'dimensional-letters', 'soft-film-lightbox'],
+    craftRandomCounts: {},
     density: '适中，图文层级均衡',
     colorMaterialPreset: '',
     colorMaterial: '',

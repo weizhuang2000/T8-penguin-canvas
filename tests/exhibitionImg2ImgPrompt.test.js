@@ -25,9 +25,14 @@ test('exhibition img2img node exposes mutually exclusive plan layout input', () 
 test('exhibition img2img craft presets are grouped by category', () => {
   const node = readFileSync(new URL('../src/components/nodes/ExhibitionImg2ImgNode.tsx', import.meta.url), 'utf8');
   const backend = readFileSync(new URL('../backend/src/routes/promptLibrary.js', import.meta.url), 'utf8');
+  const canvas = readFileSync(new URL('../src/components/Canvas.tsx', import.meta.url), 'utf8');
   assert.match(node, /CRAFT_CATEGORIES = \['装饰', '多媒体', '艺术品', '展陈', '展柜', '展台', '顶部', '其它'\]/);
   assert.match(node, /分类｜名称｜提示词/);
   assert.match(node, /craftGroups\.map/);
+  assert.match(node, /craftRandomCounts/);
+  assert.match(node, /resolveRuntimeCrafts/);
+  assert.match(node, /随机数量会在每次运行时/);
+  assert.match(canvas, /craftRandomCounts: \{\}/);
   assert.match(backend, /ELEVATION_CRAFT_CATEGORIES/);
   assert.match(backend, /category: ELEVATION_CRAFT_CATEGORIES\.has\(category\) \? category : '其它'/);
 });

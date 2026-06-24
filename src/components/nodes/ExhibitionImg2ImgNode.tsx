@@ -768,6 +768,25 @@ function normalizeCraftCategory(value: unknown) {
   return (CRAFT_CATEGORIES as readonly string[]).includes(raw) ? raw : DEFAULT_CRAFT_CATEGORY;
 }
 
+function normalizeCraftRandomCounts(value: unknown): Record<string, number> {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const out: Record<string, number> = {};
+  CRAFT_CATEGORIES.forEach((category) => {
+    const count = Math.floor(Number(source[category]) || 0);
+    out[category] = Math.max(0, Math.min(99, count));
+  });
+  return out;
+}
+
+function shuffleCraftIds(ids: string[]) {
+  const out = ids.slice();
+  for (let index = out.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [out[index], out[swapIndex]] = [out[swapIndex], out[index]];
+  }
+  return out;
+}
+
 function parseCraftPresetEditorText(text: string) {
   return text
     .split(/\r?\n/)
@@ -1638,6 +1657,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   }, [d.exhibitReferenceItems, exhibitReferenceInputImages]);
   const priorityOrder = normalizeExhibitionImg2ImgPriority(d.priorityOrder);
   const selectedCrafts: string[] = Array.isArray(d.selectedCrafts) ? d.selectedCrafts : DEFAULT_CRAFTS;
+  const craftRandomCounts = useMemo(() => normalizeCraftRandomCounts(d.craftRandomCounts), [d.craftRandomCounts]);
   const contentEnabled = d.contentPlanningEnabled === true;
   const sourceText = String(d.sourceText || '');
   const regenerateContentEachRun = d.regenerateContentEachRun === true;
@@ -1679,6 +1699,20 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     })).filter((group) => group.crafts.length > 0),
     [craftPresetOptions],
   );
+  const resolveRuntimeCrafts = useCallback(() => {
+    const picked = new Set(selectedCrafts);
+    for (const group of craftGroups) {
+      const count = craftRandomCounts[group.category] || 0;
+      if (count <= 0) continue;
+      const candidates = group.crafts
+        .map((craft) => craft.id)
+        .filter((craftId) => !picked.has(craftId));
+      for (const craftId of shuffleCraftIds(candidates).slice(0, count)) {
+        picked.add(craftId);
+      }
+    }
+    return Array.from(picked);
+  }, [craftGroups, craftRandomCounts, selectedCrafts]);
   const excludeOptions = useMemo<ExhibitionImg2ImgExcludeItem[]>(
     () => (excludePresets.length > 0 ? excludePresets : EXHIBITION_IMG2IMG_EXCLUDE_ITEMS),
     [excludePresets],
@@ -1772,7 +1806,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const planCameraPromptDescription = spatialInputMode === 'plan-camera' ? planCameraDescription(planCameraDraft, planCameraViewport) : '';
   const hasSpatialInput = !!activeSpatialReferenceImage;
 
-  const buildPromptWithWallPlan = useCallback((plan: ElevationContentPlan) => {
+  const buildPromptWithWallPlan = useCallback((plan: ElevationContentPlan, effectiveCrafts = selectedCrafts) => {
     const nextAnalysis = {
       projectTheme: plan.projectTheme,
       coreMessage: plan.coreMessage,
@@ -1785,7 +1819,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       wallCount,
       outputMode: d.outputMode === 'overview' ? 'overview' : 'segments',
       downstreamContent: 'schedule',
-      selectedCrafts,
+      selectedCrafts: effectiveCrafts,
       customCraft: d.customCraft,
       aspectRatio: d.aspectRatio,
       dimensions: d.dimensions,
@@ -1797,7 +1831,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     });
     return buildExhibitionImg2ImgPrompt({
       priorityOrder,
-      selectedCrafts,
+      selectedCrafts: effectiveCrafts,
       customCraft: d.customCraft,
       craftPresets,
       density: d.density,
@@ -1857,10 +1891,9 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     wallMode,
   ]);
 
-  const prompt = useMemo(
-    () => buildExhibitionImg2ImgPrompt({
+  const buildPromptForCrafts = useCallback((effectiveCrafts: string[], effectiveWallContentPrompt = wallContentPrompt) => buildExhibitionImg2ImgPrompt({
       priorityOrder,
-      selectedCrafts,
+      selectedCrafts: effectiveCrafts,
       customCraft: d.customCraft,
       craftPresets,
       density: d.density,
@@ -1881,12 +1914,17 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       supplement: d.supplement,
       excludeItems: selectedExcludeIds,
       excludeItemOptions: excludeOptions,
-      wallContentPrompt,
+      wallContentPrompt: effectiveWallContentPrompt,
       exhibitReferenceItems,
       spatialInputMode,
       planCameraDescription: planCameraPromptDescription,
     }),
     [activeColorMaterialReferenceImage, colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPriorityMode, colorMaterialReferenceMode, colorMaterialReferenceTone, craftPresets, d.customCraft, d.density, d.dimensions, d.supplement, d.visualStyle, excludeOptions, exhibitReferenceItems, hasColorMaterialPreset, planCameraPromptDescription, priorityOrder, promptColorMaterial, promptColorMaterialPalette, promptColorMaterialTextures, selectedCrafts, selectedExcludeIds, spatialInputMode, spaceLightingEnabled, spaceLightingLevel, wallContentPrompt],
+  );
+
+  const prompt = useMemo(
+    () => buildPromptForCrafts(selectedCrafts),
+    [buildPromptForCrafts, selectedCrafts],
   );
 
   const disconnectColorMaterialReferenceInput = useCallback(() => {
@@ -2344,6 +2382,13 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     update({ selectedCrafts: next });
   };
 
+  const setCraftRandomCount = (category: string, value: string | number) => {
+    if (isReadonly) return;
+    const next = normalizeCraftRandomCounts(craftRandomCounts);
+    next[category] = Math.max(0, Math.min(99, Math.floor(Number(value) || 0)));
+    update({ craftRandomCounts: next });
+  };
+
   const toggleExcludeItem = (itemId: string) => {
     if (isReadonly || busy) return;
     const next = selectedExcludeIds.includes(itemId)
@@ -2365,7 +2410,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     update({ exhibitReferenceItems: next });
   }, [exhibitReferenceItems, isReadonly, update]);
 
-  const planWallContent = useCallback(async (textOverride?: string, rethrow = false) => {
+  const planWallContent = useCallback(async (textOverride?: string, rethrow = false, effectiveCrafts = selectedCrafts) => {
     if (isReadonly || !contentEnabled) return;
     const text = String(textOverride ?? sourceText).trim();
     if (!text) {
@@ -2378,7 +2423,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         sourceText: text,
         wallMode,
         wallCount,
-        selectedCrafts,
+        selectedCrafts: effectiveCrafts,
         customCraft: d.customCraft,
         craftPresets,
         spaceLightingEnabled,
@@ -2484,10 +2529,11 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       update({ status: 'error', error: msg });
       throw new Error(msg);
     }
-    let promptForRun = prompt;
+    const runtimeCrafts = resolveRuntimeCrafts();
+    let promptForRun = buildPromptForCrafts(runtimeCrafts);
     if (contentEnabled && regenerateContentEachRun) {
-      const plan = await planWallContent(undefined, true);
-      if (plan) promptForRun = buildPromptWithWallPlan(plan);
+      const plan = await planWallContent(undefined, true, runtimeCrafts);
+      if (plan) promptForRun = buildPromptWithWallPlan(plan, runtimeCrafts);
     }
     const runtimeReferenceImages = await buildRuntimeReferenceImages();
     const runSeed = seed > 0 ? seed : randomImageSeed();
@@ -2742,9 +2788,25 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
             )}
           </div>
           <div className="space-y-1.5">
+            <div className="text-[9px] leading-snug text-white/35">随机数量会在每次运行时从该分类未手动选中的工艺中补选，不改变当前勾选状态。</div>
             {craftGroups.map((group) => (
               <div key={group.category} className="space-y-1">
-                <div className="text-[9px] font-semibold text-white/40">{group.category}</div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[9px] font-semibold text-white/40">{group.category}</div>
+                  <label className="flex items-center gap-1 text-[9px] text-white/40">
+                    随机
+                    <input
+                      className="h-5 w-11 rounded border border-white/10 bg-black/20 px-1 text-center text-[10px] text-white/70 outline-none focus:border-cyan-300/60 disabled:opacity-45"
+                      type="number"
+                      min={0}
+                      max={Math.max(0, group.crafts.length - selectedCrafts.filter((craftId) => group.crafts.some((craft) => craft.id === craftId)).length)}
+                      step={1}
+                      value={craftRandomCounts[group.category] || 0}
+                      disabled={isReadonly}
+                      onChange={(event) => setCraftRandomCount(group.category, event.target.value)}
+                    />
+                  </label>
+                </div>
                 <div className="grid grid-cols-4 gap-1">
                   {group.crafts.map((craft) => {
                     const active = selectedCrafts.includes(craft.id);
