@@ -396,6 +396,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     colorMaterialReferenceToneStatus: '',
     colorMaterialPriorityMode: 'frontend',
     planCameraDraft: null,
+    planCameraViewport: { ratio: '16:9', scale: 1, offsetX: 0, offsetY: 0 },
     planCameraConfirmed: false,
     planCameraCompositeImage: '',
     planCameraSourceImage: '',

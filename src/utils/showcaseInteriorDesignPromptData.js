@@ -174,6 +174,8 @@ function exhibitItemsText(items, style, values = {}) {
       '必须保持合成图中每个展品的像素占比、外接矩形大小、相互间距和留白比例；不得重新居中、不得自动适配画面、不得填满玻璃区、不得为了视觉平衡改变大小。',
       '排版高度规则：排版窗口中每个展品的垂直位置直接对应它在玻璃区内的实际展示高度；展品底边离玻璃区底部越高，下方展托就必须越高。',
       '展托规则：每件展品下面使用独立展托、托座或支架托举到排版窗口指定高度；不同展品的展托高度可以不同，不能把所有展品统一落在同一条底线上。',
+      '展托可见性强制要求：必须把展托画成清晰可见的实体构件，可以是细柱、透明亚克力支架、金属托架、阶梯台座或定制托座；展托必须从底座或层板连续连接到展品底部，不能让展品悬浮，不能只用阴影、反光或暗部暗示支撑。',
+      '禁止省略展托：不要隐藏展托、不要把展托做成完全透明不可见、不要让展托被展品或背景遮挡、不要裁掉展托；每件不贴近玻璃区底部的展品下方都必须能看见对应高度的支撑结构。',
       '不要套用自动尺寸模式中的“高度 mm”或“设定高度 70%”规则；不要为了画面美观擅自重新放大、缩小或改动展品位置。',
       s.hasCap
         ? `手动排版合成图对应玻璃区内部：宽 ${s.widthMm} mm，高 ${s.glassHeightMm} mm；展柜宽度、玻璃区高度、底座和柜帽仍保持设定尺寸。`
@@ -185,13 +187,13 @@ function exhibitItemsText(items, style, values = {}) {
         const topMm = normalizeNumber(item.yMm, 0, 0, 999999);
         const bottomFromTopMm = normalizeNumber(item.yMm + item.heightMm, 0, 0, 999999);
         const plinthHeightMm = normalizeNumber(Math.max(0, s.glassHeightMm - bottomFromTopMm), 0, 0, 999999);
-        lines.push(`${index + 1}. ${item.label}：顶部距玻璃区顶部 ${topMm} mm，展品显示高度 ${item.heightMm} mm，展品底边距玻璃区底部 ${plinthHeightMm} mm；下方展托高度约 ${plinthHeightMm} mm，用该高度托举展品。`);
+        lines.push(`${index + 1}. ${item.label}：顶部距玻璃区顶部 ${topMm} mm，展品显示高度 ${item.heightMm} mm，展品底边距玻璃区底部 ${plinthHeightMm} mm；下方必须绘制可见展托，展托高度约 ${plinthHeightMm} mm，用该高度从底座或层板托举到展品底部。`);
       });
     }
     if (values.hasColorMaterialReferenceImage === true) {
       lines.push('参考图顺序：第 2 张参考图 = 色彩材质参考图，仅用于柜内背景、底座、背板、托架、灯光和材料气质；它不是展品图，不得改变第 1 张合成图中的展品排版。');
     }
-    lines.push('渲染前最终检查：只对齐第 1 张手动排版合成图中的展品位置、大小、间距、留白和层级；必须用不同高度的展托承接各展品底边，不要使用文字坐标推导另一套布局。');
+    lines.push('渲染前最终检查：只对齐第 1 张手动排版合成图中的展品位置、大小、间距、留白和层级；必须用不同高度的可见展托承接各展品底边，不要出现悬浮展品，不要使用文字坐标推导另一套布局。');
     return lines.join('\n');
   }
 

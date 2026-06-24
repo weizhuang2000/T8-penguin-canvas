@@ -96,6 +96,16 @@ const COLOR_MATERIAL_MARK_DEFAULTS_VERSION = 2;
 const PLAN_CAMERA_DEFAULT_FOV = 60;
 const PLAN_CAMERA_MIN_FOV = 20;
 const PLAN_CAMERA_MAX_FOV = 120;
+const PLAN_CAMERA_OUTPUT_MAX_SIDE = 1600;
+const PLAN_CAMERA_VIEWPORT_SCALE_MIN = 1;
+const PLAN_CAMERA_VIEWPORT_SCALE_MAX = 5;
+const PLAN_CAMERA_RATIO_OPTIONS = [
+  { value: '1:1', label: '1:1' },
+  { value: '4:3', label: '4:3' },
+  { value: '3:4', label: '3:4' },
+  { value: '16:9', label: '16:9' },
+  { value: '9:16', label: '9:16' },
+] as const;
 const SPACE_LIGHTING_OPTIONS = [
   { value: 'very-dark', label: '非常暗' },
   { value: 'dark', label: '比较暗' },
@@ -121,6 +131,13 @@ interface PlanCameraState {
   y: number;
   angle: number;
   fov: number;
+}
+
+interface PlanCameraViewport {
+  ratio: string;
+  scale: number;
+  offsetX: number;
+  offsetY: number;
 }
 
 const REFERENCE_MARK_POSITION_OPTIONS: Array<{ value: ReferenceMarkPosition; label: string }> = [
@@ -215,12 +232,40 @@ function defaultPlanCameraState(): PlanCameraState {
   return { x: 0.5, y: 0.82, angle: -90, fov: PLAN_CAMERA_DEFAULT_FOV };
 }
 
-function planCameraDescription(camera: PlanCameraState | null): string {
+function normalizePlanCameraRatio(value: unknown): string {
+  const text = String(value || '').trim();
+  return PLAN_CAMERA_RATIO_OPTIONS.some((item) => item.value === text) ? text : '16:9';
+}
+
+function planCameraRatioValue(value: unknown): number {
+  const ratio = normalizePlanCameraRatio(value);
+  const [w, h] = ratio.split(':').map((item) => Number(item) || 1);
+  return w / h;
+}
+
+function normalizePlanCameraViewport(value: unknown): PlanCameraViewport {
+  const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  return {
+    ratio: normalizePlanCameraRatio(raw.ratio),
+    scale: clampNumber(raw.scale, PLAN_CAMERA_VIEWPORT_SCALE_MIN, PLAN_CAMERA_VIEWPORT_SCALE_MAX, 1),
+    offsetX: clampNumber(raw.offsetX, -1, 1, 0),
+    offsetY: clampNumber(raw.offsetY, -1, 1, 0),
+  };
+}
+
+function defaultPlanCameraViewport(): PlanCameraViewport {
+  return { ratio: '16:9', scale: 1, offsetX: 0, offsetY: 0 };
+}
+
+function planCameraDescription(camera: PlanCameraState | null, viewport?: PlanCameraViewport | null): string {
   if (!camera) return '';
+  const vp = viewport ? normalizePlanCameraViewport(viewport) : defaultPlanCameraViewport();
   return [
     `相机位置：平面图归一化坐标 x=${camera.x.toFixed(3)}, y=${camera.y.toFixed(3)}`,
     `相机朝向：${Math.round(camera.angle)}°`,
     `取景角：${Math.round(camera.fov)}°`,
+    `画面选区比例：${vp.ratio}`,
+    `平面图在选区内缩放：${vp.scale.toFixed(2)}x，偏移 x=${vp.offsetX.toFixed(3)}, y=${vp.offsetY.toFixed(3)}`,
     '请按该视角渲染展陈空间图像。',
   ].join('；');
 }
@@ -442,17 +487,48 @@ function drawPlanCameraOverlay(ctx: CanvasRenderingContext2D, width: number, hei
   ctx.restore();
 }
 
-async function composePlanCameraDataUrl(imageUrl: string, camera: PlanCameraState): Promise<string> {
+function planCameraOutputSize(ratio: string): { width: number; height: number } {
+  const ratioValue = planCameraRatioValue(ratio);
+  if (ratioValue >= 1) {
+    return { width: PLAN_CAMERA_OUTPUT_MAX_SIDE, height: Math.round(PLAN_CAMERA_OUTPUT_MAX_SIDE / ratioValue) };
+  }
+  return { width: Math.round(PLAN_CAMERA_OUTPUT_MAX_SIDE * ratioValue), height: PLAN_CAMERA_OUTPUT_MAX_SIDE };
+}
+
+function drawPlanLayoutToViewport(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  width: number,
+  height: number,
+  viewport: PlanCameraViewport,
+) {
+  const imageWidth = image.naturalWidth || image.width;
+  const imageHeight = image.naturalHeight || image.height;
+  const containScale = Math.min(width / imageWidth, height / imageHeight);
+  const drawWidth = imageWidth * containScale * viewport.scale;
+  const drawHeight = imageHeight * containScale * viewport.scale;
+  const overflowX = Math.max(0, (drawWidth - width) / 2);
+  const overflowY = Math.max(0, (drawHeight - height) / 2);
+  const centerX = width / 2 + viewport.offsetX * overflowX;
+  const centerY = height / 2 + viewport.offsetY * overflowY;
+  ctx.drawImage(image, centerX - drawWidth / 2, centerY - drawHeight / 2, drawWidth, drawHeight);
+}
+
+async function composePlanCameraDataUrl(imageUrl: string, camera: PlanCameraState, viewportValue?: PlanCameraViewport): Promise<string> {
   const image = await loadReferenceImage(imageUrl);
-  const width = image.naturalWidth || image.width;
-  const height = image.naturalHeight || image.height;
-  if (!width || !height) throw new Error('平面布局图尺寸无效，无法合成相机视角');
+  const sourceWidth = image.naturalWidth || image.width;
+  const sourceHeight = image.naturalHeight || image.height;
+  if (!sourceWidth || !sourceHeight) throw new Error('平面布局图尺寸无效，无法合成相机视角');
+  const viewport = normalizePlanCameraViewport(viewportValue);
+  const { width, height } = planCameraOutputSize(viewport.ratio);
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('当前浏览器无法创建平面布局图合成画布');
-  ctx.drawImage(image, 0, 0, width, height);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, height);
+  drawPlanLayoutToViewport(ctx, image, width, height, viewport);
   drawPlanCameraOverlay(ctx, width, height, camera);
   return canvas.toDataURL('image/png');
 }
@@ -840,33 +916,40 @@ function ImageSlot({
 function PlanCameraEditor({
   sourceImage,
   camera,
+  viewport,
   confirmed,
   compositeImage,
   disabled,
   busy,
   onAdd,
   onChange,
+  onViewportChange,
   onConfirm,
   onEdit,
   onClear,
 }: {
   sourceImage: string;
   camera: PlanCameraState | null;
+  viewport: PlanCameraViewport;
   confirmed: boolean;
   compositeImage: string;
   disabled: boolean;
   busy: boolean;
   onAdd: () => void;
   onChange: (camera: PlanCameraState) => void;
+  onViewportChange: (viewport: PlanCameraViewport) => void;
   onConfirm: () => void;
   onEdit: () => void;
   onClear: () => void;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
-  const [dragMode, setDragMode] = useState<'move' | 'angle' | null>(null);
+  const [dragMode, setDragMode] = useState<'image' | 'move' | 'angle' | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
   const activeCamera = camera || defaultPlanCameraState();
+  const activeViewport = normalizePlanCameraViewport(viewport);
   const canEdit = !!camera && !confirmed && !disabled && !busy;
   const previewImage = confirmed && compositeImage ? compositeImage : sourceImage;
+  const ratioValue = planCameraRatioValue(activeViewport.ratio);
   const cx = activeCamera.x * 1000;
   const cy = activeCamera.y * 1000;
   const angle = (activeCamera.angle * Math.PI) / 180;
@@ -909,6 +992,33 @@ function PlanCameraEditor({
     updateFromEvent(event, mode);
   };
 
+  const startImageDrag = (event: PointerEvent<HTMLDivElement>) => {
+    if (!canEdit) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDragMode('image');
+    dragStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      offsetX: activeViewport.offsetX,
+      offsetY: activeViewport.offsetY,
+    };
+  };
+
+  const updateImageDrag = (event: PointerEvent<HTMLDivElement>) => {
+    if (!canEdit || !dragStartRef.current) return;
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect || !rect.width || !rect.height) return;
+    const maxDeltaX = Math.max(1, rect.width * 0.35);
+    const maxDeltaY = Math.max(1, rect.height * 0.35);
+    onViewportChange({
+      ...activeViewport,
+      offsetX: clampNumber(dragStartRef.current.offsetX + (event.clientX - dragStartRef.current.x) / maxDeltaX, -1, 1, 0),
+      offsetY: clampNumber(dragStartRef.current.offsetY + (event.clientY - dragStartRef.current.y) / maxDeltaY, -1, 1, 0),
+    });
+  };
+
   return (
     <div className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
       <div className="mb-1.5 flex items-center gap-2">
@@ -925,19 +1035,62 @@ function PlanCameraEditor({
           {camera && <button type="button" className={BUTTON} disabled={disabled || busy} onClick={onClear}>清除</button>}
         </div>
       </div>
+      {camera && (
+        <div className="mb-2 grid grid-cols-[56px_1fr_42px] items-center gap-2 text-[10px] text-white/60">
+          <span>选区比例</span>
+          <select
+            className={`${FIELD} h-7 py-0 text-[10px]`}
+            value={activeViewport.ratio}
+            disabled={!canEdit}
+            onChange={(event) => onViewportChange({ ...activeViewport, ratio: normalizePlanCameraRatio(event.target.value) })}
+          >
+            {PLAN_CAMERA_RATIO_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+          <span />
+          <span>平面缩放</span>
+          <input
+            type="range"
+            min={PLAN_CAMERA_VIEWPORT_SCALE_MIN}
+            max={PLAN_CAMERA_VIEWPORT_SCALE_MAX}
+            step={0.05}
+            value={activeViewport.scale}
+            disabled={!canEdit}
+            className="accent-cyan-300"
+            onChange={(event) => onViewportChange({ ...activeViewport, scale: clampNumber(event.target.value, PLAN_CAMERA_VIEWPORT_SCALE_MIN, PLAN_CAMERA_VIEWPORT_SCALE_MAX, 1) })}
+          />
+          <span className="text-right">{activeViewport.scale.toFixed(2)}x</span>
+        </div>
+      )}
       <div
         ref={stageRef}
         className="relative overflow-hidden rounded border border-white/10 bg-black/30"
+        style={{ aspectRatio: `${ratioValue}` }}
         onPointerMove={(event) => {
-          if (dragMode) updateFromEvent(event, dragMode);
+          if (dragMode === 'image') updateImageDrag(event);
+          else if (dragMode) updateFromEvent(event, dragMode);
         }}
         onPointerUp={(event) => {
           if (dragMode) event.currentTarget.releasePointerCapture(event.pointerId);
+          dragStartRef.current = null;
           setDragMode(null);
         }}
-        onPointerCancel={() => setDragMode(null)}
+        onPointerCancel={() => {
+          dragStartRef.current = null;
+          setDragMode(null);
+        }}
       >
-        <img src={previewImage} alt="" className="block max-h-72 w-full select-none object-contain" draggable={false} />
+        <img
+          src={previewImage}
+          alt=""
+          className={`absolute left-1/2 top-1/2 h-full w-full max-w-none select-none object-contain ${canEdit && !confirmed ? 'cursor-grab active:cursor-grabbing' : ''}`}
+          style={{
+            transform: confirmed
+              ? 'translate(-50%, -50%)'
+              : `translate(calc(-50% + ${activeViewport.offsetX * 35}%), calc(-50% + ${activeViewport.offsetY * 35}%)) scale(${activeViewport.scale})`,
+          }}
+          draggable={false}
+          onPointerDown={startImageDrag}
+        />
         {camera && !confirmed && (
           <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 1000 1000" preserveAspectRatio="none">
             <path d={`M ${cx} ${cy} L ${leftX} ${leftY} L ${rightX} ${rightY} Z`} fill="rgba(34,211,238,.18)" stroke="rgba(34,211,238,.9)" strokeWidth="5" />
@@ -1167,6 +1320,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   );
   const wallContentPrompt = hasContentPlanning ? contentOutputs.mainOutput : '';
   const planCameraDraft = useMemo(() => normalizePlanCameraState(d.planCameraDraft), [d.planCameraDraft]);
+  const planCameraViewport = useMemo(() => normalizePlanCameraViewport(d.planCameraViewport), [d.planCameraViewport]);
   const planCameraConfirmed = !!(
     planLayoutImage &&
     planCameraDraft &&
@@ -1178,7 +1332,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const activeSpatialReferenceImage = spatialInputMode === 'plan-camera'
     ? (planCameraConfirmed ? String(d.planCameraCompositeImage || '') : '')
     : structureImage;
-  const planCameraPromptDescription = spatialInputMode === 'plan-camera' ? planCameraDescription(planCameraDraft) : '';
+  const planCameraPromptDescription = spatialInputMode === 'plan-camera' ? planCameraDescription(planCameraDraft, planCameraViewport) : '';
   const hasSpatialInput = !!activeSpatialReferenceImage;
 
   const buildPromptWithWallPlan = useCallback((plan: ElevationContentPlan) => {
@@ -1314,6 +1468,16 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const setPlanCameraDraft = useCallback((camera: PlanCameraState) => {
     update({
       planCameraDraft: camera,
+      planCameraViewport,
+      planCameraConfirmed: false,
+      planCameraCompositeImage: '',
+      planCameraSourceImage: planLayoutImage,
+    });
+  }, [planCameraViewport, planLayoutImage, update]);
+
+  const setPlanCameraViewport = useCallback((viewport: PlanCameraViewport) => {
+    update({
+      planCameraViewport: normalizePlanCameraViewport(viewport),
       planCameraConfirmed: false,
       planCameraCompositeImage: '',
       planCameraSourceImage: planLayoutImage,
@@ -1329,6 +1493,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     if (isReadonly || busy) return;
     update({
       planCameraDraft: null,
+      planCameraViewport: defaultPlanCameraViewport(),
       planCameraConfirmed: false,
       planCameraCompositeImage: '',
       planCameraSourceImage: '',
@@ -1347,9 +1512,10 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const confirmPlanCamera = useCallback(async () => {
     if (isReadonly || busy || !planLayoutImage || !planCameraDraft) return;
     try {
-      const composite = await composePlanCameraDataUrl(planLayoutImage, planCameraDraft);
+      const composite = await composePlanCameraDataUrl(planLayoutImage, planCameraDraft, planCameraViewport);
       update({
         planCameraDraft,
+        planCameraViewport,
         planCameraConfirmed: true,
         planCameraCompositeImage: composite,
         planCameraSourceImage: planLayoutImage,
@@ -1358,7 +1524,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     } catch (error: any) {
       update({ status: 'error', error: error?.message || '平面布局相机视角合成失败' });
     }
-  }, [busy, isReadonly, planCameraDraft, planLayoutImage, update]);
+  }, [busy, isReadonly, planCameraDraft, planCameraViewport, planLayoutImage, update]);
 
   const renderColorMaterialMarkSettings = (
     title: string,
@@ -1438,6 +1604,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       if (d.planCameraDraft || d.planCameraConfirmed || d.planCameraCompositeImage || d.planCameraSourceImage) {
         update({
           planCameraDraft: null,
+          planCameraViewport: defaultPlanCameraViewport(),
           planCameraConfirmed: false,
           planCameraCompositeImage: '',
           planCameraSourceImage: '',
@@ -2079,12 +2246,14 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
             <PlanCameraEditor
               sourceImage={planLayoutImage}
               camera={planCameraDraft}
+              viewport={planCameraViewport}
               confirmed={planCameraConfirmed}
               compositeImage={String(d.planCameraCompositeImage || '')}
               disabled={isReadonly}
               busy={busy}
               onAdd={addPlanCamera}
               onChange={setPlanCameraDraft}
+              onViewportChange={setPlanCameraViewport}
               onConfirm={() => void confirmPlanCamera()}
               onEdit={editPlanCamera}
               onClear={clearPlanCamera}
