@@ -22,8 +22,10 @@ import {
 import * as api from '../../services/api';
 import { getCodexCliStatus, type CodexCliStatus } from '../../services/codexCli';
 import { publishCodexImageConjureResult, streamCodexImageConjure, type CodexImageConjureResult } from '../../services/codexImageConjure';
+import { generateExternalImage, queryExternalImageStatus } from '../../services/generation';
 import { PORT_COLOR } from '../../config/portTypes';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
+import { useApiKeysStore } from '../../stores/apiKeys';
 import { useThemeStore } from '../../stores/theme';
 import {
   DEFAULT_CODEX_IMAGE_TEMPLATES,
@@ -56,8 +58,21 @@ import {
   filterExcludedMaterials,
   normalizeExcludedMaterialIds,
 } from '../../utils/materialExclusion';
+import {
+  advancedProviderModelOptions,
+  advancedProvidersForNode,
+  externalImageSizeFor,
+  resolveAdvancedProviderSelection,
+} from '../../utils/advancedProviders';
 
 const STORAGE_KEY = 't8.codexImageConjure.prompts.v1';
+const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
+const EXTERNAL_IMAGE_POLL_TIMEOUT_SECONDS = 3600;
+
+type CodexConjureSource = 'codex-cli' | 'external-image';
+
+const minExternalPollCount = (intervalMs: number) =>
+  Math.ceil((EXTERNAL_IMAGE_POLL_TIMEOUT_SECONDS * 1000) / Math.max(1, intervalMs));
 
 const CODEX_CONJURE_MODELS = [
   { value: 'gpt-5.5', label: 'GPT-5.5（推荐）' },
@@ -158,6 +173,7 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
   const d = data as any;
   const update = useUpdateNodeData(id);
   const { theme, style } = useThemeStore();
+  const advancedProviders = useApiKeysStore((s) => s.settings.advancedProviders);
   const isDark = theme === 'dark';
   const isPixel = style === 'pixel';
   const upstream = useUpstreamMaterials(id);
@@ -199,6 +215,38 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
   const autoPublish = d.codexConjureAutoPublish !== false;
   const persistPrompt = Boolean(d.codexConjurePersistPrompt);
   const persistRefs = d.codexConjurePersistRefs !== false;
+  const conjureSource: CodexConjureSource = d.codexConjureSource === 'external-image' ? 'external-image' : 'codex-cli';
+  const isExternalSource = conjureSource === 'external-image';
+  const imageAdvancedProviders = useMemo(
+    () => advancedProvidersForNode(advancedProviders, 'image'),
+    [advancedProviders],
+  );
+  const providerSelection = useMemo(
+    () => resolveAdvancedProviderSelection(advancedProviders, 'image', {
+      providerSource: d.providerSource,
+      providerId: d.providerId,
+      providerModel: d.providerModel,
+    }),
+    [advancedProviders, d.providerSource, d.providerId, d.providerModel],
+  );
+  const activeExternalSelection = useMemo(() => {
+    if (providerSelection.available) return providerSelection;
+    const provider = imageAdvancedProviders[0];
+    if (!provider) return providerSelection;
+    const models = advancedProviderModelOptions(provider, 'image');
+    return {
+      providerSource: provider.protocol,
+      providerId: provider.id,
+      providerModel: models[0] || '',
+      provider,
+      available: !!models[0],
+    };
+  }, [imageAdvancedProviders, providerSelection]);
+  const isExternalReady = isExternalSource && activeExternalSelection.available && !!activeExternalSelection.provider;
+  const externalModelOptions = activeExternalSelection.provider
+    ? advancedProviderModelOptions(activeExternalSelection.provider, 'image')
+    : [];
+  const externalProviderModel = activeExternalSelection.providerModel || externalModelOptions[0] || '';
   const materialOrder: string[] = Array.isArray(d.codexConjureMaterialOrder) ? d.codexConjureMaterialOrder : [];
   const excludedMaterialIds = useMemo(
     () => normalizeExcludedMaterialIds(d.codexConjureExcludedMaterialIds),
@@ -328,13 +376,17 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
   }, [setTasks]);
 
   const refreshStatus = useCallback(async () => {
+    if (isExternalSource) {
+      setStatus(null);
+      return;
+    }
     try {
       const next = await getCodexCliStatus(String(d.codexExecutablePath || ''));
       setStatus(next);
     } catch (error: any) {
       setStatus({ available: false, message: error?.message || 'Codex CLI 状态检查失败' });
     }
-  }, [d.codexExecutablePath]);
+  }, [d.codexExecutablePath, isExternalSource]);
 
   useEffect(() => {
     void refreshStatus();
@@ -496,13 +548,20 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
     return {
       prompt: [referenceInstruction, promptBody].filter(Boolean).join('\n\n').trim(),
       images: imageRefs,
+      source: conjureSource,
       model: String(d.codexConjureModel || 'gpt-5.5'),
       size: String(d.codexConjureSize || '2K'),
       aspectRatio: String(d.codexConjureAspectRatio || '9:16'),
       quality: String(d.codexConjureQuality || '高'),
       count,
+      providerSource: isExternalSource ? activeExternalSelection.providerSource : undefined,
+      providerId: isExternalSource ? activeExternalSelection.providerId : undefined,
+      providerModel: isExternalSource ? externalProviderModel : undefined,
+      providerParams: isExternalSource && d.providerParams && typeof d.providerParams === 'object' && !Array.isArray(d.providerParams)
+        ? { ...d.providerParams }
+        : undefined,
     };
-  }, [count, d.codexConjureAspectRatio, d.codexConjureBackground, d.codexConjureFormat, d.codexConjureModel, d.codexConjureNegativePrompt, d.codexConjurePromptMode, d.codexConjureQuality, d.codexConjureSize, mentionMaterials, mentions, orderedInputImages, orderedInputTexts, prompt, promptState.snippets, selectedTemplate?.notes]);
+  }, [activeExternalSelection.providerId, activeExternalSelection.providerSource, conjureSource, count, d.codexConjureAspectRatio, d.codexConjureBackground, d.codexConjureFormat, d.codexConjureModel, d.codexConjureNegativePrompt, d.codexConjurePromptMode, d.codexConjureQuality, d.codexConjureSize, d.providerParams, externalProviderModel, isExternalSource, mentionMaterials, mentions, orderedInputImages, orderedInputTexts, prompt, promptState.snippets, selectedTemplate?.notes]);
 
   const addLatestToLibrary = useCallback(async () => {
     const url = latestUrls[0];
@@ -527,30 +586,107 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
     const controller = new AbortController();
     controllersRef.current.set(task.id, controller);
     let reply = '';
-    patchTask(task.id, { status: 'running', progressText: 'Codex 正在生成...', startedAt: new Date().toISOString(), error: '' });
+    const taskSource = task.source === 'external-image' ? 'external-image' : 'codex-cli';
+    patchTask(task.id, { status: 'running', progressText: taskSource === 'external-image' ? '扩展 API 正在生成...' : 'Codex 正在生成...', startedAt: new Date().toISOString(), error: '' });
     setStreamText('');
     try {
-      const result = await streamCodexImageConjure(
-        {
-          nodeId: id,
+      let result: CodexImageConjureResult;
+      if (taskSource === 'external-image') {
+        if (!task.providerId || !task.providerModel) {
+          throw new Error('请先在 API 设置中启用支持图像生成的扩展平台，并在节点中选择平台与模型。');
+        }
+        const providerParams = task.providerParams && typeof task.providerParams === 'object' && !Array.isArray(task.providerParams)
+          ? { ...task.providerParams }
+          : {};
+        const outputFormat = String(d.codexConjureFormat || 'png').toLowerCase() === 'jpg' ? 'jpg' : 'png';
+        let externalResult = await generateExternalImage({
+          providerId: task.providerId,
+          providerModel: task.providerModel,
+          model: task.providerModel,
           prompt: task.prompt,
+          size: externalImageSizeFor(task.aspectRatio, task.size),
+          aspect_ratio: task.aspectRatio,
+          image_size: task.size,
           images: task.images,
-          selectedSkillNames: ['imagegen'],
-          model: task.model,
-          size: task.size,
-          aspectRatio: task.aspectRatio,
-          quality: task.quality,
-          count: task.count,
-          executablePath: String(d.codexExecutablePath || ''),
-        },
-        {
-          signal: controller.signal,
-          onDelta: (delta) => {
-            reply += delta;
-            setStreamText((prev) => `${prev}${delta}`);
+          negativePrompt: String(d.codexConjureNegativePrompt || '').trim() || undefined,
+          negative: String(d.codexConjureNegativePrompt || '').trim() || undefined,
+          n: task.count,
+          outputFormat,
+          providerParams,
+          historyContext: {
+            sourceNodeId: id,
+            sourceNodeType: 'codex-image-conjure',
+            nodeTitle: String(d.label || 'Codex 生图工作台'),
           },
-        },
-      );
+          async: true,
+        });
+        if ((!externalResult.imageUrls?.length) && externalResult.taskId && (externalResult.code === 'running' || externalResult.status === 'running')) {
+          let pollingTaskId = externalResult.taskId;
+          const maxPoll = minExternalPollCount(EXTERNAL_IMAGE_POLL_INTERVAL_MS);
+          for (let i = 0; i < maxPoll; i += 1) {
+            if (controller.signal.aborted) {
+              const abortError = new Error('用户停止');
+              abortError.name = 'AbortError';
+              throw abortError;
+            }
+            await new Promise((resolve) => setTimeout(resolve, EXTERNAL_IMAGE_POLL_INTERVAL_MS));
+            externalResult = await queryExternalImageStatus({
+              providerId: task.providerId,
+              providerModel: task.providerModel,
+              taskId: pollingTaskId,
+              outputFormat,
+              historyContext: {
+                sourceNodeId: id,
+                sourceNodeType: 'codex-image-conjure',
+                nodeTitle: String(d.label || 'Codex 生图工作台'),
+              },
+            });
+            pollingTaskId = externalResult.taskId || pollingTaskId;
+            patchTask(task.id, { progressText: `扩展 API 轮询中 ${Math.min(99, Math.round(((i + 1) / maxPoll) * 100))}%` });
+            if (externalResult.imageUrls?.length || (externalResult.code && externalResult.code !== 'running')) break;
+          }
+        }
+        if (!externalResult.imageUrls?.length) throw new Error(externalResult.error || '扩展平台完成但未返回图片');
+        result = {
+          imageUrl: externalResult.imageUrls[0] || '',
+          imageUrls: externalResult.imageUrls,
+          text: externalResult.text || '',
+          reply: externalResult.text || '',
+          artifacts: externalResult.imageUrls.map((url, index) => ({
+            id: `external-image-${task.id}-${index}`,
+            kind: 'image' as const,
+            title: `扩展 API 图像 ${index + 1}`,
+            url,
+            urls: [url],
+            status: 'completed',
+          })),
+          provider: externalResult.provider,
+          taskId: externalResult.taskId,
+          raw: externalResult.raw,
+        } as CodexImageConjureResult;
+      } else {
+        result = await streamCodexImageConjure(
+          {
+            nodeId: id,
+            prompt: task.prompt,
+            images: task.images,
+            selectedSkillNames: ['imagegen'],
+            model: task.model,
+            size: task.size,
+            aspectRatio: task.aspectRatio,
+            quality: task.quality,
+            count: task.count,
+            executablePath: String(d.codexExecutablePath || ''),
+          },
+          {
+            signal: controller.signal,
+            onDelta: (delta) => {
+              reply += delta;
+              setStreamText((prev) => `${prev}${delta}`);
+            },
+          },
+        );
+      }
       const published = publishCodexImageConjureResult(result, { maxImages: task.count }) as CodexImageConjureResult;
       const canvasPublished = publishCodexImageConjureResult(result, { maxImages: task.count, includeText: false }) as CodexImageConjureResult;
       patchTask(task.id, {
@@ -589,7 +725,7 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
     } finally {
       controllersRef.current.delete(task.id);
     }
-  }, [autoPublish, d.codexExecutablePath, id, patchTask, persistPrompt, persistRefs, update]);
+  }, [autoPublish, d.codexConjureFormat, d.codexConjureNegativePrompt, d.codexExecutablePath, d.label, id, patchTask, persistPrompt, persistRefs, update]);
 
   const handleGenerate = useCallback(async () => {
     if (busy) return;
@@ -598,10 +734,14 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
       update({ error: '请填写提示词，或连接上游文本节点。' });
       return;
     }
+    if (input.source === 'external-image' && (!input.providerId || !input.providerModel)) {
+      update({ status: 'error', error: '请先在 API 设置中启用支持图像生成的扩展平台，并在节点设置中选择平台与模型。' });
+      return;
+    }
     const task = createCodexImageConjureTask(input);
     setTasks([...tasksRef.current, task]);
     setBusy(true);
-    update({ status: 'running', error: '', codexConjureLastRunSummary: 'Codex 正在生成图像...' });
+    update({ status: 'running', error: '', codexConjureLastRunSummary: input.source === 'external-image' ? '扩展 API 正在生成图像...' : 'Codex 正在生成图像...' });
     try {
       await runTask(task);
     } finally {
@@ -613,6 +753,10 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
     const input = buildCurrentTaskInput();
     if (!input.prompt) {
       update({ error: '请填写提示词，或连接上游文本节点。' });
+      return;
+    }
+    if (input.source === 'external-image' && (!input.providerId || !input.providerModel)) {
+      update({ status: 'error', error: '请先在 API 设置中启用支持图像生成的扩展平台，并在节点设置中选择平台与模型。' });
       return;
     }
     const next = enqueueCodexImageConjureTasks(tasksRef.current, input, batchCount);
@@ -628,6 +772,10 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
       const input = buildCurrentTaskInput();
       if (!input.prompt) {
         update({ error: '请填写提示词，或连接上游文本节点。' });
+        return;
+      }
+      if (input.source === 'external-image' && (!input.providerId || !input.providerModel)) {
+        update({ status: 'error', error: '请先在 API 设置中启用支持图像生成的扩展平台，并在节点设置中选择平台与模型。' });
         return;
       }
       const next = enqueueCodexImageConjureTasks(tasksRef.current, input, batchCount);
@@ -677,7 +825,16 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
     if (!busy) await handleGenerate();
   }, 'codex-image-conjure');
 
-  const statusText = status?.available ? (status.version ? `Codex ${status.version}` : 'Codex 已就绪') : (status?.message || '正在检查 Codex CLI');
+  const statusText = isExternalSource
+    ? (isExternalReady && activeExternalSelection.provider
+      ? `扩展 API 已就绪：${activeExternalSelection.provider.label || activeExternalSelection.provider.id} · ${externalProviderModel || '默认模型'}`
+      : '请先在 API 设置中启用支持图像生成的扩展平台')
+    : (status?.available ? (status.version ? `Codex ${status.version}` : 'Codex 已就绪') : (status?.message || '正在检查 Codex CLI'));
+  const statusReady = isExternalSource ? isExternalReady : !!status?.available;
+  const statusTitle = isExternalSource ? (isExternalReady ? '扩展 API 已就绪' : '扩展 API 未配置') : (status?.available ? 'Codex 已就绪' : '登录 / 路径检查');
+  const headerSubtitle = isExternalSource
+    ? '扩展 API · 图像模型 · 队列/模板/片段/公共图库'
+    : 'Codex CLI · imagegen · 队列/模板/片段/公共图库';
   const queuedCount = tasks.filter((task) => task.status === 'queued').length;
   const runningCount = tasks.filter((task) => task.status === 'running').length;
   const completedCount = tasks.filter((task) => task.status === 'completed').length;
@@ -788,6 +945,74 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
         <section className="space-y-2 p-3" style={cardStyle}>
           <div className="font-bold">工作台设置</div>
           <div className="grid grid-cols-2 gap-2">
+            <label className="col-span-2 space-y-1 text-[11px] font-bold">
+              <span>生成来源</span>
+              <select
+                data-codex-conjure-source
+                className="nodrag w-full px-2 py-2 text-xs font-bold outline-none"
+                style={inputStyle}
+                value={conjureSource}
+                onChange={(event) => {
+                  const nextSource = event.currentTarget.value === 'external-image' ? 'external-image' : 'codex-cli';
+                  const patch: Record<string, any> = { codexConjureSource: nextSource };
+                  if (nextSource === 'external-image' && !providerSelection.available && imageAdvancedProviders[0]) {
+                    const provider = imageAdvancedProviders[0];
+                    patch.providerSource = provider.protocol;
+                    patch.providerId = provider.id;
+                    patch.providerModel = advancedProviderModelOptions(provider, 'image')[0] || '';
+                  }
+                  update(patch);
+                }}
+              >
+                <option value="codex-cli">Codex CLI / imagegen</option>
+                <option value="external-image">扩展 API 生图</option>
+              </select>
+            </label>
+            {isExternalSource && (
+              <div data-codex-conjure-external-provider className="col-span-2 grid grid-cols-2 gap-2">
+                {imageAdvancedProviders.length > 0 ? (
+                  <>
+                    <label className="space-y-1 text-[11px] font-bold">
+                      <span>扩展平台</span>
+                      <select
+                        className="nodrag w-full px-2 py-2 text-xs font-bold outline-none"
+                        style={inputStyle}
+                        value={activeExternalSelection.providerId}
+                        onChange={(event) => {
+                          const provider = imageAdvancedProviders.find((item) => item.id === event.currentTarget.value);
+                          if (!provider) return;
+                          const nextModels = advancedProviderModelOptions(provider, 'image');
+                          update({
+                            providerSource: provider.protocol,
+                            providerId: provider.id,
+                            providerModel: nextModels[0] || '',
+                          });
+                        }}
+                      >
+                        {imageAdvancedProviders.map((provider) => (
+                          <option key={provider.id} value={provider.id}>{provider.label || provider.id}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-[11px] font-bold">
+                      <span>外部模型</span>
+                      <select
+                        className="nodrag w-full px-2 py-2 text-xs font-bold outline-none"
+                        style={inputStyle}
+                        value={externalProviderModel}
+                        onChange={(event) => update({ providerModel: event.currentTarget.value })}
+                      >
+                        {externalModelOptions.map((model) => <option key={model} value={model}>{model}</option>)}
+                      </select>
+                    </label>
+                  </>
+                ) : (
+                  <div className="col-span-2 rounded-lg px-2 py-2 text-xs font-bold" style={{ ...inputStyle, color: subText }}>
+                    请先在 API 设置中启用支持图像生成的扩展平台
+                  </div>
+                )}
+              </div>
+            )}
             <label className="flex items-center gap-2 rounded-lg px-2 py-2 text-xs font-bold" style={inputStyle}>
               <input type="checkbox" checked={autoPublish} onChange={(event) => update({ codexConjureAutoPublish: event.currentTarget.checked })} /> 自动发布
             </label>
@@ -851,11 +1076,13 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-lg font-black leading-tight">Codex 生图工作台</div>
-          <div className="truncate text-xs" style={{ color: subText }}>Codex CLI · imagegen · 队列/模板/片段/公共图库</div>
+          <div className="truncate text-xs" style={{ color: subText }}>{headerSubtitle}</div>
         </div>
-        <button type="button" className="nodrag inline-flex items-center gap-1 px-2 py-1 text-xs font-bold" style={buttonStyle} onClick={() => void refreshStatus()}>
-          <RefreshCw size={13} /> 刷新
-        </button>
+        {!isExternalSource && (
+          <button type="button" className="nodrag inline-flex items-center gap-1 px-2 py-1 text-xs font-bold" style={buttonStyle} onClick={() => void refreshStatus()}>
+            <RefreshCw size={13} /> 刷新
+          </button>
+        )}
       </header>
 
       <div
@@ -866,9 +1093,9 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
       >
         <section className="p-3" style={cardStyle}>
           <div className="flex items-center justify-between gap-2">
-            <div className="font-bold">{status?.available ? 'Codex 已就绪' : '登录 / 路径检查'}</div>
-            <span className="rounded-full px-2 py-0.5 text-[11px]" style={{ background: status?.available ? 'rgba(34,197,94,0.16)' : 'rgba(251,191,36,0.18)', color: status?.available ? '#22c55e' : '#f59e0b' }}>
-              {status?.available ? '可生成' : '需确认'}
+            <div className="font-bold">{statusTitle}</div>
+            <span className="rounded-full px-2 py-0.5 text-[11px]" style={{ background: statusReady ? 'rgba(34,197,94,0.16)' : 'rgba(251,191,36,0.18)', color: statusReady ? '#22c55e' : '#f59e0b' }}>
+              {statusReady ? '可生成' : '需确认'}
             </span>
           </div>
           <div className="mt-1 text-xs" style={{ color: subText }}>{statusText}</div>

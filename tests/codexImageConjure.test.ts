@@ -41,8 +41,9 @@ test('Codex image conjure node is registered as a focused Codex image generator'
   assert.doesNotMatch(ports, /'codex-image-conjure':\s*\{\s*inputs:\s*\[[^\]]*video/);
   assert.doesNotMatch(ports, /'codex-image-conjure':\s*\{[\s\S]*outputs:\s*\[[^\]]*video/);
   assert.match(canvas, /CodexImageConjureNode/);
-  assert.match(canvas, /import\('\.\/nodes\/CodexImageConjureNode'\)/);
+  assert.match(canvas, /import CodexImageConjureNode from '\.\/nodes\/CodexImageConjureNode'/);
   assert.match(canvas, /'codex-image-conjure': CodexImageConjureNode/);
+  assert.match(canvas, /'codex-image-conjure':\s*\{[\s\S]*codexConjureSource:\s*'codex-cli'/);
   assert.match(canvas, /'codex-image-conjure':\s*\{[\s\S]*codexConjureMaterialOrder:\s*\[\]/);
   assert.match(canvas, /'codex-image-conjure':\s*\{[\s\S]*codexConjureExcludedMaterialIds:\s*\[\]/);
   assert.match(sidebar, /'codex-image-conjure': 'ImagePlus'/);
@@ -90,7 +91,7 @@ test('Codex image conjure keeps ilab prompt templates and snippets in an indepen
   assert.equal(normalized.categories.some((item) => item.id === '常用'), true);
 });
 
-test('Codex image conjure frontend only uses Codex CLI image generation and resource-library gallery hooks', () => {
+test('Codex image conjure frontend supports Codex CLI and optional external API image generation', () => {
   const node = read('../src/components/nodes/CodexImageConjureNode.tsx');
   const service = read('../src/services/codexImageConjure.ts');
 
@@ -124,6 +125,18 @@ test('Codex image conjure frontend only uses Codex CLI image generation and reso
   assert.doesNotMatch(node, /<Repeat/);
   assert.doesNotMatch(node, /publishResult/);
   assert.match(node, /变体/);
+  assert.match(node, /codexConjureSource/);
+  assert.match(node, /data-codex-conjure-source/);
+  assert.match(node, /data-codex-conjure-external-provider/);
+  assert.match(node, /扩展 API 生图/);
+  assert.match(node, /Codex CLI \/ imagegen/);
+  assert.match(node, /advancedProvidersForNode\(advancedProviders,\s*'image'\)/);
+  assert.match(node, /resolveAdvancedProviderSelection\(advancedProviders,\s*'image'/);
+  assert.match(node, /advancedProviderModelOptions\(provider,\s*'image'\)/);
+  assert.match(node, /generateExternalImage/);
+  assert.match(node, /queryExternalImageStatus/);
+  assert.match(node, /externalImageSizeFor/);
+  assert.match(node, /请先在 API 设置中启用支持图像生成的扩展平台/);
   assert.match(node, /codexConjureTasks/);
   assert.match(node, /runQueue/);
   assert.match(node, /导入/);
@@ -141,7 +154,7 @@ test('Codex image conjure frontend only uses Codex CLI image generation and reso
   assert.match(node, /getResourceItems/);
   assert.match(node, /publishCodexImageConjureResult/);
   assert.doesNotMatch(node, /renderArtifactPreview\(latestArtifact\)/);
-  assert.doesNotMatch(node, /openai-compatible|apiProvider|api_mode|api_provider/i);
+  assert.doesNotMatch(node, /apiProvider|api_mode|api_provider/i);
 
   assert.match(service, /streamCodexCliAgent/);
   assert.match(service, /imageGeneration:\s*true/);

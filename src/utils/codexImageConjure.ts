@@ -74,11 +74,16 @@ export interface CodexImageConjureTask {
   id: string;
   prompt: string;
   images: string[];
+  source?: 'codex-cli' | 'external-image';
   model: string;
   size: string;
   aspectRatio: string;
   quality: string;
   count: number;
+  providerSource?: string;
+  providerId?: string;
+  providerModel?: string;
+  providerParams?: Record<string, any>;
   queueIndex: number;
   status: CodexImageConjureTaskStatus;
   progressText?: string;
@@ -605,11 +610,18 @@ export function createCodexImageConjureTask(input: Partial<CodexImageConjureTask
     id: cleanString(input.id, 120) || `conjure-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     prompt: cleanString(input.prompt, 20000),
     images: Array.isArray(input.images) ? Array.from(new Set(input.images.map((url) => cleanString(url, 2000)).filter(Boolean))) : [],
+    source: input.source === 'external-image' ? 'external-image' : 'codex-cli',
     model: cleanString(input.model, 80) || 'gpt-5.5',
     size: cleanString(input.size, 40) || '2K',
     aspectRatio: cleanString(input.aspectRatio, 40) || '9:16',
     quality: cleanString(input.quality, 40) || '高',
     count: Math.max(1, Math.min(4, Number(input.count || 1) || 1)),
+    providerSource: cleanString(input.providerSource, 80) || undefined,
+    providerId: cleanString(input.providerId, 120) || undefined,
+    providerModel: cleanString(input.providerModel, 160) || undefined,
+    providerParams: input.providerParams && typeof input.providerParams === 'object' && !Array.isArray(input.providerParams)
+      ? { ...input.providerParams }
+      : undefined,
     queueIndex: Math.max(1, Number(input.queueIndex || 1) || 1),
     status: input.status || 'queued',
     progressText: cleanString(input.progressText, 1000) || undefined,

@@ -347,6 +347,15 @@ function withNodeSerialBadge(Component: ComponentType<any>): ComponentType<any> 
 const INITIAL_DATA: Record<string, Record<string, any>> = {
   image: { model: 'gpt-image-2', aspectRatio: '1:1', sizeLevel: '1K', referenceImages: [] },
   edit: { mode: 'edit', model: 'gpt-image-2', aspectRatio: '1:1', sizeLevel: '1K', referenceImages: [] },
+  'codex-image-conjure': {
+    codexConjureSource: 'codex-cli',
+    codexConjureMaterialOrder: [],
+    codexConjureExcludedMaterialIds: [],
+    providerSource: 'zhenzhen',
+    providerId: '',
+    providerModel: '',
+    providerParams: {},
+  },
   seedance: {
     model: 'doubao-seedance-2-0-fast-260128',
     duration: 5,
