@@ -142,6 +142,8 @@ interface PlanCameraViewport {
   offsetY: number;
 }
 
+type PlanCameraCropDragMode = 'crop-left' | 'crop-right' | 'crop-top' | 'crop-bottom';
+
 const REFERENCE_MARK_POSITION_OPTIONS: Array<{ value: ReferenceMarkPosition; label: string }> = [
   { value: 'top-left', label: '左上角' },
   { value: 'top-right', label: '右上角' },
@@ -257,6 +259,10 @@ function normalizePlanCameraViewport(value: unknown): PlanCameraViewport {
 
 function defaultPlanCameraViewport(): PlanCameraViewport {
   return { ratio: '16:9', scale: 1, offsetX: 0, offsetY: 0 };
+}
+
+function isPlanCameraCropDragMode(value: unknown): value is PlanCameraCropDragMode {
+  return value === 'crop-left' || value === 'crop-right' || value === 'crop-top' || value === 'crop-bottom';
 }
 
 function planCameraDescription(camera: PlanCameraState | null, viewport?: PlanCameraViewport | null): string {
@@ -978,11 +984,11 @@ function PlanCameraEditor({
     const point = pointFromEvent(event);
     if (!point) return;
     if (mode === 'move') {
-      setDraftCamera({ ...activeCamera, x: point.x, y: point.y });
+      onChange({ ...activeCamera, x: point.x, y: point.y });
       return;
     }
     const degrees = Math.atan2(point.y - activeCamera.y, point.x - activeCamera.x) * 180 / Math.PI;
-    setDraftCamera({ ...activeCamera, angle: normalizeAngle(degrees) });
+    onChange({ ...activeCamera, angle: normalizeAngle(degrees) });
   };
 
   const startDrag = (event: PointerEvent<HTMLDivElement>, mode: 'move' | 'angle') => {
@@ -1005,7 +1011,6 @@ function PlanCameraEditor({
       y: event.clientY,
       offsetX: activeViewport.offsetX,
       offsetY: activeViewport.offsetY,
-      scale: activeViewport.scale,
     };
   };
 
@@ -1015,44 +1020,10 @@ function PlanCameraEditor({
     if (!rect || !rect.width || !rect.height) return;
     const maxDeltaX = Math.max(1, rect.width * 0.35);
     const maxDeltaY = Math.max(1, rect.height * 0.35);
-    setDraftViewport({
+    onViewportChange({
       ...activeViewport,
       offsetX: clampNumber(dragStartRef.current.offsetX + (event.clientX - dragStartRef.current.x) / maxDeltaX, -1, 1, 0),
       offsetY: clampNumber(dragStartRef.current.offsetY + (event.clientY - dragStartRef.current.y) / maxDeltaY, -1, 1, 0),
-    });
-  };
-
-  const startCropDrag = (event: PointerEvent<HTMLDivElement>, mode: 'crop-left' | 'crop-right' | 'crop-top' | 'crop-bottom') => {
-    if (!canEdit) return;
-    event.preventDefault();
-    event.stopPropagation();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setDragMode(mode);
-    dragStartRef.current = {
-      x: event.clientX,
-      y: event.clientY,
-      offsetX: activeViewport.offsetX,
-      offsetY: activeViewport.offsetY,
-      scale: activeViewport.scale,
-    };
-  };
-
-  const updateCropDrag = (event: PointerEvent<HTMLDivElement>, mode: 'crop-left' | 'crop-right' | 'crop-top' | 'crop-bottom') => {
-    if (!canEdit || !dragStartRef.current) return;
-    const rect = stageRef.current?.getBoundingClientRect();
-    if (!rect || !rect.width || !rect.height) return;
-    const start = dragStartRef.current;
-    const dx = (event.clientX - start.x) / Math.max(1, rect.width);
-    const dy = (event.clientY - start.y) / Math.max(1, rect.height);
-    const signedDelta = mode === 'crop-left' ? dx : mode === 'crop-right' ? -dx : mode === 'crop-top' ? dy : -dy;
-    const nextScale = clampNumber(start.scale + signedDelta * 2.2, PLAN_CAMERA_VIEWPORT_SCALE_MIN, PLAN_CAMERA_VIEWPORT_SCALE_MAX, start.scale);
-    const scaleDelta = nextScale - start.scale;
-    const offsetShift = scaleDelta * 0.22;
-    setDraftViewport({
-      ...activeViewport,
-      scale: nextScale,
-      offsetX: clampNumber(start.offsetX + (mode === 'crop-left' ? offsetShift : mode === 'crop-right' ? -offsetShift : 0), -1, 1, 0),
-      offsetY: clampNumber(start.offsetY + (mode === 'crop-top' ? offsetShift : mode === 'crop-bottom' ? -offsetShift : 0), -1, 1, 0),
     });
   };
 
@@ -1202,7 +1173,7 @@ function PlanCameraModalEditor({
   const [open, setOpen] = useState(false);
   const [draftCamera, setDraftCamera] = useState<PlanCameraState | null>(camera || null);
   const [draftViewport, setDraftViewport] = useState<PlanCameraViewport>(() => normalizePlanCameraViewport(viewport));
-  const [dragMode, setDragMode] = useState<'image' | 'move' | 'angle' | 'crop-left' | 'crop-right' | 'crop-top' | 'crop-bottom' | null>(null);
+  const [dragMode, setDragMode] = useState<'image' | 'move' | 'angle' | PlanCameraCropDragMode | null>(null);
   const dragStartRef = useRef<{ x: number; y: number; offsetX: number; offsetY: number; scale: number } | null>(null);
   const activeCamera = draftCamera || camera || defaultPlanCameraState();
   const activeViewport = normalizePlanCameraViewport(draftViewport);
@@ -1244,11 +1215,11 @@ function PlanCameraModalEditor({
     const point = pointFromEvent(event);
     if (!point) return;
     if (mode === 'move') {
-      onChange({ ...activeCamera, x: point.x, y: point.y });
+      setDraftCamera({ ...activeCamera, x: point.x, y: point.y });
       return;
     }
     const degrees = Math.atan2(point.y - activeCamera.y, point.x - activeCamera.x) * 180 / Math.PI;
-    onChange({ ...activeCamera, angle: normalizeAngle(degrees) });
+    setDraftCamera({ ...activeCamera, angle: normalizeAngle(degrees) });
   };
 
   const startDrag = (event: PointerEvent<HTMLDivElement>, mode: 'move' | 'angle') => {
@@ -1271,6 +1242,7 @@ function PlanCameraModalEditor({
       y: event.clientY,
       offsetX: activeViewport.offsetX,
       offsetY: activeViewport.offsetY,
+      scale: activeViewport.scale,
     };
   };
 
@@ -1280,10 +1252,44 @@ function PlanCameraModalEditor({
     if (!rect || !rect.width || !rect.height) return;
     const maxDeltaX = Math.max(1, rect.width * 0.35);
     const maxDeltaY = Math.max(1, rect.height * 0.35);
-    onViewportChange({
+    setDraftViewport({
       ...activeViewport,
       offsetX: clampNumber(dragStartRef.current.offsetX + (event.clientX - dragStartRef.current.x) / maxDeltaX, -1, 1, 0),
       offsetY: clampNumber(dragStartRef.current.offsetY + (event.clientY - dragStartRef.current.y) / maxDeltaY, -1, 1, 0),
+    });
+  };
+
+  const startCropDrag = (event: PointerEvent<HTMLDivElement>, mode: PlanCameraCropDragMode) => {
+    if (!canEdit) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDragMode(mode);
+    dragStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      offsetX: activeViewport.offsetX,
+      offsetY: activeViewport.offsetY,
+      scale: activeViewport.scale,
+    };
+  };
+
+  const updateCropDrag = (event: PointerEvent<HTMLDivElement>, mode: PlanCameraCropDragMode) => {
+    if (!canEdit || !dragStartRef.current) return;
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect || !rect.width || !rect.height) return;
+    const start = dragStartRef.current;
+    const dx = (event.clientX - start.x) / Math.max(1, rect.width);
+    const dy = (event.clientY - start.y) / Math.max(1, rect.height);
+    const signedDelta = mode === 'crop-left' ? dx : mode === 'crop-right' ? -dx : mode === 'crop-top' ? dy : -dy;
+    const nextScale = clampNumber(start.scale + signedDelta * 2.2, PLAN_CAMERA_VIEWPORT_SCALE_MIN, PLAN_CAMERA_VIEWPORT_SCALE_MAX, start.scale);
+    const scaleDelta = nextScale - start.scale;
+    const offsetShift = scaleDelta * 0.22;
+    setDraftViewport({
+      ...activeViewport,
+      scale: nextScale,
+      offsetX: clampNumber(start.offsetX + (mode === 'crop-left' ? offsetShift : mode === 'crop-right' ? -offsetShift : 0), -1, 1, 0),
+      offsetY: clampNumber(start.offsetY + (mode === 'crop-top' ? offsetShift : mode === 'crop-bottom' ? -offsetShift : 0), -1, 1, 0),
     });
   };
 
@@ -1312,8 +1318,6 @@ function PlanCameraModalEditor({
   const confirmCamera = async () => {
     if (!draftCamera) return;
     const nextViewport = normalizePlanCameraViewport(draftViewport);
-    onChange(draftCamera);
-    onViewportChange(nextViewport);
     const ok = await onConfirm(draftCamera, nextViewport);
     if (ok !== false) setOpen(false);
   };
@@ -1344,8 +1348,8 @@ function PlanCameraModalEditor({
               style={{ aspectRatio: `${ratioValue}` }}
               onPointerMove={(event) => {
                 if (dragMode === 'image') updateImageDrag(event);
-                else if (dragMode?.startsWith('crop-')) updateCropDrag(event, dragMode);
-                else if (dragMode) updateFromEvent(event, dragMode);
+                else if (isPlanCameraCropDragMode(dragMode)) updateCropDrag(event, dragMode);
+                else if (dragMode === 'move' || dragMode === 'angle') updateFromEvent(event, dragMode);
               }}
               onPointerUp={endDrag}
               onPointerCancel={endDrag}
