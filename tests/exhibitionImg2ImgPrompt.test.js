@@ -51,6 +51,13 @@ test('exhibition img2img prompt forbids rendering structure labels', () => {
   assert.match(prompt, /画面中不得出现结构示意图上的标注文字、箭头、尺寸线或任何乱码文本/);
 });
 
+test('exhibition img2img prompt includes shared creative exclusions', () => {
+  const prompt = buildExhibitionImg2ImgPrompt({
+    excludeItems: ['real-brand-logo', 'instruction-table'],
+  });
+  assert.match(prompt, /排除项：不得出现：真实品牌标识和说明表格。/);
+});
+
 test('exhibition img2img prompt treats structure image as layout source', () => {
   const prompt = buildExhibitionImg2ImgPrompt();
   assert.match(prompt, /空间结构示意图是最终画面的唯一空间骨架和布局蓝本/);

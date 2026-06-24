@@ -1,4 +1,5 @@
 import type { ElevationCraft } from './elevationPromptData.js';
+import type { ExhibitionCreativeExcludeItem } from './exhibitionCreativeImagePromptData.js';
 
 export type ExhibitionImg2ImgPriorityId =
   | 'structureAnnotations'
@@ -31,6 +32,8 @@ export interface ExhibitionImg2ImgPromptValues {
   spaceLightingLevel?: 'very-dark' | 'dark' | 'bright' | 'very-bright';
   visualStyle?: string;
   supplement?: string;
+  excludeItems?: string[];
+  excludeItemOptions?: ExhibitionCreativeExcludeItem[];
   wallContentPrompt?: string;
   exhibitReferenceItems?: Array<{ id?: string; url?: string; label?: string; description?: string }>;
 }

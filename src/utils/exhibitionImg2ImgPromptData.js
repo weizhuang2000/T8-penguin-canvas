@@ -1,4 +1,8 @@
 import { ELEVATION_CRAFTS } from './elevationPromptData.js';
+import {
+  EXHIBITION_CREATIVE_EXCLUDE_ITEMS,
+  exhibitionCreativeExcludeItemsText,
+} from './exhibitionCreativeImagePromptData.js';
 
 export const EXHIBITION_IMG2IMG_PRIORITY = [
   { id: 'structureAnnotations', label: '空间结构示意图标注' },
@@ -335,6 +339,10 @@ export function buildExhibitionImg2ImgPrompt(values = {}) {
   const priorityOrder = normalizeExhibitionImg2ImgPriority(values.priorityOrder);
   const supplement = cleanText(values.supplement);
   const exhibitReference = exhibitReferenceText(values.exhibitReferenceItems);
+  const excludeItemsText = exhibitionCreativeExcludeItemsText(
+    values.excludeItems,
+    values.excludeItemOptions || EXHIBITION_CREATIVE_EXCLUDE_ITEMS,
+  );
   const lines = [
     '1. 核心任务与最高约束',
     '',
@@ -401,6 +409,8 @@ export function buildExhibitionImg2ImgPrompt(values = {}) {
     '',
     '版式抽象：如需体现图文信息，仅以不可读的抽象色块/占位符和清晰的版式层级示意，不得渲染具体文字内容。',
     '',
+    excludeItemsText ? `排除项：不得出现：${excludeItemsText}。` : '',
+    excludeItemsText ? '' : '',
     '禁止出现字段名：尤其不得将“展陈工艺”、“版式密度”、“工艺配置”、“版式备注”等字段或其后跟随的具体要求，作为画面中的文字呈现。',
     '',
     '最终目标：在严格遵循空间结构示意图的前提下，融合指定的工艺版式与色彩材质，输出一张结构逻辑清晰、材质细节丰富、灯光氛围真实的高品质展陈空间效果图。'

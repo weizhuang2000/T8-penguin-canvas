@@ -38,6 +38,11 @@ import {
   type ExhibitionImg2ImgPriorityId,
 } from '../../utils/exhibitionImg2ImgPrompt';
 import {
+  EXHIBITION_CREATIVE_EXCLUDE_ITEMS,
+  normalizeExhibitionCreativeExcludeItems,
+  type ExhibitionCreativeExcludeItem,
+} from '../../utils/exhibitionCreativeImagePrompt';
+import {
   ELEVATION_CRAFTS,
   buildElevationContentPlanMessages,
   buildElevationOutputs,
@@ -52,13 +57,16 @@ import {
   extractDocument,
   getCurrentUser,
   getElevationPromptPresets,
+  getExhibitionCreativePromptPresets,
   MAX_DOCUMENT_FILE_SIZE,
   MAX_DOCUMENT_FILE_SIZE_MB,
   updateElevationColorMaterialPresets,
   updateElevationCraftPresets,
+  updateExhibitionCreativeExcludePresets,
   type AuthUser,
   type ElevationColorMaterialPresetItem,
   type ElevationCraftPresetItem,
+  type ExhibitionCreativeExcludePresetItem,
   type ExtractedDocument,
 } from '../../services/api';
 import { useApiKeysStore } from '../../stores/apiKeys';
@@ -540,6 +548,25 @@ function parseCraftPresetEditorText(text: string) {
     .filter(Boolean) as Array<{ id: string; label: string; prompt: string; order: number }>;
 }
 
+function excludePresetEditorText(presets: ExhibitionCreativeExcludePresetItem[]) {
+  return presets.map((preset) => preset.label).join('\n');
+}
+
+function parseLabelPresetEditorText(text: string, fallbackId: string) {
+  return text
+    .split(/\r?\n/)
+    .map((line, index) => {
+      const label = line.trim();
+      if (!label) return null;
+      return {
+        id: `${label.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || fallbackId}-${index + 1}`,
+        label,
+        order: index,
+      };
+    })
+    .filter(Boolean) as Array<{ id: string; label: string; order: number }>;
+}
+
 function colorMaterialTextFromPreset(preset: ElevationColorMaterialPresetItem): string {
   return [
     preset.label,
@@ -764,13 +791,18 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const canManageTeam = currentUser?.role === 'admin' || currentUser?.role === 'manager';
   const [craftPresets, setCraftPresets] = useState<ElevationCraftPresetItem[]>([]);
+  const [excludePresets, setExcludePresets] = useState<ExhibitionCreativeExcludePresetItem[]>([]);
   const [colorMaterialPresets, setColorMaterialPresets] = useState<ElevationColorMaterialPresetItem[]>([]);
   const [craftEditorOpen, setCraftEditorOpen] = useState(false);
+  const [excludeEditorOpen, setExcludeEditorOpen] = useState(false);
   const [colorMaterialEditorOpen, setColorMaterialEditorOpen] = useState(false);
   const [craftEditorValue, setCraftEditorValue] = useState('');
+  const [excludeEditorValue, setExcludeEditorValue] = useState('');
   const [craftSaving, setCraftSaving] = useState(false);
+  const [excludeSaving, setExcludeSaving] = useState(false);
   const [colorMaterialSaving, setColorMaterialSaving] = useState(false);
   const [craftError, setCraftError] = useState('');
+  const [excludeError, setExcludeError] = useState('');
   const [colorMaterialError, setColorMaterialError] = useState('');
   const status = String(d.status || 'idle');
   const isGenerating = status === 'generating';
@@ -781,6 +813,16 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     () => (craftPresets.length > 0 ? craftPresets : ELEVATION_CRAFTS),
     [craftPresets],
   );
+  const excludeOptions = useMemo<ExhibitionCreativeExcludeItem[]>(
+    () => (excludePresets.length > 0 ? excludePresets : EXHIBITION_CREATIVE_EXCLUDE_ITEMS),
+    [excludePresets],
+  );
+  const selectedExcludeItems = useMemo(
+    () => normalizeExhibitionCreativeExcludeItems(d.excludeItems, excludeOptions),
+    [d.excludeItems, excludeOptions],
+  );
+  const selectedExcludeIds = useMemo(() => selectedExcludeItems.map((item) => item.id), [selectedExcludeItems]);
+  const allExcludeSelected = excludeOptions.length > 0 && selectedExcludeIds.length === excludeOptions.length;
   const selectedColorMaterialPreset = useMemo(
     () => colorMaterialPresets.find((preset) => preset.id === d.colorMaterialPreset) || null,
     [colorMaterialPresets, d.colorMaterialPreset],
@@ -893,6 +935,8 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       spaceLightingEnabled,
       spaceLightingLevel,
       supplement: d.supplement,
+      excludeItems: selectedExcludeIds,
+      excludeItemOptions: excludeOptions,
       wallContentPrompt: nextContentOutputs.mainOutput,
       exhibitReferenceItems,
     });
@@ -913,6 +957,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     d.outputMode,
     d.supplement,
     d.visualStyle,
+    excludeOptions,
     exhibitReferenceItems,
     hasColorMaterialPreset,
     priorityOrder,
@@ -920,6 +965,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     promptColorMaterialPalette,
     promptColorMaterialTextures,
     selectedCrafts,
+    selectedExcludeIds,
     spaceLightingEnabled,
     spaceLightingLevel,
     wallCount,
@@ -948,10 +994,12 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       spaceLightingEnabled,
       spaceLightingLevel,
       supplement: d.supplement,
+      excludeItems: selectedExcludeIds,
+      excludeItemOptions: excludeOptions,
       wallContentPrompt,
       exhibitReferenceItems,
     }),
-    [activeColorMaterialReferenceImage, colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPriorityMode, colorMaterialReferenceMode, colorMaterialReferenceTone, craftPresets, d.customCraft, d.density, d.dimensions, d.supplement, d.visualStyle, exhibitReferenceItems, hasColorMaterialPreset, priorityOrder, promptColorMaterial, promptColorMaterialPalette, promptColorMaterialTextures, selectedCrafts, spaceLightingEnabled, spaceLightingLevel, wallContentPrompt],
+    [activeColorMaterialReferenceImage, colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPriorityMode, colorMaterialReferenceMode, colorMaterialReferenceTone, craftPresets, d.customCraft, d.density, d.dimensions, d.supplement, d.visualStyle, excludeOptions, exhibitReferenceItems, hasColorMaterialPreset, priorityOrder, promptColorMaterial, promptColorMaterialPalette, promptColorMaterialTextures, selectedCrafts, selectedExcludeIds, spaceLightingEnabled, spaceLightingLevel, wallContentPrompt],
   );
 
   const disconnectColorMaterialReferenceInput = useCallback(() => {
@@ -1150,6 +1198,9 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         setCraftPresets([]);
         setColorMaterialPresets([]);
       });
+    getExhibitionCreativePromptPresets()
+      .then((presets) => setExcludePresets(presets.exclusions || []))
+      .catch(() => setExcludePresets([]));
   }, []);
 
   useEffect(() => {
@@ -1167,6 +1218,12 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     setCraftEditorValue(craftPresetEditorText(craftPresets));
     setCraftError('');
   }, [craftEditorOpen, craftPresets]);
+
+  useEffect(() => {
+    if (!excludeEditorOpen) return;
+    setExcludeEditorValue(excludePresetEditorText(excludePresets));
+    setExcludeError('');
+  }, [excludeEditorOpen, excludePresets]);
 
   useEffect(() => {
     if (!colorMaterialEditorOpen) return;
@@ -1259,6 +1316,27 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     }
   };
 
+  const saveExcludePresets = async () => {
+    if (!canManageTeam) return;
+    const presets = parseLabelPresetEditorText(excludeEditorValue, 'exclude');
+    if (presets.length === 0) {
+      setExcludeError('请至少保留一项排除内容。');
+      return;
+    }
+    setExcludeSaving(true);
+    setExcludeError('');
+    try {
+      const saved = await updateExhibitionCreativeExcludePresets(presets);
+      setExcludePresets(saved);
+      update({ excludeItems: normalizeExhibitionCreativeExcludeItems(selectedExcludeIds, saved).map((item) => item.id) });
+      setExcludeEditorOpen(false);
+    } catch (error: any) {
+      setExcludeError(error?.message || '保存排除项失败');
+    } finally {
+      setExcludeSaving(false);
+    }
+  };
+
   const saveColorMaterialPresetItems = async (presets: ElevationColorMaterialPresetItem[]) => {
     if (!canManageTeam) return;
     if (presets.length === 0) {
@@ -1284,6 +1362,19 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       ? selectedCrafts.filter((item) => item !== craftId)
       : [...selectedCrafts, craftId];
     update({ selectedCrafts: next });
+  };
+
+  const toggleExcludeItem = (itemId: string) => {
+    if (isReadonly || busy) return;
+    const next = selectedExcludeIds.includes(itemId)
+      ? selectedExcludeIds.filter((item) => item !== itemId)
+      : [...selectedExcludeIds, itemId];
+    update({ excludeItems: next });
+  };
+
+  const toggleAllExcludeItems = () => {
+    if (isReadonly || busy) return;
+    update({ excludeItems: allExcludeSelected ? [] : excludeOptions.map((item) => item.id) });
   };
 
   const patchExhibitReferenceItem = useCallback((url: string, patch: Partial<Pick<ExhibitReferenceItem, 'description'>>) => {
@@ -1679,6 +1770,79 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
             <input className={FIELD} value={d.visualStyle || ''} disabled={isReadonly} placeholder="视觉风格" onChange={(event) => update({ visualStyle: event.target.value })} />
           </div>
           <textarea className={`${FIELD} mt-1 min-h-[48px] resize-y`} value={d.supplement || ''} disabled={isReadonly} placeholder="补充要求" onChange={(event) => update({ supplement: event.target.value })} />
+        </section>
+
+        <section className="space-y-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-semibold text-cyan-100">排除项</span>
+            <span className="min-w-0 flex-1 truncate text-[10px] text-white/45">与展陈创意生图共享预设</span>
+            <button
+              type="button"
+              className={BUTTON}
+              disabled={isReadonly || busy || excludeOptions.length === 0}
+              onClick={() => toggleAllExcludeItems()}
+            >
+              {allExcludeSelected ? '清空' : '全选'}
+            </button>
+            {canManageTeam && (
+              <button
+                type="button"
+                className={BUTTON}
+                disabled={busy}
+                onClick={() => setExcludeEditorOpen((open) => !open)}
+              >
+                {excludeEditorOpen ? '收起' : '编辑'}
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {excludeOptions.map((item) => {
+              const active = selectedExcludeIds.includes(item.id);
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  disabled={isReadonly || busy}
+                  className={`rounded border px-1.5 py-1 text-[10px] ${
+                    active ? 'border-rose-300/55 bg-rose-300/15 text-rose-100' : 'border-white/10 bg-black/15 text-white/55 hover:bg-white/[0.08]'
+                  } disabled:opacity-50`}
+                  onClick={() => toggleExcludeItem(item.id)}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+          {canManageTeam && excludeEditorOpen && (
+            <div className="space-y-1.5 rounded border border-rose-300/15 bg-rose-300/5 p-2">
+              <textarea
+                className={`${FIELD} min-h-[92px] resize-y`}
+                value={excludeEditorValue}
+                disabled={excludeSaving || busy}
+                placeholder="每行一个排除项，例如：真实品牌标识"
+                onChange={(event) => setExcludeEditorValue(event.target.value)}
+              />
+              {excludeError && <div className="text-[10px] text-red-200">{excludeError}</div>}
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  className={BUTTON}
+                  disabled={excludeSaving || busy}
+                  onClick={() => setExcludeEditorOpen(false)}
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  className={BUTTON}
+                  disabled={excludeSaving || busy}
+                  onClick={() => void saveExcludePresets()}
+                >
+                  {excludeSaving ? '保存中' : '保存'}
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="rounded border border-white/10 bg-white/[0.035] p-2 space-y-2">

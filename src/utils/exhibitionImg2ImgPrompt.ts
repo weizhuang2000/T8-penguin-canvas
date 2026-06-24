@@ -4,6 +4,7 @@ import {
   EXHIBITION_IMG2IMG_PRIORITY,
   normalizeExhibitionImg2ImgPriority,
 } from './exhibitionImg2ImgPromptData.js';
+import type { ExhibitionCreativeExcludeItem } from './exhibitionCreativeImagePrompt';
 
 export type ExhibitionImg2ImgPriorityId =
   | 'structureAnnotations'
@@ -36,6 +37,8 @@ export interface ExhibitionImg2ImgPromptValues {
   spaceLightingLevel?: 'very-dark' | 'dark' | 'bright' | 'very-bright';
   visualStyle?: string;
   supplement?: string;
+  excludeItems?: string[];
+  excludeItemOptions?: ExhibitionCreativeExcludeItem[];
   wallContentPrompt?: string;
   exhibitReferenceItems?: Array<{ id?: string; url?: string; label?: string; description?: string }>;
 }

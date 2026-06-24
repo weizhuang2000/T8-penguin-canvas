@@ -386,6 +386,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     colorMaterialReferenceToneSource: '',
     colorMaterialReferenceToneStatus: '',
     colorMaterialPriorityMode: 'frontend',
+    excludeItems: ['real-brand-logo', 'instruction-table'],
     regenerateContentEachRun: false,
     prompt: '',
     outputText: '',
