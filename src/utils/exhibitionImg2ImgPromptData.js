@@ -244,6 +244,47 @@ function spaceHeightText(value) {
   return match ? match[0] : '';
 }
 
+function spatialMode(values) {
+  return values.spatialInputMode === 'plan-camera' ? 'plan-camera' : 'structure';
+}
+
+function planCameraPromptBlock(values) {
+  if (spatialMode(values) !== 'plan-camera') return '';
+  const desc = cleanText(values.planCameraDescription || '', 1000);
+  return [
+    '【平面布局图与相机视角约束】',
+    '最高优先级（不可违反）：接入的平面布局图以及已确认合成在图上的相机图标、朝向线和取景锥，是最终画面的唯一空间布局、观看方向、透视组织和画面范围依据。',
+    desc || '相机位置、朝向和取景角以输入平面布局图上合成的相机标注为准。',
+    '必须按该视角渲染展陈空间图像：从相机所在位置看向取景锥方向，将平面布局中的墙体、展区、展台、通道、入口出口和动线转换为真实室内建筑摄影级透视。',
+    '不得把平面布局图渲染成俯视平面图；不得忽略、移动或重新设计相机视角；不得让色彩、材质、工艺或展品参考覆盖平面布局和相机视角依据。',
+  ].join('\n');
+}
+
+function applyPlanCameraPromptMode(prompt, values) {
+  if (spatialMode(values) !== 'plan-camera') return prompt;
+  const block = planCameraPromptBlock(values);
+  let next = prompt
+    .replace(/空间结构示意图是最终画面的唯一空间骨架和布局蓝本/g, '平面布局图与相机视角是最终画面的唯一空间布局和透视蓝本')
+    .replace(/空间结构示意图/g, '平面布局图与相机视角')
+    .replace(/结构示意图/g, '平面布局图')
+    .replace(/示意图/g, '平面布局图')
+    .replace(/按空间结构/g, '按平面布局图与相机视角')
+    .replace(/从“平面布局图与相机视角”提取的骨架/g, '从平面布局图和相机取景锥确定的空间骨架')
+    .replace(/从平面布局图中提取/g, '从平面布局图和相机取景锥中提取')
+    .replace(/除空间结构外/g, '除平面布局与相机视角外')
+    .replace(/不得改变空间结构/g, '不得改变平面布局与相机视角')
+    .replace(/空间结构/g, '平面布局与相机视角');
+  next = next.replace(
+    /(1\.[^\n]*\n\n[^\n]*\n\n)/,
+    `$1${block}\n\n`,
+  );
+  next = next.replace(
+    /(7\.[^\n]*\n\n)/,
+    `$1${block}\n\n`,
+  );
+  return next;
+}
+
 function formatWallContentPrompt(value) {
   const prompt = cleanWallContentPrompt(value);
   if (!prompt) return '未启用展墙内容设计时，按空间结构示意图中的展墙/隔断关系进行抽象图文层级与展品陈列组织，不生成可读长文。';
@@ -416,5 +457,8 @@ export function buildExhibitionImg2ImgPrompt(values = {}) {
     '最终目标：在严格遵循空间结构示意图的前提下，融合指定的工艺版式与色彩材质，输出一张结构逻辑清晰、材质细节丰富、灯光氛围真实的高品质展陈空间效果图。'
   );
 
-  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return applyPlanCameraPromptMode(
+    lines.join('\n').replace(/\n{3,}/g, '\n\n').trim(),
+    values,
+  );
 }

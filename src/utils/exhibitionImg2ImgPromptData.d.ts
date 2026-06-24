@@ -36,6 +36,8 @@ export interface ExhibitionImg2ImgPromptValues {
   excludeItemOptions?: ExhibitionCreativeExcludeItem[];
   wallContentPrompt?: string;
   exhibitReferenceItems?: Array<{ id?: string; url?: string; label?: string; description?: string }>;
+  spatialInputMode?: 'structure' | 'plan-camera';
+  planCameraDescription?: string;
 }
 
 export const EXHIBITION_IMG2IMG_PRIORITY: ExhibitionImg2ImgPriorityMeta[];

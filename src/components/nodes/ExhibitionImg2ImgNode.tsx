@@ -4,6 +4,7 @@ import {
   ArrowDown,
   ArrowUp,
   Boxes,
+  Camera,
   Clipboard,
   FileText,
   Image as ImageIcon,
@@ -92,6 +93,9 @@ const AUTO_REFERENCE_MARK_SIZE_RATIO = 0.05;
 const LEGACY_COLOR_MATERIAL_MARK_TEXT = 'R';
 const LEGACY_REFERENCE_MARK_FONT_SIZE = 12;
 const COLOR_MATERIAL_MARK_DEFAULTS_VERSION = 2;
+const PLAN_CAMERA_DEFAULT_FOV = 60;
+const PLAN_CAMERA_MIN_FOV = 20;
+const PLAN_CAMERA_MAX_FOV = 120;
 const SPACE_LIGHTING_OPTIONS = [
   { value: 'very-dark', label: '非常暗' },
   { value: 'dark', label: '比较暗' },
@@ -110,6 +114,13 @@ interface ReferenceMarkSettings {
   color: string;
   fontSize: number;
   autoFontSize: boolean;
+}
+
+interface PlanCameraState {
+  x: number;
+  y: number;
+  angle: number;
+  fov: number;
 }
 
 const REFERENCE_MARK_POSITION_OPTIONS: Array<{ value: ReferenceMarkPosition; label: string }> = [
@@ -175,6 +186,43 @@ function normalizeColorMaterialPriorityMode(value: unknown): ColorMaterialPriori
 
 function normalizeSpaceLightingLevel(value: unknown): SpaceLightingLevel {
   return SPACE_LIGHTING_OPTIONS.some((item) => item.value === value) ? value as SpaceLightingLevel : 'bright';
+}
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.max(min, Math.min(max, num));
+}
+
+function normalizeAngle(value: unknown): number {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return -90;
+  return ((((num + 180) % 360) + 360) % 360) - 180;
+}
+
+function normalizePlanCameraState(value: unknown): PlanCameraState | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+  return {
+    x: clampNumber(raw.x, 0, 1, 0.5),
+    y: clampNumber(raw.y, 0, 1, 0.82),
+    angle: normalizeAngle(raw.angle),
+    fov: clampNumber(raw.fov, PLAN_CAMERA_MIN_FOV, PLAN_CAMERA_MAX_FOV, PLAN_CAMERA_DEFAULT_FOV),
+  };
+}
+
+function defaultPlanCameraState(): PlanCameraState {
+  return { x: 0.5, y: 0.82, angle: -90, fov: PLAN_CAMERA_DEFAULT_FOV };
+}
+
+function planCameraDescription(camera: PlanCameraState | null): string {
+  if (!camera) return '';
+  return [
+    `相机位置：平面图归一化坐标 x=${camera.x.toFixed(3)}, y=${camera.y.toFixed(3)}`,
+    `相机朝向：${Math.round(camera.angle)}°`,
+    `取景角：${Math.round(camera.fov)}°`,
+    '请按该视角渲染展陈空间图像。',
+  ].join('；');
 }
 
 function normalizeReferenceMarkSettings(data: any, prefix: 'colorMaterial'): ReferenceMarkSettings {
@@ -321,6 +369,91 @@ async function markImageDataUrl(imageUrl: string, settings: ReferenceMarkSetting
   if (!ctx) throw new Error('当前浏览器无法创建标识画布');
   ctx.drawImage(image, 0, 0, width, height);
   drawReferenceMark(ctx, width, height, settings);
+  return canvas.toDataURL('image/png');
+}
+
+function roundedRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
+  const r = Math.max(0, Math.min(radius, width / 2, height / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+}
+
+function drawPlanCameraOverlay(ctx: CanvasRenderingContext2D, width: number, height: number, camera: PlanCameraState) {
+  const x = camera.x * width;
+  const y = camera.y * height;
+  const scale = Math.max(1, Math.min(width, height) / 900);
+  const rayLength = Math.max(width, height) * 0.42;
+  const angle = (camera.angle * Math.PI) / 180;
+  const halfFov = ((camera.fov / 2) * Math.PI) / 180;
+  const left = angle - halfFov;
+  const right = angle + halfFov;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(34, 211, 238, 0.18)';
+  ctx.strokeStyle = 'rgba(34, 211, 238, 0.88)';
+  ctx.lineWidth = Math.max(3, 4 * scale);
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + Math.cos(left) * rayLength, y + Math.sin(left) * rayLength);
+  ctx.arc(x, y, rayLength, left, right, false);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.setLineDash([Math.max(10, 12 * scale), Math.max(7, 8 * scale)]);
+  ctx.strokeStyle = 'rgba(14, 165, 233, 0.9)';
+  ctx.lineWidth = Math.max(2, 2.4 * scale);
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + Math.cos(angle) * rayLength, y + Math.sin(angle) * rayLength);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.fillStyle = 'rgba(8, 13, 28, 0.92)';
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+  ctx.lineWidth = Math.max(2, 2.5 * scale);
+  const bodyW = 34 * scale;
+  const bodyH = 24 * scale;
+  roundedRectPath(ctx, -bodyW / 2, -bodyH / 2, bodyW, bodyH, 6 * scale);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(bodyW / 2, -bodyH * 0.28);
+  ctx.lineTo(bodyW / 2 + 22 * scale, -bodyH * 0.58);
+  ctx.lineTo(bodyW / 2 + 22 * scale, bodyH * 0.58);
+  ctx.lineTo(bodyW / 2, bodyH * 0.28);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(-bodyW * 0.14, 0, 5.5 * scale, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(34, 211, 238, 0.95)';
+  ctx.stroke();
+  ctx.restore();
+}
+
+async function composePlanCameraDataUrl(imageUrl: string, camera: PlanCameraState): Promise<string> {
+  const image = await loadReferenceImage(imageUrl);
+  const width = image.naturalWidth || image.width;
+  const height = image.naturalHeight || image.height;
+  if (!width || !height) throw new Error('平面布局图尺寸无效，无法合成相机视角');
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('当前浏览器无法创建平面布局图合成画布');
+  ctx.drawImage(image, 0, 0, width, height);
+  drawPlanCameraOverlay(ctx, width, height, camera);
   return canvas.toDataURL('image/png');
 }
 
@@ -665,7 +798,7 @@ function ImageSlot({
   url,
   top,
 }: {
-  handleId: 'structure' | 'color-material-reference' | 'exhibit-reference';
+  handleId: 'structure' | 'plan-layout' | 'color-material-reference' | 'exhibit-reference';
   title: string;
   subtitle: string;
   url: string;
@@ -701,6 +834,148 @@ function ImageSlot({
         )}
       </div>
     </>
+  );
+}
+
+function PlanCameraEditor({
+  sourceImage,
+  camera,
+  confirmed,
+  compositeImage,
+  disabled,
+  busy,
+  onAdd,
+  onChange,
+  onConfirm,
+  onEdit,
+  onClear,
+}: {
+  sourceImage: string;
+  camera: PlanCameraState | null;
+  confirmed: boolean;
+  compositeImage: string;
+  disabled: boolean;
+  busy: boolean;
+  onAdd: () => void;
+  onChange: (camera: PlanCameraState) => void;
+  onConfirm: () => void;
+  onEdit: () => void;
+  onClear: () => void;
+}) {
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [dragMode, setDragMode] = useState<'move' | 'angle' | null>(null);
+  const activeCamera = camera || defaultPlanCameraState();
+  const canEdit = !!camera && !confirmed && !disabled && !busy;
+  const previewImage = confirmed && compositeImage ? compositeImage : sourceImage;
+  const cx = activeCamera.x * 1000;
+  const cy = activeCamera.y * 1000;
+  const angle = (activeCamera.angle * Math.PI) / 180;
+  const halfFov = ((activeCamera.fov / 2) * Math.PI) / 180;
+  const rayLength = 520;
+  const centerX = cx + Math.cos(angle) * rayLength;
+  const centerY = cy + Math.sin(angle) * rayLength;
+  const leftX = cx + Math.cos(angle - halfFov) * rayLength;
+  const leftY = cy + Math.sin(angle - halfFov) * rayLength;
+  const rightX = cx + Math.cos(angle + halfFov) * rayLength;
+  const rightY = cy + Math.sin(angle + halfFov) * rayLength;
+
+  const pointFromEvent = (event: PointerEvent<HTMLDivElement>) => {
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect || !rect.width || !rect.height) return null;
+    return {
+      x: clampNumber((event.clientX - rect.left) / rect.width, 0, 1, activeCamera.x),
+      y: clampNumber((event.clientY - rect.top) / rect.height, 0, 1, activeCamera.y),
+    };
+  };
+
+  const updateFromEvent = (event: PointerEvent<HTMLDivElement>, mode: 'move' | 'angle') => {
+    if (!canEdit) return;
+    const point = pointFromEvent(event);
+    if (!point) return;
+    if (mode === 'move') {
+      onChange({ ...activeCamera, x: point.x, y: point.y });
+      return;
+    }
+    const degrees = Math.atan2(point.y - activeCamera.y, point.x - activeCamera.x) * 180 / Math.PI;
+    onChange({ ...activeCamera, angle: normalizeAngle(degrees) });
+  };
+
+  const startDrag = (event: PointerEvent<HTMLDivElement>, mode: 'move' | 'angle') => {
+    if (!canEdit) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDragMode(mode);
+    updateFromEvent(event, mode);
+  };
+
+  return (
+    <div className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
+      <div className="mb-1.5 flex items-center gap-2">
+        <Camera size={13} className="text-cyan-100" />
+        <span className="text-[11px] font-semibold text-cyan-100">平面布局相机视角</span>
+        <div className="ml-auto flex gap-1">
+          {!camera && (
+            <button type="button" className={BUTTON} disabled={disabled || busy} onClick={onAdd}>
+              <Camera size={11} /> 添加相机
+            </button>
+          )}
+          {camera && !confirmed && <button type="button" className={BUTTON} disabled={disabled || busy} onClick={onConfirm}>确认视角</button>}
+          {camera && confirmed && <button type="button" className={BUTTON} disabled={disabled || busy} onClick={onEdit}>重新编辑</button>}
+          {camera && <button type="button" className={BUTTON} disabled={disabled || busy} onClick={onClear}>清除</button>}
+        </div>
+      </div>
+      <div
+        ref={stageRef}
+        className="relative overflow-hidden rounded border border-white/10 bg-black/30"
+        onPointerMove={(event) => {
+          if (dragMode) updateFromEvent(event, dragMode);
+        }}
+        onPointerUp={(event) => {
+          if (dragMode) event.currentTarget.releasePointerCapture(event.pointerId);
+          setDragMode(null);
+        }}
+        onPointerCancel={() => setDragMode(null)}
+      >
+        <img src={previewImage} alt="" className="block max-h-72 w-full select-none object-contain" draggable={false} />
+        {camera && !confirmed && (
+          <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 1000 1000" preserveAspectRatio="none">
+            <path d={`M ${cx} ${cy} L ${leftX} ${leftY} L ${rightX} ${rightY} Z`} fill="rgba(34,211,238,.18)" stroke="rgba(34,211,238,.9)" strokeWidth="5" />
+            <path d={`M ${cx} ${cy} L ${centerX} ${centerY}`} stroke="rgba(125,211,252,.95)" strokeWidth="4" strokeDasharray="18 12" />
+          </svg>
+        )}
+        {camera && !confirmed && (
+          <>
+            <div
+              className="absolute h-8 w-8 cursor-grab rounded-full border border-white/50 bg-slate-950/85 text-cyan-100 shadow active:cursor-grabbing"
+              style={{ left: `${activeCamera.x * 100}%`, top: `${activeCamera.y * 100}%`, transform: `translate(-50%, -50%) rotate(${activeCamera.angle}deg)` }}
+              onPointerDown={(event) => startDrag(event, 'move')}
+              title="拖拽调整相机位置"
+            >
+              <Camera size={18} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" />
+            </div>
+            <div
+              className="absolute h-4 w-4 cursor-crosshair rounded-full border border-cyan-100 bg-cyan-300 shadow"
+              style={{ left: `${(activeCamera.x + Math.cos(angle) * 0.16) * 100}%`, top: `${(activeCamera.y + Math.sin(angle) * 0.16) * 100}%`, transform: 'translate(-50%, -50%)' }}
+              onPointerDown={(event) => startDrag(event, 'angle')}
+              title="拖拽调整相机朝向"
+            />
+          </>
+        )}
+      </div>
+      {camera && (
+        <div className="mt-2 grid grid-cols-[52px_1fr_42px] items-center gap-2 text-[10px] text-white/60">
+          <span>取景角</span>
+          <input type="range" min={PLAN_CAMERA_MIN_FOV} max={PLAN_CAMERA_MAX_FOV} value={Math.round(activeCamera.fov)} disabled={!canEdit} className="accent-cyan-300" onChange={(event) => onChange({ ...activeCamera, fov: clampNumber(event.target.value, PLAN_CAMERA_MIN_FOV, PLAN_CAMERA_MAX_FOV, PLAN_CAMERA_DEFAULT_FOV) })} />
+          <span className="text-right">{Math.round(activeCamera.fov)}°</span>
+          <span>朝向</span>
+          <input type="range" min={-180} max={180} value={Math.round(activeCamera.angle)} disabled={!canEdit} className="accent-cyan-300" onChange={(event) => onChange({ ...activeCamera, angle: normalizeAngle(event.target.value) })} />
+          <span className="text-right">{Math.round(activeCamera.angle)}°</span>
+        </div>
+      )}
+      {camera && !confirmed && <div className="mt-1.5 text-[10px] leading-snug text-cyan-50/65">拖动相机调整位置，拖动前方圆点调整朝向，再确认合成到平面布局图。</div>}
+      {camera && confirmed && <div className="mt-1.5 text-[10px] leading-snug text-cyan-50/65">已确认相机视角，生成时将使用上方合成后的平面布局图作为空间与视角参考。</div>}
+    </div>
   );
 }
 
@@ -762,6 +1037,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
 
   const structureImage = useHandleImage(id, 'structure');
+  const planLayoutImage = useHandleImage(id, 'plan-layout');
   const colorMaterialReferenceInputImage = useHandleImage(id, 'color-material-reference');
   const legacyStyleInputImage = useHandleImage(id, 'style');
   const colorMaterialReferenceImage = colorMaterialReferenceInputImage || legacyStyleInputImage;
@@ -890,6 +1166,20 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     !!d.contentPlanningPrompt
   );
   const wallContentPrompt = hasContentPlanning ? contentOutputs.mainOutput : '';
+  const planCameraDraft = useMemo(() => normalizePlanCameraState(d.planCameraDraft), [d.planCameraDraft]);
+  const planCameraConfirmed = !!(
+    planLayoutImage &&
+    planCameraDraft &&
+    d.planCameraConfirmed === true &&
+    d.planCameraSourceImage === planLayoutImage &&
+    d.planCameraCompositeImage
+  );
+  const spatialInputMode: 'structure' | 'plan-camera' = planLayoutImage ? 'plan-camera' : 'structure';
+  const activeSpatialReferenceImage = spatialInputMode === 'plan-camera'
+    ? (planCameraConfirmed ? String(d.planCameraCompositeImage || '') : '')
+    : structureImage;
+  const planCameraPromptDescription = spatialInputMode === 'plan-camera' ? planCameraDescription(planCameraDraft) : '';
+  const hasSpatialInput = !!activeSpatialReferenceImage;
 
   const buildPromptWithWallPlan = useCallback((plan: ElevationContentPlan) => {
     const nextAnalysis = {
@@ -939,6 +1229,8 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       excludeItemOptions: excludeOptions,
       wallContentPrompt: nextContentOutputs.mainOutput,
       exhibitReferenceItems,
+      spatialInputMode,
+      planCameraDescription: planCameraPromptDescription,
     });
   }, [
     activeColorMaterialReferenceImage,
@@ -960,12 +1252,14 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     excludeOptions,
     exhibitReferenceItems,
     hasColorMaterialPreset,
+    planCameraPromptDescription,
     priorityOrder,
     promptColorMaterial,
     promptColorMaterialPalette,
     promptColorMaterialTextures,
     selectedCrafts,
     selectedExcludeIds,
+    spatialInputMode,
     spaceLightingEnabled,
     spaceLightingLevel,
     wallCount,
@@ -998,8 +1292,10 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       excludeItemOptions: excludeOptions,
       wallContentPrompt,
       exhibitReferenceItems,
+      spatialInputMode,
+      planCameraDescription: planCameraPromptDescription,
     }),
-    [activeColorMaterialReferenceImage, colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPriorityMode, colorMaterialReferenceMode, colorMaterialReferenceTone, craftPresets, d.customCraft, d.density, d.dimensions, d.supplement, d.visualStyle, excludeOptions, exhibitReferenceItems, hasColorMaterialPreset, priorityOrder, promptColorMaterial, promptColorMaterialPalette, promptColorMaterialTextures, selectedCrafts, selectedExcludeIds, spaceLightingEnabled, spaceLightingLevel, wallContentPrompt],
+    [activeColorMaterialReferenceImage, colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPriorityMode, colorMaterialReferenceMode, colorMaterialReferenceTone, craftPresets, d.customCraft, d.density, d.dimensions, d.supplement, d.visualStyle, excludeOptions, exhibitReferenceItems, hasColorMaterialPreset, planCameraPromptDescription, priorityOrder, promptColorMaterial, promptColorMaterialPalette, promptColorMaterialTextures, selectedCrafts, selectedExcludeIds, spatialInputMode, spaceLightingEnabled, spaceLightingLevel, wallContentPrompt],
   );
 
   const disconnectColorMaterialReferenceInput = useCallback(() => {
@@ -1014,6 +1310,55 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       edge.target !== id || (edge.targetHandle || '') !== 'document-text'
     )));
   }, [id, rf]);
+
+  const setPlanCameraDraft = useCallback((camera: PlanCameraState) => {
+    update({
+      planCameraDraft: camera,
+      planCameraConfirmed: false,
+      planCameraCompositeImage: '',
+      planCameraSourceImage: planLayoutImage,
+    });
+  }, [planLayoutImage, update]);
+
+  const addPlanCamera = useCallback(() => {
+    if (isReadonly || busy || !planLayoutImage) return;
+    setPlanCameraDraft(defaultPlanCameraState());
+  }, [busy, isReadonly, planLayoutImage, setPlanCameraDraft]);
+
+  const clearPlanCamera = useCallback(() => {
+    if (isReadonly || busy) return;
+    update({
+      planCameraDraft: null,
+      planCameraConfirmed: false,
+      planCameraCompositeImage: '',
+      planCameraSourceImage: '',
+    });
+  }, [busy, isReadonly, update]);
+
+  const editPlanCamera = useCallback(() => {
+    if (isReadonly || busy || !planCameraDraft) return;
+    update({
+      planCameraConfirmed: false,
+      planCameraCompositeImage: '',
+      planCameraSourceImage: planLayoutImage,
+    });
+  }, [busy, isReadonly, planCameraDraft, planLayoutImage, update]);
+
+  const confirmPlanCamera = useCallback(async () => {
+    if (isReadonly || busy || !planLayoutImage || !planCameraDraft) return;
+    try {
+      const composite = await composePlanCameraDataUrl(planLayoutImage, planCameraDraft);
+      update({
+        planCameraDraft,
+        planCameraConfirmed: true,
+        planCameraCompositeImage: composite,
+        planCameraSourceImage: planLayoutImage,
+        error: '',
+      });
+    } catch (error: any) {
+      update({ status: 'error', error: error?.message || '平面布局相机视角合成失败' });
+    }
+  }, [busy, isReadonly, planCameraDraft, planLayoutImage, update]);
 
   const renderColorMaterialMarkSettings = (
     title: string,
@@ -1082,7 +1427,35 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   );
 
   useEffect(() => {
-    const refs = [structureImage, activeColorMaterialReferenceImage, ...exhibitReferenceImageUrls].filter(Boolean);
+    if (!structureImage || !planLayoutImage) return;
+    rf.setEdges((eds) => eds.filter((edge: any) => (
+      edge.target !== id || (edge.targetHandle || '') !== 'structure'
+    )));
+  }, [id, planLayoutImage, rf, structureImage]);
+
+  useEffect(() => {
+    if (!planLayoutImage) {
+      if (d.planCameraDraft || d.planCameraConfirmed || d.planCameraCompositeImage || d.planCameraSourceImage) {
+        update({
+          planCameraDraft: null,
+          planCameraConfirmed: false,
+          planCameraCompositeImage: '',
+          planCameraSourceImage: '',
+        });
+      }
+      return;
+    }
+    if (d.planCameraSourceImage && d.planCameraSourceImage !== planLayoutImage) {
+      update({
+        planCameraConfirmed: false,
+        planCameraCompositeImage: '',
+        planCameraSourceImage: planLayoutImage,
+      });
+    }
+  }, [d.planCameraCompositeImage, d.planCameraConfirmed, d.planCameraDraft, d.planCameraSourceImage, planLayoutImage, update]);
+
+  useEffect(() => {
+    const refs = [activeSpatialReferenceImage, activeColorMaterialReferenceImage, ...exhibitReferenceImageUrls].filter(Boolean);
     const patch = {
       prompt,
       outputText: prompt,
@@ -1097,7 +1470,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     ) {
       update(patch);
     }
-  }, [activeColorMaterialReferenceImage, d.imageUrl, d.outputText, d.prompt, d.referenceImages, d.text, exhibitReferenceImageUrls, prompt, structureImage, update]);
+  }, [activeColorMaterialReferenceImage, activeSpatialReferenceImage, d.imageUrl, d.outputText, d.prompt, d.referenceImages, d.text, exhibitReferenceImageUrls, prompt, update]);
 
   useEffect(() => {
     if (!inputDocumentText || isReadonly) return;
@@ -1249,7 +1622,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
 
   const orderedReferenceImages = useMemo(() => {
     const imageForPriority: Record<string, string[]> = {
-      structureAnnotations: structureImage ? [structureImage] : [],
+      structureAnnotations: activeSpatialReferenceImage ? [activeSpatialReferenceImage] : [],
       craftLayout: [],
       colorMaterialReference: activeColorMaterialReferenceImage ? [activeColorMaterialReferenceImage] : [],
     };
@@ -1263,7 +1636,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       if (url && !out.includes(url)) out.push(url);
     }
     return out;
-  }, [activeColorMaterialReferenceImage, exhibitReferenceImageUrls, priorityOrder, structureImage]);
+  }, [activeColorMaterialReferenceImage, activeSpatialReferenceImage, exhibitReferenceImageUrls, priorityOrder]);
 
   const buildRuntimeReferenceImages = useCallback(async () => {
     const runtimeColorMaterialReference = activeColorMaterialReferenceImage && colorMaterialPriorityMode === 'llm'
@@ -1272,7 +1645,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         : await markImageDataUrl(activeColorMaterialReferenceImage, colorMaterialMarkSettings)
       : activeColorMaterialReferenceImage;
     const imageForPriority: Record<string, string[]> = {
-      structureAnnotations: structureImage ? [structureImage] : [],
+      structureAnnotations: activeSpatialReferenceImage ? [activeSpatialReferenceImage] : [],
       craftLayout: [],
       colorMaterialReference: runtimeColorMaterialReference ? [runtimeColorMaterialReference] : [],
     };
@@ -1288,11 +1661,11 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     return out;
   }, [
     activeColorMaterialReferenceImage,
+    activeSpatialReferenceImage,
     colorMaterialMarkSettings,
     colorMaterialPriorityMode,
     exhibitReferenceImageUrls,
     priorityOrder,
-    structureImage,
     useColorMaterialAbstractCard,
   ]);
 
@@ -1482,7 +1855,20 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
 
   const runGenerate = async () => {
     if (isReadonly) return;
-    if (!structureImage || !hasColorMaterialInput) {
+    if (!hasSpatialInput || !hasColorMaterialInput) {
+      const spatialMsg = planLayoutImage && !planCameraConfirmed
+        ? '请先在平面布局图上添加并确认相机视角'
+        : '请连接空间结构示意图，或连接平面布局图并确认相机视角';
+      const colorMsg = '请连接色彩与材质参考图、选择共享预设或手填色彩材质';
+      const msg = !hasSpatialInput && !hasColorMaterialInput
+        ? `${spatialMsg}，并${colorMsg}`
+        : !hasSpatialInput
+          ? spatialMsg
+          : colorMsg;
+      update({ status: 'error', error: msg });
+      throw new Error(msg);
+    }
+    if (spatialInputMode === 'structure' && (!structureImage || !hasColorMaterialInput)) {
       const msg = !structureImage && !hasColorMaterialInput
         ? '请连接空间结构示意图，并连接色彩与材质参考图、选择共享预设或手填色彩材质'
         : !structureImage
@@ -1688,6 +2074,22 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
 
         <div className="columns-2 gap-2 [&>section]:mb-2 [&>section]:break-inside-avoid">
         <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+          <ImageSlot handleId="plan-layout" title="平面布局图" subtitle="与空间结构示意图互斥；添加相机后决定渲染视角" url={planLayoutImage} top="31.5%" />
+          {planLayoutImage && (
+            <PlanCameraEditor
+              sourceImage={planLayoutImage}
+              camera={planCameraDraft}
+              confirmed={planCameraConfirmed}
+              compositeImage={String(d.planCameraCompositeImage || '')}
+              disabled={isReadonly}
+              busy={busy}
+              onAdd={addPlanCamera}
+              onChange={setPlanCameraDraft}
+              onConfirm={() => void confirmPlanCamera()}
+              onEdit={editPlanCamera}
+              onClear={clearPlanCamera}
+            />
+          )}
           <ImageSlot handleId="structure" title="空间结构示意图" subtitle="保留结构、动线、分区；标注只作理解参考" url={structureImage} top="24%" />
           <ImageSlot handleId="color-material-reference" title="色彩与材质参考图" subtitle="仅提取色彩、材质、肌理、光泽和灯光氛围" url={colorMaterialReferenceImage} top="39%" />
           <ImageSlot
@@ -2425,15 +2827,15 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         <button
           type="button"
           className="flex h-8 w-full items-center justify-center gap-1.5 rounded border border-cyan-300/30 bg-cyan-300/15 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-45"
-          disabled={isReadonly || busy || !structureImage || !hasColorMaterialInput}
+          disabled={isReadonly || busy || !hasSpatialInput || !hasColorMaterialInput}
           onClick={() => void runGenerate()}
         >
           {busy ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
           {isGenerating ? `生成中 ${d.progress || ''}` : contentBusy ? '内容提炼中' : '生成展陈效果图'}
         </button>
-        {!structureImage || !hasColorMaterialInput ? (
+        {!hasSpatialInput || !hasColorMaterialInput ? (
           <div className="col-span-2 text-[10px] text-white/35">
-            需要连接空间结构示意图，并提供色彩与材质参考图、共享预设或手填色彩材质。
+            需要连接空间结构示意图，或连接平面布局图并确认相机视角；同时需要提供色彩与材质参考图、共享预设或手填色彩材质。
           </div>
         ) : null}
       </div>

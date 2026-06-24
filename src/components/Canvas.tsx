@@ -395,6 +395,10 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     colorMaterialReferenceToneSource: '',
     colorMaterialReferenceToneStatus: '',
     colorMaterialPriorityMode: 'frontend',
+    planCameraDraft: null,
+    planCameraConfirmed: false,
+    planCameraCompositeImage: '',
+    planCameraSourceImage: '',
     excludeItems: ['real-brand-logo', 'instruction-table'],
     regenerateContentEachRun: false,
     prompt: '',
@@ -3547,6 +3551,10 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
       const ins = tgt ? getNodeInputs(tgt) : [];
       const matched = outs.find((o) => ins.includes(o) || o === 'any' || ins.includes('any'));
       const color = matched && matched !== 'any' ? PORT_COLOR[matched] : undefined;
+      const exclusiveExhibitionImg2ImgHandle = tgt?.type === 'exhibition-img2img'
+        && (params.targetHandle === 'structure' || params.targetHandle === 'plan-layout')
+        ? (params.targetHandle === 'structure' ? 'plan-layout' : 'structure')
+        : '';
       setEdges((eds) =>
         addEdge(
           {
@@ -3554,7 +3562,9 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
             ...(color ? { style: { stroke: color, strokeWidth: 2 } } : {}),
             data: { portType: matched ?? 'any' },
           },
-          eds
+          exclusiveExhibitionImg2ImgHandle
+            ? eds.filter((edge) => edge.target !== params.target || edge.targetHandle !== exclusiveExhibitionImg2ImgHandle)
+            : eds
         )
       );
     },

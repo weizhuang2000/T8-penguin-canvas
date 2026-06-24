@@ -11,6 +11,28 @@ test('exhibition img2img node accepts document text input', () => {
   assert.match(ports, /'exhibition-img2img':\s*\{\s*inputs:\s*\['text', 'image'\],\s*outputs:\s*\['image'\]\s*\}/);
 });
 
+test('exhibition img2img node exposes mutually exclusive plan layout input', () => {
+  const node = readFileSync(new URL('../src/components/nodes/ExhibitionImg2ImgNode.tsx', import.meta.url), 'utf8');
+  const canvas = readFileSync(new URL('../src/components/Canvas.tsx', import.meta.url), 'utf8');
+  assert.match(node, /handleId="plan-layout"/);
+  assert.match(node, /PlanCameraEditor/);
+  assert.match(canvas, /params\.targetHandle === 'structure' \|\| params\.targetHandle === 'plan-layout'/);
+  assert.match(canvas, /exclusiveExhibitionImg2ImgHandle/);
+});
+
+test('exhibition img2img prompt can use plan layout camera mode', () => {
+  const prompt = buildExhibitionImg2ImgPrompt({
+    spatialInputMode: 'plan-camera',
+    planCameraDescription: '相机位置：平面图归一化坐标 x=0.500, y=0.820；相机朝向：-90°；取景角：60°；请按该视角渲染展陈空间图像。',
+  });
+  assert.match(prompt, /平面布局图与相机视角约束/);
+  assert.match(prompt, /平面布局图/);
+  assert.match(prompt, /相机位置/);
+  assert.match(prompt, /取景角/);
+  assert.match(prompt, /按该视角渲染/);
+  assert.doesNotMatch(prompt, /空间结构示意图是最终画面的唯一空间骨架和布局蓝本/);
+});
+
 test('exhibition img2img prompt defaults to structure priority', () => {
   const order = normalizeExhibitionImg2ImgPriority();
   assert.deepEqual(order, ['structureAnnotations', 'craftLayout', 'colorMaterialReference']);
