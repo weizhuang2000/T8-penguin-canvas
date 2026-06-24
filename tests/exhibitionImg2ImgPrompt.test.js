@@ -15,7 +15,9 @@ test('exhibition img2img node exposes mutually exclusive plan layout input', () 
   const node = readFileSync(new URL('../src/components/nodes/ExhibitionImg2ImgNode.tsx', import.meta.url), 'utf8');
   const canvas = readFileSync(new URL('../src/components/Canvas.tsx', import.meta.url), 'utf8');
   assert.match(node, /handleId="plan-layout"/);
-  assert.match(node, /PlanCameraEditor/);
+  assert.match(node, /PlanCameraModalEditor/);
+  assert.match(node, /createPortal/);
+  assert.match(node, /text-red-300/);
   assert.match(canvas, /params\.targetHandle === 'structure' \|\| params\.targetHandle === 'plan-layout'/);
   assert.match(canvas, /exclusiveExhibitionImg2ImgHandle/);
 });

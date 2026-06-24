@@ -628,6 +628,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
 
   useEffect(() => {
     if (isReadonly || busy) return;
+    if (d.aspectRatioSource === 'manual') return;
     const totalHeightMm = showcaseStyle.baseHeightMm + showcaseStyle.glassHeightMm + (showcaseStyle.hasCap ? showcaseStyle.capHeightMm : 0);
     const aspectRatioSource = `${showcaseStyle.widthMm}x${totalHeightMm}|${modelDef.id}`;
     if (d.aspectRatio === autoAspectRatio && d.aspectRatioSource === aspectRatioSource) return;
@@ -1073,10 +1074,10 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
               </label>
               <label className="space-y-1">
                 <span className="text-[10px] text-white/55">比例</span>
-                <select className={FIELD} value={aspectRatio} disabled={isReadonly || busy} onChange={(event) => update({ aspectRatio: event.target.value })}>
+                <select className={FIELD} value={aspectRatio} disabled={isReadonly || busy} onChange={(event) => update({ aspectRatio: event.target.value, aspectRatioSource: 'manual' })}>
                   {(modelDef.aspectRatios.length ? modelDef.aspectRatios : ['1:1', '16:9', '9:16']).map((item) => <option key={item} value={item}>{item}</option>)}
                 </select>
-                <span className="text-[9px] text-cyan-100/65">按展柜宽高自动匹配：{autoAspectRatio}</span>
+                <span className="text-[9px] text-cyan-100/65">按展柜宽高自动建议：{autoAspectRatio}</span>
               </label>
               <label className="space-y-1">
                 <span className="text-[10px] text-white/55">尺寸</span>

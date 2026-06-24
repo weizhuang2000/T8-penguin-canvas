@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { Handle, Position, useNodeConnections, useNodesData, useReactFlow, type NodeProps } from '@xyflow/react';
 import {
   ArrowDown,
@@ -14,6 +15,7 @@ import {
   Settings,
   Sparkles,
   Upload,
+  X,
 } from 'lucide-react';
 import {
   DEFAULT_LLM_MODEL,
@@ -442,8 +444,8 @@ function drawPlanCameraOverlay(ctx: CanvasRenderingContext2D, width: number, hei
   const right = angle + halfFov;
 
   ctx.save();
-  ctx.fillStyle = 'rgba(34, 211, 238, 0.18)';
-  ctx.strokeStyle = 'rgba(34, 211, 238, 0.88)';
+  ctx.fillStyle = 'rgba(239, 68, 68, 0.18)';
+  ctx.strokeStyle = 'rgba(248, 113, 113, 0.9)';
   ctx.lineWidth = Math.max(3, 4 * scale);
   ctx.beginPath();
   ctx.moveTo(x, y);
@@ -453,7 +455,7 @@ function drawPlanCameraOverlay(ctx: CanvasRenderingContext2D, width: number, hei
   ctx.fill();
   ctx.stroke();
   ctx.setLineDash([Math.max(10, 12 * scale), Math.max(7, 8 * scale)]);
-  ctx.strokeStyle = 'rgba(14, 165, 233, 0.9)';
+  ctx.strokeStyle = 'rgba(248, 113, 113, 0.95)';
   ctx.lineWidth = Math.max(2, 2.4 * scale);
   ctx.beginPath();
   ctx.moveTo(x, y);
@@ -464,8 +466,8 @@ function drawPlanCameraOverlay(ctx: CanvasRenderingContext2D, width: number, hei
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angle);
-  ctx.fillStyle = 'rgba(8, 13, 28, 0.92)';
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+  ctx.fillStyle = 'rgba(220, 38, 38, 0.94)';
+  ctx.strokeStyle = 'rgba(254, 226, 226, 0.96)';
   ctx.lineWidth = Math.max(2, 2.5 * scale);
   const bodyW = 34 * scale;
   const bodyH = 24 * scale;
@@ -482,7 +484,7 @@ function drawPlanCameraOverlay(ctx: CanvasRenderingContext2D, width: number, hei
   ctx.stroke();
   ctx.beginPath();
   ctx.arc(-bodyW * 0.14, 0, 5.5 * scale, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(34, 211, 238, 0.95)';
+  ctx.strokeStyle = 'rgba(254, 226, 226, 0.98)';
   ctx.stroke();
   ctx.restore();
 }
@@ -1132,6 +1134,289 @@ function PlanCameraEditor({
   );
 }
 
+function PlanCameraModalEditor({
+  sourceImage,
+  camera,
+  viewport,
+  confirmed,
+  compositeImage,
+  disabled,
+  busy,
+  onAdd,
+  onChange,
+  onViewportChange,
+  onConfirm,
+  onEdit,
+  onClear,
+}: {
+  sourceImage: string;
+  camera: PlanCameraState | null;
+  viewport: PlanCameraViewport;
+  confirmed: boolean;
+  compositeImage: string;
+  disabled: boolean;
+  busy: boolean;
+  onAdd: () => void;
+  onChange: (camera: PlanCameraState) => void;
+  onViewportChange: (viewport: PlanCameraViewport) => void;
+  onConfirm: () => boolean | Promise<boolean>;
+  onEdit: () => void;
+  onClear: () => void;
+}) {
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [dragMode, setDragMode] = useState<'image' | 'move' | 'angle' | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
+  const activeCamera = camera || defaultPlanCameraState();
+  const activeViewport = normalizePlanCameraViewport(viewport);
+  const canEdit = open && !!camera && !disabled && !busy;
+  const ratioValue = planCameraRatioValue(activeViewport.ratio);
+  const cx = activeCamera.x * 1000;
+  const cy = activeCamera.y * 1000;
+  const angle = (activeCamera.angle * Math.PI) / 180;
+  const halfFov = ((activeCamera.fov / 2) * Math.PI) / 180;
+  const rayLength = 520;
+  const centerX = cx + Math.cos(angle) * rayLength;
+  const centerY = cy + Math.sin(angle) * rayLength;
+  const leftX = cx + Math.cos(angle - halfFov) * rayLength;
+  const leftY = cy + Math.sin(angle - halfFov) * rayLength;
+  const rightX = cx + Math.cos(angle + halfFov) * rayLength;
+  const rightY = cy + Math.sin(angle + halfFov) * rayLength;
+
+  useEffect(() => {
+    if (!sourceImage) setOpen(false);
+  }, [sourceImage]);
+
+  const pointFromEvent = (event: PointerEvent<HTMLDivElement>) => {
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect || !rect.width || !rect.height) return null;
+    return {
+      x: clampNumber((event.clientX - rect.left) / rect.width, 0, 1, activeCamera.x),
+      y: clampNumber((event.clientY - rect.top) / rect.height, 0, 1, activeCamera.y),
+    };
+  };
+
+  const updateFromEvent = (event: PointerEvent<HTMLDivElement>, mode: 'move' | 'angle') => {
+    if (!canEdit) return;
+    const point = pointFromEvent(event);
+    if (!point) return;
+    if (mode === 'move') {
+      onChange({ ...activeCamera, x: point.x, y: point.y });
+      return;
+    }
+    const degrees = Math.atan2(point.y - activeCamera.y, point.x - activeCamera.x) * 180 / Math.PI;
+    onChange({ ...activeCamera, angle: normalizeAngle(degrees) });
+  };
+
+  const startDrag = (event: PointerEvent<HTMLDivElement>, mode: 'move' | 'angle') => {
+    if (!canEdit) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDragMode(mode);
+    updateFromEvent(event, mode);
+  };
+
+  const startImageDrag = (event: PointerEvent<HTMLImageElement>) => {
+    if (!canEdit) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDragMode('image');
+    dragStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      offsetX: activeViewport.offsetX,
+      offsetY: activeViewport.offsetY,
+    };
+  };
+
+  const updateImageDrag = (event: PointerEvent<HTMLDivElement>) => {
+    if (!canEdit || !dragStartRef.current) return;
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect || !rect.width || !rect.height) return;
+    const maxDeltaX = Math.max(1, rect.width * 0.35);
+    const maxDeltaY = Math.max(1, rect.height * 0.35);
+    onViewportChange({
+      ...activeViewport,
+      offsetX: clampNumber(dragStartRef.current.offsetX + (event.clientX - dragStartRef.current.x) / maxDeltaX, -1, 1, 0),
+      offsetY: clampNumber(dragStartRef.current.offsetY + (event.clientY - dragStartRef.current.y) / maxDeltaY, -1, 1, 0),
+    });
+  };
+
+  const endDrag = () => {
+    dragStartRef.current = null;
+    setDragMode(null);
+  };
+
+  const openNewCamera = () => {
+    onAdd();
+    setOpen(true);
+  };
+
+  const openExistingCamera = () => {
+    onEdit();
+    setOpen(true);
+  };
+
+  const clearCamera = () => {
+    setOpen(false);
+    onClear();
+  };
+
+  const confirmCamera = async () => {
+    const ok = await onConfirm();
+    if (ok !== false) setOpen(false);
+  };
+
+  const modal = open && typeof document !== 'undefined' ? createPortal(
+    <div
+      className="fixed inset-0 z-[10040] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm nodrag nopan"
+      onMouseDown={(event) => event.stopPropagation()}
+      onWheel={(event) => event.stopPropagation()}
+    >
+      <div className="flex max-h-[92vh] w-[min(1180px,96vw)] flex-col overflow-hidden rounded-lg border border-white/15 bg-slate-950 shadow-2xl">
+        <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
+          <Camera size={17} className="text-red-300" />
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold text-white">编辑平面布局相机视角</div>
+            <div className="text-[11px] text-white/45">在固定选区内拖拽、缩放和裁切平面图，再设置红色相机的位置、朝向和取景角。</div>
+          </div>
+          <button type="button" className="rounded p-1.5 text-white/60 hover:bg-white/10 hover:text-white" onClick={() => setOpen(false)}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="grid min-h-0 flex-1 grid-cols-[1fr_260px] gap-3 overflow-hidden p-3">
+          <div className="flex min-h-0 items-center justify-center overflow-hidden rounded border border-white/10 bg-black/45 p-3">
+            <div
+              ref={stageRef}
+              className="relative max-h-[72vh] w-full max-w-[860px] overflow-hidden rounded border border-red-300/35 bg-white"
+              style={{ aspectRatio: `${ratioValue}` }}
+              onPointerMove={(event) => {
+                if (dragMode === 'image') updateImageDrag(event);
+                else if (dragMode) updateFromEvent(event, dragMode);
+              }}
+              onPointerUp={endDrag}
+              onPointerCancel={endDrag}
+            >
+              <img
+                src={sourceImage}
+                alt=""
+                className={`absolute left-1/2 top-1/2 h-full w-full max-w-none select-none object-contain ${canEdit ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                style={{
+                  transform: `translate(calc(-50% + ${activeViewport.offsetX * 35}%), calc(-50% + ${activeViewport.offsetY * 35}%)) scale(${activeViewport.scale})`,
+                }}
+                draggable={false}
+                onPointerDown={startImageDrag}
+              />
+              <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 1000 1000" preserveAspectRatio="none">
+                <path d={`M ${cx} ${cy} L ${leftX} ${leftY} L ${rightX} ${rightY} Z`} fill="rgba(239,68,68,.18)" stroke="rgba(248,113,113,.92)" strokeWidth="5" />
+                <path d={`M ${cx} ${cy} L ${centerX} ${centerY}`} stroke="rgba(252,165,165,.95)" strokeWidth="4" strokeDasharray="18 12" />
+              </svg>
+              <div
+                className="absolute h-9 w-9 cursor-grab rounded-full border border-red-100 bg-red-600 text-white shadow-lg shadow-red-950/40 active:cursor-grabbing"
+                style={{ left: `${activeCamera.x * 100}%`, top: `${activeCamera.y * 100}%`, transform: `translate(-50%, -50%) rotate(${activeCamera.angle}deg)` }}
+                onPointerDown={(event) => startDrag(event, 'move')}
+                title="拖拽调整相机位置"
+              >
+                <Camera size={20} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" />
+              </div>
+              <div
+                className="absolute h-4 w-4 cursor-crosshair rounded-full border border-red-50 bg-red-400 shadow"
+                style={{ left: `${(activeCamera.x + Math.cos(angle) * 0.16) * 100}%`, top: `${(activeCamera.y + Math.sin(angle) * 0.16) * 100}%`, transform: 'translate(-50%, -50%)' }}
+                onPointerDown={(event) => startDrag(event, 'angle')}
+                title="拖拽调整相机朝向"
+              />
+            </div>
+          </div>
+
+          <div className="min-h-0 overflow-y-auto rounded border border-white/10 bg-white/[0.035] p-3">
+            <div className="space-y-3">
+              <label className="block text-[11px] font-semibold text-white/75">
+                选区比例
+                <select
+                  className={`${FIELD} mt-1`}
+                  value={activeViewport.ratio}
+                  disabled={!canEdit}
+                  onChange={(event) => onViewportChange({ ...activeViewport, ratio: normalizePlanCameraRatio(event.target.value) })}
+                >
+                  {PLAN_CAMERA_RATIO_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+
+              <div className="grid grid-cols-[64px_1fr_44px] items-center gap-2 text-[11px] text-white/60">
+                <span>平面缩放</span>
+                <input type="range" min={PLAN_CAMERA_VIEWPORT_SCALE_MIN} max={PLAN_CAMERA_VIEWPORT_SCALE_MAX} step={0.05} value={activeViewport.scale} disabled={!canEdit} className="accent-red-400" onChange={(event) => onViewportChange({ ...activeViewport, scale: clampNumber(event.target.value, PLAN_CAMERA_VIEWPORT_SCALE_MIN, PLAN_CAMERA_VIEWPORT_SCALE_MAX, 1) })} />
+                <span className="text-right">{activeViewport.scale.toFixed(2)}x</span>
+                <span>取景角</span>
+                <input type="range" min={PLAN_CAMERA_MIN_FOV} max={PLAN_CAMERA_MAX_FOV} value={Math.round(activeCamera.fov)} disabled={!canEdit} className="accent-red-400" onChange={(event) => onChange({ ...activeCamera, fov: clampNumber(event.target.value, PLAN_CAMERA_MIN_FOV, PLAN_CAMERA_MAX_FOV, PLAN_CAMERA_DEFAULT_FOV) })} />
+                <span className="text-right">{Math.round(activeCamera.fov)}°</span>
+                <span>朝向</span>
+                <input type="range" min={-180} max={180} value={Math.round(activeCamera.angle)} disabled={!canEdit} className="accent-red-400" onChange={(event) => onChange({ ...activeCamera, angle: normalizeAngle(event.target.value) })} />
+                <span className="text-right">{Math.round(activeCamera.angle)}°</span>
+              </div>
+
+              <button type="button" className={`${BUTTON} w-full`} disabled={!canEdit} onClick={() => onViewportChange(defaultPlanCameraViewport())}>
+                重置平面裁切
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t border-white/10 px-4 py-3">
+          <button type="button" className={BUTTON} onClick={() => setOpen(false)}>取消</button>
+          <button type="button" className={`${BUTTON} border-red-300/30 bg-red-500/18 text-red-50 hover:bg-red-500/28`} disabled={!canEdit} onClick={() => void confirmCamera()}>
+            确认视角
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  ) : null;
+
+  return (
+    <div className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
+      <div className="mb-1.5 flex items-center gap-2">
+        <Camera size={13} className="text-red-300" />
+        <span className="text-[11px] font-semibold text-cyan-100">平面布局相机视角</span>
+        <div className="ml-auto flex gap-1">
+          {!camera && (
+            <button type="button" className={BUTTON} disabled={disabled || busy} onClick={openNewCamera}>
+              <Camera size={11} className="text-red-300" /> 添加相机
+            </button>
+          )}
+          {camera && <button type="button" className={BUTTON} disabled={disabled || busy} onClick={openExistingCamera}>{confirmed ? '重新编辑' : '编辑视角'}</button>}
+          {camera && <button type="button" className={BUTTON} disabled={disabled || busy} onClick={clearCamera}>清除</button>}
+        </div>
+      </div>
+
+      {camera ? (
+        <div className="rounded border border-white/10 bg-black/20 p-2">
+          {confirmed && compositeImage ? (
+            <img src={compositeImage} alt="" className="max-h-32 w-full rounded object-contain" draggable={false} />
+          ) : (
+            <div className="rounded border border-dashed border-red-300/25 bg-red-400/10 px-2 py-3 text-[10px] leading-snug text-red-50/70">
+              相机视角尚未确认，请在弹窗中调整平面图裁切、相机位置、朝向和取景角。
+            </div>
+          )}
+          <div className="mt-1.5 grid grid-cols-2 gap-1 text-[10px] text-white/55">
+            <div>比例：{activeViewport.ratio}</div>
+            <div>缩放：{activeViewport.scale.toFixed(2)}x</div>
+            <div>取景角：{Math.round(activeCamera.fov)}°</div>
+            <div>朝向：{Math.round(activeCamera.angle)}°</div>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded border border-dashed border-white/15 px-2 py-3 text-[10px] leading-snug text-white/40">
+          点击添加相机后，在弹窗中设置平面图裁切与红色相机视角。
+        </div>
+      )}
+      {modal}
+    </div>
+  );
+}
+
 const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
@@ -1510,7 +1795,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   }, [busy, isReadonly, planCameraDraft, planLayoutImage, update]);
 
   const confirmPlanCamera = useCallback(async () => {
-    if (isReadonly || busy || !planLayoutImage || !planCameraDraft) return;
+    if (isReadonly || busy || !planLayoutImage || !planCameraDraft) return false;
     try {
       const composite = await composePlanCameraDataUrl(planLayoutImage, planCameraDraft, planCameraViewport);
       update({
@@ -1521,8 +1806,10 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         planCameraSourceImage: planLayoutImage,
         error: '',
       });
+      return true;
     } catch (error: any) {
       update({ status: 'error', error: error?.message || '平面布局相机视角合成失败' });
+      return false;
     }
   }, [busy, isReadonly, planCameraDraft, planCameraViewport, planLayoutImage, update]);
 
@@ -2243,7 +2530,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <ImageSlot handleId="plan-layout" title="平面布局图" subtitle="与空间结构示意图互斥；添加相机后决定渲染视角" url={planLayoutImage} top="31.5%" />
           {planLayoutImage && (
-            <PlanCameraEditor
+            <PlanCameraModalEditor
               sourceImage={planLayoutImage}
               camera={planCameraDraft}
               viewport={planCameraViewport}
@@ -2254,7 +2541,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               onAdd={addPlanCamera}
               onChange={setPlanCameraDraft}
               onViewportChange={setPlanCameraViewport}
-              onConfirm={() => void confirmPlanCamera()}
+              onConfirm={confirmPlanCamera}
               onEdit={editPlanCamera}
               onClear={clearPlanCamera}
             />
