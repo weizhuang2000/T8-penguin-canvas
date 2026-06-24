@@ -978,11 +978,11 @@ function PlanCameraEditor({
     const point = pointFromEvent(event);
     if (!point) return;
     if (mode === 'move') {
-      onChange({ ...activeCamera, x: point.x, y: point.y });
+      setDraftCamera({ ...activeCamera, x: point.x, y: point.y });
       return;
     }
     const degrees = Math.atan2(point.y - activeCamera.y, point.x - activeCamera.x) * 180 / Math.PI;
-    onChange({ ...activeCamera, angle: normalizeAngle(degrees) });
+    setDraftCamera({ ...activeCamera, angle: normalizeAngle(degrees) });
   };
 
   const startDrag = (event: PointerEvent<HTMLDivElement>, mode: 'move' | 'angle') => {
@@ -1005,6 +1005,7 @@ function PlanCameraEditor({
       y: event.clientY,
       offsetX: activeViewport.offsetX,
       offsetY: activeViewport.offsetY,
+      scale: activeViewport.scale,
     };
   };
 
@@ -1014,10 +1015,44 @@ function PlanCameraEditor({
     if (!rect || !rect.width || !rect.height) return;
     const maxDeltaX = Math.max(1, rect.width * 0.35);
     const maxDeltaY = Math.max(1, rect.height * 0.35);
-    onViewportChange({
+    setDraftViewport({
       ...activeViewport,
       offsetX: clampNumber(dragStartRef.current.offsetX + (event.clientX - dragStartRef.current.x) / maxDeltaX, -1, 1, 0),
       offsetY: clampNumber(dragStartRef.current.offsetY + (event.clientY - dragStartRef.current.y) / maxDeltaY, -1, 1, 0),
+    });
+  };
+
+  const startCropDrag = (event: PointerEvent<HTMLDivElement>, mode: 'crop-left' | 'crop-right' | 'crop-top' | 'crop-bottom') => {
+    if (!canEdit) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDragMode(mode);
+    dragStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      offsetX: activeViewport.offsetX,
+      offsetY: activeViewport.offsetY,
+      scale: activeViewport.scale,
+    };
+  };
+
+  const updateCropDrag = (event: PointerEvent<HTMLDivElement>, mode: 'crop-left' | 'crop-right' | 'crop-top' | 'crop-bottom') => {
+    if (!canEdit || !dragStartRef.current) return;
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect || !rect.width || !rect.height) return;
+    const start = dragStartRef.current;
+    const dx = (event.clientX - start.x) / Math.max(1, rect.width);
+    const dy = (event.clientY - start.y) / Math.max(1, rect.height);
+    const signedDelta = mode === 'crop-left' ? dx : mode === 'crop-right' ? -dx : mode === 'crop-top' ? dy : -dy;
+    const nextScale = clampNumber(start.scale + signedDelta * 2.2, PLAN_CAMERA_VIEWPORT_SCALE_MIN, PLAN_CAMERA_VIEWPORT_SCALE_MAX, start.scale);
+    const scaleDelta = nextScale - start.scale;
+    const offsetShift = scaleDelta * 0.22;
+    setDraftViewport({
+      ...activeViewport,
+      scale: nextScale,
+      offsetX: clampNumber(start.offsetX + (mode === 'crop-left' ? offsetShift : mode === 'crop-right' ? -offsetShift : 0), -1, 1, 0),
+      offsetY: clampNumber(start.offsetY + (mode === 'crop-top' ? offsetShift : mode === 'crop-bottom' ? -offsetShift : 0), -1, 1, 0),
     });
   };
 
@@ -1159,17 +1194,19 @@ function PlanCameraModalEditor({
   onAdd: () => void;
   onChange: (camera: PlanCameraState) => void;
   onViewportChange: (viewport: PlanCameraViewport) => void;
-  onConfirm: () => boolean | Promise<boolean>;
+  onConfirm: (camera: PlanCameraState, viewport: PlanCameraViewport) => boolean | Promise<boolean>;
   onEdit: () => void;
   onClear: () => void;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const [dragMode, setDragMode] = useState<'image' | 'move' | 'angle' | null>(null);
-  const dragStartRef = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
-  const activeCamera = camera || defaultPlanCameraState();
-  const activeViewport = normalizePlanCameraViewport(viewport);
-  const canEdit = open && !!camera && !disabled && !busy;
+  const [draftCamera, setDraftCamera] = useState<PlanCameraState | null>(camera || null);
+  const [draftViewport, setDraftViewport] = useState<PlanCameraViewport>(() => normalizePlanCameraViewport(viewport));
+  const [dragMode, setDragMode] = useState<'image' | 'move' | 'angle' | 'crop-left' | 'crop-right' | 'crop-top' | 'crop-bottom' | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number; offsetX: number; offsetY: number; scale: number } | null>(null);
+  const activeCamera = draftCamera || camera || defaultPlanCameraState();
+  const activeViewport = normalizePlanCameraViewport(draftViewport);
+  const canEdit = open && !!draftCamera && !disabled && !busy;
   const ratioValue = planCameraRatioValue(activeViewport.ratio);
   const cx = activeCamera.x * 1000;
   const cy = activeCamera.y * 1000;
@@ -1186,6 +1223,12 @@ function PlanCameraModalEditor({
   useEffect(() => {
     if (!sourceImage) setOpen(false);
   }, [sourceImage]);
+
+  useEffect(() => {
+    if (open) return;
+    setDraftCamera(camera || null);
+    setDraftViewport(normalizePlanCameraViewport(viewport));
+  }, [camera, open, viewport]);
 
   const pointFromEvent = (event: PointerEvent<HTMLDivElement>) => {
     const rect = stageRef.current?.getBoundingClientRect();
@@ -1250,12 +1293,14 @@ function PlanCameraModalEditor({
   };
 
   const openNewCamera = () => {
-    onAdd();
+    setDraftCamera(camera || defaultPlanCameraState());
+    setDraftViewport(normalizePlanCameraViewport(viewport));
     setOpen(true);
   };
 
   const openExistingCamera = () => {
-    onEdit();
+    setDraftCamera(camera || defaultPlanCameraState());
+    setDraftViewport(normalizePlanCameraViewport(viewport));
     setOpen(true);
   };
 
@@ -1265,7 +1310,11 @@ function PlanCameraModalEditor({
   };
 
   const confirmCamera = async () => {
-    const ok = await onConfirm();
+    if (!draftCamera) return;
+    const nextViewport = normalizePlanCameraViewport(draftViewport);
+    onChange(draftCamera);
+    onViewportChange(nextViewport);
+    const ok = await onConfirm(draftCamera, nextViewport);
     if (ok !== false) setOpen(false);
   };
 
@@ -1295,6 +1344,7 @@ function PlanCameraModalEditor({
               style={{ aspectRatio: `${ratioValue}` }}
               onPointerMove={(event) => {
                 if (dragMode === 'image') updateImageDrag(event);
+                else if (dragMode?.startsWith('crop-')) updateCropDrag(event, dragMode);
                 else if (dragMode) updateFromEvent(event, dragMode);
               }}
               onPointerUp={endDrag}
@@ -1328,6 +1378,26 @@ function PlanCameraModalEditor({
                 onPointerDown={(event) => startDrag(event, 'angle')}
                 title="拖拽调整相机朝向"
               />
+              <div
+                className="absolute inset-y-8 left-0 w-3 cursor-ew-resize border-l-2 border-red-300/80 bg-red-500/10 hover:bg-red-500/25"
+                onPointerDown={(event) => startCropDrag(event, 'crop-left')}
+                title="拖拽裁切左边缘"
+              />
+              <div
+                className="absolute inset-y-8 right-0 w-3 cursor-ew-resize border-r-2 border-red-300/80 bg-red-500/10 hover:bg-red-500/25"
+                onPointerDown={(event) => startCropDrag(event, 'crop-right')}
+                title="拖拽裁切右边缘"
+              />
+              <div
+                className="absolute inset-x-8 top-0 h-3 cursor-ns-resize border-t-2 border-red-300/80 bg-red-500/10 hover:bg-red-500/25"
+                onPointerDown={(event) => startCropDrag(event, 'crop-top')}
+                title="拖拽裁切上边缘"
+              />
+              <div
+                className="absolute inset-x-8 bottom-0 h-3 cursor-ns-resize border-b-2 border-red-300/80 bg-red-500/10 hover:bg-red-500/25"
+                onPointerDown={(event) => startCropDrag(event, 'crop-bottom')}
+                title="拖拽裁切下边缘"
+              />
             </div>
           </div>
 
@@ -1339,7 +1409,7 @@ function PlanCameraModalEditor({
                   className={`${FIELD} mt-1`}
                   value={activeViewport.ratio}
                   disabled={!canEdit}
-                  onChange={(event) => onViewportChange({ ...activeViewport, ratio: normalizePlanCameraRatio(event.target.value) })}
+                  onChange={(event) => setDraftViewport({ ...activeViewport, ratio: normalizePlanCameraRatio(event.target.value) })}
                 >
                   {PLAN_CAMERA_RATIO_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
@@ -1347,17 +1417,17 @@ function PlanCameraModalEditor({
 
               <div className="grid grid-cols-[64px_1fr_44px] items-center gap-2 text-[11px] text-white/60">
                 <span>平面缩放</span>
-                <input type="range" min={PLAN_CAMERA_VIEWPORT_SCALE_MIN} max={PLAN_CAMERA_VIEWPORT_SCALE_MAX} step={0.05} value={activeViewport.scale} disabled={!canEdit} className="accent-red-400" onChange={(event) => onViewportChange({ ...activeViewport, scale: clampNumber(event.target.value, PLAN_CAMERA_VIEWPORT_SCALE_MIN, PLAN_CAMERA_VIEWPORT_SCALE_MAX, 1) })} />
+                <input type="range" min={PLAN_CAMERA_VIEWPORT_SCALE_MIN} max={PLAN_CAMERA_VIEWPORT_SCALE_MAX} step={0.05} value={activeViewport.scale} disabled={!canEdit} className="accent-red-400" onChange={(event) => setDraftViewport({ ...activeViewport, scale: clampNumber(event.target.value, PLAN_CAMERA_VIEWPORT_SCALE_MIN, PLAN_CAMERA_VIEWPORT_SCALE_MAX, 1) })} />
                 <span className="text-right">{activeViewport.scale.toFixed(2)}x</span>
                 <span>取景角</span>
-                <input type="range" min={PLAN_CAMERA_MIN_FOV} max={PLAN_CAMERA_MAX_FOV} value={Math.round(activeCamera.fov)} disabled={!canEdit} className="accent-red-400" onChange={(event) => onChange({ ...activeCamera, fov: clampNumber(event.target.value, PLAN_CAMERA_MIN_FOV, PLAN_CAMERA_MAX_FOV, PLAN_CAMERA_DEFAULT_FOV) })} />
+                <input type="range" min={PLAN_CAMERA_MIN_FOV} max={PLAN_CAMERA_MAX_FOV} value={Math.round(activeCamera.fov)} disabled={!canEdit} className="accent-red-400" onChange={(event) => setDraftCamera({ ...activeCamera, fov: clampNumber(event.target.value, PLAN_CAMERA_MIN_FOV, PLAN_CAMERA_MAX_FOV, PLAN_CAMERA_DEFAULT_FOV) })} />
                 <span className="text-right">{Math.round(activeCamera.fov)}°</span>
                 <span>朝向</span>
-                <input type="range" min={-180} max={180} value={Math.round(activeCamera.angle)} disabled={!canEdit} className="accent-red-400" onChange={(event) => onChange({ ...activeCamera, angle: normalizeAngle(event.target.value) })} />
+                <input type="range" min={-180} max={180} value={Math.round(activeCamera.angle)} disabled={!canEdit} className="accent-red-400" onChange={(event) => setDraftCamera({ ...activeCamera, angle: normalizeAngle(event.target.value) })} />
                 <span className="text-right">{Math.round(activeCamera.angle)}°</span>
               </div>
 
-              <button type="button" className={`${BUTTON} w-full`} disabled={!canEdit} onClick={() => onViewportChange(defaultPlanCameraViewport())}>
+              <button type="button" className={`${BUTTON} w-full`} disabled={!canEdit} onClick={() => setDraftViewport(defaultPlanCameraViewport())}>
                 重置平面裁切
               </button>
             </div>
@@ -1794,13 +1864,14 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     });
   }, [busy, isReadonly, planCameraDraft, planLayoutImage, update]);
 
-  const confirmPlanCamera = useCallback(async () => {
-    if (isReadonly || busy || !planLayoutImage || !planCameraDraft) return false;
+  const confirmPlanCamera = useCallback(async (camera = planCameraDraft, viewport = planCameraViewport) => {
+    if (isReadonly || busy || !planLayoutImage || !camera) return false;
     try {
-      const composite = await composePlanCameraDataUrl(planLayoutImage, planCameraDraft, planCameraViewport);
+      const nextViewport = normalizePlanCameraViewport(viewport);
+      const composite = await composePlanCameraDataUrl(planLayoutImage, camera, nextViewport);
       update({
-        planCameraDraft,
-        planCameraViewport,
+        planCameraDraft: camera,
+        planCameraViewport: nextViewport,
         planCameraConfirmed: true,
         planCameraCompositeImage: composite,
         planCameraSourceImage: planLayoutImage,
