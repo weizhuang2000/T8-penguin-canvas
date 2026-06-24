@@ -128,3 +128,76 @@ test('external provider generation routes run enabled OpenAI compatible LLM and 
   assert.equal(upstreamCalls[1].auth, 'Bearer sk-route-secret');
   assert.equal(upstreamCalls[2].auth, 'Bearer sk-route-secret');
 });
+
+test('external image status keeps polling through transient upstream gateway errors', async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 't8-external-status-'));
+  t.after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const upstreamApp = express();
+  const upstreamCalls: any[] = [];
+  upstreamApp.get('/v1/tasks/:taskId', (req, res) => {
+    upstreamCalls.push({ path: req.path, taskId: req.params.taskId });
+    res.status(502).type('html').send('<!DOCTYPE html><title>IIS 10.0 502.3 Bad Gateway</title>');
+  });
+  const upstreamServer = await listen(upstreamApp);
+  t.after(() => upstreamServer.close());
+
+  const config = require('../backend/src/config.js');
+  const oldConfig = {
+    SETTINGS_FILE: config.SETTINGS_FILE,
+    OUTPUT_DIR: config.OUTPUT_DIR,
+    DEFAULT_LOCAL_SAVE_DIR: config.DEFAULT_LOCAL_SAVE_DIR,
+    DEFAULT_CANVAS_AUTO_SAVE_DIR: config.DEFAULT_CANVAS_AUTO_SAVE_DIR,
+    DEFAULT_RESOURCE_LIBRARY_DIR: config.DEFAULT_RESOURCE_LIBRARY_DIR,
+    DEFAULT_THEME_TEMPLATE_DIR: config.DEFAULT_THEME_TEMPLATE_DIR,
+  };
+  t.after(() => Object.assign(config, oldConfig));
+  config.SETTINGS_FILE = path.join(tmpDir, 'settings.json');
+  config.OUTPUT_DIR = path.join(tmpDir, 'output');
+  config.DEFAULT_LOCAL_SAVE_DIR = path.join(tmpDir, 'save');
+  config.DEFAULT_CANVAS_AUTO_SAVE_DIR = path.join(tmpDir, 'canvas');
+  config.DEFAULT_RESOURCE_LIBRARY_DIR = path.join(tmpDir, 'resources');
+  config.DEFAULT_THEME_TEMPLATE_DIR = path.join(tmpDir, 'themes');
+  fs.mkdirSync(config.OUTPUT_DIR, { recursive: true });
+
+  const settingsRouter = require('../backend/src/routes/settings.js');
+  const externalProvidersRouter = require('../backend/src/routes/externalProviders.js');
+  const app = express();
+  app.use(express.json({ limit: '4mb' }));
+  app.use('/api/settings', settingsRouter);
+  app.use('/api/proxy/external', externalProvidersRouter);
+  const server = await listen(app);
+  t.after(() => server.close());
+
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const upstreamBase = `http://127.0.0.1:${upstreamServer.address().port}/v1`;
+  await fetch(`${base}/api/settings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      advancedProviders: [
+        {
+          id: 'openai-compatible',
+          protocol: 'openai-compatible',
+          enabled: true,
+          baseUrl: upstreamBase,
+          apiKey: 'sk-route-secret',
+          imageModels: ['gpt-image-test'],
+        },
+      ],
+    }),
+  }).then((res) => res.json());
+
+  const status = await fetch(`${base}/api/proxy/external/image/status/task-502?providerId=openai-compatible`, {
+    method: 'GET',
+  }).then((res) => res.json());
+
+  assert.equal(status.success, true);
+  assert.equal(status.code, 'transient_error');
+  assert.equal(status.data.status, 'running');
+  assert.equal(status.data.taskId, 'task-502');
+  assert.deepEqual(status.data.imageUrls, []);
+  assert.equal(upstreamCalls.length, 1);
+});

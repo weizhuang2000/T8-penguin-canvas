@@ -198,7 +198,21 @@ function rememberExternalOutputs(req, urls, kind, provider, extra = {}) {
 
 function canContinueImageTask(result) {
   if (!result?.taskId) return false;
-  return ['timeout', 'network_error', 'empty_image'].includes(String(result.code || ''));
+  const code = String(result.code || '');
+  if (['timeout', 'network_error', 'empty_image'].includes(code)) return true;
+  if (code !== 'http_error') return false;
+  const status = Number(result.statusCode || result.httpStatus || result.raw?.status || result.raw?.statusCode);
+  return [408, 409, 425, 429, 500, 502, 503, 504].includes(status);
+}
+
+function imageTaskRunningResult(result, code = 'running') {
+  return {
+    ...result,
+    ok: true,
+    kind: 'image',
+    code,
+    status: 'running',
+  };
 }
 
 router.post('/test-provider', async (req, res) => {
@@ -283,13 +297,7 @@ router.post('/image', async (req, res) => {
     });
     if (!result.ok) {
       if (canContinueImageTask(result)) {
-        return resultResponse(res, {
-          ...result,
-          ok: true,
-          kind: 'image',
-          code: 'running',
-          status: 'running',
-        }, resolved.provider, { imageUrls: [], remoteImageUrls: [] });
+        return resultResponse(res, imageTaskRunningResult(result), resolved.provider, { imageUrls: [], remoteImageUrls: [] });
       }
       return resultResponse(res, result, resolved.provider);
     }
@@ -326,6 +334,12 @@ router.get('/image/status/:taskId', async (req, res) => {
       timeoutMs: Number(req.query?.timeoutMs) || undefined,
       baseUrl: `http://127.0.0.1:${config.PORT}`,
     });
+    if (!result.ok && canContinueImageTask(result)) {
+      return resultResponse(res, imageTaskRunningResult(result, 'transient_error'), resolved.provider, {
+        imageUrls: [],
+        remoteImageUrls: [],
+      });
+    }
     if (!result.ok) return resultResponse(res, result, resolved.provider);
 
     const remoteImageUrls = Array.isArray(result.imageUrls) ? result.imageUrls : [];

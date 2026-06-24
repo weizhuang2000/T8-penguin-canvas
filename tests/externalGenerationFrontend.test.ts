@@ -20,6 +20,16 @@ function jsonResponse(body: any, status = 200) {
   } as any;
 }
 
+function textResponse(text: string, status = 502) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    async text() {
+      return text;
+    },
+  } as any;
+}
+
 test('generateExternalImage posts to external image route and returns normalized image urls', async () => {
   const calls: any[] = [];
   const oldFetch = globalThis.fetch;
@@ -76,6 +86,22 @@ test('generateExternalImage forwards banana ratio fields for gemini-compatible p
     assert.equal(calls[0].body.aspect_ratio, '16:9');
     assert.equal(calls[0].body.image_size, '2K');
     assert.equal(calls[0].body.size, '1344x768');
+  } finally {
+    globalThis.fetch = oldFetch;
+  }
+});
+
+test('generateExternalImage reports non JSON gateway pages in readable text', async () => {
+  const oldFetch = globalThis.fetch;
+  (globalThis as any).fetch = async () => textResponse('<!DOCTYPE html><title>IIS 10.0 502.3 Bad Gateway</title>', 502);
+  try {
+    await assert.rejects(
+      () => generateExternalImage({
+        providerId: 'openai-compatible',
+        prompt: 'draw',
+      }),
+      /接口返回非 JSON.*HTTP 502.*IIS 10\.0 502\.3 Bad Gateway/,
+    );
   } finally {
     globalThis.fetch = oldFetch;
   }

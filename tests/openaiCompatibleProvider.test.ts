@@ -191,6 +191,31 @@ test('OpenAI compatible image generation uses a long default timeout', async () 
   assert.deepEqual(result.imageUrls, ['https://cdn.example.com/out.png']);
 });
 
+test('OpenAI compatible image task query exposes transient gateway status with task id', async () => {
+  const provider = {
+    id: 'custom-openai',
+    protocol: 'openai-compatible',
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'sk-secret',
+    imageModels: ['gpt-image-1'],
+  };
+
+  const result = await openaiCompatible.queryImageTask(provider, 'task-502', {
+    fetchImpl: async () => ({
+      ok: false,
+      status: 502,
+      async text() {
+        return '<!DOCTYPE html><title>IIS 10.0 502.3 Bad Gateway</title>';
+      },
+    }),
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'http_error');
+  assert.equal(result.statusCode, 502);
+  assert.equal(result.taskId, 'task-502');
+});
+
 test('OpenAI compatible video generation posts to video endpoint and normalizes returned media urls', async () => {
   const calls: any[] = [];
   const provider = {

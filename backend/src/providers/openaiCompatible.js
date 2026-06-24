@@ -482,8 +482,10 @@ async function generateImage(provider, input = {}, options = {}) {
           return {
             ok: false,
             code: 'http_error',
+            statusCode: res.status,
             providerId: provider.id,
             protocol: provider.protocol,
+            taskId: extractTaskId(raw),
             error: `扩展图像编辑调用失败：HTTP ${res.status}${raw?.message ? ` ${trimBodyForError(raw.message)}` : ''}`,
             raw,
           };
@@ -513,8 +515,10 @@ async function generateImage(provider, input = {}, options = {}) {
       return {
         ok: false,
         code: 'http_error',
+        statusCode: res.status,
         providerId: provider.id,
         protocol: provider.protocol,
+        taskId: extractTaskId(raw),
         error: `扩展图像调用失败：HTTP ${res.status}${raw?.message ? ` ${trimBodyForError(raw.message)}` : ''}`,
         raw,
       };
@@ -562,6 +566,7 @@ async function queryImageTask(provider, taskId, options = {}) {
       return {
         ok: false,
         code: 'http_error',
+        statusCode: res.status,
         providerId: provider.id,
         protocol: provider.protocol,
         taskId: id,

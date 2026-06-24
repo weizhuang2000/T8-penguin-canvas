@@ -353,6 +353,7 @@ async function generateImage(provider, input = {}, options = {}) {
       return {
         ok: false,
         code: 'http_error',
+        statusCode: res.status,
         providerId: provider.id,
         protocol: 'gemini-compatible',
         error: `Gemini/香蕉兼容图像调用失败：HTTP ${res.status}${trimBodyForError(raw) ? ` ${trimBodyForError(raw)}` : ''}`,
@@ -409,6 +410,7 @@ async function queryImageTask(provider, taskId, options = {}) {
       return {
         ok: false,
         code: 'http_error',
+        statusCode: res.status,
         providerId: provider.id,
         protocol: 'gemini-compatible',
         taskId: id,

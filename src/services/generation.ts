@@ -11,7 +11,7 @@ async function parseJsonResponse<T = any>(res: Response): Promise<T> {
     return JSON.parse(text) as T;
   } catch {
     const preview = text.replace(/\s+/g, ' ').trim().slice(0, 240);
-    throw new Error(`鎺ュ彛杩斿洖闈?JSON锛屽彲鑳芥槸涓婃父/浠ｇ悊涓存椂閿欒锛欻TTP ${res.status}銆傚搷搴旂墖娈碉細${preview}`);
+    throw new Error(`接口返回非 JSON，可能是上游或代理临时错误：HTTP ${res.status}。响应片段：${preview}`);
   }
 }
 

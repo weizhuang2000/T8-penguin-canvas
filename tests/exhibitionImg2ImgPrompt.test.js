@@ -25,13 +25,15 @@ test('exhibition img2img node exposes mutually exclusive plan layout input', () 
 test('exhibition img2img prompt can use plan layout camera mode', () => {
   const prompt = buildExhibitionImg2ImgPrompt({
     spatialInputMode: 'plan-camera',
-    planCameraDescription: '相机位置：平面图归一化坐标 x=0.500, y=0.820；相机朝向：-90°；取景角：60°；请按该视角渲染展陈空间图像。',
+    planCameraDescription: '相机位置：平面图归一化坐标 x=0.500, y=0.820；相机朝向：-90°；取景角：60°；画面选区比例：16:9；平面图在选区内缩放：5.00x，偏移 x=-0.289, y=-0.172；请按该视角渲染展陈空间图像。',
   });
   assert.match(prompt, /平面布局图与相机视角约束/);
   assert.match(prompt, /平面布局图/);
-  assert.match(prompt, /相机位置/);
-  assert.match(prompt, /取景角/);
   assert.match(prompt, /按该视角渲染/);
+  assert.doesNotMatch(prompt, /相机位置/);
+  assert.doesNotMatch(prompt, /归一化坐标/);
+  assert.doesNotMatch(prompt, /画面选区比例/);
+  assert.doesNotMatch(prompt, /偏移 x=/);
   assert.doesNotMatch(prompt, /空间结构示意图是最终画面的唯一空间骨架和布局蓝本/);
 });
 

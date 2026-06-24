@@ -267,15 +267,7 @@ function isPlanCameraCropDragMode(value: unknown): value is PlanCameraCropDragMo
 
 function planCameraDescription(camera: PlanCameraState | null, viewport?: PlanCameraViewport | null): string {
   if (!camera) return '';
-  const vp = viewport ? normalizePlanCameraViewport(viewport) : defaultPlanCameraViewport();
-  return [
-    `相机位置：平面图归一化坐标 x=${camera.x.toFixed(3)}, y=${camera.y.toFixed(3)}`,
-    `相机朝向：${Math.round(camera.angle)}°`,
-    `取景角：${Math.round(camera.fov)}°`,
-    `画面选区比例：${vp.ratio}`,
-    `平面图在选区内缩放：${vp.scale.toFixed(2)}x，偏移 x=${vp.offsetX.toFixed(3)}, y=${vp.offsetY.toFixed(3)}`,
-    '请按该视角渲染展陈空间图像。',
-  ].join('；');
+  return '已确认的相机图标、朝向线和取景锥已合成在平面布局图上，请仅依据该图中可见的相机视角标注渲染展陈空间图像。';
 }
 
 function normalizeReferenceMarkSettings(data: any, prefix: 'colorMaterial'): ReferenceMarkSettings {

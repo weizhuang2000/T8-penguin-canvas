@@ -291,6 +291,7 @@ async function generateImage(provider, input = {}, options = {}) {
         return {
           ok: false,
           code: 'http_error',
+          statusCode: poll.status,
           providerId: provider.id,
           protocol: 'modelscope',
           taskId,
@@ -351,6 +352,7 @@ async function queryImageTask(provider, taskId, options = {}) {
       return {
         ok: false,
         code: 'http_error',
+        statusCode: poll.status,
         providerId: provider.id,
         protocol: 'modelscope',
         taskId: id,
