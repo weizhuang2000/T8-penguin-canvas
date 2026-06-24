@@ -174,6 +174,11 @@ test('showcase prompt supports manual layout mode without auto height scaling', 
   assert.match(prompt, /不要倾斜摆放/);
   assert.match(prompt, /玻璃区正投影模板/);
   assert.match(prompt, /必须保持合成图中每个展品的像素占比/);
+  assert.match(prompt, /排版窗口中每个展品的垂直位置直接对应它在玻璃区内的实际展示高度/);
+  assert.match(prompt, /每件展品下面使用独立展托、托座或支架托举到排版窗口指定高度/);
+  assert.match(prompt, /青铜器：顶部距玻璃区顶部 300 mm，展品显示高度 240 mm，展品底边距玻璃区底部 860 mm；下方展托高度约 860 mm/);
+  assert.match(prompt, /陶俑：顶部距玻璃区顶部 360 mm，展品显示高度 210 mm，展品底边距玻璃区底部 830 mm；下方展托高度约 830 mm/);
+  assert.match(prompt, /必须用不同高度的展托承接各展品底边/);
   assert.match(prompt, /不得重新居中/);
   assert.match(prompt, /不得自动适配画面/);
   assert.match(prompt, /不要套用自动尺寸模式中的“高度 mm”或“设定高度 70%”规则/);

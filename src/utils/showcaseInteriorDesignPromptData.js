@@ -164,6 +164,7 @@ function exhibitItemsText(items, style, values = {}) {
   }
 
   if (layoutMode === 'manual') {
+    const manualItems = normalizeShowcaseManualLayoutItems(values.manualLayoutItems);
     const lines = [
       '手动排版模式：已将所有展品原图按排版窗口中的位置、大小和层级合成为一张“手动排版合成图”。',
       '参考图顺序：第 1 张参考图 = 手动排版合成图，包含全部展品的最终排版、相对大小、位置和层级。',
@@ -171,15 +172,26 @@ function exhibitItemsText(items, style, values = {}) {
       '展品视角要求：在保持第 1 张手动排版合成图的位置、大小和识别特征前提下，展品自身尽量以侧视图或正侧视图、平视角度呈现，不要倾斜摆放或使用强透视改变轮廓。',
       '第 1 张手动排版合成图就是玻璃区正投影模板：合成图的左边界对应玻璃区左边界，右边界对应玻璃区右边界，上边界对应玻璃区顶部，下边界对应玻璃区底部。',
       '必须保持合成图中每个展品的像素占比、外接矩形大小、相互间距和留白比例；不得重新居中、不得自动适配画面、不得填满玻璃区、不得为了视觉平衡改变大小。',
+      '排版高度规则：排版窗口中每个展品的垂直位置直接对应它在玻璃区内的实际展示高度；展品底边离玻璃区底部越高，下方展托就必须越高。',
+      '展托规则：每件展品下面使用独立展托、托座或支架托举到排版窗口指定高度；不同展品的展托高度可以不同，不能把所有展品统一落在同一条底线上。',
       '不要套用自动尺寸模式中的“高度 mm”或“设定高度 70%”规则；不要为了画面美观擅自重新放大、缩小或改动展品位置。',
       s.hasCap
         ? `手动排版合成图对应玻璃区内部：宽 ${s.widthMm} mm，高 ${s.glassHeightMm} mm；展柜宽度、玻璃区高度、底座和柜帽仍保持设定尺寸。`
         : `手动排版合成图对应玻璃区内部：宽 ${s.widthMm} mm，高 ${s.glassHeightMm} mm；展柜宽度、玻璃区高度和底座仍保持设定尺寸；顶部保持透明玻璃顶，不安装任何灯具、灯带或射灯。`,
     ];
+    if (manualItems.length) {
+      lines.push('手动排版高度明细（坐标原点在玻璃区左上角，y 越大越靠近玻璃区底部）：');
+      manualItems.forEach((item, index) => {
+        const topMm = normalizeNumber(item.yMm, 0, 0, 999999);
+        const bottomFromTopMm = normalizeNumber(item.yMm + item.heightMm, 0, 0, 999999);
+        const plinthHeightMm = normalizeNumber(Math.max(0, s.glassHeightMm - bottomFromTopMm), 0, 0, 999999);
+        lines.push(`${index + 1}. ${item.label}：顶部距玻璃区顶部 ${topMm} mm，展品显示高度 ${item.heightMm} mm，展品底边距玻璃区底部 ${plinthHeightMm} mm；下方展托高度约 ${plinthHeightMm} mm，用该高度托举展品。`);
+      });
+    }
     if (values.hasColorMaterialReferenceImage === true) {
       lines.push('参考图顺序：第 2 张参考图 = 色彩材质参考图，仅用于柜内背景、底座、背板、托架、灯光和材料气质；它不是展品图，不得改变第 1 张合成图中的展品排版。');
     }
-    lines.push('渲染前最终检查：只对齐第 1 张手动排版合成图中的展品位置、大小、间距、留白和层级；不要使用文字坐标推导另一套布局。');
+    lines.push('渲染前最终检查：只对齐第 1 张手动排版合成图中的展品位置、大小、间距、留白和层级；必须用不同高度的展托承接各展品底边，不要使用文字坐标推导另一套布局。');
     return lines.join('\n');
   }
 

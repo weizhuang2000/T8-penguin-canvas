@@ -300,6 +300,7 @@ function ShowcaseManualLayoutModal({
   const heightMm = Math.max(1, showcaseStyle.glassHeightMm);
   const sortedItems = useMemo(() => draftItems.slice().sort((a, b) => a.zIndex - b.zIndex), [draftItems]);
   const selectedItem = draftItems.find((item) => item.url === selectedUrl) || sortedItems[sortedItems.length - 1] || null;
+  const supportHeightForItem = (item: ManualLayoutItem) => roundMm(Math.max(0, heightMm - item.yMm - item.heightMm));
   const verticalGuideLines = useMemo(() => {
     const lines: number[] = [];
     for (let x = 100; x < widthMm; x += 100) lines.push(x);
@@ -427,7 +428,7 @@ function ShowcaseManualLayoutModal({
         <header className="flex items-center gap-3 border-b border-white/10 px-4 py-3">
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold text-cyan-100">柜内手动排版</div>
-            <div className="text-[10px] text-white/45">玻璃区画布：{widthMm} x {heightMm} mm，拖拽移动，右下角等比缩放。</div>
+            <div className="text-[10px] text-white/45">玻璃区画布：{widthMm} x {heightMm} mm，展品底边高度对应展托高度，拖拽移动，右下角等比缩放。</div>
           </div>
           <button type="button" className={BUTTON} onClick={onReset} disabled={disabled}><Layers size={12} /> 重置排版</button>
           <button type="button" className={BUTTON} onClick={removeSelected} disabled={disabled || !selectedItem}><Trash2 size={12} /> 删除选中</button>
@@ -498,6 +499,7 @@ function ShowcaseManualLayoutModal({
                 >
                   <div className="truncate font-semibold">{item.label}</div>
                   <div className="text-white/42">x {item.xMm} / y {item.yMm}</div>
+                  <div className="text-white/42">展托高 {supportHeightForItem(item)} mm</div>
                   <div className="text-white/42">{item.widthMm} x {item.heightMm} mm</div>
                 </button>
               ))}
@@ -510,6 +512,7 @@ function ShowcaseManualLayoutModal({
                   <div>y: {selectedItem.yMm}</div>
                   <div>w: {selectedItem.widthMm}</div>
                   <div>h: {selectedItem.heightMm}</div>
+                  <div className="col-span-2">展托高: {supportHeightForItem(selectedItem)} mm</div>
                 </div>
                 <div className="grid grid-cols-2 gap-1">
                   <button type="button" className={BUTTON} onClick={() => moveLayer(-1)} disabled={disabled}>下移层级</button>
