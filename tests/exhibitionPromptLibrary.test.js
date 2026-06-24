@@ -140,6 +140,42 @@ test('exhibition recolor presets are readable and admin managed', async (t) => {
   assert.deepEqual(ceilings.data.map((item) => [item.id, item.label, item.prompt, item.order]), [['custom-ceiling', '自定义天花', '天花改为线性灯带顶', 0]]);
 });
 
+test('exhibition img2img exclusions are managed separately from creative exclusions', async (t) => {
+  const userBase = await startApp(t, { id: 'u1', username: 'alice', name: 'Alice', role: 'designer' });
+  const defaults = await fetch(`${userBase}/api/prompt-library/exhibition-img2img/presets`).then((res) => res.json());
+  assert.equal(defaults.success, true);
+  assert.deepEqual(defaults.data.exclusions.map((item) => item.id).slice(0, 3), ['readable-wrong-text', 'real-brand-logo', 'instruction-table']);
+
+  const denied = await fetch(`${userBase}/api/prompt-library/exhibition-img2img/presets/exclusions`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ presets: [{ id: 'img-deny', label: 'regular users cannot save img2img exclusions' }] }),
+  });
+  assert.equal(denied.status, 403);
+
+  const adminBase = await startApp(t, { id: 'admin', username: 'root', name: 'Root', role: 'admin' });
+  const img2img = await fetch(`${adminBase}/api/prompt-library/exhibition-img2img/presets/exclusions`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ presets: [{ id: 'img-only', label: 'img2img only exclusion' }] }),
+  }).then((res) => res.json());
+  assert.equal(img2img.success, true);
+  assert.deepEqual(img2img.data.map((item) => [item.id, item.label, item.order]), [['img-only', 'img2img only exclusion', 0]]);
+
+  const creative = await fetch(`${adminBase}/api/prompt-library/exhibition-creative/presets/exclusions`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ presets: [{ id: 'creative-only', label: 'creative only exclusion' }] }),
+  }).then((res) => res.json());
+  assert.equal(creative.success, true);
+  assert.deepEqual(creative.data.map((item) => [item.id, item.label, item.order]), [['creative-only', 'creative only exclusion', 0]]);
+
+  const listedImg2Img = await fetch(`${adminBase}/api/prompt-library/exhibition-img2img/presets`).then((res) => res.json());
+  const listedCreative = await fetch(`${adminBase}/api/prompt-library/exhibition-creative/presets`).then((res) => res.json());
+  assert.deepEqual(listedImg2Img.data.exclusions.map((item) => item.id), ['img-only']);
+  assert.deepEqual(listedCreative.data.exclusions.map((item) => item.id), ['creative-only']);
+});
+
 test('admin can manage team entries and reject invalid dimensions', async (t) => {
   const base = await startApp(t, { id: 'admin', username: 'root', name: 'Root', role: 'manager' });
 

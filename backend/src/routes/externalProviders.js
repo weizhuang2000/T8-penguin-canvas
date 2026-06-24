@@ -440,6 +440,16 @@ router.post('/image', async (req, res) => {
         data: resolved.provider ? { provider: safeProviderForResponse(resolved.provider) } : undefined,
       });
     }
+    if (req.body?.async === true) {
+      const job = createLocalImageJob(req, resolved.provider);
+      return resultResponse(res, imageTaskRunningResult({
+        ok: true,
+        kind: 'image',
+        code: 'running',
+        taskId: job.id,
+        status: 'running',
+      }), resolved.provider, { imageUrls: [], remoteImageUrls: [] });
+    }
     const result = await generateImageWithProvider(resolved.provider, req.body || {}, {
       timeoutMs: generationTimeoutMs(req.body?.timeoutMs),
       baseUrl: `http://127.0.0.1:${config.PORT}`,
@@ -468,6 +478,24 @@ router.post('/image', async (req, res) => {
 
 router.get('/image/status/:taskId', async (req, res) => {
   try {
+    if (String(req.params.taskId || '').startsWith('external-image-')) {
+      const job = externalImageJobs.get(String(req.params.taskId || ''));
+      if (!job) {
+        return res.json({
+          success: false,
+          code: 'local_task_not_found',
+          error: '未找到本地扩展图像任务，可能已重启或任务已过期。',
+          data: { taskId: req.params.taskId },
+        });
+      }
+      await refreshLocalImageJob(job, req.query || {});
+      return res.json({
+        success: job.status !== 'failed',
+        code: job.code,
+        error: job.status === 'failed' ? job.error : undefined,
+        data: localImageJobPayload(job),
+      });
+    }
     const settings = settingsRouter.loadSettings({ persistMigrations: false });
     const currentProviders = normalizeAdvancedProviders(settings.advancedProviders);
     const resolved = resolveRunnableProvider(req.query || {}, currentProviders);

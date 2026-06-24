@@ -14,6 +14,37 @@ async function listen(app: any) {
   });
 }
 
+function mockDesignTeamDb(t: any) {
+  const dbPath = require.resolve('../backend/src/auth/designTeamDb.js');
+  const previous = require.cache[dbPath];
+  require.cache[dbPath] = {
+    id: dbPath,
+    filename: dbPath,
+    loaded: true,
+    exports: {
+      findUserById: async () => null,
+    },
+  } as any;
+  t.after(() => {
+    delete require.cache[dbPath];
+    if (previous) require.cache[dbPath] = previous;
+  });
+}
+
+async function waitFor<T>(fn: () => Promise<T>, predicate: (value: T) => boolean, timeoutMs = 2000): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  let last = await fn();
+  while (!predicate(last) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    last = await fn();
+  }
+  return last;
+}
+
+function writeAdvancedProviders(config: any, providers: any[]) {
+  fs.writeFileSync(config.SETTINGS_FILE, JSON.stringify({ advancedProviders: providers }, null, 2), 'utf-8');
+}
+
 test('external provider generation routes run enabled OpenAI compatible LLM and image calls', async (t) => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 't8-external-generation-'));
   t.after(() => {
@@ -56,6 +87,7 @@ test('external provider generation routes run enabled OpenAI compatible LLM and 
   config.DEFAULT_THEME_TEMPLATE_DIR = path.join(tmpDir, 'themes');
   fs.mkdirSync(config.OUTPUT_DIR, { recursive: true });
 
+  mockDesignTeamDb(t);
   const settingsRouter = require('../backend/src/routes/settings.js');
   const externalProvidersRouter = require('../backend/src/routes/externalProviders.js');
   const app = express();
@@ -67,24 +99,18 @@ test('external provider generation routes run enabled OpenAI compatible LLM and 
 
   const base = `http://127.0.0.1:${server.address().port}`;
   const upstreamBase = `http://127.0.0.1:${upstreamServer.address().port}/v1`;
-  await fetch(`${base}/api/settings`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      advancedProviders: [
-        {
-          id: 'openai-compatible',
-          protocol: 'openai-compatible',
-          enabled: true,
-          baseUrl: upstreamBase,
-          apiKey: 'sk-route-secret',
-          imageModels: ['gpt-image-test'],
-          videoModels: ['video-test'],
-          chatModels: ['gpt-chat-test'],
-        },
-      ],
-    }),
-  }).then((res) => res.json());
+  writeAdvancedProviders(config, [
+    {
+      id: 'openai-compatible',
+      protocol: 'openai-compatible',
+      enabled: true,
+      baseUrl: upstreamBase,
+      apiKey: 'sk-route-secret',
+      imageModels: ['gpt-image-test'],
+      videoModels: ['video-test'],
+      chatModels: ['gpt-chat-test'],
+    },
+  ]);
 
   const llm = await fetch(`${base}/api/proxy/external/llm`, {
     method: 'POST',
@@ -162,6 +188,7 @@ test('external image status keeps polling through transient upstream gateway err
   config.DEFAULT_THEME_TEMPLATE_DIR = path.join(tmpDir, 'themes');
   fs.mkdirSync(config.OUTPUT_DIR, { recursive: true });
 
+  mockDesignTeamDb(t);
   const settingsRouter = require('../backend/src/routes/settings.js');
   const externalProvidersRouter = require('../backend/src/routes/externalProviders.js');
   const app = express();
@@ -173,22 +200,16 @@ test('external image status keeps polling through transient upstream gateway err
 
   const base = `http://127.0.0.1:${server.address().port}`;
   const upstreamBase = `http://127.0.0.1:${upstreamServer.address().port}/v1`;
-  await fetch(`${base}/api/settings`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      advancedProviders: [
-        {
-          id: 'openai-compatible',
-          protocol: 'openai-compatible',
-          enabled: true,
-          baseUrl: upstreamBase,
-          apiKey: 'sk-route-secret',
-          imageModels: ['gpt-image-test'],
-        },
-      ],
-    }),
-  }).then((res) => res.json());
+  writeAdvancedProviders(config, [
+    {
+      id: 'openai-compatible',
+      protocol: 'openai-compatible',
+      enabled: true,
+      baseUrl: upstreamBase,
+      apiKey: 'sk-route-secret',
+      imageModels: ['gpt-image-test'],
+    },
+  ]);
 
   const status = await fetch(`${base}/api/proxy/external/image/status/task-502?providerId=openai-compatible`, {
     method: 'GET',
@@ -200,4 +221,90 @@ test('external image status keeps polling through transient upstream gateway err
   assert.equal(status.data.taskId, 'task-502');
   assert.deepEqual(status.data.imageUrls, []);
   assert.equal(upstreamCalls.length, 1);
+});
+
+test('external image async submit returns a local task before upstream finishes', async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 't8-external-local-job-'));
+  t.after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const upstreamApp = express();
+  upstreamApp.use(express.json({ limit: '4mb' }));
+  let upstreamCalled = false;
+  upstreamApp.post('/v1/images/generations', async (_req, res) => {
+    upstreamCalled = true;
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    res.json({ data: [{ b64_json: Buffer.from('ASYNC_PNG').toString('base64'), mime_type: 'image/png' }] });
+  });
+  const upstreamServer = await listen(upstreamApp);
+  t.after(() => upstreamServer.close());
+
+  const config = require('../backend/src/config.js');
+  const oldConfig = {
+    SETTINGS_FILE: config.SETTINGS_FILE,
+    OUTPUT_DIR: config.OUTPUT_DIR,
+    DEFAULT_LOCAL_SAVE_DIR: config.DEFAULT_LOCAL_SAVE_DIR,
+    DEFAULT_CANVAS_AUTO_SAVE_DIR: config.DEFAULT_CANVAS_AUTO_SAVE_DIR,
+    DEFAULT_RESOURCE_LIBRARY_DIR: config.DEFAULT_RESOURCE_LIBRARY_DIR,
+    DEFAULT_THEME_TEMPLATE_DIR: config.DEFAULT_THEME_TEMPLATE_DIR,
+  };
+  t.after(() => Object.assign(config, oldConfig));
+  config.SETTINGS_FILE = path.join(tmpDir, 'settings.json');
+  config.OUTPUT_DIR = path.join(tmpDir, 'output');
+  config.DEFAULT_LOCAL_SAVE_DIR = path.join(tmpDir, 'save');
+  config.DEFAULT_CANVAS_AUTO_SAVE_DIR = path.join(tmpDir, 'canvas');
+  config.DEFAULT_RESOURCE_LIBRARY_DIR = path.join(tmpDir, 'resources');
+  config.DEFAULT_THEME_TEMPLATE_DIR = path.join(tmpDir, 'themes');
+  fs.mkdirSync(config.OUTPUT_DIR, { recursive: true });
+
+  mockDesignTeamDb(t);
+  const settingsRouter = require('../backend/src/routes/settings.js');
+  const externalProvidersRouter = require('../backend/src/routes/externalProviders.js');
+  const app = express();
+  app.use(express.json({ limit: '4mb' }));
+  app.use('/api/settings', settingsRouter);
+  app.use('/api/proxy/external', externalProvidersRouter);
+  const server = await listen(app);
+  t.after(() => server.close());
+
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const upstreamBase = `http://127.0.0.1:${upstreamServer.address().port}/v1`;
+  writeAdvancedProviders(config, [
+    {
+      id: 'openai-compatible',
+      protocol: 'openai-compatible',
+      enabled: true,
+      baseUrl: upstreamBase,
+      apiKey: 'sk-route-secret',
+      imageModels: ['gpt-image-test'],
+    },
+  ]);
+
+  const startedAt = Date.now();
+  const submit = await fetch(`${base}/api/proxy/external/image`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ providerId: 'openai-compatible', prompt: 'slow draw', size: '512x512', async: true }),
+  }).then((res) => res.json());
+
+  assert.equal(submit.success, true);
+  assert.match(submit.data.taskId, /^external-image-/);
+  assert.equal(submit.data.status, 'running');
+  assert.deepEqual(submit.data.imageUrls, []);
+  assert.ok(Date.now() - startedAt < 100);
+
+  const finalStatus = await waitFor(
+    () => fetch(`${base}/api/proxy/external/image/status/${encodeURIComponent(submit.data.taskId)}`)
+      .then((res) => res.json()),
+    (body: any) => body?.data?.status === 'completed',
+    2000,
+  );
+
+  assert.equal(upstreamCalled, true);
+  assert.equal(finalStatus.success, true);
+  assert.equal(finalStatus.data.status, 'completed');
+  assert.equal(finalStatus.data.imageUrls.length, 1);
+  assert.match(finalStatus.data.imageUrls[0], /^\/files\/output\/external_/);
+  assert.equal(fs.existsSync(path.join(config.OUTPUT_DIR, path.basename(finalStatus.data.imageUrls[0]))), true);
 });

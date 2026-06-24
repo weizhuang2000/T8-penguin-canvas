@@ -1,8 +1,4 @@
 import { ELEVATION_CRAFTS } from './elevationPromptData.js';
-import {
-  EXHIBITION_CREATIVE_EXCLUDE_ITEMS,
-  exhibitionCreativeExcludeItemsText,
-} from './exhibitionCreativeImagePromptData.js';
 
 export const EXHIBITION_IMG2IMG_PRIORITY = [
   { id: 'structureAnnotations', label: '空间结构示意图标注' },
@@ -15,6 +11,17 @@ export const DEFAULT_EXHIBITION_IMG2IMG_PRIORITY = [
   'craftLayout',
   'colorMaterialReference',
 ];
+
+export const EXHIBITION_IMG2IMG_EXCLUDE_ITEMS = [
+  { id: 'readable-wrong-text', label: '可读错字/乱码文字' },
+  { id: 'real-brand-logo', label: '真实品牌标识' },
+  { id: 'instruction-table', label: '说明表格' },
+  { id: 'crowded-people', label: '过多人群' },
+  { id: 'messy-cables', label: '杂乱线缆' },
+  { id: 'cartoon-style', label: '卡通低幼风格' },
+  { id: 'blurry-low-quality', label: '低清晰度/模糊画面' },
+  { id: 'extra-structure', label: '擅自新增或改变建筑结构' },
+].map((item, index) => ({ ...item, order: index }));
 
 const PRIORITY_IDS = new Set(EXHIBITION_IMG2IMG_PRIORITY.map((item) => item.id));
 const LEGACY_PRIORITY_ID_MAP = {
@@ -114,6 +121,24 @@ export function normalizeExhibitionImg2ImgPriority(value) {
     if (!out.includes(id)) out.push(id);
   }
   return out;
+}
+
+export function normalizeExhibitionImg2ImgExcludeItems(value, options = EXHIBITION_IMG2IMG_EXCLUDE_ITEMS) {
+  const source = Array.isArray(options) && options.length > 0 ? options : EXHIBITION_IMG2IMG_EXCLUDE_ITEMS;
+  const labelsById = new Map(source.map((item) => [String(item.id), String(item.label || item.id).trim()]));
+  const ids = Array.isArray(value) ? value.map((item) => String(item || '').trim()).filter(Boolean) : [];
+  return Array.from(new Set(ids.filter((id) => labelsById.has(id)))).map((id) => ({
+    id,
+    label: labelsById.get(id) || id,
+  }));
+}
+
+export function exhibitionImg2ImgExcludeItemsText(value, options = EXHIBITION_IMG2IMG_EXCLUDE_ITEMS) {
+  const items = normalizeExhibitionImg2ImgExcludeItems(value, options).map((item) => item.label).filter(Boolean);
+  if (items.length === 0) return '';
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return items.join('和');
+  return `${items.slice(0, -1).join('、')}和${items[items.length - 1]}`;
 }
 
 function craftItems(selectedIds, customCraft, craftPresets) {
@@ -379,9 +404,9 @@ export function buildExhibitionImg2ImgPrompt(values = {}) {
   const priorityOrder = normalizeExhibitionImg2ImgPriority(values.priorityOrder);
   const supplement = cleanText(values.supplement);
   const exhibitReference = exhibitReferenceText(values.exhibitReferenceItems);
-  const excludeItemsText = exhibitionCreativeExcludeItemsText(
+  const excludeItemsText = exhibitionImg2ImgExcludeItemsText(
     values.excludeItems,
-    values.excludeItemOptions || EXHIBITION_CREATIVE_EXCLUDE_ITEMS,
+    values.excludeItemOptions || EXHIBITION_IMG2IMG_EXCLUDE_ITEMS,
   );
   const lines = [
     '1. 核心任务与最高约束',

@@ -77,7 +77,7 @@ test('exhibition img2img prompt forbids rendering structure labels', () => {
   assert.match(prompt, /画面中不得出现结构示意图上的标注文字、箭头、尺寸线或任何乱码文本/);
 });
 
-test('exhibition img2img prompt includes shared creative exclusions', () => {
+test('exhibition img2img prompt includes img2img exclusions', () => {
   const prompt = buildExhibitionImg2ImgPrompt({
     excludeItems: ['real-brand-logo', 'instruction-table'],
   });

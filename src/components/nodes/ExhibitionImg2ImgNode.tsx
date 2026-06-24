@@ -36,15 +36,13 @@ import {
 } from '../../utils/advancedProviders';
 import {
   buildExhibitionImg2ImgPrompt,
+  EXHIBITION_IMG2IMG_EXCLUDE_ITEMS,
   EXHIBITION_IMG2IMG_PRIORITY,
+  normalizeExhibitionImg2ImgExcludeItems,
   normalizeExhibitionImg2ImgPriority,
+  type ExhibitionImg2ImgExcludeItem,
   type ExhibitionImg2ImgPriorityId,
 } from '../../utils/exhibitionImg2ImgPrompt';
-import {
-  EXHIBITION_CREATIVE_EXCLUDE_ITEMS,
-  normalizeExhibitionCreativeExcludeItems,
-  type ExhibitionCreativeExcludeItem,
-} from '../../utils/exhibitionCreativeImagePrompt';
 import {
   ELEVATION_CRAFTS,
   buildElevationContentPlanMessages,
@@ -60,16 +58,16 @@ import {
   extractDocument,
   getCurrentUser,
   getElevationPromptPresets,
-  getExhibitionCreativePromptPresets,
+  getExhibitionImg2ImgPromptPresets,
   MAX_DOCUMENT_FILE_SIZE,
   MAX_DOCUMENT_FILE_SIZE_MB,
   updateElevationColorMaterialPresets,
   updateElevationCraftPresets,
-  updateExhibitionCreativeExcludePresets,
+  updateExhibitionImg2ImgExcludePresets,
   type AuthUser,
   type ElevationColorMaterialPresetItem,
   type ElevationCraftPresetItem,
-  type ExhibitionCreativeExcludePresetItem,
+  type ExhibitionImg2ImgExcludePresetItem,
   type ExtractedDocument,
 } from '../../services/api';
 import { useApiKeysStore } from '../../stores/apiKeys';
@@ -783,7 +781,7 @@ function parseCraftPresetEditorText(text: string) {
     .filter(Boolean) as Array<{ id: string; label: string; prompt: string; order: number }>;
 }
 
-function excludePresetEditorText(presets: ExhibitionCreativeExcludePresetItem[]) {
+function excludePresetEditorText(presets: ExhibitionImg2ImgExcludePresetItem[]) {
   return presets.map((preset) => preset.label).join('\n');
 }
 
@@ -1630,7 +1628,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const canManageTeam = currentUser?.role === 'admin' || currentUser?.role === 'manager';
   const [craftPresets, setCraftPresets] = useState<ElevationCraftPresetItem[]>([]);
-  const [excludePresets, setExcludePresets] = useState<ExhibitionCreativeExcludePresetItem[]>([]);
+  const [excludePresets, setExcludePresets] = useState<ExhibitionImg2ImgExcludePresetItem[]>([]);
   const [colorMaterialPresets, setColorMaterialPresets] = useState<ElevationColorMaterialPresetItem[]>([]);
   const [craftEditorOpen, setCraftEditorOpen] = useState(false);
   const [excludeEditorOpen, setExcludeEditorOpen] = useState(false);
@@ -1652,12 +1650,12 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     () => (craftPresets.length > 0 ? craftPresets : ELEVATION_CRAFTS),
     [craftPresets],
   );
-  const excludeOptions = useMemo<ExhibitionCreativeExcludeItem[]>(
-    () => (excludePresets.length > 0 ? excludePresets : EXHIBITION_CREATIVE_EXCLUDE_ITEMS),
+  const excludeOptions = useMemo<ExhibitionImg2ImgExcludeItem[]>(
+    () => (excludePresets.length > 0 ? excludePresets : EXHIBITION_IMG2IMG_EXCLUDE_ITEMS),
     [excludePresets],
   );
   const selectedExcludeItems = useMemo(
-    () => normalizeExhibitionCreativeExcludeItems(d.excludeItems, excludeOptions),
+    () => normalizeExhibitionImg2ImgExcludeItems(d.excludeItems, excludeOptions),
     [d.excludeItems, excludeOptions],
   );
   const selectedExcludeIds = useMemo(() => selectedExcludeItems.map((item) => item.id), [selectedExcludeItems]);
@@ -2151,7 +2149,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         setCraftPresets([]);
         setColorMaterialPresets([]);
       });
-    getExhibitionCreativePromptPresets()
+    getExhibitionImg2ImgPromptPresets()
       .then((presets) => setExcludePresets(presets.exclusions || []))
       .catch(() => setExcludePresets([]));
   }, []);
@@ -2279,9 +2277,9 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     setExcludeSaving(true);
     setExcludeError('');
     try {
-      const saved = await updateExhibitionCreativeExcludePresets(presets);
+      const saved = await updateExhibitionImg2ImgExcludePresets(presets);
       setExcludePresets(saved);
-      update({ excludeItems: normalizeExhibitionCreativeExcludeItems(selectedExcludeIds, saved).map((item) => item.id) });
+      update({ excludeItems: normalizeExhibitionImg2ImgExcludeItems(selectedExcludeIds, saved).map((item) => item.id) });
       setExcludeEditorOpen(false);
     } catch (error: any) {
       setExcludeError(error?.message || '保存排除项失败');
@@ -2505,16 +2503,26 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         });
         if ((!res.imageUrls?.length) && res.taskId && (res.code === 'running' || res.status === 'running')) {
           let pollingTaskId = res.taskId;
+          let transientFailures = 0;
           update({ progress: '生成中', taskId: pollingTaskId });
           logBus.info(`展陈图扩展平台任务继续轮询: ${pollingTaskId}`, src);
           for (let i = 0; i < EXTERNAL_IMAGE_MAX_POLLS; i += 1) {
             await new Promise((resolve) => setTimeout(resolve, EXTERNAL_IMAGE_POLL_INTERVAL_MS));
-            res = await queryExternalImageStatus({
-              providerId: providerSelection.provider.id,
-              providerModel: externalProviderModel,
-              taskId: pollingTaskId,
-              outputFormat,
-            });
+            try {
+              res = await queryExternalImageStatus({
+                providerId: providerSelection.provider.id,
+                providerModel: externalProviderModel,
+                taskId: pollingTaskId,
+                outputFormat,
+              });
+              transientFailures = 0;
+            } catch (err: any) {
+              transientFailures += 1;
+              const message = err?.message || String(err);
+              logBus.warn(`展陈图生图扩展平台状态查询临时失败(${transientFailures}/5): ${message}`, src);
+              if (transientFailures >= 5) throw err;
+              continue;
+            }
             pollingTaskId = res.taskId || pollingTaskId;
             update({ progress: `${Math.min(99, Math.round(((i + 1) / EXTERNAL_IMAGE_MAX_POLLS) * 100))}%`, taskId: pollingTaskId });
             if (res.imageUrls?.length || (res.code && res.code !== 'running')) break;

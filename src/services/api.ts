@@ -432,6 +432,16 @@ export interface ExhibitionCreativePromptPresetMap {
   viewAngles: ExhibitionCreativeViewAnglePresetItem[];
 }
 
+export interface ExhibitionImg2ImgExcludePresetItem {
+  id: string;
+  label: string;
+  order: number;
+}
+
+export interface ExhibitionImg2ImgPromptPresetMap {
+  exclusions: ExhibitionImg2ImgExcludePresetItem[];
+}
+
 export interface ExhibitionPlanLayoutInsertPresetItem {
   id: string;
   label: string;
@@ -616,6 +626,26 @@ export async function updateExhibitionCreativeViewAnglePresets(
 ): Promise<ExhibitionCreativeViewAnglePresetItem[]> {
   const res = await request<{ success: boolean; data: ExhibitionCreativeViewAnglePresetItem[] }>(
     `${BASE}/prompt-library/exhibition-creative/presets/view-angles`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ presets }),
+    },
+  );
+  return res.data || [];
+}
+
+export async function getExhibitionImg2ImgPromptPresets(): Promise<ExhibitionImg2ImgPromptPresetMap> {
+  const res = await request<{ success: boolean; data: ExhibitionImg2ImgPromptPresetMap }>(
+    `${BASE}/prompt-library/exhibition-img2img/presets`,
+  );
+  return res.data || { exclusions: [] };
+}
+
+export async function updateExhibitionImg2ImgExcludePresets(
+  presets: Array<Pick<ExhibitionImg2ImgExcludePresetItem, 'label'> & Partial<Pick<ExhibitionImg2ImgExcludePresetItem, 'id' | 'order'>>>,
+): Promise<ExhibitionImg2ImgExcludePresetItem[]> {
+  const res = await request<{ success: boolean; data: ExhibitionImg2ImgExcludePresetItem[] }>(
+    `${BASE}/prompt-library/exhibition-img2img/presets/exclusions`,
     {
       method: 'PUT',
       body: JSON.stringify({ presets }),

@@ -1,10 +1,12 @@
 import {
   buildExhibitionImg2ImgPrompt,
   DEFAULT_EXHIBITION_IMG2IMG_PRIORITY,
+  EXHIBITION_IMG2IMG_EXCLUDE_ITEMS,
   EXHIBITION_IMG2IMG_PRIORITY,
+  exhibitionImg2ImgExcludeItemsText,
+  normalizeExhibitionImg2ImgExcludeItems,
   normalizeExhibitionImg2ImgPriority,
 } from './exhibitionImg2ImgPromptData.js';
-import type { ExhibitionCreativeExcludeItem } from './exhibitionCreativeImagePrompt';
 
 export type ExhibitionImg2ImgPriorityId =
   | 'structureAnnotations'
@@ -14,6 +16,12 @@ export type ExhibitionImg2ImgPriorityId =
 export interface ExhibitionImg2ImgPriorityMeta {
   id: ExhibitionImg2ImgPriorityId;
   label: string;
+}
+
+export interface ExhibitionImg2ImgExcludeItem {
+  id: string;
+  label: string;
+  order?: number;
 }
 
 export interface ExhibitionImg2ImgPromptValues {
@@ -38,7 +46,7 @@ export interface ExhibitionImg2ImgPromptValues {
   visualStyle?: string;
   supplement?: string;
   excludeItems?: string[];
-  excludeItemOptions?: ExhibitionCreativeExcludeItem[];
+  excludeItemOptions?: ExhibitionImg2ImgExcludeItem[];
   wallContentPrompt?: string;
   exhibitReferenceItems?: Array<{ id?: string; url?: string; label?: string; description?: string }>;
   spatialInputMode?: 'structure' | 'plan-camera';
@@ -48,6 +56,9 @@ export interface ExhibitionImg2ImgPromptValues {
 export {
   buildExhibitionImg2ImgPrompt,
   DEFAULT_EXHIBITION_IMG2IMG_PRIORITY,
+  EXHIBITION_IMG2IMG_EXCLUDE_ITEMS,
   EXHIBITION_IMG2IMG_PRIORITY,
+  exhibitionImg2ImgExcludeItemsText,
+  normalizeExhibitionImg2ImgExcludeItems,
   normalizeExhibitionImg2ImgPriority,
 };

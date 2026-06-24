@@ -1,5 +1,4 @@
 import type { ElevationCraft } from './elevationPromptData.js';
-import type { ExhibitionCreativeExcludeItem } from './exhibitionCreativeImagePromptData.js';
 
 export type ExhibitionImg2ImgPriorityId =
   | 'structureAnnotations'
@@ -9,6 +8,12 @@ export type ExhibitionImg2ImgPriorityId =
 export interface ExhibitionImg2ImgPriorityMeta {
   id: ExhibitionImg2ImgPriorityId;
   label: string;
+}
+
+export interface ExhibitionImg2ImgExcludeItem {
+  id: string;
+  label: string;
+  order?: number;
 }
 
 export interface ExhibitionImg2ImgPromptValues {
@@ -33,7 +38,7 @@ export interface ExhibitionImg2ImgPromptValues {
   visualStyle?: string;
   supplement?: string;
   excludeItems?: string[];
-  excludeItemOptions?: ExhibitionCreativeExcludeItem[];
+  excludeItemOptions?: ExhibitionImg2ImgExcludeItem[];
   wallContentPrompt?: string;
   exhibitReferenceItems?: Array<{ id?: string; url?: string; label?: string; description?: string }>;
   spatialInputMode?: 'structure' | 'plan-camera';
@@ -42,5 +47,8 @@ export interface ExhibitionImg2ImgPromptValues {
 
 export const EXHIBITION_IMG2IMG_PRIORITY: ExhibitionImg2ImgPriorityMeta[];
 export const DEFAULT_EXHIBITION_IMG2IMG_PRIORITY: ExhibitionImg2ImgPriorityId[];
+export const EXHIBITION_IMG2IMG_EXCLUDE_ITEMS: ExhibitionImg2ImgExcludeItem[];
 export function normalizeExhibitionImg2ImgPriority(value: unknown): ExhibitionImg2ImgPriorityId[];
+export function normalizeExhibitionImg2ImgExcludeItems(value: unknown, options?: ExhibitionImg2ImgExcludeItem[]): ExhibitionImg2ImgExcludeItem[];
+export function exhibitionImg2ImgExcludeItemsText(value: unknown, options?: ExhibitionImg2ImgExcludeItem[]): string;
 export function buildExhibitionImg2ImgPrompt(values?: ExhibitionImg2ImgPromptValues): string;

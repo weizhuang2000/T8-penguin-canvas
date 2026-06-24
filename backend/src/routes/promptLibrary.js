@@ -11,6 +11,7 @@ const router = express.Router();
 const DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition.json');
 const ELEVATION_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_elevation.json');
 const CREATIVE_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition_creative.json');
+const IMG2IMG_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition_img2img.json');
 const PLAN_LAYOUT_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition_plan_layout.json');
 const RECOLOR_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition_recolor.json');
 const UNIT_PANEL_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_unit_panel.json');
@@ -156,6 +157,17 @@ const DEFAULT_EXHIBITION_CREATIVE_VIEW_ANGLE_PRESETS = [
   { id: 'left-45', label: '左45度视角' },
   { id: 'right-45', label: '右45度视角' },
   { id: 'top-45', label: '上45度视角' },
+].map((item, index) => ({ ...item, order: index }));
+
+const DEFAULT_EXHIBITION_IMG2IMG_EXCLUDE_PRESETS = [
+  { id: 'readable-wrong-text', label: '可读错字/乱码文字' },
+  { id: 'real-brand-logo', label: '真实品牌标识' },
+  { id: 'instruction-table', label: '说明表格' },
+  { id: 'crowded-people', label: '过多人群' },
+  { id: 'messy-cables', label: '杂乱线缆' },
+  { id: 'cartoon-style', label: '卡通低幼风格' },
+  { id: 'blurry-low-quality', label: '低清晰度/模糊画面' },
+  { id: 'extra-structure', label: '擅自新增或改变建筑结构' },
 ].map((item, index) => ({ ...item, order: index }));
 
 const DEFAULT_EXHIBITION_PLAN_LAYOUT_INSERT_PRESETS = [
@@ -338,6 +350,29 @@ function normalizeCreativeInsertPresetList(value) {
 
 function normalizeCreativeExcludePresetList(value) {
   const source = Array.isArray(value) && value.length > 0 ? value : DEFAULT_EXHIBITION_CREATIVE_EXCLUDE_PRESETS;
+  const used = new Set();
+  return source
+    .map((raw, index) => {
+      const label = safeText(raw?.label || raw?.text, 120);
+      if (!label) return null;
+      let id = safeText(raw?.id, 96).replace(/[^a-zA-Z0-9_-]/g, '');
+      if (!id) id = `exclude_${index + 1}`;
+      while (used.has(id)) id = `${id}_${index + 1}`;
+      used.add(id);
+      return {
+        id,
+        label,
+        order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 80)
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+    .map((item, index) => ({ ...item, order: index }));
+}
+
+function normalizeImg2ImgExcludePresetList(value) {
+  const source = Array.isArray(value) && value.length > 0 ? value : DEFAULT_EXHIBITION_IMG2IMG_EXCLUDE_PRESETS;
   const used = new Set();
   return source
     .map((raw, index) => {
@@ -678,6 +713,35 @@ function writeCreativeDb(db) {
   );
 }
 
+function readImg2ImgDb() {
+  try {
+    if (!fs.existsSync(IMG2IMG_DB_FILE)) {
+      return {
+        excludePresets: normalizeImg2ImgExcludePresetList(DEFAULT_EXHIBITION_IMG2IMG_EXCLUDE_PRESETS),
+      };
+    }
+    const raw = JSON.parse(fs.readFileSync(IMG2IMG_DB_FILE, 'utf-8'));
+    return {
+      excludePresets: normalizeImg2ImgExcludePresetList(raw?.excludePresets),
+    };
+  } catch {
+    return {
+      excludePresets: normalizeImg2ImgExcludePresetList(DEFAULT_EXHIBITION_IMG2IMG_EXCLUDE_PRESETS),
+    };
+  }
+}
+
+function writeImg2ImgDb(db) {
+  fs.mkdirSync(path.dirname(IMG2IMG_DB_FILE), { recursive: true });
+  fs.writeFileSync(
+    IMG2IMG_DB_FILE,
+    JSON.stringify({
+      excludePresets: normalizeImg2ImgExcludePresetList(db?.excludePresets),
+    }, null, 2),
+    'utf-8',
+  );
+}
+
 function readPlanLayoutDb() {
   try {
     if (!fs.existsSync(PLAN_LAYOUT_DB_FILE)) {
@@ -971,6 +1035,27 @@ router.put('/exhibition-creative/presets/view-angles', (req, res) => {
   const db = readCreativeDb();
   const presets = normalizeCreativeViewAnglePresetList(req.body?.presets);
   writeCreativeDb({ ...db, viewAnglePresets: presets });
+  res.json({ success: true, data: presets });
+});
+
+router.get('/exhibition-img2img/presets', (_req, res) => {
+  const db = readImg2ImgDb();
+  res.json({
+    success: true,
+    data: {
+      exclusions: normalizeImg2ImgExcludePresetList(db.excludePresets),
+    },
+  });
+});
+
+router.put('/exhibition-img2img/presets/exclusions', (req, res) => {
+  const user = req.user;
+  if (!isAdminRole(user?.role)) {
+    return res.status(403).json({ success: false, error: '只有系统管理员或经理可以维护展陈图生图排除项预设' });
+  }
+  const db = readImg2ImgDb();
+  const presets = normalizeImg2ImgExcludePresetList(req.body?.presets);
+  writeImg2ImgDb({ ...db, excludePresets: presets });
   res.json({ success: true, data: presets });
 });
 
