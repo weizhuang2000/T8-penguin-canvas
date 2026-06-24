@@ -12,6 +12,7 @@ export interface ShowcaseStyleValues {
   glassHeightMm?: number;
   capHeightMm?: number;
   hasCap?: boolean;
+  hasBodyPattern?: boolean;
 }
 
 export interface ShowcaseExhibitItem {

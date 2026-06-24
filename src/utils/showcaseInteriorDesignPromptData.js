@@ -4,6 +4,7 @@ const DEFAULT_SHOWCASE_STYLE = {
   glassHeightMm: 1400,
   capHeightMm: 180,
   hasCap: false,
+  hasBodyPattern: false,
 };
 const EXHIBIT_RENDER_HEIGHT_SCALE = 0.7;
 
@@ -37,6 +38,7 @@ export function normalizeShowcaseStyle(value = {}) {
     glassHeightMm: normalizeNumber(source.glassHeightMm ?? source.glassHeight, DEFAULT_SHOWCASE_STYLE.glassHeightMm),
     capHeightMm: normalizeNumber(source.capHeightMm ?? source.capHeight, DEFAULT_SHOWCASE_STYLE.capHeightMm),
     hasCap: source.hasCap === true,
+    hasBodyPattern: source.hasBodyPattern === true,
   };
 }
 
@@ -86,15 +88,54 @@ export function colorMaterialTextFromPreset(preset) {
 function showcaseStyleText(style) {
   const s = normalizeShowcaseStyle(style);
   const totalHeight = s.baseHeightMm + s.glassHeightMm + (s.hasCap ? s.capHeightMm : 0);
-  return [
+  const lines = [
     `展柜宽度：${s.widthMm} mm`,
     `底座高度：${s.baseHeightMm} mm`,
     `玻璃区高度：${s.glassHeightMm} mm`,
-    s.hasCap
-      ? `柜帽：开启，柜帽高度 ${s.capHeightMm} mm`
-      : `柜帽：关闭。不要生成柜帽结构；柜帽高度 ${s.capHeightMm} mm 仅作为关闭状态记录。`,
-    `推导总高度：${totalHeight} mm`,
-  ].join('\n');
+  ];
+  if (s.hasCap) {
+    lines.push(`柜帽：开启，柜帽高度 ${s.capHeightMm} mm`);
+  } else {
+    lines.push('顶部形式：透明玻璃顶，顶部没有额外封板或设备层；顶部不安装任何灯具、灯带或射灯。');
+  }
+  lines.push(`推导总高度：${totalHeight} mm`);
+  return lines.join('\n');
+}
+
+function showcaseScaleRuleText(style) {
+  const s = normalizeShowcaseStyle(style);
+  return s.hasCap
+    ? '生成缩放规则：生图时展品本体显示高度按设定高度的 70% 生成；展柜宽度、底座高度、玻璃区高度、柜帽高度和柜体总高度保持设定尺寸不变。'
+    : '生成缩放规则：生图时展品本体显示高度按设定高度的 70% 生成；展柜宽度、底座高度、玻璃区高度和柜体总高度保持设定尺寸不变；顶部保持透明玻璃顶，不安装任何灯具、灯带或射灯。';
+}
+
+function showcaseRatioRequirementText(style) {
+  const s = normalizeShowcaseStyle(style);
+  return s.hasCap
+    ? '比例要求：展柜宽度、底座高度、玻璃区高度、柜帽高度必须形成可信比例；玻璃区应是主要陈列空间，底座承托稳定。'
+    : '比例要求：展柜宽度、底座高度、玻璃区高度必须形成可信比例；玻璃区应是主要陈列空间，底座承托稳定；顶部必须是通透玻璃顶。';
+}
+
+function showcaseDesignRequirementText(style) {
+  const s = normalizeShowcaseStyle(style);
+  return s.hasCap
+    ? '柜内设计要求：结合背板、台座、托架、微型展台、层板、暗藏灯带、重点射灯、低反射玻璃、展品保护距离和视觉焦点组织展品。设计应像真实展陈深化方案，而不是普通商品橱窗。'
+    : '柜内设计要求：结合背板、台座、托架、微型展台、层板、低反射玻璃、展品保护距离和视觉焦点组织展品。顶部必须保持透明玻璃顶，不添加封板、设备层或任何灯具；照明表现只使用外部环境光、侧向隐藏光或背板反射光，不在顶部出现灯带、射灯或发光结构。设计应像真实展陈深化方案，而不是普通商品橱窗。';
+}
+
+function bodyPatternRequirementText(style) {
+  const s = normalizeShowcaseStyle(style);
+  if (s.hasBodyPattern) return '';
+  return s.hasCap
+    ? '柜体图案：关闭。柜体外观保持纯色、低反射材质或材料本身细微质感；柜体、底座、边框、柜帽都不要出现图案、纹样、花纹、符号、徽标、装饰纹理或可读文字。'
+    : '柜体图案：关闭。柜体外观保持纯色、低反射材质或材料本身细微质感；柜体、底座、边框和顶部玻璃连接构件都不要出现图案、纹样、花纹、符号、徽标、装饰纹理或可读文字。';
+}
+
+function showcaseQualityRequirementText(style) {
+  const s = normalizeShowcaseStyle(style);
+  return s.hasCap
+    ? '生成高完成度展陈设计效果图；结构清晰、玻璃通透、材质真实、灯光有层次、展品尺度可信。'
+    : '生成高完成度展陈设计效果图；结构清晰、顶部玻璃通透、材质真实、外部或侧向光线有层次、展品尺度可信；顶部不能出现任何灯具、灯带、射灯或发光结构。';
 }
 
 function exhibitItemsText(items, style, values = {}) {
@@ -131,7 +172,9 @@ function exhibitItemsText(items, style, values = {}) {
       '第 1 张手动排版合成图就是玻璃区正投影模板：合成图的左边界对应玻璃区左边界，右边界对应玻璃区右边界，上边界对应玻璃区顶部，下边界对应玻璃区底部。',
       '必须保持合成图中每个展品的像素占比、外接矩形大小、相互间距和留白比例；不得重新居中、不得自动适配画面、不得填满玻璃区、不得为了视觉平衡改变大小。',
       '不要套用自动尺寸模式中的“高度 mm”或“设定高度 70%”规则；不要为了画面美观擅自重新放大、缩小或改动展品位置。',
-      `手动排版合成图对应玻璃区内部：宽 ${s.widthMm} mm，高 ${s.glassHeightMm} mm；展柜宽度、玻璃区高度、底座和柜帽仍保持设定尺寸。`,
+      s.hasCap
+        ? `手动排版合成图对应玻璃区内部：宽 ${s.widthMm} mm，高 ${s.glassHeightMm} mm；展柜宽度、玻璃区高度、底座和柜帽仍保持设定尺寸。`
+        : `手动排版合成图对应玻璃区内部：宽 ${s.widthMm} mm，高 ${s.glassHeightMm} mm；展柜宽度、玻璃区高度和底座仍保持设定尺寸；顶部保持透明玻璃顶，不安装任何灯具、灯带或射灯。`,
     ];
     if (values.hasColorMaterialReferenceImage === true) {
       lines.push('参考图顺序：第 2 张参考图 = 色彩材质参考图，仅用于柜内背景、底座、背板、托架、灯光和材料气质；它不是展品图，不得改变第 1 张合成图中的展品排版。');
@@ -145,7 +188,7 @@ function exhibitItemsText(items, style, values = {}) {
     '参考图顺序：第 1 张参考图 = 展品 1，第 2 张参考图 = 展品 2，以此类推。必须按这个顺序匹配展品图片和尺寸。',
     '展品视角要求：展品尽量采用侧视图或正侧视图，保持平视、端正摆放；不要俯拍、仰拍、斜拍、倾斜旋转或明显透视变形。',
     '严格比例规则：每件展品只能按“高度 mm”缩放，不能按原图像素、裁切大小、主体在参考图里看起来的大小或视觉重要性缩放。',
-    '生成缩放规则：生图时展品本体显示高度按设定高度的 70% 生成；展柜宽度、底座高度、玻璃区高度、柜帽高度和柜体总高度保持设定尺寸不变。',
+    showcaseScaleRuleText(style),
     '标注规则：如果开启尺寸标注，展品、展柜和构件的标注文字仍必须标注用户设定尺寸，不标注 70% 后的显示高度；70% 只影响画面里展品本体的视觉占比。',
     '高度定义：高度只指展品本体的可见垂直高度，不包含托台、托盘、标签牌、底座、支架、阴影、留白或说明文字。',
     '最终展品本体必须严格按设定高度的 70% 形成真实显示比例范围，不得为了构图、焦点或视觉美观而随意放大或缩小。',
@@ -191,6 +234,12 @@ function colorMaterialText(values) {
 
 function outputRequirementText(values) {
   const isManualLayout = values.layoutMode === 'manual';
+  const s = normalizeShowcaseStyle(values.showcaseStyle || values.dimensions || values);
+  const explodedViewText = values.explodedViewEnabled === true
+    ? s.hasCap
+      ? '分解爆炸图：开启。输出应表现柜体、玻璃罩、底座、柜帽、托架、展品、灯光组件的分解关系，可用轻微错位或爆炸图形式展示结构层级。'
+      : '分解爆炸图：开启。输出应表现柜体、玻璃罩、底座、透明玻璃顶、托架和展品的分解关系，可用轻微错位或爆炸图形式展示结构层级；顶部仍为玻璃且不安装任何灯具、灯带或射灯。'
+    : '分解爆炸图：关闭。输出应为完整组装后的柜内陈列效果图，不要把柜体构件拆散漂浮。';
   return [
     values.perspectiveEnabled === false
       ? '透视效果：关闭。必须输出完全平面的正立面/二维方案效果，不要任何 3D 透视、斜视角、消失点、近大远小、景深、透视玻璃边或空间纵深；所有水平线和垂直线必须保持平行，像正投影立面图。'
@@ -204,9 +253,7 @@ function outputRequirementText(values) {
       : isManualLayout
         ? '尺寸标注：关闭。不要绘制尺寸线、毫米数字、红色测量标注、工程尺或标注符号；展品位置和显示大小仍必须严格按第 1 张手动排版合成图。'
         : '尺寸标注：关闭。不要绘制尺寸线、毫米数字、红色测量标注、工程尺或标注符号，但仍要按给定尺寸比例生成；展品视觉高度按设定高度的 70%，展柜尺寸不变。',
-    values.explodedViewEnabled === true
-      ? '分解爆炸图：开启。输出应表现柜体、玻璃罩、底座、柜帽、托架、展品、灯光组件的分解关系，可用轻微错位或爆炸图形式展示结构层级。'
-      : '分解爆炸图：关闭。输出应为完整组装后的柜内陈列效果图，不要把柜体构件拆散漂浮。',
+    explodedViewText,
   ].join('\n');
 }
 
@@ -221,21 +268,22 @@ export function buildShowcaseInteriorDesignPrompt(values = {}) {
     '1. 展柜样式与尺寸',
     showcaseStyleText(style),
     '',
-    '比例要求：展柜宽度、底座高度、玻璃区高度、柜帽高度必须形成可信比例；玻璃区应是主要陈列空间，底座承托稳定。',
+    showcaseRatioRequirementText(style),
     '',
     '2. 展品输入与物理尺寸约束',
     exhibitItemsText(values.exhibitItems, style, values),
     '',
     '3. 柜内形式设计风格',
     colorMaterialText(values),
+    bodyPatternRequirementText(style),
     '',
-    '柜内设计要求：结合背板、台座、托架、微型展台、层板、暗藏灯带、重点射灯、低反射玻璃、展品保护距离和视觉焦点组织展品。设计应像真实展陈深化方案，而不是普通商品橱窗。',
+    showcaseDesignRequirementText(style),
     '',
     '4. 输出形式要求',
-    outputRequirementText(values),
+    outputRequirementText({ ...values, showcaseStyle: style }),
     '',
     '5. 画面质量约束',
-    '生成高完成度展陈设计效果图；结构清晰、玻璃通透、材质真实、灯光有层次、展品尺度可信。',
+    showcaseQualityRequirementText(style),
     '不要生成随机品牌 logo、无关人物、杂乱商店橱窗、低清模糊、错误文字、不可读乱码说明牌或与展品无关的装饰堆砌。',
   ];
   if (supplement) lines.push('', '6. 补充要求', supplement);

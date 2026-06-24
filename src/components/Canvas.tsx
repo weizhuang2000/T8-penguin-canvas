@@ -633,6 +633,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
       glassHeightMm: 1400,
       capHeightMm: 180,
       hasCap: false,
+      hasBodyPattern: false,
     },
     exhibitItems: [],
     emptyExhibitMode: 'empty',

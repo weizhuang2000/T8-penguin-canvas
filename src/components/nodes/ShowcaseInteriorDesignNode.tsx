@@ -617,7 +617,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
     dimensionMarksEnabled: d.dimensionMarksEnabled === true,
     explodedViewEnabled: d.explodedViewEnabled === true,
     supplement: d.supplement,
-  }), [colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.emptyExhibitQuery, d.explodedViewEnabled, d.perspectiveEnabled, d.supplement, emptyExhibitMode, exhibitItems, layoutMode, manualLayoutItems, selectedColorMaterialPreset, showcaseStyle.baseHeightMm, showcaseStyle.capHeightMm, showcaseStyle.glassHeightMm, showcaseStyle.hasCap, showcaseStyle.widthMm]);
+  }), [colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.emptyExhibitQuery, d.explodedViewEnabled, d.perspectiveEnabled, d.supplement, emptyExhibitMode, exhibitItems, layoutMode, manualLayoutItems, selectedColorMaterialPreset, showcaseStyle.baseHeightMm, showcaseStyle.capHeightMm, showcaseStyle.glassHeightMm, showcaseStyle.hasBodyPattern, showcaseStyle.hasCap, showcaseStyle.widthMm]);
 
   useEffect(() => {
     getElevationPromptPresets().then((presets) => setColorMaterialPresets(presets.colorMaterial || [])).catch(() => setColorMaterialPresets([]));
@@ -903,6 +903,10 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
           <label className="flex items-center gap-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[11px] text-white/70">
             <input type="checkbox" className="accent-cyan-300" checked={showcaseStyle.hasCap} disabled={isReadonly || busy} onChange={(event) => patchShowcaseStyle('hasCap', event.target.checked)} />
             是否有柜帽
+          </label>
+          <label className="flex items-center gap-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[11px] text-white/70">
+            <input type="checkbox" className="accent-cyan-300" checked={showcaseStyle.hasBodyPattern} disabled={isReadonly || busy} onChange={(event) => patchShowcaseStyle('hasBodyPattern', event.target.checked)} />
+            柜体图案
           </label>
         </section>
 

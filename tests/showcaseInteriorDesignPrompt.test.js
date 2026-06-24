@@ -28,8 +28,11 @@ test('showcase prompt includes four showcase dimensions and cap switch in Chines
   const withoutCap = buildShowcaseInteriorDesignPrompt({
     showcaseStyle: { widthMm: 1200, baseHeightMm: 300, glassHeightMm: 1400, capHeightMm: 180, hasCap: false },
   });
-  assert.match(withoutCap, /柜帽：关闭/);
   assert.match(withoutCap, /推导总高度：1700 mm/);
+  assert.match(withoutCap, /顶部形式：透明玻璃顶/);
+  assert.match(withoutCap, /顶部不安装任何灯具、灯带或射灯/);
+  assert.match(withoutCap, /顶部必须是通透玻璃顶/);
+  assert.doesNotMatch(withoutCap, /柜帽/);
 
   assert.deepEqual(normalizeShowcaseStyle({}), {
     widthMm: 1200,
@@ -37,7 +40,29 @@ test('showcase prompt includes four showcase dimensions and cap switch in Chines
     glassHeightMm: 1400,
     capHeightMm: 180,
     hasCap: false,
+    hasBodyPattern: false,
   });
+});
+
+test('showcase prompt disables body patterns by default and keeps current logic when enabled', () => {
+  const withoutPattern = buildShowcaseInteriorDesignPrompt({
+    showcaseStyle: { hasCap: true, hasBodyPattern: false },
+  });
+  assert.match(withoutPattern, /柜体图案：关闭/);
+  assert.match(withoutPattern, /柜体、底座、边框、柜帽都不要出现图案、纹样、花纹/);
+
+  const withoutPatternAndCap = buildShowcaseInteriorDesignPrompt({
+    showcaseStyle: { hasCap: false, hasBodyPattern: false },
+  });
+  assert.match(withoutPatternAndCap, /柜体图案：关闭/);
+  assert.match(withoutPatternAndCap, /柜体、底座、边框和顶部玻璃连接构件都不要出现图案、纹样、花纹/);
+  assert.doesNotMatch(withoutPatternAndCap, /柜帽/);
+
+  const withPattern = buildShowcaseInteriorDesignPrompt({
+    showcaseStyle: { hasCap: true, hasBodyPattern: true },
+  });
+  assert.doesNotMatch(withPattern, /柜体图案：关闭/);
+  assert.doesNotMatch(withPattern, /都不要出现图案/);
 });
 
 test('showcase prompt keeps exhibit order and display height in millimeters', () => {
@@ -48,7 +73,9 @@ test('showcase prompt keeps exhibit order and display height in millimeters', ()
   assert.deepEqual(items.map((item) => item.heightMm), [420, 260]);
 
   const prompt = buildShowcaseInteriorDesignPrompt({ exhibitItems: items, showcaseStyle: { widthMm: 1200, glassHeightMm: 1400 } });
+  const promptWithCap = buildShowcaseInteriorDesignPrompt({ exhibitItems: items, showcaseStyle: { widthMm: 1200, glassHeightMm: 1400, hasCap: true } });
   assert.ok(prompt.indexOf('1. 青铜器：设定高度 420 mm，生图显示高度 294 mm') < prompt.indexOf('2. 陶俑：设定高度 260 mm，生图显示高度 182 mm'));
+  assert.match(promptWithCap, /展柜宽度、底座高度、玻璃区高度、柜帽高度和柜体总高度保持设定尺寸不变/);
   assert.match(prompt, /参考图顺序：第 1 张参考图 = 展品 1，第 2 张参考图 = 展品 2/);
   assert.doesNotMatch(prompt, /尺寸合成参考图/);
   assert.doesNotMatch(prompt, /第 2 张参考图 = 展品 1/);
@@ -58,7 +85,9 @@ test('showcase prompt keeps exhibit order and display height in millimeters', ()
   assert.match(prompt, /保持平视/);
   assert.match(prompt, /倾斜旋转/);
   assert.match(prompt, /生图时展品本体显示高度按设定高度的 70% 生成/);
-  assert.match(prompt, /展柜宽度、底座高度、玻璃区高度、柜帽高度和柜体总高度保持设定尺寸不变/);
+  assert.match(prompt, /展柜宽度、底座高度、玻璃区高度和柜体总高度保持设定尺寸不变/);
+  assert.match(prompt, /顶部保持透明玻璃顶，不安装任何灯具、灯带或射灯/);
+  assert.doesNotMatch(prompt, /柜帽/);
   assert.match(prompt, /展品、展柜和构件的标注文字仍必须标注用户设定尺寸/);
   assert.match(prompt, /高度只指展品本体的可见垂直高度，不包含托台、托盘、标签牌、底座、支架、阴影、留白或说明文字/);
   assert.match(prompt, /不得为了构图、焦点或视觉美观而随意放大或缩小/);
@@ -74,13 +103,18 @@ test('showcase prompt keeps exhibit order and display height in millimeters', ()
 });
 
 test('showcase prompt switches dimension marks and exploded view requirements', () => {
-  const marked = buildShowcaseInteriorDesignPrompt({ perspectiveEnabled: true, dimensionMarksEnabled: true, explodedViewEnabled: true });
+  const marked = buildShowcaseInteriorDesignPrompt({ showcaseStyle: { hasCap: true }, perspectiveEnabled: true, dimensionMarksEnabled: true, explodedViewEnabled: true });
   assert.match(marked, /透视效果：开启/);
   assert.match(marked, /尺寸标注：开启/);
   assert.match(marked, /所有标注必须使用用户设定尺寸/);
   assert.match(marked, /展品标注为设定高度，不标注 70% 后的显示高度/);
   assert.match(marked, /分解爆炸图：开启/);
   assert.match(marked, /柜体、玻璃罩、底座、柜帽、托架、展品、灯光组件/);
+
+  const markedWithoutCap = buildShowcaseInteriorDesignPrompt({ perspectiveEnabled: true, dimensionMarksEnabled: true, explodedViewEnabled: true });
+  assert.match(markedWithoutCap, /柜体、玻璃罩、底座、透明玻璃顶、托架和展品/);
+  assert.match(markedWithoutCap, /顶部仍为玻璃且不安装任何灯具、灯带或射灯/);
+  assert.doesNotMatch(markedWithoutCap, /柜帽/);
 
   const unmarked = buildShowcaseInteriorDesignPrompt({ perspectiveEnabled: false, dimensionMarksEnabled: false, explodedViewEnabled: false });
   assert.match(unmarked, /透视效果：关闭/);
