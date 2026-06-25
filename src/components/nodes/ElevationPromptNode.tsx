@@ -51,6 +51,8 @@ const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border
 const DEFAULT_CRAFTS = ['panel', 'dimensional-letters', 'soft-film-lightbox'];
 const DEFAULT_REFINE_WORD_COUNT = 1200;
 const SUPPLEMENT_PRESET_KEY = 't8-elevation-supplement-presets';
+const CRAFT_CATEGORIES = ['装饰', '多媒体', '艺术品', '展陈', '展柜', '展台', '顶部', '其它'] as const;
+const DEFAULT_CRAFT_CATEGORY = '其它';
 
 function same(valueA: unknown, valueB: unknown) {
   return JSON.stringify(valueA) === JSON.stringify(valueB);
@@ -145,8 +147,32 @@ function buildColorMaterialPresetPayload(presets: ElevationColorMaterialPresetIt
   }));
 }
 
+function normalizeCraftCategory(value: unknown) {
+  const raw = String(value || '').trim();
+  return (CRAFT_CATEGORIES as readonly string[]).includes(raw) ? raw : DEFAULT_CRAFT_CATEGORY;
+}
+
+function normalizeCraftRandomCounts(value: unknown): Record<string, number> {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const out: Record<string, number> = {};
+  CRAFT_CATEGORIES.forEach((category) => {
+    const count = Math.floor(Number(source[category]) || 0);
+    out[category] = Math.max(-1, Math.min(99, count));
+  });
+  return out;
+}
+
+function shuffleCraftIds(ids: string[]) {
+  const out = ids.slice();
+  for (let index = out.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [out[index], out[swapIndex]] = [out[swapIndex], out[index]];
+  }
+  return out;
+}
+
 function craftPresetEditorText(presets: ElevationCraftPresetItem[]): string {
-  return presets.map((preset) => `${preset.label}｜${preset.prompt}`).join('\n');
+  return presets.map((preset) => `${normalizeCraftCategory(preset.category)}｜${preset.label}｜${preset.prompt}`).join('\n');
 }
 
 function parseCraftPresetEditorText(text: string) {
@@ -155,18 +181,23 @@ function parseCraftPresetEditorText(text: string) {
     .map((line, index) => {
       const raw = line.trim();
       if (!raw) return null;
-      const [labelRaw, ...rest] = raw.split(/[｜|]/);
+      const parts = raw.split(/[｜|]/).map((part) => part.trim()).filter(Boolean);
+      const hasCategory = parts.length >= 3 && (CRAFT_CATEGORIES as readonly string[]).includes(parts[0]);
+      const category = hasCategory ? parts[0] : DEFAULT_CRAFT_CATEGORY;
+      const labelRaw = hasCategory ? parts[1] : parts[0];
+      const rest = hasCategory ? parts.slice(2) : parts.slice(1);
       const label = String(labelRaw || '').trim();
       const prompt = rest.join('｜').trim();
       if (!label || !prompt) return null;
       return {
         id: `${label.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'craft'}-${index + 1}`,
+        category,
         label,
         prompt,
         order: index,
       };
     })
-    .filter(Boolean) as Array<{ id: string; label: string; prompt: string; order: number }>;
+    .filter(Boolean) as Array<{ id: string; category: string; label: string; prompt: string; order: number }>;
 }
 
 const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
@@ -201,6 +232,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
     [d.analysis],
   );
   const selectedCrafts: string[] = Array.isArray(d.selectedCrafts) ? d.selectedCrafts : DEFAULT_CRAFTS;
+  const craftRandomCounts = useMemo(() => normalizeCraftRandomCounts(d.craftRandomCounts), [d.craftRandomCounts]);
   const selectedColorMaterialPreset = useMemo(
     () => colorMaterialPresets.find((preset) => preset.id === d.colorMaterialPreset) || null,
     [colorMaterialPresets, d.colorMaterialPreset],
@@ -209,6 +241,28 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
     () => (craftPresets.length > 0 ? craftPresets : ELEVATION_CRAFTS),
     [craftPresets],
   );
+  const craftGroups = useMemo(
+    () => CRAFT_CATEGORIES.map((category) => ({
+      category,
+      crafts: craftPresetOptions.filter((craft) => normalizeCraftCategory(craft.category) === category),
+    })).filter((group) => group.crafts.length > 0),
+    [craftPresetOptions],
+  );
+  const runtimeCrafts = useMemo(() => {
+    const picked = new Set(selectedCrafts);
+    for (const group of craftGroups) {
+      const count = craftRandomCounts[group.category] || 0;
+      if (count === 0) continue;
+      const candidates = group.crafts
+        .map((craft) => craft.id)
+        .filter((craftId) => !picked.has(craftId));
+      const nextCraftIds = count === -1 ? candidates : shuffleCraftIds(candidates).slice(0, count);
+      for (const craftId of nextCraftIds) {
+        picked.add(craftId);
+      }
+    }
+    return Array.from(picked);
+  }, [craftGroups, craftRandomCounts, selectedCrafts]);
   const status = String(d.status || 'idle');
   const busy = status === 'extracting' || status === 'refining';
 
@@ -234,7 +288,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
       wallCount,
       outputMode: d.outputMode === 'overview' ? 'overview' : 'segments',
       downstreamContent: d.downstreamContent || 'concept',
-      selectedCrafts,
+      selectedCrafts: runtimeCrafts,
       customCraft: d.customCraft,
       aspectRatio: d.aspectRatio,
       dimensions: d.dimensions,
@@ -252,7 +306,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
       wallCount,
       d.outputMode,
       d.downstreamContent,
-      selectedCrafts,
+      runtimeCrafts,
       d.customCraft,
       d.aspectRatio,
       d.dimensions,
@@ -467,6 +521,13 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
     update({ selectedCrafts: next });
   };
 
+  const setCraftRandomCount = (category: string, value: string | number) => {
+    if (isReadonly) return;
+    const next = normalizeCraftRandomCounts(craftRandomCounts);
+    next[category] = Math.max(-1, Math.min(99, Math.floor(Number(value) || 0)));
+    update({ craftRandomCounts: next });
+  };
+
   const saveColorMaterialPresets = async () => {
     if (!canManageTeam) return;
     const presets = parseColorPresetEditorText(presetEditorValue);
@@ -510,7 +571,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
     if (!canManageTeam) return;
     const presets = parseCraftPresetEditorText(craftEditorValue);
     if (presets.length === 0) {
-      setCraftError('请至少保留一条“名称｜提示词”格式的工艺预设。');
+      setCraftError('请至少保留一条“分类｜名称｜提示词”格式的工艺预设。');
       return;
     }
     setCraftSaving(true);
@@ -807,30 +868,53 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
               </button>
             )}
           </div>
-          <div className="grid grid-cols-4 gap-1">
-            {craftPresetOptions.map((craft: ElevationCraft) => {
-              const active = selectedCrafts.includes(craft.id);
-              return (
-                <button
-                  key={craft.id}
-                  type="button"
-                  disabled={isReadonly}
-                  className={`min-w-0 rounded border px-1.5 py-1 text-[10px] ${
-                    active
-                      ? 'border-cyan-300/55 bg-cyan-300/15 text-cyan-100'
-                      : 'border-white/10 bg-black/15 text-white/55 hover:bg-white/[0.08]'
-                  } disabled:opacity-50`}
-                  onClick={() => toggleCraft(craft.id)}
-                  title={craft.prompt}
-                >
-                  <span className="block truncate">{craft.label}</span>
-                </button>
-              );
-            })}
+          <div className="space-y-1.5">
+            <div className="text-[9px] leading-snug text-white/35">随机数量会在每次输出时从该分类未手动选中的工艺中补选；-1 表示补入全部未选项，不改变当前勾选状态。</div>
+            {craftGroups.map((group) => (
+              <div key={group.category} className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[9px] font-semibold text-white/40">{group.category}</div>
+                  <label className="flex items-center gap-1 text-[9px] text-white/40">
+                    随机
+                    <input
+                      className="h-5 w-11 rounded border border-white/10 bg-black/20 px-1 text-center text-[10px] text-white/70 outline-none focus:border-cyan-300/60 disabled:opacity-45"
+                      type="number"
+                      min={-1}
+                      max={Math.max(0, group.crafts.length - selectedCrafts.filter((craftId) => group.crafts.some((craft) => craft.id === craftId)).length)}
+                      step={1}
+                      value={craftRandomCounts[group.category] || 0}
+                      disabled={isReadonly}
+                      onChange={(event) => setCraftRandomCount(group.category, event.target.value)}
+                    />
+                  </label>
+                </div>
+                <div className="grid grid-cols-4 gap-1">
+                  {group.crafts.map((craft: ElevationCraft) => {
+                    const active = selectedCrafts.includes(craft.id);
+                    return (
+                      <button
+                        key={craft.id}
+                        type="button"
+                        disabled={isReadonly}
+                        className={`min-w-0 rounded border px-1.5 py-1 text-[10px] ${
+                          active
+                            ? 'border-cyan-300/55 bg-cyan-300/15 text-cyan-100'
+                            : 'border-white/10 bg-black/15 text-white/55 hover:bg-white/[0.08]'
+                        } disabled:opacity-50`}
+                        onClick={() => toggleCraft(craft.id)}
+                        title={`${group.category}｜${craft.prompt}`}
+                      >
+                        <span className="block truncate">{craft.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
           {canManageTeam && craftEditorOpen && (
             <div className="mt-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
-              <div className="mb-1 text-[10px] text-white/45">每行一个工艺预设：名称｜提示词。新增一行即新增，删除一行即删除。</div>
+              <div className="mb-1 text-[10px] text-white/45">每行一个工艺预设：分类｜名称｜提示词。分类可用：装饰、多媒体、艺术品、展陈、展柜、展台、顶部、其它。</div>
               <textarea
                 className={`${FIELD} min-h-[96px] resize-y font-mono`}
                 value={craftEditorValue}

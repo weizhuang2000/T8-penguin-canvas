@@ -87,6 +87,7 @@ import { logBus } from '../stores/logs';
 import CanvasToolbar from './CanvasToolbar';
 import TerminalPanel from './TerminalPanel';
 import NodeActionBar from './NodeActionBar';
+import NodeFullscreenOverlay from './NodeFullscreenOverlay';
 import MaterialDragOverlay from './MaterialDragOverlay';
 import ThemeMusicToggle from './ThemeMusicToggle';
 import SendMaterialsModal from './SendMaterialsModal';
@@ -5439,6 +5440,9 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
 
       {/* 跨节点素材拖拽浮层 (Ctrl + 鼠标左键 从素材缩略图拖出) */}
       <MaterialDragOverlay />
+
+      {/* 节点全屏覆盖层 */}
+      <NodeFullscreenOverlay />
 
       {/* 拖线到空白处弹出的候选节点菜单 */}
       {picker && (

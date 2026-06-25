@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {
   buildElevationAnalysisMessages,
   buildElevationContentPlanMessages,
@@ -8,6 +9,8 @@ import {
   parseElevationAnalysisResponse,
   wallsFromAnalysis,
 } from '../src/utils/elevationPromptData.js';
+
+const elevationNodeSource = fs.readFileSync(new URL('../src/components/nodes/ElevationPromptNode.tsx', import.meta.url), 'utf-8');
 
 const analysis = {
   projectTheme: '海洋文明',
@@ -70,6 +73,13 @@ test('elevation outputs use configured craft presets', () => {
 
   assert.match(result.conceptPrompts[0], /定制工艺提示词/);
   assert.match(result.layoutSchedule, /定制工艺/);
+});
+
+test('elevation node shows crafts by category with random counts', () => {
+  assert.match(elevationNodeSource, /CRAFT_CATEGORIES = \['装饰', '多媒体', '艺术品', '展陈', '展柜', '展台', '顶部', '其它'\]/);
+  assert.match(elevationNodeSource, /分类｜名称｜提示词/);
+  assert.match(elevationNodeSource, /随机数量会在每次输出时从该分类未手动选中的工艺中补选/);
+  assert.match(elevationNodeSource, /craftRandomCounts/);
 });
 
 test('content plan parser keeps wall craft choices and notes', () => {

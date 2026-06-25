@@ -14,9 +14,10 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNodes, useViewport, useReactFlow, type Node } from '@xyflow/react';
-import { Play, Square, X } from 'lucide-react';
+import { Play, Square, X, Maximize2 } from 'lucide-react';
 import { useThemeStore } from '../stores/theme';
 import { useRunBusStore } from '../stores/runBus';
+import { useFullscreenNodeStore } from '../stores/fullscreenNode';
 import { trackAchievementEvent } from '../stores/achievements';
 import { useHiddenFeatureStore, isRhDuckUploadEnabled, isYyhPortraitEnabled } from '../stores/hiddenFeatures';
 import { resolveThemeTemplate } from '../theme/defaultTemplates';
@@ -88,6 +89,7 @@ const NodeActionBar = () => {
   const toggleRhDuckUpload = useHiddenFeatureStore((s) => s.toggleRhDuckUpload);
   const clearRhDuckUpload = useHiddenFeatureStore((s) => s.clearRhDuckUpload);
   const toggleYyhPortrait = useHiddenFeatureStore((s) => s.toggleYyhPortrait);
+  const setFullscreenNode = useFullscreenNodeStore((s) => s.setFullscreenNode);
   const holdTimerRef = useRef<number | null>(null);
   const suppressClickRef = useRef(false);
   const [holdArmed, setHoldArmed] = useState(false);
@@ -250,6 +252,10 @@ const NodeActionBar = () => {
     e.stopPropagation();
     setNodes((nds) => nds.map((n) => (n.id === selectedExe.id ? { ...n, selected: false } : n)));
   };
+  const onFullscreen = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setFullscreenNode(selectedExe.id);
+  };
 
   const runColor = rhDuckMode
     ? '#ff345f'
@@ -262,13 +268,15 @@ const NodeActionBar = () => {
       : actionColors.run;
 
   // 按钮通用样式生成器
-  const mkBtn = (kind: 'run' | 'stop' | 'close'): React.CSSProperties => {
+  const mkBtn = (kind: 'run' | 'stop' | 'close' | 'fullscreen'): React.CSSProperties => {
     const color =
       kind === 'run'
         ? runColor
         : kind === 'stop'
           ? actionColors.stop
-          : actionColors.close;
+          : kind === 'fullscreen'
+            ? (isDark ? '#a78bfa' : '#7c3aed')
+            : actionColors.close;
     if (isPixel) {
       return {
         display: 'inline-flex',
@@ -310,16 +318,16 @@ const NodeActionBar = () => {
   };
 
   // hover 增强
-  const onEnter = (e: React.MouseEvent, kind: 'run' | 'stop' | 'close') => {
+  const onEnter = (e: React.MouseEvent, kind: 'run' | 'stop' | 'close' | 'fullscreen') => {
     const color =
-      kind === 'run' ? runColor : kind === 'stop' ? actionColors.stop : actionColors.close;
+      kind === 'run' ? runColor : kind === 'stop' ? actionColors.stop : kind === 'fullscreen' ? (isDark ? '#a78bfa' : '#7c3aed') : actionColors.close;
     if (isPixel) return;
     (e.currentTarget as HTMLElement).style.background = `${color}33`;
     (e.currentTarget as HTMLElement).style.borderColor = color;
   };
-  const onLeave = (e: React.MouseEvent, kind: 'run' | 'stop' | 'close') => {
+  const onLeave = (e: React.MouseEvent, kind: 'run' | 'stop' | 'close' | 'fullscreen') => {
     const color =
-      kind === 'run' ? runColor : kind === 'stop' ? actionColors.stop : actionColors.close;
+      kind === 'run' ? runColor : kind === 'stop' ? actionColors.stop : kind === 'fullscreen' ? (isDark ? '#a78bfa' : '#7c3aed') : actionColors.close;
     if (isPixel) return;
     (e.currentTarget as HTMLElement).style.background =
       kind === 'run'
@@ -399,6 +407,18 @@ const NodeActionBar = () => {
             <span>RUN</span>
           </button>
         )}
+
+        {/* 全屏 */}
+        <button
+          type="button"
+          onClick={onFullscreen}
+          onMouseEnter={(e) => onEnter(e, 'fullscreen')}
+          onMouseLeave={(e) => onLeave(e, 'fullscreen')}
+          title="全屏预览此节点"
+          style={mkBtn('fullscreen')}
+        >
+          <Maximize2 size={12} />
+        </button>
 
         {/* 取消选中 (关闭操作栏) */}
         <button
