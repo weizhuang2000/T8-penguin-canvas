@@ -745,14 +745,14 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
               className="w-full flex items-center justify-between text-[10px] font-semibold text-white/70 hover:text-white"
             >
               <span>高级来源</span>
-              <span>{isExternalSelected && providerSelection.provider ? providerSelection.provider.label : '默认 LLM Key'}</span>
+              <span>{isExternalSelected && providerSelection.provider ? providerSelection.provider.label : (allowZhenzhenFallback ? '默认 LLM Key' : '请选择扩展平台')}</span>
             </button>
             {d?.advancedProviderOpen && (
               <div className="space-y-2">
                 <div>
                   <label className="text-[10px] text-white/50 block mb-1">平台</label>
                   <select
-                    value={isExternalSelected ? providerSelection.providerId : 'zhenzhen'}
+                    value={isExternalSelected ? providerSelection.providerId : (allowZhenzhenFallback ? 'zhenzhen' : (firstLlmAdvancedProvider?.id || ''))}
                     onChange={(e) => {
                       const nextId = e.target.value;
                       if (nextId === 'zhenzhen') {

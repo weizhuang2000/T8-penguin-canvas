@@ -800,7 +800,7 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
                 <div>
                   <label className="text-[10px] text-white/50 block mb-1">平台</label>
                   <select
-                    value={isExternalSelected ? providerSelection.providerId : 'zhenzhen'}
+                    value={isExternalSelected ? providerSelection.providerId : (allowZhenzhenFallback ? 'zhenzhen' : (firstVideoAdvancedProvider?.id || ''))}
                     onChange={(e) => {
                       const nextId = e.target.value;
                       if (nextId === 'zhenzhen') {
