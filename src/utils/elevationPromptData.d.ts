@@ -38,7 +38,7 @@ export interface ElevationContentPlan {
 export interface ElevationPromptValues {
   analysis?: Partial<ElevationAnalysis> | null;
   walls?: ElevationWall[];
-  wallMode?: 'single' | 'multi';
+  wallMode?: 'single' | 'multi' | 'auto';
   wallCount?: number;
   outputMode?: 'segments' | 'overview';
   downstreamContent?: 'concept' | 'schedule' | 'combined';
@@ -76,20 +76,20 @@ export function normalizeElevationAnalysis(value: unknown): ElevationAnalysis;
 export function parseElevationAnalysisResponse(content: string): ElevationAnalysis;
 export function wallsFromAnalysis(
   analysisValue: unknown,
-  mode?: 'single' | 'multi',
+  mode?: 'single' | 'multi' | 'auto',
   count?: number,
 ): ElevationWall[];
 export function buildElevationOutputs(values?: ElevationPromptValues): ElevationOutputs;
 export function buildElevationAnalysisMessages(
   sourceText: string,
-  wallMode?: 'single' | 'multi',
+  wallMode?: 'single' | 'multi' | 'auto',
   wallCount?: number,
   wordCount?: number,
 ): ElevationAnalysisMessage[];
 export function parseElevationContentPlanResponse(content: string): ElevationContentPlan;
 export function buildElevationContentPlanMessages(values?: {
   sourceText?: string;
-  wallMode?: 'single' | 'multi';
+  wallMode?: 'single' | 'multi' | 'auto';
   wallCount?: number;
   selectedCrafts?: string[];
   craftPresets?: ElevationCraft[];

@@ -82,6 +82,12 @@ test('elevation node shows crafts by category with random counts', () => {
   assert.match(elevationNodeSource, /craftRandomCounts/);
 });
 
+test('elevation node exposes automatic split mode with read-only count', () => {
+  assert.match(elevationNodeSource, /<option value="auto">自动拆分<\/option>/);
+  assert.match(elevationNodeSource, /wallMode !== 'multi'/);
+  assert.match(elevationNodeSource, /wallCount: wallMode === 'auto' \? nextWalls\.length : wallCount/);
+});
+
 test('content plan parser keeps wall craft choices and notes', () => {
   const payload = {
     projectTheme: '青花瓷展',
@@ -162,12 +168,34 @@ test('single-wall mode collapses multiple walls and never emits segments', () =>
   assert.match(result.overviewPrompt, /共 1 面/);
 });
 
+test('auto wall mode lets AI-derived sections decide wall count', () => {
+  const walls = wallsFromAnalysis(analysis, 'auto', 8);
+  assert.equal(walls.length, analysis.sections.length);
+
+  const result = buildElevationOutputs({
+    analysis,
+    wallMode: 'auto',
+    outputMode: 'segments',
+    downstreamContent: 'concept',
+  });
+  assert.equal(result.walls.length, analysis.sections.length);
+  assert.equal(result.textSegments.length, analysis.sections.length);
+  assert.match(result.overviewPrompt, new RegExp(`共 ${analysis.sections.length} 面`));
+});
+
 test('analysis messages request strict JSON and preserve document text', () => {
   const messages = buildElevationAnalysisMessages('原始文档正文', 'multi', 4, 800);
   assert.match(messages[0].content, /只输出 JSON/);
   assert.match(messages[0].content, /约 4 个连续立面/);
   assert.match(messages[0].content, /约 800 字/);
   assert.equal(messages[1].content, '原始文档正文');
+});
+
+test('analysis messages support automatic wall splitting', () => {
+  const messages = buildElevationAnalysisMessages('原始文档正文', 'auto', 4, 800);
+  assert.match(messages[0].content, /自动拆分为 1 到 12 个连续立面章节/);
+  assert.match(messages[0].content, /sections 数组的长度就是最终立面数量/);
+  assert.doesNotMatch(messages[0].content, /约 4 个连续立面/);
 });
 
 test('content plan messages ask for direct wall content with suitable crafts', () => {

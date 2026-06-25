@@ -224,13 +224,15 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
   const [supplementPresetMap, setSupplementPresetMap] = useState<Record<string, string>>(() => loadSupplementPresets());
 
   const sourceText = String(d.sourceText || '');
-  const wallMode: 'single' | 'multi' = d.wallMode === 'single' ? 'single' : 'multi';
-  const wallCount = Math.max(1, Math.min(12, Number(d.wallCount) || 3));
+  const wallMode: 'single' | 'multi' | 'auto' = d.wallMode === 'single' ? 'single' : d.wallMode === 'auto' ? 'auto' : 'multi';
   const refineWordCount = Math.max(200, Math.min(3000, Number(d.refineWordCount) || DEFAULT_REFINE_WORD_COUNT));
   const analysis = useMemo(
     () => normalizeElevationAnalysis(d.analysis) as ElevationAnalysis,
     [d.analysis],
   );
+  const storedWallCount = Math.max(1, Math.min(12, Number(d.wallCount) || 3));
+  const autoWallCount = Math.max(1, Math.min(12, Array.isArray(d.walls) && d.walls.length > 0 ? d.walls.length : (analysis.sections.length || storedWallCount)));
+  const wallCount = wallMode === 'single' ? 1 : wallMode === 'auto' ? autoWallCount : storedWallCount;
   const selectedCrafts: string[] = Array.isArray(d.selectedCrafts) ? d.selectedCrafts : DEFAULT_CRAFTS;
   const craftRandomCounts = useMemo(() => normalizeCraftRandomCounts(d.craftRandomCounts), [d.craftRandomCounts]);
   const selectedColorMaterialPreset = useMemo(
@@ -402,6 +404,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
       update({
         analysis: nextAnalysis,
         walls: nextWalls,
+        wallCount: wallMode === 'auto' ? nextWalls.length : wallCount,
         status: 'success',
         error: '',
         analyzedAt: Date.now(),
@@ -454,7 +457,8 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
 
   const rebuildWalls = () => {
     if (isReadonly) return;
-    update({ walls: wallsFromAnalysis(analysis, wallMode, wallCount) });
+    const nextWalls = wallsFromAnalysis(analysis, wallMode, wallCount) as ElevationWall[];
+    update({ walls: nextWalls, wallCount: wallMode === 'auto' ? nextWalls.length : wallCount });
   };
 
   const patchWall = (index: number, patch: Partial<ElevationWall>) => {
@@ -469,7 +473,8 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
     if (isReadonly) return;
     try {
       const next = parseElevationAnalysisResponse(analysisDraft) as ElevationAnalysis;
-      update({ analysis: next, walls: wallsFromAnalysis(next, wallMode, wallCount), error: '' });
+      const nextWalls = wallsFromAnalysis(next, wallMode, wallCount) as ElevationWall[];
+      update({ analysis: next, walls: nextWalls, wallCount: wallMode === 'auto' ? nextWalls.length : wallCount, error: '' });
       setDraftMessage('已应用');
     } catch (error: any) {
       setDraftMessage(error?.message || 'JSON 无法解析');
@@ -789,28 +794,35 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
               disabled={isReadonly}
               value={wallMode}
               onChange={(event) => {
-                const nextMode = event.target.value === 'single' ? 'single' : 'multi';
+                const nextMode: 'single' | 'multi' | 'auto' = event.target.value === 'single'
+                  ? 'single'
+                  : event.target.value === 'auto'
+                    ? 'auto'
+                    : 'multi';
+                const nextWalls = wallsFromAnalysis(analysis, nextMode, nextMode === 'single' ? 1 : wallCount) as ElevationWall[];
                 update({
                   wallMode: nextMode,
-                  walls: wallsFromAnalysis(analysis, nextMode, nextMode === 'single' ? 1 : wallCount),
+                  wallCount: nextMode === 'auto' ? nextWalls.length : nextMode === 'single' ? 1 : wallCount,
+                  walls: nextWalls,
                 });
               }}
             >
               <option value="single">单立面</option>
               <option value="multi">多立面</option>
+              <option value="auto">自动拆分</option>
             </select>
             <input
               className={FIELD}
               type="number"
               min={1}
               max={12}
-              disabled={isReadonly || wallMode === 'single'}
-              value={wallMode === 'single' ? 1 : wallCount}
+              disabled={isReadonly || wallMode !== 'multi'}
+              value={wallCount}
               onChange={(event) => {
                 const nextCount = Math.max(1, Math.min(12, Number(event.target.value) || 1));
                 update({ wallCount: nextCount, walls: wallsFromAnalysis(analysis, 'multi', nextCount) });
               }}
-              title="立面数量"
+              title={wallMode === 'auto' ? `自动拆分数量：${wallCount} 面` : '立面数量'}
             />
             <select
               className={FIELD}

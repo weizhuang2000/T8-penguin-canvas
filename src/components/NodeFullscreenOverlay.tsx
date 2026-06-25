@@ -2,7 +2,9 @@
  * NodeFullscreenOverlay —— 节点全屏覆盖层
  *
  * 将选中节点的 DOM 元素移动到全屏 portal 容器中,
- * 退出时移回原位, 保留所有 React 状态与交互性。
+ * 并将节点内部的纵向堆叠 section 重排为多列网格,
+ * 充分利用屏幕宽度, 减少上下滚动。
+ * 退出时移回原位并恢复原始样式, 保留所有 React 状态与交互性。
  */
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
@@ -11,20 +13,89 @@ import { useFullscreenNodeStore } from '../stores/fullscreenNode';
 import { useThemeStore } from '../stores/theme';
 import { resolveThemeTemplate } from '../theme/defaultTemplates';
 
-/** 需要在全屏模式下覆盖的 ReactFlow 节点行内样式 */
-const FULLSCREEN_OVERRIDE: Partial<CSSStyleDeclaration> = {
-  position: 'relative',
-  width: '100%',
-  height: '100%',
-  minWidth: '100%',
-  minHeight: '100%',
-  maxWidth: '100%',
-  maxHeight: '100%',
-  transform: 'none',
-  margin: '0',
-  inset: 'auto',
-  zIndex: 'auto',
-};
+/** 全屏时注入到 <head> 的样式表 id */
+const FULLSCREEN_STYLE_ID = 't8-node-fullscreen-override-style';
+
+/** 全屏覆盖层样式: 节点自适应全屏 + 配置区多列网格 */
+const FULLSCREEN_CSS = `
+/* 节点根元素: 去掉固定宽度, 自适应容器 */
+[data-node-fullscreen-content] > [data-id] {
+  position: relative !important;
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  min-height: auto !important;
+  max-height: none !important;
+  transform: none !important;
+  margin: 0 !important;
+  inset: auto !important;
+  z-index: auto !important;
+}
+
+/* 去掉节点内容容器的固定宽度 */
+[data-node-fullscreen-content] > [data-id] > div {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+/* 配置区 (space-y-2 / space-y-2\.5 / space-y-3): 改为多列网格 */
+[data-node-fullscreen-content] > [data-id] > div > .space-y-2,
+[data-node-fullscreen-content] > [data-id] > div > .space-y-2\\.5,
+[data-node-fullscreen-content] > [data-id] > div > .space-y-3,
+[data-node-fullscreen-content] > [data-id] > div > div[class*="space-y-2"],
+[data-node-fullscreen-content] > [data-id] > div > div[class*="space-y-3"] {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+  align-items: start;
+  /* 移除节点内的滚动限制, 让内容自然展开 */
+  max-height: none !important;
+  overflow-y: visible !important;
+  overflow: visible !important;
+}
+
+/* 配置区内的子 section 保持完整, 不被 grid 拆行 */
+[data-node-fullscreen-content] > [data-id] > div > .space-y-2 > *,
+[data-node-fullscreen-content] > [data-id] > div > .space-y-2\\.5 > *,
+[data-node-fullscreen-content] > [data-id] > div > .space-y-3 > *,
+[data-node-fullscreen-content] > [data-id] > div > div[class*="space-y-2"] > *,
+[data-node-fullscreen-content] > [data-id] > div > div[class*="space-y-3"] > * {
+  grid-row: auto;
+}
+
+/* 结果展示区 (border-t) 跨全宽 */
+[data-node-fullscreen-content] > [data-id] > div > .border-t,
+[data-node-fullscreen-content] > [data-id] > .border-t {
+  grid-column: 1 / -1;
+}
+
+/* 隐藏 ReactFlow 的 Handle (全屏时不需要连线交互) */
+[data-node-fullscreen-content] > [data-id] .react-flow__handle {
+  display: none !important;
+}
+
+/* 全屏下节点内的 max-h 限制一律移除 */
+[data-node-fullscreen-content] > [data-id] [class*="max-h-"] {
+  max-height: none !important;
+  overflow-y: visible !important;
+}
+`;
+
+/** 注入全屏覆盖样式 */
+function injectFullscreenStyle() {
+  if (document.getElementById(FULLSCREEN_STYLE_ID)) return;
+  const style = document.createElement('style');
+  style.id = FULLSCREEN_STYLE_ID;
+  style.textContent = FULLSCREEN_CSS;
+  document.head.appendChild(style);
+}
+
+/** 移除全屏覆盖样式 */
+function removeFullscreenStyle() {
+  const style = document.getElementById(FULLSCREEN_STYLE_ID);
+  if (style) style.remove();
+}
 
 const NodeFullscreenOverlay = () => {
   const fullscreenNodeId = useFullscreenNodeStore((s) => s.fullscreenNodeId);
@@ -42,6 +113,8 @@ const NodeFullscreenOverlay = () => {
     nextSibling: Node | null;
     el: HTMLElement;
     originalCssText: string;
+    /** 保存被移除的 Tailwind 宽度 class */
+    removedClasses: string[];
   } | null>(null);
 
   const close = useCallback(() => {
@@ -49,6 +122,10 @@ const NodeFullscreenOverlay = () => {
     if (saved) {
       // 恢复原始样式
       saved.el.style.cssText = saved.originalCssText;
+      // 恢复被移除的 class
+      for (const cls of saved.removedClasses) {
+        saved.el.classList.add(cls);
+      }
       // 移回原位
       try {
         if (saved.nextSibling && saved.nextSibling.parentNode === saved.parent) {
@@ -61,6 +138,7 @@ const NodeFullscreenOverlay = () => {
       }
       savedRef.current = null;
     }
+    removeFullscreenStyle();
     setFullscreenNode(null);
   }, [setFullscreenNode]);
 
@@ -76,19 +154,43 @@ const NodeFullscreenOverlay = () => {
       const container = containerRef.current;
       if (!nodeEl || !container) return;
 
+      // 收集需要移除的固定宽度 class (w-[320px], w-[360px] 等)
+      const widthClasses: string[] = [];
+      for (const cls of Array.from(nodeEl.classList)) {
+        if (/^w-\[\d+px\]$/.test(cls) || /^w-\d+$/.test(cls)) {
+          widthClasses.push(cls);
+        }
+      }
+      // 同样检查第一个子 div (节点内容容器)
+      const firstChild = nodeEl.firstElementChild as HTMLElement | null;
+      if (firstChild) {
+        for (const cls of Array.from(firstChild.classList)) {
+          if (/^w-\[\d+px\]$/.test(cls) || /^w-\d+$/.test(cls)) {
+            widthClasses.push(cls);
+          }
+        }
+      }
+
       // 保存原始状态
       savedRef.current = {
         parent: nodeEl.parentElement!,
         nextSibling: nodeEl.nextSibling,
         el: nodeEl,
         originalCssText: nodeEl.style.cssText,
+        removedClasses: widthClasses,
       };
+
+      // 移除固定宽度 class
+      for (const cls of widthClasses) {
+        nodeEl.classList.remove(cls);
+        firstChild?.classList.remove(cls);
+      }
 
       // 移入全屏容器
       container.appendChild(nodeEl);
 
-      // 覆盖 ReactFlow 的定位样式
-      Object.assign(nodeEl.style, FULLSCREEN_OVERRIDE);
+      // 注入全屏覆盖样式
+      injectFullscreenStyle();
     });
 
     return () => {
@@ -97,6 +199,9 @@ const NodeFullscreenOverlay = () => {
       const saved = savedRef.current;
       if (saved) {
         saved.el.style.cssText = saved.originalCssText;
+        for (const cls of saved.removedClasses) {
+          saved.el.classList.add(cls);
+        }
         try {
           if (saved.nextSibling && saved.nextSibling.parentNode === saved.parent) {
             saved.parent.insertBefore(saved.el, saved.nextSibling);
@@ -108,6 +213,7 @@ const NodeFullscreenOverlay = () => {
         }
         savedRef.current = null;
       }
+      removeFullscreenStyle();
     };
   }, [fullscreenNodeId]);
 
@@ -207,9 +313,10 @@ const NodeFullscreenOverlay = () => {
         </button>
       </div>
 
-      {/* 节点容器 */}
+      {/* 节点容器: CSS 选择器锚点 data-node-fullscreen-content */}
       <div
         ref={containerRef}
+        data-node-fullscreen-content
         className="nodrag nopan"
         style={{
           flex: 1,

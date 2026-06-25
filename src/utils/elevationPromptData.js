@@ -104,7 +104,11 @@ function distributeSections(sections, count) {
 export function wallsFromAnalysis(analysisValue, mode = 'multi', count = 3) {
   const analysis = normalizeElevationAnalysis(analysisValue);
   const sections = analysis.sections;
-  const wallCount = mode === 'single' ? 1 : Math.max(1, Math.min(12, Number(count) || sections.length || 3));
+  const wallCount = mode === 'single'
+    ? 1
+    : mode === 'auto'
+      ? Math.max(1, Math.min(12, sections.length || Number(count) || 3))
+      : Math.max(1, Math.min(12, Number(count) || sections.length || 3));
   const buckets = distributeSections(sections, wallCount);
   return buckets.map((bucket, index) => {
     const titles = bucket.map((item) => item.shortTitle || item.title).filter(Boolean);
@@ -255,7 +259,7 @@ export function parseElevationContentPlanResponse(content) {
 
 export function buildElevationContentPlanMessages(values = {}) {
   const sourceText = cleanText(values.sourceText, 100000);
-  const wallMode = values.wallMode === 'single' ? 'single' : 'multi';
+  const wallMode = values.wallMode === 'single' ? 'single' : values.wallMode === 'auto' ? 'auto' : 'multi';
   const wallCount = wallMode === 'single' ? 1 : Math.max(1, Math.min(12, Number(values.wallCount) || 3));
   const craftOptions = selectedCraftMetas(values.selectedCrafts, values.customCraft, values.craftPresets);
   const craftTextForPrompt = craftOptions.length
@@ -270,7 +274,9 @@ export function buildElevationContentPlanMessages(values = {}) {
         lightingPrecondition,
         '不要先做资料提炼说明，不要输出 Markdown，不要解释，只输出 JSON。',
         'JSON 结构必须为：{"projectTheme":"项目主题","coreMessage":"核心叙事","walls":[{"id":"wall-1","title":"立面标题","content":"具体展示内容与画面组织描述","exactText":["建议清晰出现的短标题或关键词"],"craftIds":["从候选工艺 id 中选择本立面适合的若干项"],"craftNotes":"说明这些工艺如何服务具体内容"}]}。',
-        `立面数量：${wallCount}；${wallMode === 'single' ? '只生成一个综合立面。' : '按内容自然分配为多个连续立面。'}`,
+        wallMode === 'auto'
+          ? '立面数量：由你根据内容体量、叙事节奏和展墙连续性自动判断，输出 1 到 12 个连续立面；每个 walls 条目就是一个立面。'
+          : `立面数量：${wallCount}；${wallMode === 'single' ? '只生成一个综合立面。' : '按内容自然分配为多个连续立面。'}`,
         '每个立面不需要使用全部候选工艺，只选择最合适的工艺。必须写清工艺如何承载具体内容，例如：用立体字展示标题、用图文展板展示青花瓷纹样、用沿墙文物柜展示青花瓷展品、用灯箱突出重点图像。',
         '不得虚构用户内容中没有的关键事实；可以把长内容转化为适合上墙的短标题、关键词、图文展示重点和展品展示方式。',
         `候选工艺：\n${craftTextForPrompt}`,
@@ -290,7 +296,7 @@ function stripWallSegmentHeading(text) {
 }
 
 export function buildElevationOutputs(values = {}) {
-  const mode = values.wallMode === 'single' ? 'single' : 'multi';
+  const mode = values.wallMode === 'single' ? 'single' : values.wallMode === 'auto' ? 'auto' : 'multi';
   const analysis = normalizeElevationAnalysis(values.analysis);
   let walls = Array.isArray(values.walls) ? values.walls.filter(Boolean) : [];
   if (mode === 'single' && walls.length > 1) {
@@ -331,7 +337,7 @@ export function buildElevationOutputs(values = {}) {
     : contentMode === 'combined'
       ? `${overviewPrompt}\n\n===== 准确图文工艺排版清单 =====\n${layoutSchedule}`
       : overviewPrompt;
-  const useSegments = mode === 'multi' && values.outputMode === 'segments';
+  const useSegments = mode !== 'single' && values.outputMode === 'segments';
   return {
     walls,
     conceptPrompts,
@@ -348,7 +354,9 @@ export function buildElevationAnalysisMessages(sourceText, wallMode = 'multi', w
   const targetWordCount = Math.max(200, Math.min(3000, Number(wordCount) || 1200));
   const countInstruction = wallMode === 'single'
     ? '按一个主题立面组织内容'
-    : `建议拆分为约 ${Math.max(1, Math.min(12, Number(wallCount) || 3))} 个连续立面章节`;
+    : wallMode === 'auto'
+      ? '请根据内容体量、叙事阶段、主题边界和展墙连续性，自动拆分为 1 到 12 个连续立面章节；sections 数组的长度就是最终立面数量，不要为了凑数拆得过碎，也不要把明显不同主题强行合并。'
+      : `建议拆分为约 ${Math.max(1, Math.min(12, Number(wallCount) || 3))} 个连续立面章节`;
   const wordInstruction = `提炼总字数控制在约 ${targetWordCount} 字，允许上下浮动 20%；projectTheme 简短，coreMessage 和各章节 displayFocus 只保留关键设计信息，keyQuotes 为原文摘录且不计入改写字数。`;
   return [
     {
