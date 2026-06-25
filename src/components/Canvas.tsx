@@ -426,6 +426,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     palettePresetInitialized: false,
     primaryColor: '#1f5f8b',
     secondaryColor: '#c7a76c',
+    harmonyColor: '#e7dcc7',
     accentColor: '#e94b35',
     brightness: 0,
     excludeItems: ['exhibit', 'sand-table', 'sculpture'],

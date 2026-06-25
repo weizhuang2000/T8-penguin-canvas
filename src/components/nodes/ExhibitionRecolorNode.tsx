@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
-import { ChevronDown, ChevronRight, Image as ImageIcon, Loader2, Palette, Play, Settings, SlidersHorizontal, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText, Image as ImageIcon, Loader2, Palette, Play, Settings, SlidersHorizontal, X } from 'lucide-react';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
 import {
   getCurrentUser,
@@ -154,9 +154,33 @@ function parsePalettePresetFromLlm(text: string, fallbackLabel: string): Omit<Ex
     category: String(source.category || source.group || 'AI 生成').trim().slice(0, 40) || 'AI 生成',
     primaryColor: normalizeExhibitionRecolorColor(source.primaryColor || source.primary || source.mainColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.primaryColor),
     secondaryColor: normalizeExhibitionRecolorColor(source.secondaryColor || source.secondary || source.supportColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.secondaryColor),
+    harmonyColor: normalizeExhibitionRecolorColor(source.harmonyColor || source.harmony || source.neutralColor || source.baseColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.harmonyColor),
     accentColor: normalizeExhibitionRecolorColor(source.accentColor || source.accent || source.highlightColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.accentColor),
     description,
   };
+}
+
+function parsePaletteBatchText(text: string, offset = 0): ExhibitionRecolorPalettePresetItem[] {
+  return String(text || '')
+    .split(/\r?\n/)
+    .map((line, index) => {
+      const parts = line.split(/[｜|]/).map((part) => part.trim());
+      if (parts.every((part) => !part)) return null;
+      const [category, label, primaryColor, secondaryColor, harmonyColor, accentColor, ...descriptionParts] = parts;
+      if (!category || !label || !primaryColor || !secondaryColor || !harmonyColor || !accentColor) return null;
+      return {
+        id: `palette-batch-${Date.now()}-${offset + index + 1}`,
+        category,
+        label,
+        primaryColor: normalizeExhibitionRecolorColor(primaryColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.primaryColor),
+        secondaryColor: normalizeExhibitionRecolorColor(secondaryColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.secondaryColor),
+        harmonyColor: normalizeExhibitionRecolorColor(harmonyColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.harmonyColor),
+        accentColor: normalizeExhibitionRecolorColor(accentColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.accentColor),
+        description: descriptionParts.join('｜').trim(),
+        order: offset + index,
+      };
+    })
+    .filter(Boolean) as ExhibitionRecolorPalettePresetItem[];
 }
 
 function ColorControl({
@@ -217,6 +241,9 @@ function PaletteEditorModal({
   const [aiLlmKeyId, setAiLlmKeyId] = useState('');
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiError, setAiError] = useState('');
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [batchText, setBatchText] = useState('');
+  const [batchError, setBatchError] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const llmConfigOptions = useMemo(() => {
     const saved = (Array.isArray(llmConfigs) ? llmConfigs : []).filter((item) => item && (item.hasApiKey || item.apiKey || item.baseUrl || item.model));
@@ -272,8 +299,8 @@ function PaletteEditorModal({
           {
             role: 'user',
             content: [
-              '根据用户需求创建一个展陈空间三色色调预设。',
-              '只返回 JSON 对象，字段必须是：label, category, primaryColor, secondaryColor, accentColor, description。',
+              '根据用户需求创建一个展陈空间四色色调预设。',
+              '只返回 JSON 对象，字段必须是：label, category, primaryColor, secondaryColor, harmonyColor, accentColor, description。',
               '颜色必须是 #RRGGBB 格式；description 用中文说明色彩气质、适用展陈场景和使用注意，不超过 80 字。',
               `用户需求：${requirement}`,
             ].join('\n'),
@@ -292,6 +319,17 @@ function PaletteEditorModal({
     } finally {
       setAiGenerating(false);
     }
+  };
+  const applyBatchText = () => {
+    const nextItems = parsePaletteBatchText(batchText, drafts.length);
+    if (!nextItems.length) {
+      setBatchError('请按“分类｜名称｜主色调｜辅助色调｜调和色｜点缀色｜说明”格式填写，每行一个预设。');
+      return;
+    }
+    setDrafts((items) => [...items, ...nextItems.map((item, index) => ({ ...item, order: items.length + index }))]);
+    setBatchText('');
+    setBatchError('');
+    setBatchOpen(false);
   };
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4">
@@ -326,11 +364,36 @@ function PaletteEditorModal({
           </div>
           <div className="flex items-center justify-between gap-2 text-[10px] text-white/45">
             <span className="truncate">模型：{aiLlmModel}</span>
-            <button type="button" className={`${BUTTON} shrink-0 border-emerald-300/30 bg-emerald-300/15 text-emerald-100`} disabled={saving || aiGenerating} onClick={() => void generateAiPreset()}>
-              {aiGenerating ? <Loader2 size={12} className="animate-spin" /> : <Palette size={12} />} AI 增加预设
-            </button>
+            <div className="flex shrink-0 items-center gap-1">
+              <button type="button" className={`${BUTTON} border-emerald-300/30 bg-emerald-300/15 text-emerald-100`} disabled={saving || aiGenerating} onClick={() => void generateAiPreset()}>
+                {aiGenerating ? <Loader2 size={12} className="animate-spin" /> : <Palette size={12} />} AI 增加预设
+              </button>
+              <button type="button" className={BUTTON} disabled={saving || aiGenerating} onClick={() => setBatchOpen((value) => !value)}>
+                <FileText size={12} /> 批量添加
+              </button>
+            </div>
             {aiError && <span className="shrink-0 text-red-200">{aiError}</span>}
           </div>
+          {batchOpen && (
+            <div className="space-y-1 rounded border border-white/10 bg-black/15 p-2">
+              <div className="text-[10px] leading-snug text-white/45">每行一个预设：分类｜名称｜主色调｜辅助色调｜调和色｜点缀色｜说明</div>
+              <textarea
+                className={`${FIELD} min-h-[92px] resize-y font-mono`}
+                value={batchText}
+                disabled={saving}
+                placeholder="文化展陈｜深蓝暖金｜#1f5f8b｜#c7a76c｜#e7dcc7｜#e94b35｜沉稳蓝色主调，暖金辅助"
+                onChange={(event) => {
+                  setBatchText(event.target.value);
+                  setBatchError('');
+                }}
+              />
+              {batchError && <div className="text-[10px] text-red-200">{batchError}</div>}
+              <div className="flex justify-end gap-1">
+                <button type="button" className={BUTTON} disabled={saving} onClick={() => setBatchOpen(false)}>取消</button>
+                <button type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={saving} onClick={applyBatchText}>添加到列表</button>
+              </div>
+            </div>
+          )}
         </div>
         <div className="max-h-[520px] space-y-2 overflow-y-auto">
           {draftGroups.map((group) => (
@@ -347,13 +410,13 @@ function PaletteEditorModal({
                 <span className="text-white/35">{group.items.length} 项</span>
               </button>
               {expandedCategories.has(group.category) && group.items.map(({ item, index }) => (
-                <div key={item.id || index} className="grid grid-cols-[1fr_92px_92px_92px_32px] gap-2 rounded border border-white/10 bg-white/[0.035] p-2">
+                <div key={item.id || index} className="grid grid-cols-[1fr_76px_76px_76px_76px_32px] gap-2 rounded border border-white/10 bg-white/[0.035] p-2">
                   <div className="space-y-1">
                     <input className={FIELD} value={item.label} disabled={saving} placeholder="预设名称" onChange={(event) => patch(index, { label: event.target.value })} />
                     <input className={FIELD} value={item.category || ''} disabled={saving} placeholder="分类" onChange={(event) => patch(index, { category: event.target.value })} />
                     <input className={FIELD} value={item.description || ''} disabled={saving} placeholder="说明" onChange={(event) => patch(index, { description: event.target.value })} />
                   </div>
-                  {(['primaryColor', 'secondaryColor', 'accentColor'] as const).map((key) => (
+                  {(['primaryColor', 'secondaryColor', 'harmonyColor', 'accentColor'] as const).map((key) => (
                     <input
                       key={key}
                       type="color"
@@ -384,6 +447,7 @@ function PaletteEditorModal({
             category: '未分类',
             primaryColor: EXHIBITION_RECOLOR_DEFAULT_COLORS.primaryColor,
             secondaryColor: EXHIBITION_RECOLOR_DEFAULT_COLORS.secondaryColor,
+            harmonyColor: EXHIBITION_RECOLOR_DEFAULT_COLORS.harmonyColor,
             accentColor: EXHIBITION_RECOLOR_DEFAULT_COLORS.accentColor,
             description: '',
             order: items.length,
@@ -565,6 +629,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
   const toneEnabled = d.toneEnabled !== false;
   const primaryColor = normalizeExhibitionRecolorColor(d.primaryColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.primaryColor);
   const secondaryColor = normalizeExhibitionRecolorColor(d.secondaryColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.secondaryColor);
+  const harmonyColor = normalizeExhibitionRecolorColor(d.harmonyColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.harmonyColor);
   const accentColor = normalizeExhibitionRecolorColor(d.accentColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.accentColor);
   const brightness = normalizeExhibitionRecolorBrightness(d.brightness);
   const selectedExcludeItems = useMemo(() => (
@@ -602,6 +667,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
     toneEnabled,
     primaryColor,
     secondaryColor,
+    harmonyColor,
     accentColor,
     brightness,
     excludeItems: selectedExcludeItems,
@@ -609,7 +675,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
     manualExclusions: d.manualExclusions,
     floorPrompt: selectedFloor?.prompt,
     ceilingPrompt: selectedCeiling?.prompt,
-  }), [accentColor, brightness, d.manualExclusions, exclusions, primaryColor, secondaryColor, selectedCeiling?.prompt, selectedExcludeItems, selectedFloor?.prompt, toneEnabled]);
+  }), [accentColor, brightness, d.manualExclusions, exclusions, harmonyColor, primaryColor, secondaryColor, selectedCeiling?.prompt, selectedExcludeItems, selectedFloor?.prompt, toneEnabled]);
 
   useEffect(() => {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
@@ -636,6 +702,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
       palettePresetInitialized: true,
       primaryColor: first.primaryColor,
       secondaryColor: first.secondaryColor,
+      harmonyColor: first.harmonyColor,
       accentColor: first.accentColor,
     });
   }, [d.palettePresetId, d.palettePresetInitialized, palettes, update]);
@@ -684,6 +751,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
       palettePresetId: palette.id,
       primaryColor: palette.primaryColor,
       secondaryColor: palette.secondaryColor,
+      harmonyColor: palette.harmonyColor,
       accentColor: palette.accentColor,
     });
   };
@@ -989,9 +1057,10 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
             ))}
           </select>
           {selectedPalette?.description && <div className="rounded border border-cyan-300/15 bg-cyan-300/5 px-2 py-1 text-[10px] leading-snug text-cyan-50/70">{selectedPalette.description}</div>}
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             <ColorControl label="主色调" value={primaryColor} disabled={isReadonly || busy || !toneEnabled} onChange={(value) => update({ primaryColor: value, palettePresetId: '' })} />
             <ColorControl label="辅助色调" value={secondaryColor} disabled={isReadonly || busy || !toneEnabled} onChange={(value) => update({ secondaryColor: value, palettePresetId: '' })} />
+            <ColorControl label="调和色" value={harmonyColor} disabled={isReadonly || busy || !toneEnabled} onChange={(value) => update({ harmonyColor: value, palettePresetId: '' })} />
             <ColorControl label="点缀色" value={accentColor} disabled={isReadonly || busy || !toneEnabled} onChange={(value) => update({ accentColor: value, palettePresetId: '' })} />
           </div>
           <label className="block rounded border border-white/10 bg-black/15 p-2">

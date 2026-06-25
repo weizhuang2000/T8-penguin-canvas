@@ -467,6 +467,7 @@ export interface ExhibitionRecolorPalettePresetItem {
   category: string;
   primaryColor: string;
   secondaryColor: string;
+  harmonyColor: string;
   accentColor: string;
   description: string;
   order: number;
@@ -697,7 +698,7 @@ export async function getExhibitionRecolorPromptPresets(): Promise<ExhibitionRec
 }
 
 export async function updateExhibitionRecolorPalettePresets(
-  presets: Array<Pick<ExhibitionRecolorPalettePresetItem, 'label' | 'primaryColor' | 'secondaryColor' | 'accentColor'> & Partial<Pick<ExhibitionRecolorPalettePresetItem, 'id' | 'category' | 'description' | 'order'>>>,
+  presets: Array<Pick<ExhibitionRecolorPalettePresetItem, 'label' | 'primaryColor' | 'secondaryColor' | 'accentColor'> & Partial<Pick<ExhibitionRecolorPalettePresetItem, 'id' | 'category' | 'harmonyColor' | 'description' | 'order'>>>,
 ): Promise<ExhibitionRecolorPalettePresetItem[]> {
   const res = await request<{ success: boolean; data: ExhibitionRecolorPalettePresetItem[] }>(
     `${BASE}/prompt-library/exhibition-recolor/presets/palettes`,

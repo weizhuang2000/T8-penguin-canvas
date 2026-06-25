@@ -16,6 +16,7 @@ test('exhibition recolor node is registered across frontend and permissions', ()
   assert.match(read('src/components/Canvas.tsx'), /ExhibitionRecolorNode/);
   assert.match(read('src/components/Canvas.tsx'), /'exhibition-recolor': ExhibitionRecolorNode/);
   assert.match(read('src/components/Canvas.tsx'), /primaryColor: '#1f5f8b'/);
+  assert.match(read('src/components/Canvas.tsx'), /harmonyColor: '#e7dcc7'/);
   assert.match(read('src/components/Canvas.tsx'), /toneEnabled: true/);
   assert.match(read('src/components/Canvas.tsx'), /excludeItems: \['exhibit', 'sand-table', 'sculpture'\]/);
   assert.match(read('src/components/Canvas.tsx'), /floorPresetId: ''/);
@@ -40,7 +41,10 @@ test('exhibition recolor node wires presets, color controls and image generation
   assert.match(source, /generateLlm/);
   assert.match(source, /parsePalettePresetFromLlm/);
   assert.match(source, /AI 增加预设/);
-  assert.match(source, /category, primaryColor, secondaryColor, accentColor/);
+  assert.match(source, /批量添加/);
+  assert.match(source, /parsePaletteBatchText/);
+  assert.match(source, /category, primaryColor, secondaryColor, harmonyColor, accentColor/);
+  assert.match(source, /label="调和色"/);
   assert.match(source, /placeholder="分类"/);
   assert.match(source, /draftGroups/);
   assert.match(source, /expandedCategories/);
@@ -57,9 +61,8 @@ test('exhibition recolor node wires presets, color controls and image generation
   assert.match(source, /queryImageStatus/);
   assert.match(source, /id="original-image"/);
   assert.match(source, /sourceNodeType: 'exhibition-recolor'/);
-  assert.match(source, /NODE_RUN_BUTTON/);
-  assert.match(source, /absolute -right-2 -top-3/);
-  assert.match(source, /bg-emerald-400\/90/);
+  assert.match(source, /生成换色图/);
+  assert.match(source, /<Play size=\{13\}/);
 
   const api = read('src/services/api.ts');
   assert.match(api, /ExhibitionRecolorPalettePresetItem/);

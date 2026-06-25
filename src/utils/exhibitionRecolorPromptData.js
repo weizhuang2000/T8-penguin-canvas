@@ -1,6 +1,7 @@
 export const EXHIBITION_RECOLOR_DEFAULT_COLORS = {
   primaryColor: '#1f5f8b',
   secondaryColor: '#c7a76c',
+  harmonyColor: '#e7dcc7',
   accentColor: '#e94b35',
 };
 
@@ -62,6 +63,7 @@ export function buildExhibitionRecolorPrompt(values = {}) {
   const toneEnabled = values.toneEnabled !== false;
   const primaryColor = normalizeExhibitionRecolorColor(values.primaryColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.primaryColor);
   const secondaryColor = normalizeExhibitionRecolorColor(values.secondaryColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.secondaryColor);
+  const harmonyColor = normalizeExhibitionRecolorColor(values.harmonyColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.harmonyColor);
   const accentColor = normalizeExhibitionRecolorColor(values.accentColor, EXHIBITION_RECOLOR_DEFAULT_COLORS.accentColor);
   const protectPresetText = exhibitionRecolorExcludeItemsText(values.excludeItems, values.excludeItemOptions);
   const manualExclusions = cleanText(values.manualExclusions, 1000);
@@ -73,7 +75,7 @@ export function buildExhibitionRecolorPrompt(values = {}) {
     '',
     '原始图像是唯一结构来源。必须保持原图的空间结构、构图、视角、镜头高度、透视关系、比例尺度、展陈动线、灯具位置、展墙、展柜、展台、导视、文字区域和所有细节关系不变。',
     '',
-    `新色调：主色调 ${primaryColor}；辅助色调 ${secondaryColor}；点缀色 ${accentColor}。`,
+    `新色调：主色调 ${primaryColor}；辅助色调 ${secondaryColor}；调和色 ${harmonyColor}；点缀色 ${accentColor}。`,
     `明暗度调整：${brightnessText(values.brightness)}。`,
     '',
     '允许改变：展陈环境中的墙面、地面、背景板、装饰面、局部灯光氛围、导视色块、标题字背景、收边构件和非保护对象周边环境的色彩倾向与明暗关系。',
@@ -85,7 +87,7 @@ export function buildExhibitionRecolorPrompt(values = {}) {
     lines.splice(
       4,
       6,
-      '色调模块：已关闭。不要执行主色调、辅助色调或点缀色调整；保持原图的环境色彩体系、原有色温和色彩关系。',
+      '色调模块：已关闭。不要执行主色调、辅助色调、调和色或点缀色调整；保持原图的环境色彩体系、原有色温和色彩关系。',
       `明暗度调整：${brightnessText(values.brightness)}。`,
       '',
       '允许改变：整体明暗度关系，以及已启用的地面、天花板等专项调整。',
@@ -109,7 +111,7 @@ export function buildExhibitionRecolorPrompt(values = {}) {
     '文字与标识约束：保留原图文字和标识所在区域、层级和排版关系；不要生成新的可读文字，不要改写原有文字，不要把提示词字段渲染到画面里。',
     '',
     toneEnabled
-      ? '最终输出：画面必须一眼可识别为同一张原始展陈空间图，只在主色调、辅助色调、点缀色和明暗度上完成换色。'
+      ? '最终输出：画面必须一眼可识别为同一张原始展陈空间图，只在主色调、辅助色调、调和色、点缀色和明暗度上完成换色。'
       : '最终输出：画面必须一眼可识别为同一张原始展陈空间图，不执行色调换色，但保留明暗度调整并应用已启用的其他专项调整。',
   );
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();

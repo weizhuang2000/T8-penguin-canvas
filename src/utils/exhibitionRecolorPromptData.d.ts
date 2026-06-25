@@ -1,6 +1,7 @@
 export interface ExhibitionRecolorColorSet {
   primaryColor: string;
   secondaryColor: string;
+  harmonyColor: string;
   accentColor: string;
 }
 
@@ -14,6 +15,7 @@ export interface ExhibitionRecolorPromptValues {
   toneEnabled?: boolean;
   primaryColor?: string;
   secondaryColor?: string;
+  harmonyColor?: string;
   accentColor?: string;
   brightness?: number;
   excludeItems?: string[];

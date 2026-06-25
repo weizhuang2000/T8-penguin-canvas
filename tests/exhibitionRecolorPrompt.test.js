@@ -10,6 +10,7 @@ test('exhibition recolor prompt includes colors brightness and protected exclusi
   const prompt = buildExhibitionRecolorPrompt({
     primaryColor: '#123456',
     secondaryColor: '#abc',
+    harmonyColor: '#ddeeff',
     accentColor: '#fedcba',
     brightness: 28,
     excludeItems: ['exhibit', 'sand-table', 'sculpture'],
@@ -20,6 +21,7 @@ test('exhibition recolor prompt includes colors brightness and protected exclusi
 
   assert.match(prompt, /主色调 #123456/);
   assert.match(prompt, /辅助色调 #aabbcc/);
+  assert.match(prompt, /调和色 #ddeeff/);
   assert.match(prompt, /点缀色 #fedcba/);
   assert.match(prompt, /整体明暗度提高 28%/);
   assert.match(prompt, /保护排除项：展品、沙盘和雕塑、核心展柜、青铜器/);
@@ -49,15 +51,17 @@ test('exhibition recolor prompt can disable tone recoloring', () => {
     toneEnabled: false,
     primaryColor: '#123456',
     secondaryColor: '#abcdef',
+    harmonyColor: '#ddeeff',
     accentColor: '#fedcba',
     brightness: 30,
     floorPrompt: '地面改为浅灰石材',
   });
 
   assert.match(prompt, /色调模块：已关闭/);
-  assert.match(prompt, /不要执行主色调、辅助色调或点缀色调整/);
+  assert.match(prompt, /不要执行主色调、辅助色调、调和色或点缀色调整/);
   assert.doesNotMatch(prompt, /主色调 #123456/);
   assert.doesNotMatch(prompt, /辅助色调 #abcdef/);
+  assert.doesNotMatch(prompt, /调和色 #ddeeff/);
   assert.doesNotMatch(prompt, /点缀色 #fedcba/);
   assert.match(prompt, /整体明暗度提高 30%/);
   assert.match(prompt, /地面：地面改为浅灰石材/);
