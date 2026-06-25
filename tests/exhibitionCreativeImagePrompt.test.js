@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   buildExhibitionCreativeBriefPrompt,
   buildExhibitionCreativeImagePrompt,
@@ -245,4 +246,16 @@ test('exhibition creative prompt normalizes count, space type and brief wrappers
   assert.equal(normalizeExhibitionCreativeCount(0), 1);
   assert.equal(normalizeExhibitionCreativeSpaceType('unknown'), 'intro-hall');
   assert.equal(normalizeExhibitionCreativeBrief('```markdown\n创意描述：空间入口设置发光序章。\n```'), '空间入口设置发光序章。');
+});
+
+test('exhibition creative image node supports random categorized insert items', () => {
+  const node = readFileSync(new URL('../src/components/nodes/ExhibitionCreativeImageNode.tsx', import.meta.url), 'utf8');
+  const canvas = readFileSync(new URL('../src/components/Canvas.tsx', import.meta.url), 'utf8');
+  const backend = readFileSync(new URL('../backend/src/routes/promptLibrary.js', import.meta.url), 'utf8');
+  assert.match(node, /INSERT_CATEGORIES = \['装饰', '多媒体', '艺术品', '展陈', '展柜', '展台', '顶部', '其它'\]/);
+  assert.match(node, /insertRandomCounts/);
+  assert.match(node, /resolveRuntimeInsertItems/);
+  assert.match(node, /随机数量会在每次运行时/);
+  assert.match(canvas, /insertRandomCounts: \{\}/);
+  assert.match(backend, /EXHIBITION_CREATIVE_INSERT_CATEGORIES/);
 });

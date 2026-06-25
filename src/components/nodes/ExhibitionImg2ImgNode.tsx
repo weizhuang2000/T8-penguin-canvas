@@ -85,6 +85,8 @@ const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border
 const DEFAULT_CRAFTS = ['panel', 'dimensional-letters', 'soft-film-lightbox'];
 const CRAFT_CATEGORIES = ['装饰', '多媒体', '艺术品', '展陈', '展柜', '展台', '顶部', '其它'] as const;
 const DEFAULT_CRAFT_CATEGORY = '其它';
+const MIN_IMAGE_COUNT = 1;
+const MAX_IMAGE_COUNT = 4;
 const MAX_IMAGE_SEED = 2147483647;
 const EXTERNAL_SIZE_LEVELS = ['1K', '2K', '4K'];
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
@@ -1636,6 +1638,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const aspectRatio = d.aspectRatio || modelDef.defaultAspectRatio || '1:1';
   const sizeLevel = d.sizeLevel || modelDef.defaultSize || '2K';
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
+  const generationCount = clampNumber(d.generationCount, MIN_IMAGE_COUNT, MAX_IMAGE_COUNT, 1);
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
 
   const structureImage = useHandleImage(id, 'structure');
@@ -2571,7 +2574,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           images: runtimeReferenceImages,
           outputFormat,
           seed: runSeed,
-          n: Math.max(1, Math.min(4, Number(providerParams.n || 1))),
+          n: generationCount,
           providerParams,
           historyContext,
           async: true,
@@ -2631,7 +2634,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         aspect_ratio: aspectRatio,
         image_size: sizeLevel,
         images: runtimeReferenceImages,
-        n: 1,
+        n: generationCount,
         outputFormat,
         seed: runSeed,
         historyContext,
@@ -3476,6 +3479,32 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                 );
               })}
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2 text-[10px] text-white/60">
+              <span>生图数量</span>
+              <input
+                className="h-7 w-16 rounded border border-white/10 bg-black/20 px-2 text-center text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55"
+                type="number"
+                min={MIN_IMAGE_COUNT}
+                max={MAX_IMAGE_COUNT}
+                step={1}
+                value={generationCount}
+                disabled={isReadonly || busy}
+                onChange={(event) => update({ generationCount: clampNumber(event.target.value, MIN_IMAGE_COUNT, MAX_IMAGE_COUNT, 1) })}
+              />
+            </div>
+            <input
+              type="range"
+              min={MIN_IMAGE_COUNT}
+              max={MAX_IMAGE_COUNT}
+              step={1}
+              value={generationCount}
+              disabled={isReadonly || busy}
+              className="h-1 w-full accent-cyan-300"
+              onChange={(event) => update({ generationCount: clampNumber(event.target.value, MIN_IMAGE_COUNT, MAX_IMAGE_COUNT, 1) })}
+            />
           </div>
 
           <div>

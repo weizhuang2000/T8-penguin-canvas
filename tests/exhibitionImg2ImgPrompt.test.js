@@ -33,6 +33,9 @@ test('exhibition img2img craft presets are grouped by category', () => {
   assert.match(node, /resolveRuntimeCrafts/);
   assert.match(node, /随机数量会在每次运行时/);
   assert.match(canvas, /craftRandomCounts: \{\}/);
+  assert.match(canvas, /generationCount: 1/);
+  assert.match(node, /const generationCount = clampNumber\(d\.generationCount, MIN_IMAGE_COUNT, MAX_IMAGE_COUNT, 1\)/);
+  assert.match(node, /n: generationCount/);
   assert.match(backend, /ELEVATION_CRAFT_CATEGORIES/);
   assert.match(backend, /category: ELEVATION_CRAFT_CATEGORIES\.has\(category\) \? category : '其它'/);
 });

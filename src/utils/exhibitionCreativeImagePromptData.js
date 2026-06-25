@@ -34,7 +34,7 @@ export const EXHIBITION_CREATIVE_INSERT_ITEMS = [
   { id: 'showcase', label: '展柜' },
   { id: 'scene', label: '场景' },
   { id: 'artwork', label: '艺术品' },
-].map((item, index) => ({ ...item, order: index }));
+].map((item, index) => ({ ...item, category: '其它', order: index }));
 
 const INSERT_ITEM_IDS = new Set(EXHIBITION_CREATIVE_INSERT_ITEMS.map((item) => item.id));
 

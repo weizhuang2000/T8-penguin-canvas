@@ -126,6 +126,8 @@ const DEFAULT_ELEVATION_CRAFT_PRESETS = [
   { id: 'wayfinding', label: '导视标识', prompt: '统一的导视标识系统，编号与方向信息清晰' },
 ].map((item, index) => ({ ...item, order: index }));
 
+const EXHIBITION_CREATIVE_INSERT_CATEGORIES = new Set(['装饰', '多媒体', '艺术品', '展陈', '展柜', '展台', '顶部', '其它']);
+
 const DEFAULT_EXHIBITION_CREATIVE_INSERT_PRESETS = [
   { id: 'large-sculpture', label: '大型雕塑' },
   { id: 'relief', label: '浮雕' },
@@ -340,8 +342,10 @@ function normalizeCreativeInsertPresetList(value) {
       if (!id) id = `insert_${index + 1}`;
       while (used.has(id)) id = `${id}_${index + 1}`;
       used.add(id);
+      const category = safeText(raw?.category, 40);
       return {
         id,
+        category: EXHIBITION_CREATIVE_INSERT_CATEGORIES.has(category) ? category : '其它',
         label,
         order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,
       };

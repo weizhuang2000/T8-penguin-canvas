@@ -83,6 +83,8 @@ const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border
 const MAX_IMAGE_SEED = 2147483647;
 const MIN_GENERATION_COUNT = 1;
 const MAX_GENERATION_COUNT = 12;
+const INSERT_CATEGORIES = ['装饰', '多媒体', '艺术品', '展陈', '展柜', '展台', '顶部', '其它'] as const;
+const DEFAULT_INSERT_CATEGORY = '其它';
 const EXTERNAL_SIZE_LEVELS = ['1K', '2K', '4K'];
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
@@ -608,7 +610,31 @@ function fallbackCreativeBrief(values: {
 }
 
 function insertPresetEditorText(presets: ExhibitionCreativeInsertPresetItem[]) {
-  return presets.map((preset) => preset.label).join('\n');
+  return presets.map((preset) => `${normalizeInsertCategory(preset.category)}｜${preset.label}`).join('\n');
+}
+
+function normalizeInsertCategory(value: unknown) {
+  const raw = String(value || '').trim();
+  return (INSERT_CATEGORIES as readonly string[]).includes(raw) ? raw : DEFAULT_INSERT_CATEGORY;
+}
+
+function normalizeInsertRandomCounts(value: unknown): Record<string, number> {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const out: Record<string, number> = {};
+  INSERT_CATEGORIES.forEach((category) => {
+    const count = Math.floor(Number(source[category]) || 0);
+    out[category] = Math.max(0, Math.min(99, count));
+  });
+  return out;
+}
+
+function shuffleInsertIds(ids: string[]) {
+  const out = ids.slice();
+  for (let index = out.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [out[index], out[swapIndex]] = [out[swapIndex], out[index]];
+  }
+  return out;
 }
 
 function excludePresetEditorText(presets: ExhibitionCreativeExcludePresetItem[]) {
@@ -713,6 +739,27 @@ function parseLabelPresetEditorText(text: string, fallbackId: string) {
     .filter(Boolean) as Array<{ id: string; label: string; order: number }>;
 }
 
+function parseInsertPresetEditorText(text: string) {
+  return text
+    .split(/\r?\n/)
+    .map((line, index) => {
+      const raw = line.trim();
+      if (!raw) return null;
+      const parts = raw.split(/[｜|]/).map((part) => part.trim()).filter(Boolean);
+      const hasCategory = parts.length >= 2 && (INSERT_CATEGORIES as readonly string[]).includes(parts[0]);
+      const category = hasCategory ? parts[0] : DEFAULT_INSERT_CATEGORY;
+      const label = String(hasCategory ? parts[1] : parts[0] || '').trim();
+      if (!label) return null;
+      return {
+        id: `${label.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'insert'}-${index + 1}`,
+        category,
+        label,
+        order: index,
+      };
+    })
+    .filter(Boolean) as Array<{ id: string; category: string; label: string; order: number }>;
+}
+
 const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
@@ -804,6 +851,14 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     () => (insertPresets.length > 0 ? insertPresets : EXHIBITION_CREATIVE_INSERT_ITEMS),
     [insertPresets],
   );
+  const insertRandomCounts = useMemo(() => normalizeInsertRandomCounts(d.insertRandomCounts), [d.insertRandomCounts]);
+  const insertGroups = useMemo(
+    () => INSERT_CATEGORIES.map((category) => ({
+      category,
+      items: insertOptions.filter((item) => normalizeInsertCategory(item.category) === category),
+    })).filter((group) => group.items.length > 0),
+    [insertOptions],
+  );
   const excludeOptions = useMemo<ExhibitionCreativeExcludeItem[]>(
     () => (excludePresets.length > 0 ? excludePresets : EXHIBITION_CREATIVE_EXCLUDE_ITEMS),
     [excludePresets],
@@ -817,6 +872,20 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     [d.insertItems, insertOptions],
   );
   const selectedInsertIds = useMemo(() => selectedInsertItems.map((item) => item.id), [selectedInsertItems]);
+  const resolveRuntimeInsertItems = useCallback(() => {
+    const picked = new Set(selectedInsertIds);
+    for (const group of insertGroups) {
+      const count = insertRandomCounts[group.category] || 0;
+      if (count <= 0) continue;
+      const candidates = group.items
+        .map((item) => item.id)
+        .filter((itemId) => !picked.has(itemId));
+      for (const itemId of shuffleInsertIds(candidates).slice(0, count)) {
+        picked.add(itemId);
+      }
+    }
+    return Array.from(picked);
+  }, [insertGroups, insertRandomCounts, selectedInsertIds]);
   const selectedExcludeItems = useMemo(
     () => normalizeExhibitionCreativeExcludeItems(d.excludeItems, excludeOptions),
     [d.excludeItems, excludeOptions],
@@ -1186,7 +1255,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
 
   const saveInsertPresets = async () => {
     if (!canManageTeam) return;
-    const presets = parseLabelPresetEditorText(insertEditorValue, 'insert');
+    const presets = parseInsertPresetEditorText(insertEditorValue);
     if (presets.length === 0) {
       setInsertError('请至少保留一项植入内容。');
       return;
@@ -1255,6 +1324,13 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     update({ insertItems: next });
   };
 
+  const setInsertRandomCount = (category: string, value: string | number) => {
+    if (isReadonly || busy) return;
+    const next = normalizeInsertRandomCounts(insertRandomCounts);
+    next[category] = Math.max(0, Math.min(99, Math.floor(Number(value) || 0)));
+    update({ insertRandomCounts: next });
+  };
+
   const toggleExcludeItem = (itemId: string) => {
     if (isReadonly || busy) return;
     const next = selectedExcludeIds.includes(itemId)
@@ -1284,7 +1360,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     });
   };
 
-  const buildCreativeBrief = useCallback(async (roundIndex: number, previousBriefs: string[] = []) => {
+  const buildCreativeBrief = useCallback(async (roundIndex: number, previousBriefs: string[] = [], effectiveInsertIds = selectedInsertIds) => {
     const requestPrompt = buildExhibitionCreativeBriefPrompt({
       spaceType,
       projectTheme,
@@ -1292,7 +1368,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       hasColorMaterialReferenceImage: hasColorMaterialReference,
       inspiration,
       documentSummary,
-      insertItems: selectedInsertIds,
+      insertItems: effectiveInsertIds,
       insertItemOptions: insertOptions,
       excludeItems: selectedExcludeIds,
       excludeItemOptions: excludeOptions,
@@ -1584,12 +1660,13 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           : await markImageDataUrl(colorMaterialReferenceImage, colorMaterialMarkSettings)
         : '';
       const runtimeReferenceImages = [spaceImage, colorMaterialReferenceForModel, ...exhibitReferenceImageUrls].filter(Boolean);
+      const runtimeInsertIds = resolveRuntimeInsertItems();
       let sharedBrief = creativeBrief;
       if (!regenerateEachTime) {
         if (!sharedBrief) {
           update({ progress: `创意描述 1/${generationCount}` });
           try {
-            sharedBrief = await buildCreativeBrief(1, []);
+            sharedBrief = await buildCreativeBrief(1, [], runtimeInsertIds);
           } catch (error: any) {
             const reason = llmErrorMessage(error);
             logBus.warn(`展陈创意描述失败，改用本地兜底描述: ${reason}`, src);
@@ -1599,7 +1676,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               colorMaterial: effectiveColorMaterial,
               inspiration,
               documentSummary,
-              insertItemsText: exhibitionCreativeInsertItemsText(selectedInsertIds, insertOptions),
+              insertItemsText: exhibitionCreativeInsertItemsText(runtimeInsertIds, insertOptions),
               excludeItemsText: exhibitionCreativeExcludeItemsText(selectedExcludeIds, excludeOptions),
               roundIndex: 1,
               total: generationCount,
@@ -1617,7 +1694,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
         let brief = sharedBrief;
         if (regenerateEachTime) {
           try {
-            brief = await buildCreativeBrief(index, briefs);
+            brief = await buildCreativeBrief(index, briefs, runtimeInsertIds);
           } catch (error: any) {
             const reason = llmErrorMessage(error);
             logBus.warn(`展陈创意描述失败，改用本地兜底描述: ${index}/${generationCount} ${reason}`, src);
@@ -1627,7 +1704,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               colorMaterial: effectiveColorMaterial,
               inspiration,
               documentSummary,
-              insertItemsText: exhibitionCreativeInsertItemsText(selectedInsertIds, insertOptions),
+              insertItemsText: exhibitionCreativeInsertItemsText(runtimeInsertIds, insertOptions),
               excludeItemsText: exhibitionCreativeExcludeItemsText(selectedExcludeIds, excludeOptions),
               roundIndex: index,
               total: generationCount,
@@ -1658,7 +1735,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           inspiration,
           documentSummary: documentSummaryForImagePrompt,
           creativeBrief: brief,
-          insertItems: selectedInsertIds,
+          insertItems: runtimeInsertIds,
           insertItemOptions: insertOptions,
           excludeItems: selectedExcludeIds,
           excludeItemOptions: excludeOptions,
@@ -2241,23 +2318,46 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                 </button>
               )}
             </div>
-            <div className="flex flex-wrap gap-1">
-              {insertOptions.map((item) => {
-                const active = selectedInsertIds.includes(item.id);
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    disabled={isReadonly || busy}
-                    className={`rounded border px-1.5 py-1 text-[10px] ${
-                      active ? 'border-cyan-300/55 bg-cyan-300/15 text-cyan-100' : 'border-white/10 bg-black/15 text-white/55 hover:bg-white/[0.08]'
-                    } disabled:opacity-50`}
-                    onClick={() => toggleInsertItem(item.id)}
-                  >
-                    {item.label}
-                  </button>
-                );
-              })}
+            <div className="space-y-1.5">
+              <div className="text-[9px] leading-snug text-white/35">随机数量会在每次运行时从该分类未手动选中的植入项中补选，不改变当前勾选状态。</div>
+              {insertGroups.map((group) => (
+                <div key={group.category} className="space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-[9px] font-semibold text-white/40">{group.category}</div>
+                    <label className="flex items-center gap-1 text-[9px] text-white/40">
+                      随机
+                      <input
+                        className="h-5 w-11 rounded border border-white/10 bg-black/20 px-1 text-center text-[10px] text-white/70 outline-none focus:border-cyan-300/60 disabled:opacity-45"
+                        type="number"
+                        min={0}
+                        max={Math.max(0, group.items.length - selectedInsertIds.filter((itemId) => group.items.some((item) => item.id === itemId)).length)}
+                        step={1}
+                        value={insertRandomCounts[group.category] || 0}
+                        disabled={isReadonly || busy}
+                        onChange={(event) => setInsertRandomCount(group.category, event.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {group.items.map((item) => {
+                      const active = selectedInsertIds.includes(item.id);
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          disabled={isReadonly || busy}
+                          className={`rounded border px-1.5 py-1 text-[10px] ${
+                            active ? 'border-cyan-300/55 bg-cyan-300/15 text-cyan-100' : 'border-white/10 bg-black/15 text-white/55 hover:bg-white/[0.08]'
+                          } disabled:opacity-50`}
+                          onClick={() => toggleInsertItem(item.id)}
+                        >
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
             {canManageTeam && insertEditorOpen && (
               <div className="space-y-1.5 rounded border border-cyan-300/15 bg-cyan-300/5 p-2">
@@ -2265,7 +2365,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                   className={`${FIELD} min-h-[92px] resize-y`}
                   value={insertEditorValue}
                   disabled={insertSaving || busy}
-                  placeholder="每行一个植入项，例如：大型雕塑"
+                  placeholder="每行一个植入项：分类｜名称；分类可用：装饰、多媒体、艺术品、展陈、展柜、展台、顶部、其它"
                   onChange={(event) => setInsertEditorValue(event.target.value)}
                 />
                 {insertError && <div className="text-[10px] text-red-200">{insertError}</div>}

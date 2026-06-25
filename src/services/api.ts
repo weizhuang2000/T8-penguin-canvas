@@ -411,6 +411,7 @@ export interface ElevationPromptPresetMap {
 
 export interface ExhibitionCreativeInsertPresetItem {
   id: string;
+  category?: string;
   label: string;
   order: number;
 }
@@ -597,7 +598,7 @@ export async function getExhibitionCreativePromptPresets(): Promise<ExhibitionCr
 }
 
 export async function updateExhibitionCreativeInsertPresets(
-  presets: Array<Pick<ExhibitionCreativeInsertPresetItem, 'label'> & Partial<Pick<ExhibitionCreativeInsertPresetItem, 'id' | 'order'>>>,
+  presets: Array<Pick<ExhibitionCreativeInsertPresetItem, 'label'> & Partial<Pick<ExhibitionCreativeInsertPresetItem, 'id' | 'category' | 'order'>>>,
 ): Promise<ExhibitionCreativeInsertPresetItem[]> {
   const res = await request<{ success: boolean; data: ExhibitionCreativeInsertPresetItem[] }>(
     `${BASE}/prompt-library/exhibition-creative/presets/inserts`,

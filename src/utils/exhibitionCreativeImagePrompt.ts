@@ -33,6 +33,7 @@ export interface ExhibitionCreativeSpaceTypeMeta {
 
 export interface ExhibitionCreativeInsertItem {
   id: string;
+  category?: string;
   label: string;
   order?: number;
 }
