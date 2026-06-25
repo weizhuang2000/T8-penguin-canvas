@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { CanvasListItem } from '../types/canvas';
+import type { CanvasAllUsersShare, CanvasListItem } from '../types/canvas';
 import * as api from '../services/api';
 
 interface CanvasStoreState {
@@ -13,7 +13,7 @@ interface CanvasStoreState {
   createCanvas: (name?: string) => Promise<CanvasListItem | null>;
   deleteCanvas: (id: string) => Promise<void>;
   renameCanvas: (id: string, name: string) => Promise<void>;
-  updateCanvasShares: (id: string, sharedWith: CanvasListItem['sharedWith']) => Promise<void>;
+  updateCanvasShares: (id: string, sharedWith: CanvasListItem['sharedWith'], allUsersShare?: Partial<CanvasAllUsersShare>) => Promise<void>;
   setActive: (id: string) => void;
 }
 
@@ -81,11 +81,11 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
     }
   },
 
-  async updateCanvasShares(id, sharedWith) {
+  async updateCanvasShares(id, sharedWith, allUsersShare) {
     try {
-      const updatedShares = await api.updateCanvasShares(id, sharedWith || []);
+      const updated = await api.updateCanvasShares(id, sharedWith || [], allUsersShare);
       set((s) => ({
-        canvases: s.canvases.map((x) => (x.id === id ? { ...x, sharedWith: updatedShares } : x)),
+        canvases: s.canvases.map((x) => (x.id === id ? { ...x, sharedWith: updated.sharedWith, allUsersShare: updated.allUsersShare } : x)),
       }));
     } catch (e: any) {
       set({ error: e?.message || '更新共享失败' });

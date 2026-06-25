@@ -11,6 +11,7 @@ const {
   canManageCanvasSharing,
   canViewCanvas,
   canvasAccessForUser,
+  normalizeAllUsersShare,
   normalizeSharedWith,
 } = access;
 
@@ -67,6 +68,19 @@ test('canvas list is filtered by owner and shares for normal users', () => {
   assert.equal(canvasAccessForUser(user, visible[1]).canEdit, false);
 });
 
+test('canvas list includes all-users shares and respects permission', () => {
+  const user = { id: '2', role: 'designer' };
+  const list = [
+    { id: 'public-view', ownerUserId: '1', allUsersShare: { enabled: true, permission: 'view' } },
+    { id: 'public-edit', ownerUserId: '3', allUsersShare: { enabled: true, permission: 'edit' } },
+    { id: 'private', ownerUserId: '4', allUsersShare: { enabled: false, permission: 'edit' } },
+  ];
+  const visible = list.filter((item) => canViewCanvas(user, item));
+  assert.deepEqual(visible.map((item) => item.id), ['public-view', 'public-edit']);
+  assert.equal(canvasAccessForUser(user, visible[0]).canEdit, false);
+  assert.equal(canvasAccessForUser(user, visible[1]).canEdit, true);
+});
+
 test('view share cannot save canvas data', () => {
   const user = { id: '2', role: 'designer' };
   const canvas = { ownerUserId: '1', sharedWith: [{ userId: '2', permission: 'view' }] };
@@ -120,6 +134,21 @@ test('normalizeSharedWith dedupes and defaults old entries to view', () => {
     { id: 3, username: 'carol', permission: 'edit' },
   ]);
   assert.deepEqual(shares.map((share) => [share.userId, share.permission]), [['2', 'view'], ['3', 'edit']]);
+});
+
+test('normalizeAllUsersShare defaults disabled and keeps edit permission', () => {
+  assert.deepEqual(normalizeAllUsersShare(null), {
+    enabled: false,
+    permission: 'view',
+    updatedAt: 0,
+    updatedByUserId: '',
+  });
+  assert.deepEqual(normalizeAllUsersShare({ enabled: true, permission: 'edit', updatedAt: 12, updatedByUserId: 3 }), {
+    enabled: true,
+    permission: 'edit',
+    updatedAt: 12,
+    updatedByUserId: '3',
+  });
 });
 
 test('patchCanvasNodeData only updates target node data and keeps canvas shape', () => {

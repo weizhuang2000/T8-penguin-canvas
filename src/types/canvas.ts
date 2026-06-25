@@ -285,13 +285,22 @@ export interface CanvasShareEntry {
   sharedByUserId: string;
 }
 
+export interface CanvasAllUsersShare {
+  enabled: boolean;
+  permission: CanvasSharePermission;
+  updatedAt: number;
+  updatedByUserId: string;
+}
+
 export interface CanvasAccess {
   canView: boolean;
   canEdit: boolean;
   canManageSharing: boolean;
   isOwner: boolean;
   isShared: boolean;
+  isAllUsersShared?: boolean;
   sharePermission?: CanvasSharePermission | null;
+  allUsersPermission?: CanvasSharePermission | null;
 }
 
 export interface CanvasListItem {
@@ -301,6 +310,7 @@ export interface CanvasListItem {
   ownerName?: string;
   ownerRole?: string;
   sharedWith?: CanvasShareEntry[];
+  allUsersShare?: CanvasAllUsersShare;
   access?: CanvasAccess;
   nodeCount: number;
   createdAt: number;
@@ -404,6 +414,7 @@ export interface CanvasData {
   ownerName?: string;
   ownerRole?: string;
   sharedWith?: CanvasShareEntry[];
+  allUsersShare?: CanvasAllUsersShare;
   access?: CanvasAccess;
   nodes: any[];
   edges: any[];

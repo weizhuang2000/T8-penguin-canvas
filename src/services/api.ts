@@ -6,6 +6,7 @@ import type {
   AdvancedProviderConfig,
   ApiSettings,
   CanvasData,
+  CanvasAllUsersShare,
   CanvasListItem,
   CanvasShareEntry,
   CloudUploadSummary,
@@ -340,15 +341,30 @@ export async function getCanvasShares(id: string): Promise<CanvasShareEntry[]> {
   return res.data || [];
 }
 
+export interface CanvasSharesUpdateResult {
+  sharedWith: CanvasShareEntry[];
+  allUsersShare: CanvasAllUsersShare;
+}
+
 export async function updateCanvasShares(
   id: string,
   sharedWith: Array<Pick<CanvasShareEntry, 'userId' | 'permission'> & Partial<CanvasShareEntry>>,
-): Promise<CanvasShareEntry[]> {
-  const res = await request<{ success: boolean; data: CanvasShareEntry[] }>(`${BASE}/canvas/${id}/shares`, {
+  allUsersShare?: Partial<CanvasAllUsersShare>,
+): Promise<CanvasSharesUpdateResult> {
+  const res = await request<{ success: boolean; data: CanvasSharesUpdateResult | CanvasShareEntry[] }>(`${BASE}/canvas/${id}/shares`, {
     method: 'PUT',
-    body: JSON.stringify({ sharedWith }),
+    body: JSON.stringify({ sharedWith, allUsersShare }),
   });
-  return res.data || [];
+  if (Array.isArray(res.data)) {
+    return {
+      sharedWith: res.data,
+      allUsersShare: { enabled: false, permission: 'view', updatedAt: 0, updatedByUserId: '' },
+    };
+  }
+  return res.data || {
+    sharedWith: [],
+    allUsersShare: { enabled: false, permission: 'view', updatedAt: 0, updatedByUserId: '' },
+  };
 }
 
 // ========== 设置(三套通用 Key + 分类 Key) ==========

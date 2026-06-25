@@ -43,6 +43,26 @@ test('view shares cannot edit while edit shares can edit', () => {
   assert.equal(canEditCanvas({ id: '6', role: 'designer' }, canvas), true);
 });
 
+test('all users share can grant view or edit access', () => {
+  const viewCanvas = { ownerUserId: '1', allUsersShare: { enabled: true, permission: 'view' } };
+  assert.equal(canViewCanvas({ id: '9', role: 'designer' }, viewCanvas), true);
+  assert.equal(canEditCanvas({ id: '9', role: 'designer' }, viewCanvas), false);
+
+  const editCanvas = { ownerUserId: '1', allUsersShare: { enabled: true, permission: 'edit' } };
+  assert.equal(canViewCanvas({ id: '9', role: 'designer' }, editCanvas), true);
+  assert.equal(canEditCanvas({ id: '9', role: 'designer' }, editCanvas), true);
+});
+
+test('effective share permission uses the highest available permission', () => {
+  const canvas = {
+    ownerUserId: '1',
+    sharedWith: [{ userId: '5', permission: 'view' }],
+    allUsersShare: { enabled: true, permission: 'edit' },
+  };
+  assert.equal(access.canvasAccessForUser({ id: '5', role: 'designer' }, canvas).sharePermission, 'edit');
+  assert.equal(access.canvasAccessForUser({ id: '6', role: 'designer' }, canvas).isAllUsersShared, true);
+});
+
 test('edit shares cannot manage sharing', () => {
   const canvas = { ownerUserId: '1', sharedWith: [{ userId: '6', permission: 'edit' }] };
   assert.equal(canManageCanvasSharing({ id: '6', role: 'designer' }, canvas), false);

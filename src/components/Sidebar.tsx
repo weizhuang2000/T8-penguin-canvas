@@ -17,7 +17,7 @@ import { NODE_GROUPS } from '../config/nodeRegistry';
 
 // vite.config.ts 中通过 define 注入的编译期常量（与 package.json version 同步）
 declare const __APP_VERSION__: string;
-import type { CanvasListItem, CanvasShareEntry, CanvasSharePermission, NodeMeta, NodeType } from '../types/canvas';
+import type { CanvasAllUsersShare, CanvasListItem, CanvasShareEntry, CanvasSharePermission, NodeMeta, NodeType } from '../types/canvas';
 import { useThemeStore } from '../stores/theme';
 import { useCanvasStore } from '../stores/canvas';
 import { resolveThemeTemplate } from '../theme/defaultTemplates';
@@ -844,8 +844,8 @@ export default function Sidebar({ onAddNode, visibleNodeTypes }: SidebarProps) {
           isDark={isDark}
           isPixel={isPixel}
           onClose={() => setShareCanvas(null)}
-          onSave={async (sharedWith) => {
-            await updateCanvasShares(shareCanvas.id, sharedWith);
+          onSave={async (sharedWith, allUsersShare) => {
+            await updateCanvasShares(shareCanvas.id, sharedWith, allUsersShare);
           }}
         />
       )}
@@ -874,11 +874,17 @@ interface CanvasShareModalProps {
   isDark: boolean;
   isPixel: boolean;
   onClose: () => void;
-  onSave: (sharedWith: CanvasShareEntry[]) => Promise<void>;
+  onSave: (sharedWith: CanvasShareEntry[], allUsersShare: Partial<CanvasAllUsersShare>) => Promise<void>;
 }
 
 function CanvasShareModal({ canvas, isDark, isPixel, onClose, onSave }: CanvasShareModalProps) {
   const [shares, setShares] = useState<CanvasShareEntry[]>(() => canvas.sharedWith || []);
+  const [allUsersShare, setAllUsersShare] = useState<CanvasAllUsersShare>(() => canvas.allUsersShare || {
+    enabled: false,
+    permission: 'view',
+    updatedAt: 0,
+    updatedByUserId: '',
+  });
   const [query, setQuery] = useState('');
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -887,7 +893,13 @@ function CanvasShareModal({ canvas, isDark, isPixel, onClose, onSave }: CanvasSh
 
   useEffect(() => {
     setShares(canvas.sharedWith || []);
-  }, [canvas.id, canvas.sharedWith]);
+    setAllUsersShare(canvas.allUsersShare || {
+      enabled: false,
+      permission: 'view',
+      updatedAt: 0,
+      updatedByUserId: '',
+    });
+  }, [canvas.id, canvas.sharedWith, canvas.allUsersShare]);
 
   useEffect(() => {
     let cancelled = false;
@@ -934,11 +946,27 @@ function CanvasShareModal({ canvas, isDark, isPixel, onClose, onSave }: CanvasSh
     setShares((prev) => prev.filter((share) => share.userId !== userId));
   };
 
+  const setAllUsersEnabled = (enabled: boolean) => {
+    setAllUsersShare((prev) => ({
+      ...prev,
+      enabled,
+      updatedAt: Date.now(),
+    }));
+  };
+
+  const setAllUsersPermission = (permission: CanvasSharePermission) => {
+    setAllUsersShare((prev) => ({
+      ...prev,
+      permission,
+      updatedAt: Date.now(),
+    }));
+  };
+
   const save = async () => {
     setSaving(true);
     setMessage('');
     try {
-      await onSave(shares);
+      await onSave(shares, allUsersShare);
       onClose();
     } catch (e: any) {
       setMessage(e?.message || '保存共享失败');
@@ -977,6 +1005,36 @@ function CanvasShareModal({ canvas, isDark, isPixel, onClose, onSave }: CanvasSh
           </button>
         </div>
         <div className="p-4 space-y-4 overflow-y-auto max-h-[68vh]">
+          <div className={`rounded-md border px-3 py-3 ${isDark ? 'border-sky-400/25 bg-sky-500/10' : 'border-sky-200 bg-sky-50'}`}>
+            <div className="flex items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-semibold">全员共享</div>
+                <div className={`text-[11px] ${isDark ? 'text-white/50' : 'text-zinc-500'}`}>所有已登录成员都可以访问此画布</div>
+              </div>
+              <label className="flex items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={allUsersShare.enabled}
+                  onChange={(e) => setAllUsersEnabled(e.target.checked)}
+                  className="h-4 w-4 accent-sky-500"
+                />
+                启用
+              </label>
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <span className={`text-[11px] ${isDark ? 'text-white/55' : 'text-zinc-500'}`}>全员权限</span>
+              <select
+                value={allUsersShare.permission}
+                onChange={(e) => setAllUsersPermission(e.target.value as CanvasSharePermission)}
+                disabled={!allUsersShare.enabled}
+                className={`${inputCls} disabled:opacity-50`}
+              >
+                <option value="view">查看</option>
+                <option value="edit">编辑</option>
+              </select>
+            </div>
+          </div>
+
           <div className="space-y-2">
             <input
               value={query}

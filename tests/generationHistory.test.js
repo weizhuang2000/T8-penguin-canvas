@@ -55,6 +55,17 @@ test('history items follow canvas owner/shared/admin visibility', () => withTemp
   assert.deepEqual(history.listVisibleItems({ id: 'admin', role: 'admin' }).map((item) => item.url).sort(), ['/files/output/a.png', '/files/output/b.mp4']);
 }));
 
+test('history items follow all-users canvas sharing', () => withTempData(() => {
+  writeCanvases([
+    { id: 'c1', name: 'Team canvas', ownerUserId: 'u1', allUsersShare: { enabled: true, permission: 'view' } },
+    { id: 'c2', name: 'Private canvas', ownerUserId: 'u3' },
+  ]);
+  history.addHistoryItems([{ url: '/files/output/team.png', kind: 'image' }], { canvasId: 'c1' }, { id: 'u1', role: 'designer' });
+  history.addHistoryItems([{ url: '/files/output/private.png', kind: 'image' }], { canvasId: 'c2' }, { id: 'u3', role: 'designer' });
+
+  assert.deepEqual(history.listVisibleItems({ id: 'u2', role: 'designer' }).map((item) => item.url), ['/files/output/team.png']);
+}));
+
 test('addHistoryItems deduplicates by url and updates context', () => withTempData(() => {
   writeCanvases([{ id: 'c1', ownerUserId: 'u1' }]);
   history.addHistoryItems([{ url: '/files/output/a.png', kind: 'image', title: 'A' }], { canvasId: 'c1', prompt: 'old' }, { id: 'u1', role: 'designer' });

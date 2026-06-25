@@ -297,13 +297,24 @@ router.put('/:id/shares', async (req, res) => {
     }
 
     found.item.sharedWith = shares;
-    found.item.allUsersShare = normalizeAllUsersShare(req.body?.allUsersShare);
-    if (found.item.allUsersShare.enabled) {
-      found.item.allUsersShare.updatedAt = Number(req.body?.allUsersShare?.updatedAt) || Date.now();
-      found.item.allUsersShare.updatedByUserId = String(req.user.id);
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'allUsersShare')) {
+      if (
+        req.body?.allUsersShare?.enabled &&
+        req.body?.allUsersShare?.permission !== 'view' &&
+        req.body?.allUsersShare?.permission !== 'edit'
+      ) {
+        return res.status(400).json({ success: false, error: 'All users share permission must be view or edit' });
+      }
+      found.item.allUsersShare = normalizeAllUsersShare(req.body?.allUsersShare);
+      if (found.item.allUsersShare.enabled) {
+        found.item.allUsersShare.updatedAt = Number(req.body?.allUsersShare?.updatedAt) || Date.now();
+        found.item.allUsersShare.updatedByUserId = String(req.user.id);
+      } else {
+        found.item.allUsersShare.updatedAt = Number(req.body?.allUsersShare?.updatedAt) || 0;
+        found.item.allUsersShare.updatedByUserId = '';
+      }
     } else {
-      found.item.allUsersShare.updatedAt = Number(req.body?.allUsersShare?.updatedAt) || 0;
-      found.item.allUsersShare.updatedByUserId = '';
+      found.item.allUsersShare = normalizeAllUsersShare(found.item.allUsersShare);
     }
     found.item.updatedAt = Date.now();
     saveCanvasList(found.list);

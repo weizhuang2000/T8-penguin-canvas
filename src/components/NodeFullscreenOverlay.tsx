@@ -46,7 +46,7 @@ const FULLSCREEN_CSS = `
 [data-node-fullscreen-content] > [data-id] > div > div[class*="space-y-2"],
 [data-node-fullscreen-content] > [data-id] > div > div[class*="space-y-3"] {
   display: grid !important;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
   align-items: start;
   /* 移除节点内的滚动限制, 让内容自然展开 */

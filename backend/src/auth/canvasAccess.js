@@ -8,7 +8,7 @@ function normalizeSharePermission(value) {
 
 function normalizeAllUsersShare(value) {
   const raw = value && typeof value === 'object' ? value : {};
-  const enabled = !!(raw.enabled || raw === true);
+  const enabled = value === true || !!raw.enabled;
   return {
     enabled,
     permission: normalizeSharePermission(raw.permission),
@@ -80,7 +80,8 @@ function canManageCanvasSharing(user, canvas) {
 function canvasAccessForUser(user, canvas) {
   const share = findCanvasShare(user, canvas);
   const allUsersShare = findAllUsersShare(user, canvas);
-  const sharePermission = share?.permission || allUsersShare?.permission || null;
+  const sharedPermissions = [share?.permission, allUsersShare?.permission].filter(Boolean);
+  const sharePermission = sharedPermissions.includes('edit') ? 'edit' : sharedPermissions[0] || null;
   return {
     canView: canViewCanvas(user, canvas),
     canEdit: canEditCanvas(user, canvas),
