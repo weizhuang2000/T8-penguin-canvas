@@ -64,6 +64,20 @@ const FULLSCREEN_CSS = `
   grid-row: auto;
 }
 
+/* 按钮、提示文字等跨两列, 避免占半屏 */
+[data-node-fullscreen-content] > [data-id] > div > .space-y-2 > button,
+[data-node-fullscreen-content] > [data-id] > div > .space-y-2\\.5 > button,
+[data-node-fullscreen-content] > [data-id] > div > .space-y-3 > button,
+[data-node-fullscreen-content] > [data-id] > div > div[class*="space-y-2"] > button,
+[data-node-fullscreen-content] > [data-id] > div > div[class*="space-y-3"] > button,
+[data-node-fullscreen-content] > [data-id] > div > .space-y-2 > div:not([class*="rounded"]),
+[data-node-fullscreen-content] > [data-id] > div > .space-y-2\\.5 > div:not([class*="rounded"]),
+[data-node-fullscreen-content] > [data-id] > div > .space-y-3 > div:not([class*="rounded"]),
+[data-node-fullscreen-content] > [data-id] > div > div[class*="space-y-2"] > div:not([class*="rounded"]),
+[data-node-fullscreen-content] > [data-id] > div > div[class*="space-y-3"] > div:not([class*="rounded"]) {
+  grid-column: 1 / -1;
+}
+
 /* 结果展示区 (border-t) 跨全宽 */
 [data-node-fullscreen-content] > [data-id] > div > .border-t,
 [data-node-fullscreen-content] > [data-id] > .border-t {

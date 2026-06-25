@@ -17,6 +17,8 @@ import {
   Square as SquareIcon,
   Circle as CircleIcon,
   ListOrdered,
+  ArrowRight,
+  Type as TypeIcon,
   Layers as LayersIcon,
   Lock as LockIcon,
   Unlock as UnlockIcon,
@@ -58,19 +60,24 @@ export type ImageEditProduceMeta =
     }
   | { type: 'mask'; strokeCount: number }
   | { type: 'brush'; strokeCount: number }
+  | { type: 'annotation-edit'; instruction: string; strokeCount: number; annotationTextCount: number; annotationShapeCount: number }
   | { type: 'compose'; layerCount: number; canvasW: number; canvasH: number };
 
 interface Props {
   srcUrl: string;
   onClose: () => void;
   /** 产物 urls 注入到外部 (在 OutputNode 中创建 N 个新 OutputNode) */
-  onProduce: (urls: string[], meta: ImageEditProduceMeta) => void;
+  onProduce: (urls: string[], meta: ImageEditProduceMeta) => void | Promise<void>;
 }
 
 type EditMode = 'crop' | 'mask' | 'brush' | 'grid' | 'compose';
 type GridSubMode = 'preset' | 'custom';
-type BrushTool = 'free' | 'rect' | 'ellipse' | 'label';
+type BrushTool = 'free' | 'line' | 'arrow' | 'rect' | 'ellipse' | 'label' | 'text';
+type BrushFillMode = 'stroke' | 'fill';
 type CropAspectPreset = 'free' | '16:9' | '9:16' | '4:3' | '3:4' | '1:1' | 'custom';
+
+const AUTO_ANNOTATION_TEXT_ID = 'annotation-instruction-text';
+const ANNOTATION_EDIT_DEFAULT_INSTRUCTION = '请根据标注图，在干净原图上完成对应的 AI 改图。';
 
 const CROP_ASPECT_PRESETS: Array<{ id: CropAspectPreset; label: string }> = [
   { id: 'free', label: '自由' },
@@ -132,9 +139,12 @@ type DrawStroke =
   | { kind: 'mask-stroke'; size: number; points: Pt[] }
   | { kind: 'mask-erase'; size: number; points: Pt[] }
   | { kind: 'brush-free'; color: string; size: number; points: Pt[] }
-  | { kind: 'brush-rect'; color: string; size: number; rect: FRect }
-  | { kind: 'brush-ellipse'; color: string; size: number; rect: FRect }
-  | { kind: 'brush-label'; color: string; size: number; pos: Pt; text: string };
+  | { kind: 'brush-line'; color: string; size: number; start: Pt; end: Pt }
+  | { kind: 'brush-arrow'; color: string; size: number; start: Pt; end: Pt }
+  | { kind: 'brush-rect'; color: string; size: number; rect: FRect; fillMode: BrushFillMode }
+  | { kind: 'brush-ellipse'; color: string; size: number; rect: FRect; fillMode: BrushFillMode }
+  | { kind: 'brush-label'; color: string; size: number; pos: Pt; text: string }
+  | { kind: 'brush-text'; id: string; color: string; size: number; pos: Pt; text: string; rotation: number; scale: number };
 
 interface Line {
   type: 'h' | 'v';
@@ -150,6 +160,87 @@ interface CropBox {
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const EDIT_STAGE_PADDING = 32;
 const EDIT_STAGE_MIN_PREVIEW = 180;
+const TEXT_ANNOTATION_EXPORT_BASE_PX = 720;
+
+const IMAGE_EDIT_BRUSH_TOOLS: Array<{ id: BrushTool; label: string; title: string; icon: 'brush' | 'line' | 'arrow' | 'rect' | 'ellipse' | 'label' | 'text' }> = [
+  { id: 'free', label: '画笔', title: '自由笔刷', icon: 'brush' },
+  { id: 'line', label: '直线', title: '直线标注', icon: 'line' },
+  { id: 'arrow', label: '箭头', title: '箭头标注', icon: 'arrow' },
+  { id: 'rect', label: '框线', title: '矩形框线', icon: 'rect' },
+  { id: 'ellipse', label: '圆形', title: '圆形 / 椭圆标注', icon: 'ellipse' },
+  { id: 'label', label: '标号', title: '数字标号', icon: 'label' },
+  { id: 'text', label: '文字', title: '文字标注：使用下方文本框内容，点击图片放置', icon: 'text' },
+];
+
+function clampLabelCounter(value: number) {
+  return clamp(Math.round(Number.isFinite(value) ? value : 1), 1, 9999);
+}
+
+function brushTextExportFontPx(s: Extract<DrawStroke, { kind: 'brush-text' }>, W: number, H: number) {
+  const exportScale = clamp(Math.max(W, H) / TEXT_ANNOTATION_EXPORT_BASE_PX, 1, 10);
+  return Math.max(18, s.size * 1.35 * s.scale * exportScale);
+}
+
+function brushRectFromDrag(start: Pt, end: Pt, lockAspect: boolean, naturalSize: { w: number; h: number } | null): FRect {
+  let next = end;
+  if (lockAspect) {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const signX = dx < 0 ? -1 : 1;
+    const signY = dy < 0 ? -1 : 1;
+    const maxX = signX > 0 ? 1 - start.x : start.x;
+    const maxY = signY > 0 ? 1 - start.y : start.y;
+    if (naturalSize && naturalSize.w > 0 && naturalSize.h > 0) {
+      const sidePx = Math.min(
+        Math.max(Math.abs(dx) * naturalSize.w, Math.abs(dy) * naturalSize.h),
+        maxX * naturalSize.w,
+        maxY * naturalSize.h,
+      );
+      next = { x: start.x + signX * (sidePx / naturalSize.w), y: start.y + signY * (sidePx / naturalSize.h) };
+    } else {
+      const side = Math.min(Math.max(Math.abs(dx), Math.abs(dy)), maxX, maxY);
+      next = { x: start.x + signX * side, y: start.y + signY * side };
+    }
+  }
+  return {
+    x: Math.min(start.x, next.x),
+    y: Math.min(start.y, next.y),
+    w: Math.abs(next.x - start.x),
+    h: Math.abs(next.y - start.y),
+  };
+}
+
+function drawRoundedRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const radius = Math.max(0, Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + w - radius, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+  ctx.lineTo(x + w, y + h - radius);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+  ctx.lineTo(x + radius, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+}
+
+function arrowLineEndBeforeHead(start: { x: number; y: number }, end: { x: number; y: number }, size: number) {
+  const angle = Math.atan2(end.y - start.y, end.x - start.x);
+  const headLen = Math.max(12, size * 3.2);
+  return { x: end.x - Math.cos(angle) * headLen * 0.45, y: end.y - Math.sin(angle) * headLen * 0.45 };
+}
+
+function drawLineArrowHead(ctx: CanvasRenderingContext2D, start: { x: number; y: number }, end: { x: number; y: number }, size: number) {
+  const angle = Math.atan2(end.y - start.y, end.x - start.x);
+  const headLen = Math.max(12, size * 3.2);
+  ctx.beginPath();
+  ctx.moveTo(end.x, end.y);
+  ctx.lineTo(end.x - Math.cos(angle - Math.PI / 6) * headLen, end.y - Math.sin(angle - Math.PI / 6) * headLen);
+  ctx.lineTo(end.x - Math.cos(angle + Math.PI / 6) * headLen, end.y - Math.sin(angle + Math.PI / 6) * headLen);
+  ctx.closePath();
+  ctx.fill();
+}
+
 
 // 计算切割矩形 (natural 像素), 兼容 等分 / 自定义 两个模式
 function computeRects(
@@ -239,8 +330,12 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
   const [brushTool, setBrushTool] = useState<BrushTool>('free');
   const [brushColor, setBrushColor] = useState('#ff2d55');
   const [brushSize, setBrushSize] = useState(14);
+  const [brushFillMode, setBrushFillMode] = useState<BrushFillMode>('stroke');
+  const [annotationInstruction, setAnnotationInstruction] = useState('');
   const [labelCounter, setLabelCounter] = useState(1);
+  const [selectedAnnotationTextId, setSelectedAnnotationTextId] = useState<string | null>(null);
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
+  const hasAnnotationTextDraft = brushStrokes.some((stroke) => stroke.kind === 'brush-text' && stroke.id === AUTO_ANNOTATION_TEXT_ID);
 
   // ---- compose v2 ----
   const [composeLayers, setComposeLayers] = useState<Layer[]>([]);
@@ -285,6 +380,18 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
     pointerId: number;
     startPt: Pt;
     pending: DrawStroke | null;
+  } | null>(null);
+  const annotationTextDragRef = useRef<{
+    pointerId: number;
+    id: string;
+    op: 'move' | 'scale' | 'rotate';
+    startClientX: number;
+    startClientY: number;
+    centerClientX: number;
+    centerClientY: number;
+    startDistance: number;
+    startAngle: number;
+    startStroke: Extract<DrawStroke, { kind: 'brush-text' }>;
   } | null>(null);
 
   const setGridGap = useCallback((value: number) => {
@@ -352,8 +459,71 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
       pushHistory('brush');
       setBrushStrokes([]);
       setLabelCounter(1);
+      setAnnotationInstruction('');
+      setSelectedAnnotationTextId(null);
     }
   };
+
+  useEffect(() => {
+    if (mode !== 'brush') return;
+    const text = annotationInstruction.trim();
+    setBrushStrokes((current) => {
+      const index = current.findIndex(
+        (stroke) => stroke.kind === 'brush-text' && stroke.id === AUTO_ANNOTATION_TEXT_ID,
+      );
+      if (!text) {
+        if (index < 0) return current;
+        return current.filter((_, strokeIndex) => strokeIndex !== index);
+      }
+      const size = Math.max(14, brushSize);
+      if (index >= 0) {
+        const existing = current[index] as Extract<DrawStroke, { kind: 'brush-text' }>;
+        if (existing.text === text && existing.color === brushColor && existing.size === size) return current;
+        const next = [...current];
+        next[index] = { ...existing, color: brushColor, size, text };
+        return next;
+      }
+      return [
+        ...current,
+        {
+          kind: 'brush-text',
+          id: AUTO_ANNOTATION_TEXT_ID,
+          color: brushColor,
+          size,
+          pos: { x: 0.5, y: 0.16 },
+          text,
+          rotation: 0,
+          scale: 1,
+        },
+      ];
+    });
+  }, [annotationInstruction, brushColor, brushSize, mode]);
+
+  useEffect(() => {
+    if (!annotationInstruction.trim() && selectedAnnotationTextId === AUTO_ANNOTATION_TEXT_ID) {
+      setSelectedAnnotationTextId(null);
+    }
+  }, [annotationInstruction, selectedAnnotationTextId]);
+
+  function confirmAnnotationTextDraft() {
+    const draft = brushStrokes.find(
+      (stroke): stroke is Extract<DrawStroke, { kind: 'brush-text' }> =>
+        stroke.kind === 'brush-text' && stroke.id === AUTO_ANNOTATION_TEXT_ID,
+    );
+    if (!draft) return;
+    pushHistory('brush');
+    const lockedText: DrawStroke = {
+      ...draft,
+      id: `manual-text-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    };
+    setBrushStrokes((arr) =>
+      arr.map((stroke) =>
+        stroke.kind === 'brush-text' && stroke.id === AUTO_ANNOTATION_TEXT_ID ? lockedText : stroke,
+      ),
+    );
+    setAnnotationInstruction('');
+    setSelectedAnnotationTextId(lockedText.id);
+  }
 
   // ESC 关闭 + Ctrl+Z/Y 撤销恢复 + 1/2/3/4 切换 mode + [/] 调笔刷
   useEffect(() => {
@@ -1246,25 +1416,42 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
       ctx.restore();
       return;
     }
-    if (s.kind === 'brush-rect') {
+    if (s.kind === 'brush-line' || s.kind === 'brush-arrow') {
       ctx.save();
+      const start = { x: s.start.x * W, y: s.start.y * H };
+      const end = { x: s.end.x * W, y: s.end.y * H };
+      const lineEnd = s.kind === 'brush-arrow' ? arrowLineEndBeforeHead(start, end, s.size) : end;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
       ctx.lineWidth = s.size;
       ctx.strokeStyle = s.color;
-      ctx.strokeRect(s.rect.x * W, s.rect.y * H, s.rect.w * W, s.rect.h * H);
+      ctx.fillStyle = s.color;
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(lineEnd.x, lineEnd.y);
+      ctx.stroke();
+      if (s.kind === 'brush-arrow') drawLineArrowHead(ctx, start, end, s.size);
       ctx.restore();
       return;
     }
-    if (s.kind === 'brush-ellipse') {
+    if (s.kind === 'brush-rect' || s.kind === 'brush-ellipse') {
       ctx.save();
       ctx.lineWidth = s.size;
       ctx.strokeStyle = s.color;
-      ctx.beginPath();
-      const cx = (s.rect.x + s.rect.w / 2) * W;
-      const cy = (s.rect.y + s.rect.h / 2) * H;
-      const rx = Math.abs(s.rect.w / 2) * W;
-      const ry = Math.abs(s.rect.h / 2) * H;
-      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.fillStyle = s.color;
+      if (s.kind === 'brush-rect') {
+        ctx.beginPath();
+        ctx.rect(s.rect.x * W, s.rect.y * H, s.rect.w * W, s.rect.h * H);
+      } else {
+        ctx.beginPath();
+        const cx = (s.rect.x + s.rect.w / 2) * W;
+        const cy = (s.rect.y + s.rect.h / 2) * H;
+        const rx = Math.abs(s.rect.w / 2) * W;
+        const ry = Math.abs(s.rect.h / 2) * H;
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      }
+      if (s.fillMode === 'fill') ctx.fill();
+      else ctx.stroke();
       ctx.restore();
       return;
     }
@@ -1289,6 +1476,32 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
       ctx.restore();
       return;
     }
+    if (s.kind === 'brush-text') {
+      ctx.save();
+      const fontPx = brushTextExportFontPx(s, W, H);
+      const x = s.pos.x * W;
+      const y = s.pos.y * H;
+      ctx.translate(x, y);
+      ctx.rotate((s.rotation * Math.PI) / 180);
+      ctx.font = `bold ${Math.round(fontPx)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const metrics = ctx.measureText(s.text);
+      const padX = fontPx * 0.45;
+      const padY = fontPx * 0.3;
+      const boxW = metrics.width + padX * 2;
+      const boxH = fontPx + padY * 2;
+      drawRoundedRectPath(ctx, -boxW / 2, -boxH / 2, boxW, boxH, Math.min(12, boxH / 3));
+      ctx.fillStyle = 'rgba(255,255,255,.84)';
+      ctx.fill();
+      ctx.lineWidth = Math.max(2, fontPx / 12);
+      ctx.strokeStyle = s.color;
+      ctx.stroke();
+      ctx.fillStyle = s.color;
+      ctx.fillText(s.text, 0, 1);
+      ctx.restore();
+      return;
+    }
   };
 
   useEffect(() => {
@@ -1303,7 +1516,9 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
       // 诊底透明 overlay; mask 的“黑底白笔”仅在调 applyMask 时走离屏
       for (const s of maskStrokes) drawStrokeOnCtx(ctx, s, cv.width, cv.height);
     } else if (mode === 'brush') {
-      for (const s of brushStrokes) drawStrokeOnCtx(ctx, s, cv.width, cv.height);
+      for (const s of brushStrokes) {
+        if (s.kind !== 'brush-text') drawStrokeOnCtx(ctx, s, cv.width, cv.height);
+      }
     }
   }, [mode, maskStrokes, brushStrokes, naturalSize]);
 
@@ -1316,6 +1531,91 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
       y: clamp((e.clientY - r.top) / r.height, 0, 1),
     };
   };
+
+  function updateAnnotationTextStroke(
+    id: string,
+    updater: (stroke: Extract<DrawStroke, { kind: 'brush-text' }>) => Extract<DrawStroke, { kind: 'brush-text' }>,
+  ) {
+    setBrushStrokes((arr) =>
+      arr.map((stroke) => (stroke.kind === 'brush-text' && stroke.id === id ? updater(stroke) : stroke)),
+    );
+  }
+
+  function startAnnotationTextTransform(
+    e: React.PointerEvent,
+    id: string,
+    op: 'move' | 'scale' | 'rotate',
+  ) {
+    if (mode !== 'brush') return;
+    const img = imgRef.current;
+    const stroke = brushStrokes.find(
+      (item): item is Extract<DrawStroke, { kind: 'brush-text' }> => item.kind === 'brush-text' && item.id === id,
+    );
+    if (!img || !stroke) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = img.getBoundingClientRect();
+    const centerClientX = rect.left + stroke.pos.x * rect.width;
+    const centerClientY = rect.top + stroke.pos.y * rect.height;
+    setSelectedAnnotationTextId(id);
+    pushHistory('brush');
+    annotationTextDragRef.current = {
+      pointerId: e.pointerId,
+      id,
+      op,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      centerClientX,
+      centerClientY,
+      startDistance: Math.max(8, Math.hypot(e.clientX - centerClientX, e.clientY - centerClientY)),
+      startAngle: Math.atan2(e.clientY - centerClientY, e.clientX - centerClientX),
+      startStroke: stroke,
+    };
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+  }
+
+  function moveAnnotationTextTransform(e: React.PointerEvent) {
+    const drag = annotationTextDragRef.current;
+    const img = imgRef.current;
+    if (!drag || !img) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = img.getBoundingClientRect();
+    if (drag.op === 'move') {
+      const dx = (e.clientX - drag.startClientX) / Math.max(1, rect.width);
+      const dy = (e.clientY - drag.startClientY) / Math.max(1, rect.height);
+      updateAnnotationTextStroke(drag.id, (stroke) => ({
+        ...stroke,
+        pos: {
+          x: clamp(drag.startStroke.pos.x + dx, 0.02, 0.98),
+          y: clamp(drag.startStroke.pos.y + dy, 0.02, 0.98),
+        },
+      }));
+      return;
+    }
+    if (drag.op === 'scale') {
+      const distance = Math.max(8, Math.hypot(e.clientX - drag.centerClientX, e.clientY - drag.centerClientY));
+      updateAnnotationTextStroke(drag.id, (stroke) => ({
+        ...stroke,
+        scale: clamp(drag.startStroke.scale * (distance / drag.startDistance), 0.35, 4),
+      }));
+      return;
+    }
+    const angle = Math.atan2(e.clientY - drag.centerClientY, e.clientX - drag.centerClientX);
+    updateAnnotationTextStroke(drag.id, (stroke) => ({
+      ...stroke,
+      rotation: drag.startStroke.rotation + ((angle - drag.startAngle) * 180) / Math.PI,
+    }));
+  }
+
+  function endAnnotationTextTransform(e?: React.PointerEvent) {
+    const drag = annotationTextDragRef.current;
+    if (!drag) return;
+    try {
+      if (e) (e.currentTarget as Element).releasePointerCapture?.(drag.pointerId);
+    } catch {}
+    annotationTextDragRef.current = null;
+  }
 
   // ---- mask/brush pointer 事件 ----
   const onDrawPointerDown = (e: React.PointerEvent) => {
@@ -1340,20 +1640,22 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
         const stroke: DrawStroke = { kind: 'brush-free', color: brushColor, size: brushSize, points: [pt] };
         setBrushStrokes((arr) => [...arr, stroke]);
         drawDragRef.current = { pointerId: e.pointerId, startPt: pt, pending: stroke };
-      } else if (brushTool === 'rect') {
+      } else if (brushTool === 'line' || brushTool === 'arrow') {
         const stroke: DrawStroke = {
-          kind: 'brush-rect',
+          kind: brushTool === 'arrow' ? 'brush-arrow' : 'brush-line',
           color: brushColor,
           size: brushSize,
-          rect: { x: pt.x, y: pt.y, w: 0, h: 0 },
+          start: pt,
+          end: pt,
         };
         setBrushStrokes((arr) => [...arr, stroke]);
         drawDragRef.current = { pointerId: e.pointerId, startPt: pt, pending: stroke };
-      } else if (brushTool === 'ellipse') {
+      } else if (brushTool === 'rect' || brushTool === 'ellipse') {
         const stroke: DrawStroke = {
-          kind: 'brush-ellipse',
+          kind: brushTool === 'rect' ? 'brush-rect' : 'brush-ellipse',
           color: brushColor,
           size: brushSize,
+          fillMode: brushFillMode,
           rect: { x: pt.x, y: pt.y, w: 0, h: 0 },
         };
         setBrushStrokes((arr) => [...arr, stroke]);
@@ -1367,7 +1669,22 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
           text: String(labelCounter),
         };
         setBrushStrokes((arr) => [...arr, stroke]);
-        setLabelCounter((n) => n + 1);
+        setLabelCounter((n) => clampLabelCounter(n + 1));
+        drawDragRef.current = null;
+      } else if (brushTool === 'text') {
+        const text = annotationInstruction.trim() || 'Text note';
+        const stroke: DrawStroke = {
+          kind: 'brush-text',
+          id: `manual-text-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          color: brushColor,
+          size: Math.max(14, brushSize),
+          pos: pt,
+          text,
+          rotation: 0,
+          scale: 1,
+        };
+        setBrushStrokes((arr) => [...arr, stroke]);
+        setSelectedAnnotationTextId(stroke.id);
         drawDragRef.current = null;
       }
     }
@@ -1403,6 +1720,14 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
           next[next.length - 1] = { ...last, points: [...last.points, pt] };
           return next;
         });
+      } else if (brushTool === 'line' || brushTool === 'arrow') {
+        setBrushStrokes((arr) => {
+          const last = arr[arr.length - 1];
+          if (!last || (last.kind !== 'brush-line' && last.kind !== 'brush-arrow')) return arr;
+          const next = [...arr];
+          next[next.length - 1] = { ...last, end: pt };
+          return next;
+        });
       } else if (brushTool === 'rect' || brushTool === 'ellipse') {
         setBrushStrokes((arr) => {
           const last = arr[arr.length - 1];
@@ -1414,12 +1739,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
           const next = [...arr];
           next[next.length - 1] = {
             ...last,
-            rect: {
-              x: Math.min(ctx.startPt.x, pt.x),
-              y: Math.min(ctx.startPt.y, pt.y),
-              w: Math.abs(pt.x - ctx.startPt.x),
-              h: Math.abs(pt.y - ctx.startPt.y),
-            },
+            rect: brushRectFromDrag(ctx.startPt, pt, e.shiftKey, naturalSize),
           };
           return next;
         });
@@ -1485,6 +1805,40 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
       onClose();
     } catch (e: any) {
       setErrMsg(e?.message || '应用画板失败');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+
+  async function applyAnnotationEdit() {
+    if (!naturalSize || brushStrokes.length === 0) return;
+    const annotationTextCount = brushStrokes.filter((stroke) => stroke.kind === 'brush-label' || stroke.kind === 'brush-text').length;
+    const annotationShapeCount = brushStrokes.filter((stroke) => stroke.kind !== 'brush-free' && stroke.kind !== 'brush-text').length;
+    setBusy(true);
+    setErrMsg(null);
+    try {
+      const img = await loadImage(srcUrl);
+      const cv = document.createElement('canvas');
+      cv.width = naturalSize.w;
+      cv.height = naturalSize.h;
+      const ctx = cv.getContext('2d');
+      if (!ctx) throw new Error('canvas unavailable');
+      ctx.drawImage(img, 0, 0, cv.width, cv.height);
+      for (const s of brushStrokes) drawStrokeOnCtx(ctx, s, cv.width, cv.height);
+      const dataUrl = cv.toDataURL('image/png');
+      const originUrl = await fetchAndUpload(srcUrl, 'annotation-source');
+      const annotatedUrl = await uploadDataUrl(dataUrl, 'annotation-markup');
+      await onProduce([originUrl, annotatedUrl], {
+        type: 'annotation-edit',
+        instruction: ANNOTATION_EDIT_DEFAULT_INSTRUCTION,
+        strokeCount: brushStrokes.length,
+        annotationTextCount,
+        annotationShapeCount,
+      });
+      onClose();
+    } catch (e: any) {
+      setErrMsg(e?.message || 'Annotation edit failed');
     } finally {
       setBusy(false);
     }
@@ -1584,6 +1938,91 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
     fontSize: 12,
     textAlign: 'center',
   };
+
+  function renderBrushToolIcon(icon: (typeof IMAGE_EDIT_BRUSH_TOOLS)[number]['icon']) {
+    if (icon === 'brush') return <Paintbrush size={13} />;
+    if (icon === 'line') {
+      return <span style={{ display: 'inline-block', width: 14, height: 1.5, background: 'currentColor', transform: 'rotate(-18deg)' }} />;
+    }
+    if (icon === 'arrow') return <ArrowRight size={13} />;
+    if (icon === 'rect') return <SquareIcon size={13} />;
+    if (icon === 'ellipse') return <CircleIcon size={13} />;
+    if (icon === 'label') return <ListOrdered size={13} />;
+    return <TypeIcon size={13} />;
+  }
+
+  function renderAnnotationTextOverlay(stroke: Extract<DrawStroke, { kind: 'brush-text' }>) {
+    const img = imgRef.current;
+    const displayScale = img && naturalSize ? Math.min(img.clientWidth / naturalSize.w, img.clientHeight / naturalSize.h) : 1;
+    const fontPx = Math.max(12, stroke.size * 1.35 * stroke.scale * displayScale);
+    const selected = selectedAnnotationTextId === stroke.id;
+    return (
+      <div
+        key={stroke.id}
+        className="img-edit-annotation-text-overlay"
+        onPointerDown={(e) => startAnnotationTextTransform(e, stroke.id, 'move')}
+        style={{
+          position: 'absolute',
+          left: `${stroke.pos.x * 100}%`,
+          top: `${stroke.pos.y * 100}%`,
+          transform: `translate(-50%, -50%) rotate(${stroke.rotation}deg)`,
+          transformOrigin: 'center center',
+          color: stroke.color,
+          background: 'rgba(255,255,255,.84)',
+          border: `${Math.max(1, fontPx / 12)}px solid ${stroke.color}`,
+          borderRadius: isPixel ? 0 : Math.max(6, fontPx * 0.25),
+          padding: `${Math.max(3, fontPx * 0.3)}px ${Math.max(6, fontPx * 0.45)}px`,
+          fontSize: fontPx,
+          fontWeight: 800,
+          lineHeight: 1,
+          whiteSpace: 'nowrap',
+          cursor: 'move',
+          pointerEvents: mode === 'brush' ? 'auto' : 'none',
+          boxShadow: selected ? `0 0 0 2px ${accent}` : '0 2px 8px rgba(0,0,0,.18)',
+          zIndex: 3,
+        }}
+      >
+        {stroke.text}
+        {selected && (
+          <>
+            <button
+              type="button"
+              onPointerDown={(e) => startAnnotationTextTransform(e, stroke.id, 'scale')}
+              title="缩放文字"
+              style={{
+                position: 'absolute',
+                right: -10,
+                bottom: -10,
+                width: 18,
+                height: 18,
+                borderRadius: 999,
+                border: '2px solid #fff',
+                background: accent,
+                cursor: 'nwse-resize',
+              }}
+            />
+            <button
+              type="button"
+              onPointerDown={(e) => startAnnotationTextTransform(e, stroke.id, 'rotate')}
+              title="旋转文字"
+              style={{
+                position: 'absolute',
+                left: '50%',
+                top: -24,
+                width: 16,
+                height: 16,
+                transform: 'translateX(-50%)',
+                borderRadius: 999,
+                border: '2px solid #fff',
+                background: accent,
+                cursor: 'crosshair',
+              }}
+            />
+          </>
+        )}
+      </div>
+    );
+  }
 
   const ui = (
     <div
@@ -1880,35 +2319,18 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
           )}
           {mode === 'brush' && (
             <>
-              <button
-                style={tabBtn(brushTool === 'free')}
-                onClick={() => setBrushTool('free')}
-                title="自由笔刷"
-              >
-                <Paintbrush size={13} />
-              </button>
-              <button
-                style={tabBtn(brushTool === 'rect')}
-                onClick={() => setBrushTool('rect')}
-                title="矩形"
-              >
-                <SquareIcon size={13} />
-              </button>
-              <button
-                style={tabBtn(brushTool === 'ellipse')}
-                onClick={() => setBrushTool('ellipse')}
-                title="椭圆"
-              >
-                <CircleIcon size={13} />
-              </button>
-              <button
-                style={tabBtn(brushTool === 'label')}
-                onClick={() => setBrushTool('label')}
-                title="数字标签 (点一下 +1)"
-              >
-                <ListOrdered size={13} />
-              </button>
-              <span style={{ color: subText, marginLeft: 4 }}>颜色</span>
+              {IMAGE_EDIT_BRUSH_TOOLS.map((tool) => (
+                <button
+                  key={tool.id}
+                  style={{ ...tabBtn(brushTool === tool.id), padding: '0 8px' }}
+                  onClick={() => setBrushTool(tool.id)}
+                  title={tool.id === 'label' ? `${tool.title}: current ${labelCounter}, auto +1 after click` : tool.title}
+                >
+                  {renderBrushToolIcon(tool.icon)}
+                  <span>{tool.label}</span>
+                </button>
+              ))}
+              <span style={{ color: subText, marginLeft: 4 }}>Color</span>
               <input
                 type="color"
                 value={brushColor}
@@ -1923,7 +2345,35 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
                   cursor: 'pointer',
                 }}
               />
-              <span style={{ color: subText }}>笔刷</span>
+              {(brushTool === 'rect' || brushTool === 'ellipse') && (
+                <div role="group" aria-label="shape fill mode" style={{ display: 'inline-flex', gap: 4 }}>
+                  <button type="button" style={tabBtn(brushFillMode === 'stroke')} onClick={() => setBrushFillMode('stroke')} title="Stroke only">
+                    Stroke
+                  </button>
+                  <button type="button" style={tabBtn(brushFillMode === 'fill')} onClick={() => setBrushFillMode('fill')} title="Solid fill">
+                    Fill
+                  </button>
+                </div>
+              )}
+              {brushTool === 'label' && (
+                <>
+                  <span style={{ color: subText }}>Size</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={9999}
+                    value={labelCounter}
+                    onChange={(e) => setLabelCounter(clampLabelCounter(Number(e.target.value)))}
+                    style={{ ...inputStyle, width: 66 }}
+                    aria-label="current label number"
+                    title="Number used for the next click"
+                  />
+                  <button type="button" style={btnBase} onClick={() => setLabelCounter(1)} title="Reset next label to 1">
+                    Reset 1
+                  </button>
+                </>
+              )}
+              <span style={{ color: subText }}>Size</span>
               <input
                 type="range"
                 min={2}
@@ -1935,17 +2385,17 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
               <span style={{ minWidth: 24, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>
                 {brushSize}
               </span>
-              <button style={btnBase} onClick={undo} disabled={!brushHistory.length} title="撤销 (Ctrl+Z)">
+              <button style={btnBase} onClick={undo} disabled={!brushHistory.length} title="Undo (Ctrl+Z)">
                 <Undo2 size={13} />
               </button>
-              <button style={btnBase} onClick={redo} disabled={!brushRedo.length} title="恢复 (Ctrl+Y)">
+              <button style={btnBase} onClick={redo} disabled={!brushRedo.length} title="Redo (Ctrl+Y)">
                 <Redo2 size={13} />
               </button>
-              <button style={btnBase} onClick={clearCurrent} title="清空画板">
-                <Eraser size={13} /> 清空
+              <button style={btnBase} onClick={clearCurrent} title="Clear board">
+                <Eraser size={13} /> Clear
               </button>
               <div style={{ flex: 1 }} />
-              <span style={{ color: subText }}>产物：原图 ⊕ 画板合成图</span>
+              <span style={{ color: subText }}>Output: clean original + annotated reference</span>
             </>
           )}
           {mode === 'compose' && (
@@ -2473,11 +2923,15 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
                 : 'default',
           }}
           onPointerMove={(e) => {
+            const wasTextDragging = !!annotationTextDragRef.current;
+            moveAnnotationTextTransform(e);
+            if (wasTextDragging) return;
             moveCropDrag(e);
             onStagePointerMove(e);
             onDrawPointerMove(e);
           }}
           onPointerUp={(e) => {
+            endAnnotationTextTransform(e);
             endCropDrag();
             onStagePointerUp(e);
             onDrawPointerUp(e);
@@ -2541,6 +2995,13 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
                 borderRadius: isPixel ? 0 : 8,
               }}
             />
+            {mode === 'brush' &&
+              brushStrokes
+                .filter(
+                  (stroke): stroke is Extract<DrawStroke, { kind: 'brush-text' }> =>
+                    stroke.kind === 'brush-text',
+                )
+                .map(renderAnnotationTextOverlay)}
             {/* 跟随鼠标的笔刷圈 */}
             {(mode === 'mask' || mode === 'brush') && cursor && (
               <div
@@ -2756,22 +3217,62 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
               )}
             </button>
           ) : mode === 'brush' ? (
-            <button
-              style={btnPrimary}
-              onClick={applyBrush}
-              disabled={busy || !naturalSize || brushStrokes.length === 0}
-              title={brushStrokes.length === 0 ? '请先作画' : ''}
-            >
-              {busy ? (
-                <>
-                  <Loader2 size={14} className="animate-spin" /> 处理中…
-                </>
-              ) : (
-                <>
-                  <Check size={14} /> 应用画板
-                </>
-              )}
-            </button>
+            <>
+              <input
+                className="nodrag"
+                style={{
+                  ...inputStyle,
+                  minWidth: 260,
+                  maxWidth: 420,
+                  flex: '1 1 260px',
+                  width: 'auto',
+                }}
+                value={annotationInstruction}
+                onChange={(event) => setAnnotationInstruction(event.target.value)}
+                placeholder="Type text to add an editable note on the image"
+                title="Text annotation"
+              />
+              <button
+                style={btnBase}
+                onClick={confirmAnnotationTextDraft}
+                disabled={busy || !hasAnnotationTextDraft}
+                title={hasAnnotationTextDraft ? 'Lock the current text note and clear the input' : 'Type text first, then confirm to add another note'}
+              >
+                <Check size={14} /> Confirm text
+              </button>
+              <button
+                style={btnBase}
+                onClick={applyBrush}
+                disabled={busy || !naturalSize || brushStrokes.length === 0}
+                title={brushStrokes.length === 0 ? 'Draw something first' : ''}
+              >
+                {busy ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" /> Processing...
+                  </>
+                ) : (
+                  <>
+                    <Check size={14} /> Apply board
+                  </>
+                )}
+              </button>
+              <button
+                style={btnPrimary}
+                onClick={applyAnnotationEdit}
+                disabled={busy || !naturalSize || brushStrokes.length === 0}
+                title={brushStrokes.length === 0 ? 'Use arrows, boxes, labels, or text to mark the edit target first' : 'Send clean original and annotated reference for AI edit'}
+              >
+                {busy ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" /> Processing...
+                  </>
+                ) : (
+                  <>
+                    <Paintbrush size={14} /> Annotate edit
+                  </>
+                )}
+              </button>
+            </>
           ) : mode === 'compose' ? (
             <button
               style={btnPrimary}

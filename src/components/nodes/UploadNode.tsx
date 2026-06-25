@@ -473,6 +473,12 @@ const UploadNode = ({ id, data, selected, type }: NodeProps) => {
       const newId = `output-auto-edit-${id}-${ts}-${i}-${Math.random()
         .toString(36)
         .slice(2, 6)}`;
+      const isAnnotationEdit = _meta?.type === 'annotation-edit';
+      const annotationLabel = isAnnotationEdit
+        ? i === 0
+          ? 'Annotation source'
+          : 'Annotation reference'
+        : undefined;
       return {
         id: newId,
         type: 'output',
@@ -481,8 +487,20 @@ const UploadNode = ({ id, data, selected, type }: NodeProps) => {
           y: baseY + Math.floor(i / COLS) * ROW_H + _off.dy,
         },
         data: {
+          ...(annotationLabel ? { label: annotationLabel } : {}),
           directImageUrl: u,
           imageUrl: u,
+          ...(isAnnotationEdit
+            ? {
+                prompt: _meta.instruction,
+                directOutputText:
+                  i === 0
+                    ? 'Clean original: use as the main AI edit input.'
+                    : 'Annotated reference: follow arrows, boxes, labels, and text when editing.',
+                annotationEditRole: i === 0 ? 'source' : 'markup',
+                annotationEditPrompt: _meta.instruction,
+              }
+            : {}),
         },
         selected: isRhCapabilityOutput,
       } as Node;
