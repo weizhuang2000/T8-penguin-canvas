@@ -395,6 +395,8 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   const [taskSoundMessage, setTaskSoundMessage] = useState<string>('');
   const [taskSoundBusy, setTaskSoundBusy] = useState(false);
   const [taskSoundTesting, setTaskSoundTesting] = useState(false);
+  // 贞贞工坊启用开关（对应 enableZhenzhenFallback）
+  const [zhenzhenEnabled, setZhenzhenEnabled] = useState(true);
   const backupFileInputRef = useRef<HTMLInputElement | null>(null);
   const taskCompletionSoundFileInputRef = useRef<HTMLInputElement | null>(null);
   // 眼睛预览拉取的明文（仅缓存，不提交）
@@ -439,6 +441,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       setResourceLibraryPathInput((settings as any)?.resourceLibraryPath || '');
       setThemeTemplatePathInput((settings as any)?.themeTemplatePath || '');
       setEagleApiBaseInput((settings as any)?.eagleApiBase || '');
+      setZhenzhenEnabled((settings as any)?.enableZhenzhenFallback !== false);
     }
   }, [open, settings]);
 
@@ -718,6 +721,10 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     }
     if (cloudUploadDirty) {
       (patch as any).cloudUploadTargets = cloudUploadTargetsInput;
+    }
+    // 贞贞工坊启用开关
+    if (zhenzhenEnabled !== ((settings as any)?.enableZhenzhenFallback !== false)) {
+      (patch as any).enableZhenzhenFallback = zhenzhenEnabled;
     }
     if (Object.keys(patch).length === 0) {
       onClose();
@@ -2740,6 +2747,17 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
         <div className="t8-api-settings-body p-5 space-y-5 overflow-y-auto">
           {/* 三套通用 Key */}
           {renderKey(COMMON_KEYS[0], { baseUrlNote: `Base URL 锁定: ${FIXED_ZHENZHEN_BASE}` })}
+          <label className={`flex items-center gap-2 text-xs font-bold ${labelCls} -mt-2`}>
+            <input
+              type="checkbox"
+              checked={zhenzhenEnabled}
+              onChange={(e) => setZhenzhenEnabled(e.target.checked)}
+            />
+            贞贞工坊有效
+            {!zhenzhenEnabled && (
+              <span className={`text-[10px] font-normal ${hintCls}`}>关闭后节点模型选择中不会显示贞贞工坊</span>
+            )}
+          </label>
           <LocalSettingsAddonSlot
             open={open}
             isPixel={isPixel}

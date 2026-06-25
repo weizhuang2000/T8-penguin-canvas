@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react';
 import { AlertCircle, Image as ImageIcon, Loader2, Plus, Sparkles, X } from 'lucide-react';
 import { useUpstreamMaterials, type Material } from './useUpstreamMaterials';
@@ -175,6 +175,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
   const model = d?.model || IMAGE_MODELS[0].id;
   const modelDef = useMemo(() => IMAGE_MODELS.find((m) => m.id === model) || IMAGE_MODELS[0], [model]);
   const advancedProviders = useApiKeysStore((s) => s.settings.advancedProviders);
+  const allowZhenzhenFallback = useApiKeysStore((s) => s.settings.enableZhenzhenFallback !== false);
   const imageAdvancedProviders = useMemo(
     () => advancedProvidersForNode(advancedProviders, 'image'),
     [advancedProviders],
@@ -193,6 +194,18 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
     ? advancedProviderModelOptions(providerSelection.provider, 'image')
     : [];
   const externalProviderModel = providerSelection.providerModel || externalModelOptions[0] || '';
+  const firstImageAdvancedProvider = imageAdvancedProviders[0] || null;
+  // 贞贞工坊关闭时自动切换到第一个可用扩展平台
+  useEffect(() => {
+    if (allowZhenzhenFallback || isExternalSelected || !firstImageAdvancedProvider) return;
+    const nextModels = advancedProviderModelOptions(firstImageAdvancedProvider, 'image');
+    update({
+      providerSource: firstImageAdvancedProvider.protocol,
+      providerId: firstImageAdvancedProvider.id,
+      providerModel: nextModels[0] || '',
+      ...clearModelscopeLoraParams(),
+    });
+  }, [allowZhenzhenFallback, firstImageAdvancedProvider, isExternalSelected, update]);
   const providerParams = (d?.providerParams && typeof d.providerParams === 'object') ? d.providerParams : {};
   const isModelScopeExternal = isExternalSelected && providerSelection.provider?.protocol === 'modelscope';
   const isComfyExternal = isExternalSelected && providerSelection.provider?.protocol === 'comfyui';
@@ -1042,14 +1055,14 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
               className="w-full flex items-center justify-between text-[10px] font-semibold text-white/70 hover:text-white"
             >
               <span>高级来源</span>
-              <span>{isExternalSelected && providerSelection.provider ? providerSelection.provider.label : '默认贞贞工坊'}</span>
+              <span>{isExternalSelected && providerSelection.provider ? providerSelection.provider.label : (allowZhenzhenFallback ? '默认贞贞工坊' : '请选择扩展平台')}</span>
             </button>
             {d?.advancedProviderOpen && (
               <div className="space-y-2">
                 <div>
                   <label className="text-[10px] text-white/50 block mb-1">平台</label>
                   <select
-                    value={isExternalSelected ? providerSelection.providerId : 'zhenzhen'}
+                    value={isExternalSelected ? providerSelection.providerId : (allowZhenzhenFallback ? 'zhenzhen' : (firstImageAdvancedProvider?.id || ''))}
                     onChange={(e) => {
                       const nextId = e.target.value;
                       if (nextId === 'zhenzhen') {
@@ -1069,7 +1082,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
                     style={{ background: '#18181b', color: '#ffffff' }}
                     className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
                   >
-                    <option value="zhenzhen" style={{ background: '#18181b', color: '#ffffff' }}>贞贞工坊（默认）</option>
+                    {allowZhenzhenFallback && <option value="zhenzhen" style={{ background: '#18181b', color: '#ffffff' }}>贞贞工坊（默认）</option>}
                     {imageAdvancedProviders.map((provider) => (
                       <option key={provider.id} value={provider.id} style={{ background: '#18181b', color: '#ffffff' }}>
                         {provider.label || provider.id}

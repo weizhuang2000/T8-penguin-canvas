@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef, useState, useLayoutEffect } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react';
 import { Handle, Position, useReactFlow, type Node, type NodeProps } from '@xyflow/react';
 import {
   AlertCircle,
@@ -185,6 +185,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
   const d = data as any;
   const model: string = d?.model || DEFAULT_LLM_MODEL;
   const advancedProviders = useApiKeysStore((s) => s.settings.advancedProviders);
+  const allowZhenzhenFallback = useApiKeysStore((s) => s.settings.enableZhenzhenFallback !== false);
   const llmAdvancedProviders = useMemo(
     () => advancedProvidersForNode(advancedProviders, 'llm'),
     [advancedProviders],
@@ -203,6 +204,17 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
     ? advancedProviderModelOptions(providerSelection.provider, 'llm')
     : [];
   const externalProviderModel = providerSelection.providerModel || externalModelOptions[0] || '';
+  const firstLlmAdvancedProvider = llmAdvancedProviders[0] || null;
+  // 贞贞工坊关闭时自动切换到第一个可用扩展平台
+  useEffect(() => {
+    if (allowZhenzhenFallback || isExternalSelected || !firstLlmAdvancedProvider) return;
+    const nextModels = advancedProviderModelOptions(firstLlmAdvancedProvider, 'llm');
+    update({
+      providerSource: firstLlmAdvancedProvider.protocol,
+      providerId: firstLlmAdvancedProvider.id,
+      providerModel: nextModels[0] || '',
+    });
+  }, [allowZhenzhenFallback, firstLlmAdvancedProvider, isExternalSelected, update]);
   const status: 'idle' | 'generating' | 'success' | 'error' = d?.status || 'idle';
     // 用户输入框值: 改用 d.userPrompt 私有字段（避免与对下游开放的 d.prompt=助手回复 冲突，
     // 否则下游 useUpstreamMaterials 会同时 pushText(d.prompt) + pushText(d.reply) 出现两条文本）
@@ -760,7 +772,7 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
                     style={{ background: '#18181b', color: '#ffffff' }}
                     className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
                   >
-                    <option value="zhenzhen" style={{ background: '#18181b', color: '#ffffff' }}>LLM 独立 Key（默认）</option>
+                    {allowZhenzhenFallback && <option value="zhenzhen" style={{ background: '#18181b', color: '#ffffff' }}>LLM 独立 Key（默认）</option>}
                     {llmAdvancedProviders.map((provider) => (
                       <option key={provider.id} value={provider.id} style={{ background: '#18181b', color: '#ffffff' }}>
                         {provider.label || provider.id}

@@ -142,6 +142,7 @@ import ImportCamProjectNode from './nodes/ImportCamProjectNode';
 import MaterialSetNode from './nodes/MaterialSetNode';
 import UploadNode from './nodes/UploadNode';
 import Model3DPreviewNode from './nodes/Model3DPreviewNode';
+import Panorama3DNode from './nodes/Panorama3DNode';
 import OutputNode from './nodes/OutputNode';
 import GroupBoxNode from './nodes/GroupBoxNode';
 import CodexCliAgentNode from './nodes/CodexCliAgentNode';
@@ -179,6 +180,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   // Special (5)
   'multi-angle-3d': PresetImageNode,
   'panorama-720': PresetImageNode,
+  'panorama-3d': Panorama3DNode,
   'penguin-portrait': PresetImageNode,
   'portrait-metadata': PortraitMetadataNode,
   'storyboard-grid': StoryboardGridNode,
@@ -761,6 +763,35 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
   },
   'multi-angle-3d': { preset: 'multi-angle-3d' },
   'panorama-720': { preset: 'panorama-720' },
+  'panorama-3d': {
+    panoramaRatio: 'ultrawide',
+    panoramaGenerationMode: 'text',
+    panoramaSizeLevel: '1K',
+    panoramaViewerPosition: '',
+    panoramaViewCenter: '',
+    panoramaCameraViews: [],
+    panoramaHotspots: [],
+    panoramaAvatars: [],
+    panoramaAvatarKeyframes: [],
+    panoramaKeyframeSequenceCount: 8,
+    panoramaOcclusionMasks: [],
+    panoramaControlSnapshotUrl: '',
+    panoramaActionPrompt: '',
+    panoramaActionPlan: null,
+    panoramaSceneSnapshot: null,
+    panoramaAvatarIkEditMode: false,
+    panoramaShotCamera: {
+      mode: 'panorama-view',
+      presetId: 'full-body',
+      targetAvatarId: '',
+      targetBone: 'body',
+      framingRatio: '16:9',
+      closeupStrength: 28,
+      lowAngle: 10,
+    },
+    panoramaStoryboardPromptEnabled: false,
+    panoramaStoryboardPromptText: '锝涳蓟浜虹墿锛芥槸@鍦ㄥ仛锛诲姩浣滐冀锛岋綕',
+  },
   'penguin-portrait': { preset: 'penguin-portrait' },
   audio: { mode: 'generate', version: 'v5.5', title: '', tags: '', seed: 0, continueAt: 28 },
   llm: {

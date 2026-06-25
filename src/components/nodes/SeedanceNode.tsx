@@ -80,6 +80,7 @@ const SeedanceNode = ({ id, data, selected }: NodeProps) => {
   const d = (data as any) || {};
   const providerParams = (d?.providerParams && typeof d.providerParams === 'object') ? d.providerParams : {};
   const advancedProviders = useApiKeysStore((s) => s.settings.advancedProviders);
+  const allowZhenzhenFallback = useApiKeysStore((s) => s.settings.enableZhenzhenFallback !== false);
   const videoAdvancedProviders = useMemo(
     () => advancedProvidersForNode(advancedProviders, 'video'),
     [advancedProviders],
@@ -99,6 +100,17 @@ const SeedanceNode = ({ id, data, selected }: NodeProps) => {
     ? advancedProviderModelOptions(providerSelection.provider, 'video')
     : [];
   const externalProviderModel = providerSelection.providerModel || externalModelOptions[0] || '';
+  const firstVideoAdvancedProvider = videoAdvancedProviders[0] || null;
+  // 贞贞工坊关闭时自动切换到第一个可用扩展平台
+  useEffect(() => {
+    if (allowZhenzhenFallback || isExternalSelected || !firstVideoAdvancedProvider) return;
+    const nextModels = advancedProviderModelOptions(firstVideoAdvancedProvider, 'video');
+    update({
+      providerSource: firstVideoAdvancedProvider.protocol,
+      providerId: firstVideoAdvancedProvider.id,
+      providerModel: nextModels[0] || '',
+    });
+  }, [allowZhenzhenFallback, firstVideoAdvancedProvider, isExternalSelected, update]);
   const model: string = d.model || MODEL_OPTIONS[0].value;
   const duration: number = typeof d.duration === 'number' ? d.duration : 5;
   const ratio: string = d.ratio || '16:9';
@@ -531,7 +543,7 @@ const SeedanceNode = ({ id, data, selected }: NodeProps) => {
                     style={{ background: '#18181b', color: '#ffffff' }}
                     className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
                   >
-                    <option value="zhenzhen" style={{ background: '#18181b', color: '#ffffff' }}>贞贞工坊 SD2.0（默认）</option>
+                    {allowZhenzhenFallback && <option value="zhenzhen" style={{ background: '#18181b', color: '#ffffff' }}>贞贞工坊 SD2.0（默认）</option>}
                     {videoAdvancedProviders.map((provider) => (
                       <option key={provider.id} value={provider.id} style={{ background: '#18181b', color: '#ffffff' }}>
                         {provider.label || provider.id}

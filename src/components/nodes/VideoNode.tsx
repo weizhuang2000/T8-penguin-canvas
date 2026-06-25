@@ -110,6 +110,7 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
   const d = data as any;
   const providerParams = (d?.providerParams && typeof d.providerParams === 'object') ? d.providerParams : {};
   const advancedProviders = useApiKeysStore((s) => s.settings.advancedProviders);
+  const allowZhenzhenFallback = useApiKeysStore((s) => s.settings.enableZhenzhenFallback !== false);
   const videoAdvancedProviders = useMemo(
     () => advancedProvidersForNode(advancedProviders, 'video'),
     [advancedProviders],
@@ -128,6 +129,17 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
     ? advancedProviderModelOptions(providerSelection.provider, 'video')
     : [];
   const externalProviderModel = providerSelection.providerModel || externalModelOptions[0] || '';
+  const firstVideoAdvancedProvider = videoAdvancedProviders[0] || null;
+  // 贞贞工坊关闭时自动切换到第一个可用扩展平台
+  useEffect(() => {
+    if (allowZhenzhenFallback || isExternalSelected || !firstVideoAdvancedProvider) return;
+    const nextModels = advancedProviderModelOptions(firstVideoAdvancedProvider, 'video');
+    update({
+      providerSource: firstVideoAdvancedProvider.protocol,
+      providerId: firstVideoAdvancedProvider.id,
+      providerModel: nextModels[0] || '',
+    });
+  }, [allowZhenzhenFallback, firstVideoAdvancedProvider, isExternalSelected, update]);
   const isJimengCliSelected = isExternalSelected && providerSelection.provider?.protocol === 'jimeng-cli';
   const isJimengSeedanceSelected = isJimengCliSelected && /seedance|jimeng-video|video/i.test(externalProviderModel);
   const jimengSeedanceMode = normalizeJimengSeedanceMode(providerParams.frameMode ?? d?.jimengFrameMode);
@@ -781,7 +793,7 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
               className="w-full flex items-center justify-between text-[10px] font-semibold text-white/70 hover:text-white"
             >
               <span>高级来源</span>
-              <span>{isExternalSelected && providerSelection.provider ? providerSelection.provider.label : '默认视频接口'}</span>
+              <span>{isExternalSelected && providerSelection.provider ? providerSelection.provider.label : (allowZhenzhenFallback ? '默认视频接口' : '请选择扩展平台')}</span>
             </button>
             {d?.advancedProviderOpen && (
               <div className="space-y-2">
@@ -807,7 +819,7 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
                     style={{ background: '#18181b', color: '#ffffff' }}
                     className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
                   >
-                    <option value="zhenzhen" style={{ background: '#18181b', color: '#ffffff' }}>贞贞工坊（默认）</option>
+                    {allowZhenzhenFallback && <option value="zhenzhen" style={{ background: '#18181b', color: '#ffffff' }}>贞贞工坊（默认）</option>}
                     {videoAdvancedProviders.map((provider) => (
                       <option key={provider.id} value={provider.id} style={{ background: '#18181b', color: '#ffffff' }}>
                         {provider.label || provider.id}
