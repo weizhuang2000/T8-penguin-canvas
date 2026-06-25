@@ -10,6 +10,7 @@ import { useCanvasStore } from '../../stores/canvas';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useUpstreamMaterials } from './useUpstreamMaterials';
+import PromptTextarea from '../PromptTextarea';
 import { materialSetItemsToData, type MaterialSetItem } from '../../utils/materialSet';
 import { placeSingleNode } from '../../utils/nodePlacement';
 import {
@@ -573,12 +574,13 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
                   onChange={(event) => update({ outlineCreateWordCount: event.target.value })}
                 />
               </label>
-              <textarea
+              <PromptTextarea title="扩大编辑"
                 className={`${FIELD} min-h-[68px] resize-y`}
                 value={outlineCreateTheme}
                 disabled={isReadonly || busy}
                 placeholder="主题描述：例如展览主题、城市/产业/文化关键词、目标观众、希望突出的叙事方向"
-                onChange={(event) => update({ outlineCreateTheme: event.target.value })}
+                onValueChange={(value) => update({ outlineCreateTheme: value })}
+                readOnly={isReadonly || busy}
               />
               <div className="grid grid-cols-2 gap-1">
                 <select
@@ -614,13 +616,14 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
               </button>
             </div>
           )}
-          <textarea
+          <PromptTextarea title="扩大编辑"
             className={`${FIELD} min-h-[96px] resize-y`}
             value={sourceText}
             disabled={isReadonly || busy}
             placeholder="导入 DOCX、文本型 PDF、TXT，或直接粘贴展陈资料原文"
-            onChange={(event) => update({ sourceText: event.target.value })}
-          />
+            onValueChange={(value) => update({ sourceText: value })}
+                readOnly={isReadonly || busy}
+              />
           <label className="flex items-center gap-1.5 text-[10px] text-white/60">
             <input
               type="checkbox"
@@ -686,13 +689,14 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
             placeholder="项目主题 / 展览关键词（可选）"
             onChange={(event) => update({ projectTheme: event.target.value })}
           />
-          <textarea
+          <PromptTextarea title="扩大编辑"
             className={`${FIELD} min-h-[56px] resize-y`}
             value={extraInstruction}
             disabled={isReadonly || busy}
             placeholder="额外拆分要求：例如按时间线、按展厅动线、突出产业成果等（可选）"
-            onChange={(event) => update({ extraInstruction: event.target.value })}
-          />
+            onValueChange={(value) => update({ extraInstruction: value })}
+                readOnly={isReadonly || busy}
+              />
           <div className="grid grid-cols-2 gap-1">
             <select
               className={FIELD}

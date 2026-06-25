@@ -84,6 +84,7 @@ import { useThemeStore } from '../../stores/theme';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
+import PromptTextarea from '../PromptTextarea';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
@@ -2879,7 +2880,10 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           {canManageTeam && craftEditorOpen && (
             <div className="mt-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
               <div className="mb-1 text-[10px] text-white/45">每行一个工艺预设：分类｜名称｜提示词。分类可用：装饰、多媒体、艺术品、展陈、展柜、展台、顶部、其它。</div>
-              <textarea className={`${FIELD} min-h-[96px] resize-y font-mono`} value={craftEditorValue} disabled={craftSaving} onChange={(event) => setCraftEditorValue(event.target.value)} />
+              <PromptTextarea title="扩大编辑" className={`${FIELD} min-h-[96px] resize-y font-mono`} value={craftEditorValue} disabled={craftSaving} onValueChange={(value) => setCraftEditorValue(value)}
+                editorKind="lines"
+                readOnly={craftSaving}
+              />
               {craftError && <div className="mt-1 text-[10px] text-red-300">{craftError}</div>}
               <div className="mt-1.5 flex justify-end gap-1">
                 <button type="button" className={BUTTON} disabled={craftSaving} onClick={() => setCraftEditorOpen(false)}>取消</button>
@@ -2906,7 +2910,9 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
             />
             <input className={FIELD} value={d.visualStyle || ''} disabled={isReadonly} placeholder="视觉风格" onChange={(event) => update({ visualStyle: event.target.value })} />
           </div>
-          <textarea className={`${FIELD} mt-1 min-h-[48px] resize-y`} value={d.supplement || ''} disabled={isReadonly} placeholder="补充要求" onChange={(event) => update({ supplement: event.target.value })} />
+          <PromptTextarea title="扩大编辑" className={`${FIELD} mt-1 min-h-[48px] resize-y`} value={d.supplement || ''} disabled={isReadonly} placeholder="补充要求" onValueChange={(value) => update({ supplement: value })}
+                readOnly={isReadonly}
+              />
         </section>
 
         <section className="space-y-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
@@ -2952,12 +2958,14 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           </div>
           {canManageTeam && excludeEditorOpen && (
             <div className="space-y-1.5 rounded border border-rose-300/15 bg-rose-300/5 p-2">
-              <textarea
+              <PromptTextarea title="扩大编辑"
+                editorKind="lines"
                 className={`${FIELD} min-h-[92px] resize-y`}
                 value={excludeEditorValue}
                 disabled={excludeSaving || busy}
                 placeholder="每行一个排除项，例如：真实品牌标识"
-                onChange={(event) => setExcludeEditorValue(event.target.value)}
+                onValueChange={(value) => setExcludeEditorValue(value)}
+                readOnly={excludeSaving || busy}
               />
               {excludeError && <div className="text-[10px] text-red-200">{excludeError}</div>}
               <div className="flex items-center justify-end gap-2">
@@ -3079,16 +3087,17 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                   <span className="truncate text-[8px] text-amber-200/75" title={d.colorMaterialReferenceToneStatus}>需手动确认</span>
                 )}
               </div>
-              <textarea
+              <PromptTextarea title="扩大编辑"
                 className={`${FIELD} mt-1 min-h-[46px] resize-y text-[10px] leading-snug${colorMaterialPriorityMode === 'llm' ? ' select-none pointer-events-none' : ''}`}
                 value={colorMaterialReferenceTone}
                 disabled={isReadonly || busy || hasColorMaterialPreset || colorMaterialPriorityMode === 'llm'}
                 placeholder="接入图片后自动识别主色调，可手动修正"
-                onChange={(event) => update({
-                  colorMaterialReferenceTone: event.target.value,
+                onValueChange={(value) => update({
+                  colorMaterialReferenceTone: value,
                   colorMaterialReferenceToneSource: colorMaterialReferenceImage,
                   colorMaterialReferenceToneStatus: '',
                 })}
+                readOnly={isReadonly || busy || hasColorMaterialPreset || colorMaterialPriorityMode === 'llm'}
               />
               {renderColorMaterialMarkSettings('色彩与材质图标识', colorMaterialMarkSettings)}
             </div>
@@ -3105,28 +3114,30 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
             />
           )}
           <div className="grid grid-cols-2 gap-1">
-            <textarea
+            <PromptTextarea title="扩大编辑"
               className={`${FIELD} min-h-[54px] resize-y text-[10px] leading-snug`}
               value={colorMaterialPalette || d.colorMaterial || ''}
               disabled={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
               placeholder="Color palette / 主色、辅助色、明暗、冷暖"
-              onChange={(event) => update({
-                colorMaterialPalette: event.target.value,
-                colorMaterial: combineColorMaterialText(event.target.value, colorMaterialTextures, d.colorMaterial || ''),
+              onValueChange={(value) => update({
+                colorMaterialPalette: value,
+                colorMaterial: combineColorMaterialText(value, colorMaterialTextures, d.colorMaterial || ''),
                 colorMaterialPreset: '',
               })}
-            />
-            <textarea
+                readOnly={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
+              />
+            <PromptTextarea title="扩大编辑"
               className={`${FIELD} min-h-[54px] resize-y text-[10px] leading-snug`}
               value={colorMaterialTextures || d.colorMaterial || ''}
               disabled={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
               placeholder="Materials/textures / 墙面、地面、展柜、灯光材质"
-              onChange={(event) => update({
-                colorMaterialTextures: event.target.value,
-                colorMaterial: combineColorMaterialText(colorMaterialPalette, event.target.value, d.colorMaterial || ''),
+              onValueChange={(value) => update({
+                colorMaterialTextures: value,
+                colorMaterial: combineColorMaterialText(colorMaterialPalette, value, d.colorMaterial || ''),
                 colorMaterialPreset: '',
               })}
-            />
+                readOnly={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
+              />
           </div>
           {hasColorMaterialReference && (
             <div className="rounded border border-rose-300/15 bg-rose-300/5 px-2 py-1 text-[10px] leading-snug text-rose-50/70">
@@ -3214,13 +3225,14 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                 {Array.isArray(d.documentMeta?.warnings) && d.documentMeta.warnings.length > 0 && (
                   <div className="mt-1 text-[10px] text-amber-200/80">{d.documentMeta.warnings.join('；')}</div>
                 )}
-                <textarea
+                <PromptTextarea title="扩大编辑"
                   className={`${FIELD} mt-2 min-h-[72px] resize-y`}
                   value={sourceText}
                   disabled={isReadonly || contentBusy || !!inputDocumentText}
                   placeholder="上传 DOCX、文本型 PDF、TXT，或直接粘贴项目文案"
-                  onChange={(event) => update({ sourceText: event.target.value })}
-                />
+                  onValueChange={(value) => update({ sourceText: value })}
+                readOnly={isReadonly || contentBusy || !!inputDocumentText}
+              />
               </div>
 
               <div className="rounded border border-white/10 bg-black/15 p-2">
@@ -3309,13 +3321,14 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                   placeholder="项目主题"
                   onChange={(event) => update({ analysis: { ...analysis, projectTheme: event.target.value } })}
                 />
-                <textarea
+                <PromptTextarea title="扩大编辑"
                   className={`${FIELD} mt-1 min-h-[48px] resize-y`}
                   value={analysis.coreMessage}
                   disabled={isReadonly}
                   placeholder="核心叙事"
-                  onChange={(event) => update({ analysis: { ...analysis, coreMessage: event.target.value } })}
-                />
+                  onValueChange={(value) => update({ analysis: { ...analysis, coreMessage: value } })}
+                readOnly={isReadonly}
+              />
                 <div className="mt-2 max-h-56 space-y-1.5 overflow-y-auto">
                   {contentOutputs.walls.map((wall: ElevationWall, index: number) => (
                     <div key={wall.id || index} className="rounded border border-white/10 bg-white/[0.035] p-1.5">
@@ -3326,29 +3339,33 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                         placeholder={`立面 ${index + 1} 标题`}
                         onChange={(event) => patchWall(index, { title: event.target.value })}
                       />
-                      <textarea
+                      <PromptTextarea title="扩大编辑"
                         className={`${FIELD} mt-1 min-h-[46px] resize-y`}
                         value={wall.content || ''}
                         disabled={isReadonly}
                         placeholder="展示重点与内容摘要"
-                        onChange={(event) => patchWall(index, { content: event.target.value })}
-                      />
-                      <textarea
+                        onValueChange={(value) => patchWall(index, { content: value })}
+                readOnly={isReadonly}
+              />
+                      <PromptTextarea title="扩大编辑"
+                        editorKind="lines"
                         className={`${FIELD} mt-1 min-h-[40px] resize-y`}
                         value={(wall.exactText || []).join('\n')}
                         disabled={isReadonly}
                         placeholder="准确上墙文案，每行一条"
-                        onChange={(event) => patchWall(index, {
-                          exactText: event.target.value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
+                        onValueChange={(value) => patchWall(index, {
+                          exactText: value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
                         })}
-                      />
-                      <textarea
+                readOnly={isReadonly}
+              />
+                      <PromptTextarea title="扩大编辑"
                         className={`${FIELD} mt-1 min-h-[40px] resize-y`}
                         value={wall.craftNotes || ''}
                         disabled={isReadonly}
                         placeholder="本立面工艺与版式配置，如：立体字展示标题；图文展板展示纹样；沿墙文物柜展示展品"
-                        onChange={(event) => patchWall(index, { craftNotes: event.target.value })}
-                      />
+                        onValueChange={(value) => patchWall(index, { craftNotes: value })}
+                readOnly={isReadonly}
+              />
                     </div>
                   ))}
                 </div>

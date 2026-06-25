@@ -82,6 +82,7 @@ import { useThemeStore } from '../../stores/theme';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
+import PromptTextarea from '../PromptTextarea';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
@@ -2039,17 +2040,18 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                         <span className="truncate text-[8px] text-amber-200/75" title={d.colorMaterialReferenceToneStatus}>需手动确认</span>
                       )}
                     </div>
-                    <textarea
+                    <PromptTextarea title="扩大编辑"
                       className={`${FIELD} min-h-[46px] resize-y text-[10px] leading-snug${colorMaterialPriorityMode === 'llm' ? ' select-none pointer-events-none' : ''}`}
                       value={colorMaterialReferenceTone}
                       disabled={isReadonly || busy || hasColorMaterialPreset || colorMaterialPriorityMode === 'llm'}
                       placeholder="接入图片后自动识别主色调，可手动修正"
-                      onChange={(event) => update({
-                        colorMaterialReferenceTone: event.target.value,
+                      onValueChange={(value) => update({
+                        colorMaterialReferenceTone: value,
                         colorMaterialReferenceToneSource: colorMaterialReferenceImage,
                         colorMaterialReferenceToneStatus: '',
                       })}
-                    />
+                readOnly={isReadonly || busy || hasColorMaterialPreset || colorMaterialPriorityMode === 'llm'}
+              />
                   </div>
                 </>
               ) : (
@@ -2196,36 +2198,39 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                 onSave={saveColorMaterialPresetItems}
               />
             )}
-              <textarea
+              <PromptTextarea title="扩大编辑"
                 className={`${FIELD} min-h-[46px] resize-y`}
                 value={colorMaterialPalette || d.colorMaterial || ''}
                 disabled={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
                 placeholder="Color palette"
-                onChange={(event) => update({
-                  colorMaterialPalette: event.target.value,
-                  colorMaterial: combineColorMaterialText(event.target.value, colorMaterialTextures, d.colorMaterial || ''),
+                onValueChange={(value) => update({
+                  colorMaterialPalette: value,
+                  colorMaterial: combineColorMaterialText(value, colorMaterialTextures, d.colorMaterial || ''),
                   colorMaterialPreset: '',
                 })}
+                readOnly={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
               />
-              <textarea
+              <PromptTextarea title="扩大编辑"
                 className={`${FIELD} min-h-[46px] resize-y`}
                 value={colorMaterialTextures || d.colorMaterial || ''}
                 disabled={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
                 placeholder="Materials/textures"
-                onChange={(event) => update({
-                  colorMaterialTextures: event.target.value,
-                  colorMaterial: combineColorMaterialText(colorMaterialPalette, event.target.value, d.colorMaterial || ''),
+                onValueChange={(value) => update({
+                  colorMaterialTextures: value,
+                  colorMaterial: combineColorMaterialText(colorMaterialPalette, value, d.colorMaterial || ''),
                   colorMaterialPreset: '',
                 })}
+                readOnly={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
               />
           </div>
-          <textarea
+          <PromptTextarea title="扩大编辑"
             className={`${FIELD} min-h-[78px] resize-y`}
             value={inspiration}
             disabled={isReadonly || busy}
             placeholder="个人灵感：想要的情绪、装置、材料、互动、叙事方向"
-            onChange={(event) => update({ inspiration: event.target.value })}
-          />
+            onValueChange={(value) => update({ inspiration: value })}
+                readOnly={isReadonly || busy}
+              />
         </section>
 
         <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
@@ -2282,13 +2287,14 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             </select>
             <input className={FIELD} disabled value={documentLlmModel} title="资料总结模型由所选 LLM 配置决定" />
           </div>
-          <textarea
+          <PromptTextarea title="扩大编辑"
             className={`${FIELD} min-h-[72px] resize-y`}
             value={sourceText}
             disabled={isReadonly || busy}
             placeholder="导入 DOCX、文本型 PDF、TXT，或直接粘贴项目资料原文"
-            onChange={(event) => update({ sourceText: event.target.value })}
-          />
+            onValueChange={(value) => update({ sourceText: value })}
+                readOnly={isReadonly || busy}
+              />
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -2303,13 +2309,14 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               摘要会参与后续创意描述和生图 Prompt。
             </span>
           </div>
-          <textarea
+          <PromptTextarea title="扩大编辑"
             className={`${FIELD} min-h-[92px] resize-y`}
             value={documentSummary}
             disabled={isReadonly || busy}
             placeholder="LLM 总结后的创意资料摘要，可手动调整"
-            onChange={(event) => update({ documentSummary: event.target.value })}
-          />
+            onValueChange={(value) => update({ documentSummary: value })}
+                readOnly={isReadonly || busy}
+              />
         </section>
 
         <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
@@ -2340,13 +2347,14 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             </select>
             <input className={FIELD} disabled value={llmModel} title="模型由所选 LLM 配置决定" />
           </div>
-          <textarea
+          <PromptTextarea title="扩大编辑"
             className={`${FIELD} min-h-[132px] resize-y`}
             value={creativeBrief}
             disabled={isReadonly || busy}
             placeholder="点击生成创意，或在这里手动微调 LLM 创意描述"
-            onChange={(event) => update({ creativeBrief: event.target.value })}
-          />
+            onValueChange={(value) => update({ creativeBrief: value })}
+                readOnly={isReadonly || busy}
+              />
           <label className="flex items-center gap-1.5 text-[10px] text-white/60">
             <input
               type="checkbox"
@@ -2432,13 +2440,15 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             </div>
             {canManageTeam && insertEditorOpen && (
               <div className="space-y-1.5 rounded border border-cyan-300/15 bg-cyan-300/5 p-2">
-                <textarea
+                <PromptTextarea title="扩大编辑"
+                  editorKind="lines"
                   className={`${FIELD} min-h-[92px] resize-y`}
                   value={insertEditorValue}
                   disabled={insertSaving || busy}
                   placeholder="每行一个植入项：分类｜名称；分类可用：装饰、多媒体、艺术品、展陈、展柜、展台、顶部、其它"
-                  onChange={(event) => setInsertEditorValue(event.target.value)}
-                />
+                  onValueChange={(value) => setInsertEditorValue(value)}
+                readOnly={insertSaving || busy}
+              />
                 {insertError && <div className="text-[10px] text-red-200">{insertError}</div>}
                 <div className="flex items-center justify-end gap-2">
                   <button
@@ -2510,13 +2520,15 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             </div>
             {canManageTeam && viewAngleEditorOpen && (
               <div className="space-y-1.5 rounded border border-emerald-300/15 bg-emerald-300/5 p-2">
-                <textarea
+                <PromptTextarea title="扩大编辑"
+                  editorKind="lines"
                   className={`${FIELD} min-h-[92px] resize-y`}
                   value={viewAngleEditorValue}
                   disabled={viewAngleSaving || busy}
                   placeholder="每行一个视角项，例如：正视角"
-                  onChange={(event) => setViewAngleEditorValue(event.target.value)}
-                />
+                  onValueChange={(value) => setViewAngleEditorValue(value)}
+                readOnly={viewAngleSaving || busy}
+              />
                 {viewAngleError && <div className="text-[10px] text-red-200">{viewAngleError}</div>}
                 <div className="flex items-center justify-end gap-2">
                   <button
@@ -2585,13 +2597,15 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             </div>
             {canManageTeam && excludeEditorOpen && (
               <div className="space-y-1.5 rounded border border-rose-300/15 bg-rose-300/5 p-2">
-                <textarea
+                <PromptTextarea title="扩大编辑"
+                  editorKind="lines"
                   className={`${FIELD} min-h-[92px] resize-y`}
                   value={excludeEditorValue}
                   disabled={excludeSaving || busy}
                   placeholder="每行一个排除项，例如：真实品牌标识"
-                  onChange={(event) => setExcludeEditorValue(event.target.value)}
-                />
+                  onValueChange={(value) => setExcludeEditorValue(value)}
+                readOnly={excludeSaving || busy}
+              />
                 {excludeError && <div className="text-[10px] text-red-200">{excludeError}</div>}
                 <div className="flex items-center justify-end gap-2">
                   <button

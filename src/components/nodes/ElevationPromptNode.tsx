@@ -45,6 +45,7 @@ import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
+import PromptTextarea from '../PromptTextarea';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
@@ -674,13 +675,14 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
           {Array.isArray(d.documentMeta?.warnings) && d.documentMeta.warnings.length > 0 && (
             <div className="mt-1 text-[10px] text-amber-200/80">{d.documentMeta.warnings.join('；')}</div>
           )}
-          <textarea
+          <PromptTextarea title="扩大编辑"
             className={`${FIELD} mt-2 min-h-[90px] resize-y`}
             value={sourceText}
             disabled={isReadonly || busy}
             placeholder="上传 DOCX、文本型 PDF、TXT，或直接粘贴项目文案"
-            onChange={(event) => update({ sourceText: event.target.value })}
-          />
+            onValueChange={(value) => update({ sourceText: value })}
+                readOnly={isReadonly || busy}
+              />
         </section>
 
         <section className="rounded border border-white/10 bg-white/[0.035] p-2">
@@ -737,13 +739,14 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
             placeholder="项目主题"
             onChange={(event) => update({ analysis: { ...analysis, projectTheme: event.target.value } })}
           />
-          <textarea
+          <PromptTextarea title="扩大编辑"
             className={`${FIELD} mt-1 min-h-[52px] resize-y`}
             value={analysis.coreMessage}
             disabled={isReadonly}
             placeholder="核心信息"
-            onChange={(event) => update({ analysis: { ...analysis, coreMessage: event.target.value } })}
-          />
+            onValueChange={(value) => update({ analysis: { ...analysis, coreMessage: value } })}
+                readOnly={isReadonly}
+              />
           <details className="mt-1.5 text-[10px] text-white/55">
             <summary className="cursor-pointer select-none">编辑结构化分析 JSON</summary>
             <input
@@ -753,15 +756,17 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
               className="hidden"
               onChange={(event) => importAnalysisJson(event.target.files?.[0])}
             />
-            <textarea
+            <PromptTextarea title="扩大编辑"
+              editorKind="json"
               className={`${FIELD} mt-1 min-h-[150px] resize-y font-mono`}
               value={analysisDraft}
               disabled={isReadonly}
-              onChange={(event) => {
-                setAnalysisDraft(event.target.value);
+              onValueChange={(value) => {
+                setAnalysisDraft(value);
                 setDraftMessage('');
               }}
-            />
+                readOnly={isReadonly}
+              />
             <div className="mt-1 flex items-center justify-end gap-2">
               {draftMessage && (
                 <span className={['已应用', '已导入', '已导出'].includes(draftMessage) ? 'text-emerald-300' : 'text-red-300'}>
@@ -844,22 +849,25 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
                   placeholder={`立面 ${index + 1} 标题`}
                   onChange={(event) => patchWall(index, { title: event.target.value })}
                 />
-                <textarea
+                <PromptTextarea title="扩大编辑"
                   className={`${FIELD} mt-1 min-h-[48px] resize-y`}
                   value={wall.content || ''}
                   disabled={isReadonly}
                   placeholder="展示重点与内容摘要"
-                  onChange={(event) => patchWall(index, { content: event.target.value })}
-                />
-                <textarea
+                  onValueChange={(value) => patchWall(index, { content: value })}
+                readOnly={isReadonly}
+              />
+                <PromptTextarea title="扩大编辑"
+                  editorKind="lines"
                   className={`${FIELD} mt-1 min-h-[42px] resize-y`}
                   value={(wall.exactText || []).join('\n')}
                   disabled={isReadonly}
                   placeholder="准确上墙文案，每行一条"
-                  onChange={(event) => patchWall(index, {
-                    exactText: event.target.value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
+                  onValueChange={(value) => patchWall(index, {
+                    exactText: value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
                   })}
-                />
+                readOnly={isReadonly}
+              />
               </div>
             ))}
           </div>
@@ -927,11 +935,13 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
           {canManageTeam && craftEditorOpen && (
             <div className="mt-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
               <div className="mb-1 text-[10px] text-white/45">每行一个工艺预设：分类｜名称｜提示词。分类可用：装饰、多媒体、艺术品、展陈、展柜、展台、顶部、其它。</div>
-              <textarea
+              <PromptTextarea title="扩大编辑"
+                editorKind="lines"
                 className={`${FIELD} min-h-[96px] resize-y font-mono`}
                 value={craftEditorValue}
                 disabled={craftSaving}
-                onChange={(event) => setCraftEditorValue(event.target.value)}
+                onValueChange={(value) => setCraftEditorValue(value)}
+                readOnly={craftSaving}
               />
               {craftError && <div className="mt-1 text-[10px] text-red-300">{craftError}</div>}
               <div className="mt-1.5 flex justify-end gap-1">
@@ -999,7 +1009,9 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
               onSave={saveColorMaterialPresetItems}
             />
           )}
-          <textarea className={`${FIELD} mt-1 min-h-[46px] resize-y`} value={d.colorMaterial || ''} disabled={isReadonly} placeholder="色彩与材质体系" onChange={(event) => update({ colorMaterial: event.target.value, colorMaterialPreset: '' })} />
+          <PromptTextarea title="扩大编辑" className={`${FIELD} mt-1 min-h-[46px] resize-y`} value={d.colorMaterial || ''} disabled={isReadonly} placeholder="色彩与材质体系" onValueChange={(value) => update({ colorMaterial: value, colorMaterialPreset: '' })}
+                readOnly={isReadonly}
+              />
           <div className="mt-1.5">
             <div className="mb-1 flex items-center gap-1.5">
               <label className="text-[10px] text-white/50">特殊限制、品牌语气、施工要求等</label>
@@ -1046,7 +1058,9 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
                 )}
               </div>
             </div>
-            <textarea className={`${FIELD} min-h-[46px] resize-y`} value={d.supplement || ''} disabled={isReadonly} placeholder="特殊限制、品牌语气、施工要求等" onChange={(event) => update({ supplement: event.target.value })} />
+            <PromptTextarea title="扩大编辑" className={`${FIELD} min-h-[46px] resize-y`} value={d.supplement || ''} disabled={isReadonly} placeholder="特殊限制、品牌语气、施工要求等" onValueChange={(value) => update({ supplement: value })}
+                readOnly={isReadonly}
+              />
           </div>
         </section>
 
@@ -1067,12 +1081,13 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
           </div>
           <details className="mt-1.5 text-[10px] text-white/55">
             <summary className="cursor-pointer select-none">编辑准确排版清单</summary>
-            <textarea
+            <PromptTextarea title="扩大编辑"
               className={`${FIELD} mt-1 min-h-[150px] resize-y`}
               value={d.layoutScheduleOverride || outputs.generatedLayoutSchedule}
               disabled={isReadonly}
-              onChange={(event) => update({ layoutScheduleOverride: event.target.value })}
-            />
+              onValueChange={(value) => update({ layoutScheduleOverride: value })}
+                readOnly={isReadonly}
+              />
             {d.layoutScheduleOverride && (
               <div className="mt-1 flex justify-end">
                 <button type="button" className={BUTTON} disabled={isReadonly} onClick={() => update({ layoutScheduleOverride: '' })}>
