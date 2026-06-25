@@ -2653,6 +2653,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                 providerModel: externalProviderModel,
                 taskId: pollingTaskId,
                 outputFormat,
+                historyContext,
               });
               transientFailures = 0;
             } catch (err: any) {

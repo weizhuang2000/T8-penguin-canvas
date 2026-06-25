@@ -1613,6 +1613,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             providerModel: externalProviderModel,
             taskId: pollingTaskId,
             outputFormat,
+            historyContext,
           });
           pollingTaskId = res.taskId || pollingTaskId;
           update({ taskId: pollingTaskId, progress: `${roundIndex}/${generationCount} · ${Math.min(99, Math.round(((i + 1) / EXTERNAL_IMAGE_MAX_POLLS) * 100))}%` });
