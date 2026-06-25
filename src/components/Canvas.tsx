@@ -5268,6 +5268,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
         snapGrid={SNAP_GRID}
         elevateNodesOnSelect={false}
         fitView
+        minZoom={0}
         proOptions={memoProOptions}
         defaultEdgeOptions={memoDefaultEdgeOptions}
       >

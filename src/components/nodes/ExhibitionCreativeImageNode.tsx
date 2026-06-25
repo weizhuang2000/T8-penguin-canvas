@@ -82,6 +82,7 @@ import { useThemeStore } from '../../stores/theme';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
+import PromptExpandableInput from '../PromptExpandableInput';
 import PromptTextarea from '../PromptTextarea';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
@@ -1090,13 +1091,14 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
         </label>
       </div>
       <div className="grid grid-cols-4 gap-1">
-        <input
+        <PromptExpandableInput
+          title="扩大编辑"
           className={FIELD}
           value={settings.text}
           disabled={isReadonly || busy}
           maxLength={64}
           placeholder="标识"
-          onChange={(event) => update({ [`${prefix}MarkText`]: event.target.value })}
+          onValueChange={(value) => update({ [`${prefix}MarkText`]: value })}
         />
         <select
           className={`${FIELD} col-span-2`}
@@ -1126,11 +1128,12 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           className="h-7 w-full rounded border border-white/10 bg-black/20 p-0.5 disabled:opacity-55"
           onChange={(event) => update({ [`${prefix}MarkColor`]: normalizeReferenceMarkColor(event.target.value) })}
         />
-        <input
+        <PromptExpandableInput
+          title="扩大编辑"
           className={FIELD}
           value={settings.color}
           disabled={isReadonly || busy}
-          onChange={(event) => update({ [`${prefix}MarkColor`]: event.target.value })}
+          onValueChange={(value) => update({ [`${prefix}MarkColor`]: value })}
         />
       </div>
     </div>
@@ -2040,7 +2043,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                         <span className="truncate text-[8px] text-amber-200/75" title={d.colorMaterialReferenceToneStatus}>需手动确认</span>
                       )}
                     </div>
-                    <PromptTextarea title="扩大编辑"
+                    <PromptTextarea compact title="扩大编辑"
                       className={`${FIELD} min-h-[46px] resize-y text-[10px] leading-snug${colorMaterialPriorityMode === 'llm' ? ' select-none pointer-events-none' : ''}`}
                       value={colorMaterialReferenceTone}
                       disabled={isReadonly || busy || hasColorMaterialPreset || colorMaterialPriorityMode === 'llm'}
@@ -2075,12 +2078,13 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                     <div key={item.url} className="grid grid-cols-[54px_minmax(0,1fr)] items-start gap-1.5 rounded border border-white/10 bg-black/15 p-1.5">
                       <img src={item.url} alt="" className="h-12 w-12 rounded border border-white/10 object-cover" draggable={false} />
                       <div className="min-w-0">
-                        <input
+                        <PromptExpandableInput
+                          title="扩大编辑"
                           className={FIELD}
                           value={item.description}
                           disabled={isReadonly || busy}
                           placeholder={`展品 ${index + 1} 特征描述，如"红色的茶壶"`}
-                          onChange={(event) => patchExhibitReferenceItem(item.url, { description: event.target.value })}
+                          onValueChange={(value) => patchExhibitReferenceItem(item.url, { description: value })}
                         />
                         <div className="mt-0.5 truncate text-[9px] text-white/35" title={item.url}>{item.label}</div>
                       </div>
@@ -2198,7 +2202,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                 onSave={saveColorMaterialPresetItems}
               />
             )}
-              <PromptTextarea title="扩大编辑"
+              <PromptTextarea compact title="扩大编辑"
                 className={`${FIELD} min-h-[46px] resize-y`}
                 value={colorMaterialPalette || d.colorMaterial || ''}
                 disabled={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
@@ -2210,7 +2214,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                 })}
                 readOnly={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
               />
-              <PromptTextarea title="扩大编辑"
+              <PromptTextarea compact title="扩大编辑"
                 className={`${FIELD} min-h-[46px] resize-y`}
                 value={colorMaterialTextures || d.colorMaterial || ''}
                 disabled={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
@@ -2223,7 +2227,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                 readOnly={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
               />
           </div>
-          <PromptTextarea title="扩大编辑"
+          <PromptTextarea compact title="扩大编辑"
             className={`${FIELD} min-h-[78px] resize-y`}
             value={inspiration}
             disabled={isReadonly || busy}
@@ -2285,9 +2289,9 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             >
               {llmConfigOptions.map((item) => <option key={item.id} value={`llm-key:${item.id}`}>{item.label || item.id}{item.model ? ` · ${item.model}` : ''}</option>)}
             </select>
-            <input className={FIELD} disabled value={documentLlmModel} title="资料总结模型由所选 LLM 配置决定" />
+            <PromptExpandableInput title="扩大编辑" className={FIELD} disabled value={documentLlmModel} />
           </div>
-          <PromptTextarea title="扩大编辑"
+          <PromptTextarea compact title="扩大编辑"
             className={`${FIELD} min-h-[72px] resize-y`}
             value={sourceText}
             disabled={isReadonly || busy}
@@ -2309,7 +2313,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               摘要会参与后续创意描述和生图 Prompt。
             </span>
           </div>
-          <PromptTextarea title="扩大编辑"
+          <PromptTextarea compact title="扩大编辑"
             className={`${FIELD} min-h-[92px] resize-y`}
             value={documentSummary}
             disabled={isReadonly || busy}
@@ -2345,9 +2349,9 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             >
               {llmConfigOptions.map((item) => <option key={item.id} value={`llm-key:${item.id}`}>{item.label || item.id}{item.model ? ` · ${item.model}` : ''}</option>)}
             </select>
-            <input className={FIELD} disabled value={llmModel} title="模型由所选 LLM 配置决定" />
+            <PromptExpandableInput title="扩大编辑" className={FIELD} disabled value={llmModel} />
           </div>
-          <PromptTextarea title="扩大编辑"
+          <PromptTextarea compact title="扩大编辑"
             className={`${FIELD} min-h-[132px] resize-y`}
             value={creativeBrief}
             disabled={isReadonly || busy}
@@ -2369,13 +2373,14 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
 
         <section className="space-y-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="text-[11px] font-semibold text-cyan-100">图像名称</div>
-          <input
+          <PromptExpandableInput
+            title="扩大编辑"
             className={FIELD}
             value={imageName}
             disabled={isReadonly || busy}
             maxLength={12}
             placeholder="最多6字"
-            onChange={(event) => update({ imageName: normalizeExhibitionImageName(event.target.value) })}
+            onValueChange={(value) => update({ imageName: normalizeExhibitionImageName(value) })}
           />
           <div className="text-[9px] leading-snug text-white/35">为空时，LLM 提炼文本后自动生成；批量输出会追加 -1、-2。</div>
         </section>
@@ -2440,7 +2445,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             </div>
             {canManageTeam && insertEditorOpen && (
               <div className="space-y-1.5 rounded border border-cyan-300/15 bg-cyan-300/5 p-2">
-                <PromptTextarea title="扩大编辑"
+                <PromptTextarea compact title="扩大编辑"
                   editorKind="lines"
                   className={`${FIELD} min-h-[92px] resize-y`}
                   value={insertEditorValue}
@@ -2520,7 +2525,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             </div>
             {canManageTeam && viewAngleEditorOpen && (
               <div className="space-y-1.5 rounded border border-emerald-300/15 bg-emerald-300/5 p-2">
-                <PromptTextarea title="扩大编辑"
+                <PromptTextarea compact title="扩大编辑"
                   editorKind="lines"
                   className={`${FIELD} min-h-[92px] resize-y`}
                   value={viewAngleEditorValue}
@@ -2597,7 +2602,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             </div>
             {canManageTeam && excludeEditorOpen && (
               <div className="space-y-1.5 rounded border border-rose-300/15 bg-rose-300/5 p-2">
-                <PromptTextarea title="扩大编辑"
+                <PromptTextarea compact title="扩大编辑"
                   editorKind="lines"
                   className={`${FIELD} min-h-[92px] resize-y`}
                   value={excludeEditorValue}

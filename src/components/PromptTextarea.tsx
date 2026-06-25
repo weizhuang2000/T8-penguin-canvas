@@ -28,6 +28,8 @@ interface PromptTextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaEl
   mono?: boolean;
   editorKind?: PromptExpandEditorKind;
   promptTemplateKind?: PromptTemplateKind | false;
+  compact?: boolean;
+  compactHeight?: number;
 }
 
 const PromptTextarea = forwardRef<HTMLTextAreaElement, PromptTextareaProps>(function PromptTextarea({
@@ -40,6 +42,8 @@ const PromptTextarea = forwardRef<HTMLTextAreaElement, PromptTextareaProps>(func
   mono = false,
   editorKind = 'text',
   promptTemplateKind = false,
+  compact = false,
+  compactHeight = 36,
   className,
   style: textareaStyle,
   onKeyDown,
@@ -141,6 +145,21 @@ const PromptTextarea = forwardRef<HTMLTextAreaElement, PromptTextareaProps>(func
     : `rounded border p-1 shadow-sm ${
         isDark ? 'border-white/10 bg-zinc-950/80 text-white/70 hover:text-white' : 'border-black/10 bg-white/90 text-zinc-600 hover:text-zinc-900'
       }`;
+  const effectiveStyle = compact
+    ? {
+        ...textareaStyle,
+        height: compactHeight,
+        minHeight: compactHeight,
+        maxHeight: compactHeight,
+        resize: 'none' as const,
+        overflowX: 'auto' as const,
+        overflowY: 'hidden' as const,
+        whiteSpace: 'nowrap' as const,
+        paddingRight: textareaStyle?.paddingRight ?? (templateEnabled ? 64 : 34),
+      }
+    : templateEnabled
+      ? { ...textareaStyle, paddingRight: textareaStyle?.paddingRight ?? 64 }
+      : textareaStyle;
 
   const setTextareaRef = (el: HTMLTextAreaElement | null) => {
     textareaRef.current = el;
@@ -176,7 +195,8 @@ const PromptTextarea = forwardRef<HTMLTextAreaElement, PromptTextareaProps>(func
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         className={className}
-        style={templateEnabled ? { ...textareaStyle, paddingRight: textareaStyle?.paddingRight ?? 64 } : textareaStyle}
+        style={effectiveStyle}
+        wrap={compact ? 'off' : rest.wrap}
         spellCheck={false}
       />
       {templateEnabled && (

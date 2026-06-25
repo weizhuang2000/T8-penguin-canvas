@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Icons from 'lucide-react';
 import {
   Check,
@@ -7,6 +7,8 @@ import {
   Edit2,
   FolderOpen,
   Loader2,
+  LockKeyhole,
+  LockKeyholeOpen,
   Plus,
   Search,
   Share2,
@@ -403,6 +405,27 @@ export default function Sidebar({ onAddNode, visibleNodeTypes }: SidebarProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [keyword, setKeyword] = useState('');
 
+  // 侧边栏锁定状态：锁定时保持展开，开锁时自动收起、鼠标划入滑出
+  const [sidebarLocked, setSidebarLocked] = useState(true);
+  const [sidebarHovered, setSidebarHovered] = useState(false);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const sidebarExpanded = sidebarLocked || sidebarHovered;
+
+  // 开锁模式下，监听鼠标是否在侧边栏区域
+  useEffect(() => {
+    if (sidebarLocked) return;
+    const el = sidebarRef.current;
+    if (!el) return;
+    const onEnter = () => setSidebarHovered(true);
+    const onLeave = () => setSidebarHovered(false);
+    el.addEventListener('mouseenter', onEnter);
+    el.addEventListener('mouseleave', onLeave);
+    return () => {
+      el.removeEventListener('mouseenter', onEnter);
+      el.removeEventListener('mouseleave', onLeave);
+    };
+  }, [sidebarLocked]);
+
   // 画布管理(整合到节点侧边栏顶部)
   const {
     canvases,
@@ -535,7 +558,10 @@ export default function Sidebar({ onAddNode, visibleNodeTypes }: SidebarProps) {
 
   return (
     <div
-      className={`t8-sidebar w-64 flex flex-col border-r overflow-hidden ${
+      ref={sidebarRef}
+      className={`t8-sidebar flex flex-col border-r overflow-hidden transition-[width] duration-200 ease-in-out ${
+        sidebarExpanded ? 'w-64' : 'w-8'
+      } ${
         isPixel
           ? 'px-panel'
           : isDark
@@ -554,6 +580,21 @@ export default function Sidebar({ onAddNode, visibleNodeTypes }: SidebarProps) {
             isPixel ? '' : isDark ? 'text-white/70' : 'text-zinc-700'
           }`}
         >
+          <button
+            onClick={() => setSidebarLocked((v) => !v)}
+            className={`shrink-0 p-1 rounded-md ${
+              isPixel
+                ? 'px-btn px-btn--icon'
+                : isDark
+                  ? 'hover:bg-white/10 text-white/70 hover:text-white'
+                  : 'hover:bg-black/10 text-zinc-700'
+            }`}
+            title={sidebarLocked ? '解锁侧边栏（开锁后自动收起，鼠标划入滑出）' : '锁定侧边栏（保持展开）'}
+          >
+            {sidebarLocked ? <LockKeyhole size={13} /> : <LockKeyholeOpen size={13} />}
+          </button>
+          {sidebarExpanded && (
+          <>
           <button
             onClick={() => setCanvasPanelOpen((v) => !v)}
             className={`flex items-center gap-1 shrink-0 text-left text-[11px] font-semibold uppercase tracking-wider ${
@@ -607,8 +648,10 @@ export default function Sidebar({ onAddNode, visibleNodeTypes }: SidebarProps) {
           >
             <Plus size={13} />
           </button>
+          </>
+          )}
         </div>
-        {canvasPanelOpen && (
+        {sidebarExpanded && canvasPanelOpen && (
           <div className="px-2 pb-2 max-h-56 overflow-y-auto space-y-0.5 scrollbar-hide">
             {canvasLoading && (
               <div
@@ -780,6 +823,7 @@ export default function Sidebar({ onAddNode, visibleNodeTypes }: SidebarProps) {
       </div>
 
       {/* 搜索框 */}
+      {sidebarExpanded && (
       <div
         className={`t8-sidebar-search-row p-2 border-b ${
           isPixel ? 'border-[#1A1410]/80' : isDark ? 'border-white/10' : 'border-black/10'
@@ -808,8 +852,10 @@ export default function Sidebar({ onAddNode, visibleNodeTypes }: SidebarProps) {
           />
         </div>
       </div>
+      )}
 
       {/* 节点分组列表 */}
+      {sidebarExpanded && (
       <div className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-hide">
         {Object.entries(nodeGroups).map(([key, group]) => {
           const visible = filterNodes(group.nodes);
@@ -836,6 +882,7 @@ export default function Sidebar({ onAddNode, visibleNodeTypes }: SidebarProps) {
           );
         })}
       </div>
+      )}
 
       {/* 底部版本信息 */}
       {shareCanvas && (
@@ -850,6 +897,7 @@ export default function Sidebar({ onAddNode, visibleNodeTypes }: SidebarProps) {
         />
       )}
 
+      {sidebarExpanded && (
       <div
         className={`px-3 py-2 border-t text-[10px] ${
           isPixel
@@ -865,6 +913,7 @@ export default function Sidebar({ onAddNode, visibleNodeTypes }: SidebarProps) {
           <>T8-penguin-canvas · v{__APP_VERSION__}</>
         )}
       </div>
+      )}
     </div>
   );
 }

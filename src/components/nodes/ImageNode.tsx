@@ -2008,10 +2008,12 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         {/* 本地 prompt(优先取上游) */}
         {!isComfyExternal && <div>
           <label className="text-[10px] text-white/50 block mb-1">本地 Prompt(可选,优先取上游 text)</label>
-          <PromptTextarea
+          <MentionPromptInput
             title="图像 Prompt"
             value={localPrompt}
-            onValueChange={(value) => update({ prompt: value, promptMentions: [] })}
+            mentions={promptMentions}
+            materials={mentionMaterials}
+            onChange={(value, mentions) => update({ prompt: value, promptMentions: mentions })}
             placeholder="备用:无上游连接时使用此提示词"
             isDark={isDark}
             isPixel={isPixel}

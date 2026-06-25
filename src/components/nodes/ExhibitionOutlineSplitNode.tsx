@@ -11,6 +11,7 @@ import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useUpstreamMaterials } from './useUpstreamMaterials';
 import PromptTextarea from '../PromptTextarea';
+import PromptExpandableInput from '../PromptExpandableInput';
 import { materialSetItemsToData, type MaterialSetItem } from '../../utils/materialSet';
 import { placeSingleNode } from '../../utils/nodePlacement';
 import {
@@ -574,7 +575,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
                   onChange={(event) => update({ outlineCreateWordCount: event.target.value })}
                 />
               </label>
-              <PromptTextarea title="扩大编辑"
+              <PromptTextarea compact title="扩大编辑"
                 className={`${FIELD} min-h-[68px] resize-y`}
                 value={outlineCreateTheme}
                 disabled={isReadonly || busy}
@@ -598,7 +599,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
                     </option>
                   ))}
                 </select>
-                <input className={FIELD} disabled value={llmModel} title="模型由所选 LLM 配置决定" />
+                <PromptExpandableInput title="扩大编辑" className={FIELD} disabled value={llmModel} />
               </div>
               <label className="flex items-center gap-1.5 text-[10px] text-white/60">
                 <input
@@ -616,7 +617,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
               </button>
             </div>
           )}
-          <PromptTextarea title="扩大编辑"
+          <PromptTextarea compact title="扩大编辑"
             className={`${FIELD} min-h-[96px] resize-y`}
             value={sourceText}
             disabled={isReadonly || busy}
@@ -682,14 +683,15 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
               />
             </label>
           )}
-          <input
+          <PromptExpandableInput
+            title="扩大编辑"
             className={FIELD}
             value={projectTheme}
             disabled={isReadonly || busy}
             placeholder="项目主题 / 展览关键词（可选）"
-            onChange={(event) => update({ projectTheme: event.target.value })}
+            onValueChange={(value) => update({ projectTheme: value })}
           />
-          <PromptTextarea title="扩大编辑"
+          <PromptTextarea compact title="扩大编辑"
             className={`${FIELD} min-h-[56px] resize-y`}
             value={extraInstruction}
             disabled={isReadonly || busy}
@@ -713,7 +715,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
                 </option>
               ))}
             </select>
-            <input className={FIELD} disabled value={llmModel} title="模型由所选 LLM 配置决定" />
+            <PromptExpandableInput title="扩大编辑" className={FIELD} disabled value={llmModel} />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <button type="button" className="t8-btn min-h-8 px-2 text-[11px]" disabled={isReadonly || busy} onClick={() => void runSplit()}>

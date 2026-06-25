@@ -46,6 +46,7 @@ import { useUpdateNodeData } from './useUpdateNodeData';
 import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
 import PromptTextarea from '../PromptTextarea';
+import PromptExpandableInput from '../PromptExpandableInput';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
@@ -675,7 +676,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
           {Array.isArray(d.documentMeta?.warnings) && d.documentMeta.warnings.length > 0 && (
             <div className="mt-1 text-[10px] text-amber-200/80">{d.documentMeta.warnings.join('；')}</div>
           )}
-          <PromptTextarea title="扩大编辑"
+          <PromptTextarea compact title="扩大编辑"
             className={`${FIELD} mt-2 min-h-[90px] resize-y`}
             value={sourceText}
             disabled={isReadonly || busy}
@@ -739,7 +740,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
             placeholder="项目主题"
             onChange={(event) => update({ analysis: { ...analysis, projectTheme: event.target.value } })}
           />
-          <PromptTextarea title="扩大编辑"
+          <PromptTextarea compact title="扩大编辑"
             className={`${FIELD} mt-1 min-h-[52px] resize-y`}
             value={analysis.coreMessage}
             disabled={isReadonly}
@@ -756,7 +757,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
               className="hidden"
               onChange={(event) => importAnalysisJson(event.target.files?.[0])}
             />
-            <PromptTextarea title="扩大编辑"
+            <PromptTextarea compact title="扩大编辑"
               editorKind="json"
               className={`${FIELD} mt-1 min-h-[150px] resize-y font-mono`}
               value={analysisDraft}
@@ -849,7 +850,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
                   placeholder={`立面 ${index + 1} 标题`}
                   onChange={(event) => patchWall(index, { title: event.target.value })}
                 />
-                <PromptTextarea title="扩大编辑"
+                <PromptTextarea compact title="扩大编辑"
                   className={`${FIELD} mt-1 min-h-[48px] resize-y`}
                   value={wall.content || ''}
                   disabled={isReadonly}
@@ -857,7 +858,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
                   onValueChange={(value) => patchWall(index, { content: value })}
                 readOnly={isReadonly}
               />
-                <PromptTextarea title="扩大编辑"
+                <PromptTextarea compact title="扩大编辑"
                   editorKind="lines"
                   className={`${FIELD} mt-1 min-h-[42px] resize-y`}
                   value={(wall.exactText || []).join('\n')}
@@ -935,7 +936,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
           {canManageTeam && craftEditorOpen && (
             <div className="mt-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
               <div className="mb-1 text-[10px] text-white/45">每行一个工艺预设：分类｜名称｜提示词。分类可用：装饰、多媒体、艺术品、展陈、展柜、展台、顶部、其它。</div>
-              <PromptTextarea title="扩大编辑"
+              <PromptTextarea compact title="扩大编辑"
                 editorKind="lines"
                 className={`${FIELD} min-h-[96px] resize-y font-mono`}
                 value={craftEditorValue}
@@ -964,7 +965,14 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
               </div>
             </div>
           )}
-          <input className={`${FIELD} mt-1.5`} value={d.customCraft || ''} disabled={isReadonly} placeholder="自定义工艺" onChange={(event) => update({ customCraft: event.target.value })} />
+          <PromptExpandableInput
+            title="扩大编辑"
+            className={`${FIELD} mt-1.5`}
+            value={d.customCraft || ''}
+            disabled={isReadonly}
+            placeholder="自定义工艺"
+            onValueChange={(value) => update({ customCraft: value })}
+          />
           <div className="mt-1 grid grid-cols-2 gap-1">
             <select className={FIELD} value={d.aspectRatio || '3:1'} disabled={isReadonly} onChange={(event) => update({ aspectRatio: event.target.value })}>
               <option value="3:1">横向 3:1</option>
@@ -973,13 +981,27 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
               <option value="1:1">方形 1:1</option>
               <option value="9:16">竖向 9:16</option>
             </select>
-            <input className={FIELD} value={d.dimensions || ''} disabled={isReadonly} placeholder="实际尺寸，如 6m × 3m" onChange={(event) => update({ dimensions: event.target.value })} />
+            <PromptExpandableInput
+              title="扩大编辑"
+              className={FIELD}
+              value={d.dimensions || ''}
+              disabled={isReadonly}
+              placeholder="实际尺寸，如 6m × 3m"
+              onValueChange={(value) => update({ dimensions: value })}
+            />
             <select className={FIELD} value={d.density || '适中'} disabled={isReadonly} onChange={(event) => update({ density: event.target.value })}>
               <option value="疏朗，强调大图与留白">疏朗</option>
               <option value="适中，图文层级均衡">适中</option>
               <option value="信息丰富，采用严谨网格">丰富</option>
             </select>
-            <input className={FIELD} value={d.visualStyle || ''} disabled={isReadonly} placeholder="视觉风格" onChange={(event) => update({ visualStyle: event.target.value })} />
+            <PromptExpandableInput
+              title="扩大编辑"
+              className={FIELD}
+              value={d.visualStyle || ''}
+              disabled={isReadonly}
+              placeholder="视觉风格"
+              onValueChange={(value) => update({ visualStyle: value })}
+            />
           </div>
           <ColorMaterialPresetSelect
             className={`${FIELD} mt-1`}
@@ -1009,7 +1031,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
               onSave={saveColorMaterialPresetItems}
             />
           )}
-          <PromptTextarea title="扩大编辑" className={`${FIELD} mt-1 min-h-[46px] resize-y`} value={d.colorMaterial || ''} disabled={isReadonly} placeholder="色彩与材质体系" onValueChange={(value) => update({ colorMaterial: value, colorMaterialPreset: '' })}
+          <PromptTextarea compact title="扩大编辑" className={`${FIELD} mt-1 min-h-[46px] resize-y`} value={d.colorMaterial || ''} disabled={isReadonly} placeholder="色彩与材质体系" onValueChange={(value) => update({ colorMaterial: value, colorMaterialPreset: '' })}
                 readOnly={isReadonly}
               />
           <div className="mt-1.5">
@@ -1058,7 +1080,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
                 )}
               </div>
             </div>
-            <PromptTextarea title="扩大编辑" className={`${FIELD} min-h-[46px] resize-y`} value={d.supplement || ''} disabled={isReadonly} placeholder="特殊限制、品牌语气、施工要求等" onValueChange={(value) => update({ supplement: value })}
+            <PromptTextarea compact title="扩大编辑" className={`${FIELD} min-h-[46px] resize-y`} value={d.supplement || ''} disabled={isReadonly} placeholder="特殊限制、品牌语气、施工要求等" onValueChange={(value) => update({ supplement: value })}
                 readOnly={isReadonly}
               />
           </div>
@@ -1081,7 +1103,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
           </div>
           <details className="mt-1.5 text-[10px] text-white/55">
             <summary className="cursor-pointer select-none">编辑准确排版清单</summary>
-            <PromptTextarea title="扩大编辑"
+            <PromptTextarea compact title="扩大编辑"
               className={`${FIELD} mt-1 min-h-[150px] resize-y`}
               value={d.layoutScheduleOverride || outputs.generatedLayoutSchedule}
               disabled={isReadonly}

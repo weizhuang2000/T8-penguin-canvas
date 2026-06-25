@@ -84,6 +84,7 @@ import { useThemeStore } from '../../stores/theme';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
+import PromptExpandableInput from '../PromptExpandableInput';
 import PromptTextarea from '../PromptTextarea';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
@@ -2036,13 +2037,14 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         </label>
       </div>
       <div className="grid grid-cols-4 gap-1">
-        <input
+        <PromptExpandableInput
+          title="扩大编辑"
           className={FIELD}
           value={settings.text}
           disabled={isReadonly || busy}
           maxLength={64}
           placeholder="标识"
-          onChange={(event) => update({ colorMaterialMarkText: event.target.value })}
+          onValueChange={(value) => update({ colorMaterialMarkText: value })}
         />
         <select
           className={`${FIELD} col-span-2`}
@@ -2072,11 +2074,12 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           className="h-7 w-full rounded border border-white/10 bg-black/20 p-0.5 disabled:opacity-55"
           onChange={(event) => update({ colorMaterialMarkColor: normalizeReferenceMarkColor(event.target.value) })}
         />
-        <input
+        <PromptExpandableInput
+          title="扩大编辑"
           className={FIELD}
           value={settings.color}
           disabled={isReadonly || busy}
-          onChange={(event) => update({ colorMaterialMarkColor: event.target.value })}
+          onValueChange={(value) => update({ colorMaterialMarkColor: value })}
           onBlur={(event) => update({ colorMaterialMarkColor: normalizeReferenceMarkColor(event.target.value) })}
         />
       </div>
@@ -2880,7 +2883,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           {canManageTeam && craftEditorOpen && (
             <div className="mt-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
               <div className="mb-1 text-[10px] text-white/45">每行一个工艺预设：分类｜名称｜提示词。分类可用：装饰、多媒体、艺术品、展陈、展柜、展台、顶部、其它。</div>
-              <PromptTextarea title="扩大编辑" className={`${FIELD} min-h-[96px] resize-y font-mono`} value={craftEditorValue} disabled={craftSaving} onValueChange={(value) => setCraftEditorValue(value)}
+              <PromptTextarea compact title="扩大编辑" className={`${FIELD} min-h-[96px] resize-y font-mono`} value={craftEditorValue} disabled={craftSaving} onValueChange={(value) => setCraftEditorValue(value)}
                 editorKind="lines"
                 readOnly={craftSaving}
               />
@@ -2891,7 +2894,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               </div>
             </div>
           )}
-          <input className={`${FIELD} mt-1.5`} value={d.customCraft || ''} disabled={isReadonly} placeholder="自定义工艺" onChange={(event) => update({ customCraft: event.target.value })} />
+          <PromptExpandableInput title="扩大编辑" className={`${FIELD} mt-1.5`} value={d.customCraft || ''} disabled={isReadonly} placeholder="自定义工艺" onValueChange={(value) => update({ customCraft: value })} />
           <div className="mt-1 grid grid-cols-2 gap-1">
             <select className={FIELD} value={d.density || '适中，图文层级均衡'} disabled={isReadonly} onChange={(event) => update({ density: event.target.value })}>
               <option value="疏朗，强调大图与留白">疏朗</option>
@@ -2908,9 +2911,9 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               placeholder="空间高度"
               onChange={(event) => update({ dimensions: event.target.value })}
             />
-            <input className={FIELD} value={d.visualStyle || ''} disabled={isReadonly} placeholder="视觉风格" onChange={(event) => update({ visualStyle: event.target.value })} />
+            <PromptExpandableInput title="扩大编辑" className={FIELD} value={d.visualStyle || ''} disabled={isReadonly} placeholder="视觉风格" onValueChange={(value) => update({ visualStyle: value })} />
           </div>
-          <PromptTextarea title="扩大编辑" className={`${FIELD} mt-1 min-h-[48px] resize-y`} value={d.supplement || ''} disabled={isReadonly} placeholder="补充要求" onValueChange={(value) => update({ supplement: value })}
+          <PromptTextarea compact title="扩大编辑" className={`${FIELD} mt-1 min-h-[48px] resize-y`} value={d.supplement || ''} disabled={isReadonly} placeholder="补充要求" onValueChange={(value) => update({ supplement: value })}
                 readOnly={isReadonly}
               />
         </section>
@@ -2958,7 +2961,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           </div>
           {canManageTeam && excludeEditorOpen && (
             <div className="space-y-1.5 rounded border border-rose-300/15 bg-rose-300/5 p-2">
-              <PromptTextarea title="扩大编辑"
+              <PromptTextarea compact title="扩大编辑"
                 editorKind="lines"
                 className={`${FIELD} min-h-[92px] resize-y`}
                 value={excludeEditorValue}
@@ -3087,7 +3090,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                   <span className="truncate text-[8px] text-amber-200/75" title={d.colorMaterialReferenceToneStatus}>需手动确认</span>
                 )}
               </div>
-              <PromptTextarea title="扩大编辑"
+              <PromptTextarea compact title="扩大编辑"
                 className={`${FIELD} mt-1 min-h-[46px] resize-y text-[10px] leading-snug${colorMaterialPriorityMode === 'llm' ? ' select-none pointer-events-none' : ''}`}
                 value={colorMaterialReferenceTone}
                 disabled={isReadonly || busy || hasColorMaterialPreset || colorMaterialPriorityMode === 'llm'}
@@ -3114,7 +3117,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
             />
           )}
           <div className="grid grid-cols-2 gap-1">
-            <PromptTextarea title="扩大编辑"
+            <PromptTextarea compact title="扩大编辑"
               className={`${FIELD} min-h-[54px] resize-y text-[10px] leading-snug`}
               value={colorMaterialPalette || d.colorMaterial || ''}
               disabled={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
@@ -3126,7 +3129,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               })}
                 readOnly={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
               />
-            <PromptTextarea title="扩大编辑"
+            <PromptTextarea compact title="扩大编辑"
               className={`${FIELD} min-h-[54px] resize-y text-[10px] leading-snug`}
               value={colorMaterialTextures || d.colorMaterial || ''}
               disabled={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
@@ -3164,12 +3167,13 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                 <div key={item.url} className="grid grid-cols-[54px_minmax(0,1fr)] items-start gap-1.5 rounded border border-white/10 bg-black/15 p-1.5">
                   <img src={item.url} alt="" className="h-12 w-12 rounded border border-white/10 object-cover" draggable={false} />
                   <div className="min-w-0">
-                    <input
+                    <PromptExpandableInput
+                      title="扩大编辑"
                       className={FIELD}
                       value={item.description}
                       disabled={isReadonly || busy}
                       placeholder={`展品 ${index + 1} 特征描述，如"红色的茶壶"`}
-                      onChange={(event) => patchExhibitReferenceItem(item.url, { description: event.target.value })}
+                      onValueChange={(value) => patchExhibitReferenceItem(item.url, { description: value })}
                     />
                     <div className="mt-0.5 truncate text-[9px] text-white/35" title={item.url}>{item.label}</div>
                   </div>
@@ -3225,7 +3229,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                 {Array.isArray(d.documentMeta?.warnings) && d.documentMeta.warnings.length > 0 && (
                   <div className="mt-1 text-[10px] text-amber-200/80">{d.documentMeta.warnings.join('；')}</div>
                 )}
-                <PromptTextarea title="扩大编辑"
+                <PromptTextarea compact title="扩大编辑"
                   className={`${FIELD} mt-2 min-h-[72px] resize-y`}
                   value={sourceText}
                   disabled={isReadonly || contentBusy || !!inputDocumentText}
@@ -3272,7 +3276,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                   >
                     {llmConfigOptions.map((item) => <option key={item.id} value={`llm-key:${item.id}`}>{item.label || item.id}{item.model ? ` · ${item.model}` : ''}</option>)}
                   </select>
-                  <input className={FIELD} disabled value={contentModel} title="模型由所选 LLM 配置决定" />
+                  <PromptExpandableInput title="扩大编辑" className={FIELD} disabled value={contentModel} />
                 </div>
                 <div className="grid grid-cols-3 gap-1">
                   <select
@@ -3314,14 +3318,15 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                     <option value="overview">整套总览</option>
                   </select>
                 </div>
-                <input
+                <PromptExpandableInput
+                  title="扩大编辑"
                   className={`${FIELD} mt-1.5`}
                   value={analysis.projectTheme}
                   disabled={isReadonly}
                   placeholder="项目主题"
-                  onChange={(event) => update({ analysis: { ...analysis, projectTheme: event.target.value } })}
+                  onValueChange={(value) => update({ analysis: { ...analysis, projectTheme: value } })}
                 />
-                <PromptTextarea title="扩大编辑"
+                <PromptTextarea compact title="扩大编辑"
                   className={`${FIELD} mt-1 min-h-[48px] resize-y`}
                   value={analysis.coreMessage}
                   disabled={isReadonly}
@@ -3332,14 +3337,15 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                 <div className="mt-2 max-h-56 space-y-1.5 overflow-y-auto">
                   {contentOutputs.walls.map((wall: ElevationWall, index: number) => (
                     <div key={wall.id || index} className="rounded border border-white/10 bg-white/[0.035] p-1.5">
-                      <input
+                      <PromptExpandableInput
+                        title="扩大编辑"
                         className={FIELD}
                         value={wall.title || ''}
                         disabled={isReadonly}
                         placeholder={`立面 ${index + 1} 标题`}
-                        onChange={(event) => patchWall(index, { title: event.target.value })}
+                        onValueChange={(value) => patchWall(index, { title: value })}
                       />
-                      <PromptTextarea title="扩大编辑"
+                      <PromptTextarea compact title="扩大编辑"
                         className={`${FIELD} mt-1 min-h-[46px] resize-y`}
                         value={wall.content || ''}
                         disabled={isReadonly}
@@ -3347,7 +3353,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                         onValueChange={(value) => patchWall(index, { content: value })}
                 readOnly={isReadonly}
               />
-                      <PromptTextarea title="扩大编辑"
+                      <PromptTextarea compact title="扩大编辑"
                         editorKind="lines"
                         className={`${FIELD} mt-1 min-h-[40px] resize-y`}
                         value={(wall.exactText || []).join('\n')}
@@ -3358,7 +3364,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                         })}
                 readOnly={isReadonly}
               />
-                      <PromptTextarea title="扩大编辑"
+                      <PromptTextarea compact title="扩大编辑"
                         className={`${FIELD} mt-1 min-h-[40px] resize-y`}
                         value={wall.craftNotes || ''}
                         disabled={isReadonly}
@@ -3570,13 +3576,14 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
 
           <div>
             <label className="text-[10px] text-white/50 block mb-1">图像名称</label>
-            <input
+            <PromptExpandableInput
+              title="扩大编辑"
               className={FIELD}
               value={imageName}
               disabled={isReadonly || busy}
               maxLength={12}
               placeholder="最多6字"
-              onChange={(event) => update({ imageName: normalizeExhibitionImageName(event.target.value) })}
+              onValueChange={(value) => update({ imageName: normalizeExhibitionImageName(value) })}
             />
             <div className="mt-1 text-[9px] leading-snug text-white/35">为空时，LLM 提炼文本后自动生成；批量输出会追加 -1、-2。</div>
           </div>
