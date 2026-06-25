@@ -9,6 +9,7 @@ const {
   canViewCanvas,
   canvasAccessForUser,
   deriveNextNodeSerialId,
+  normalizeAllUsersShare,
   normalizeSharePermission,
   normalizeSharedWith,
 } = require('../auth/canvasAccess');
@@ -70,6 +71,7 @@ function atomicWriteJson(file, data) {
 function normalizeCanvasMeta(item) {
   if (!item || typeof item !== 'object') return item;
   item.sharedWith = normalizeSharedWith(item.sharedWith);
+  item.allUsersShare = normalizeAllUsersShare(item.allUsersShare);
   return item;
 }
 
@@ -81,6 +83,7 @@ function publicCanvasItem(item, user) {
     ownerName: item.ownerName || '',
     ownerRole: item.ownerRole || '',
     sharedWith: normalizeSharedWith(item.sharedWith),
+    allUsersShare: normalizeAllUsersShare(item.allUsersShare),
     access: canvasAccessForUser(user, item),
   };
 }
@@ -129,6 +132,7 @@ function syncCanvasFileMeta(id, item) {
         ownerName: item.ownerName || data.ownerName || '',
         ownerRole: item.ownerRole || data.ownerRole || '',
         sharedWith: normalizeSharedWith(item.sharedWith),
+        allUsersShare: normalizeAllUsersShare(item.allUsersShare),
       }, null, 2),
       'utf-8'
     );
@@ -227,6 +231,7 @@ router.post('/', (req, res) => {
     name: isGenericDefaultCanvasName(requestedName) ? nextDefaultCanvasName(list, req.user) : requestedName,
     ...owner,
     sharedWith: [],
+    allUsersShare: normalizeAllUsersShare(null),
     nodeCount: 0,
     createdAt: now,
     updatedAt: now,
@@ -238,6 +243,7 @@ router.post('/', (req, res) => {
     JSON.stringify({
       ...owner,
       sharedWith: [],
+      allUsersShare: normalizeAllUsersShare(null),
       nodes: [],
       edges: [],
       viewport: { x: 0, y: 0, zoom: 1 },
@@ -291,10 +297,18 @@ router.put('/:id/shares', async (req, res) => {
     }
 
     found.item.sharedWith = shares;
+    found.item.allUsersShare = normalizeAllUsersShare(req.body?.allUsersShare);
+    if (found.item.allUsersShare.enabled) {
+      found.item.allUsersShare.updatedAt = Number(req.body?.allUsersShare?.updatedAt) || Date.now();
+      found.item.allUsersShare.updatedByUserId = String(req.user.id);
+    } else {
+      found.item.allUsersShare.updatedAt = Number(req.body?.allUsersShare?.updatedAt) || 0;
+      found.item.allUsersShare.updatedByUserId = '';
+    }
     found.item.updatedAt = Date.now();
     saveCanvasList(found.list);
     syncCanvasFileMeta(req.params.id, found.item);
-    res.json({ success: true, data: shares });
+    res.json({ success: true, data: { sharedWith: shares, allUsersShare: found.item.allUsersShare } });
   } catch (e) {
     res.status(500).json({ success: false, error: e?.message || String(e) });
   }
@@ -317,6 +331,7 @@ router.get('/:id', (req, res) => {
         ownerName: data.ownerName || found.item.ownerName || '',
         ownerRole: data.ownerRole || found.item.ownerRole || '',
         sharedWith: normalizeSharedWith(found.item.sharedWith || data.sharedWith),
+        allUsersShare: normalizeAllUsersShare(found.item.allUsersShare || data.allUsersShare),
         access: canvasAccessForUser(req.user, found.item),
       },
     });
@@ -349,6 +364,7 @@ router.put('/:id', (req, res) => {
     ownerName: found.item.ownerName || '',
     ownerRole: found.item.ownerRole || '',
     sharedWith: normalizeSharedWith(found.item.sharedWith),
+    allUsersShare: normalizeAllUsersShare(found.item.allUsersShare),
     nodes: Array.isArray(incoming?.nodes) ? incoming.nodes : [],
     edges: Array.isArray(incoming?.edges) ? incoming.edges : [],
     viewport: incoming?.viewport || { x: 0, y: 0, zoom: 1 },
@@ -361,6 +377,7 @@ router.put('/:id', (req, res) => {
   found.item.ownerName = found.item.ownerName || persisted.ownerName;
   found.item.ownerRole = found.item.ownerRole || persisted.ownerRole;
   found.item.sharedWith = normalizeSharedWith(found.item.sharedWith);
+  found.item.allUsersShare = normalizeAllUsersShare(found.item.allUsersShare);
   found.item.updatedAt = Date.now();
   saveCanvasList(found.list);
   res.json({ success: true });
@@ -390,6 +407,7 @@ router.patch('/:id/nodes/:nodeId/patch-data', express.json({ limit: '50mb' }), (
     ownerName: found.item.ownerName || existing.ownerName || '',
     ownerRole: found.item.ownerRole || existing.ownerRole || '',
     sharedWith: normalizeSharedWith(found.item.sharedWith),
+    allUsersShare: normalizeAllUsersShare(found.item.allUsersShare),
     nodes,
     edges: Array.isArray(existing.edges) ? existing.edges : [],
     viewport: existing.viewport || { x: 0, y: 0, zoom: 1 },
@@ -435,6 +453,7 @@ router.post('/:id/auto-save', (req, res) => {
         ownerName: found.item.ownerName || '',
         ownerRole: found.item.ownerRole || '',
         sharedWith: normalizeSharedWith(found.item.sharedWith),
+        allUsersShare: normalizeAllUsersShare(found.item.allUsersShare),
         nodeCount: incoming.nodes.length,
         edgeCount: incoming.edges.length,
         createdAt: found.item?.createdAt || null,
