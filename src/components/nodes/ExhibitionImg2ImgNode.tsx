@@ -55,6 +55,11 @@ import {
   type ElevationWall,
 } from '../../utils/elevationPrompt';
 import {
+  formatExhibitionOutputImageName,
+  generateExhibitionImageNameWithLlm,
+  normalizeExhibitionImageName,
+} from '../../utils/exhibitionImageName';
+import {
   extractDocument,
   getCurrentUser,
   getElevationPromptPresets,
@@ -1640,6 +1645,8 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
   const generationCount = clampNumber(d.generationCount, MIN_IMAGE_COUNT, MAX_IMAGE_COUNT, 1);
   const outputImageUrls = Array.isArray(d.imageUrls) && d.imageUrls.length ? d.imageUrls.filter(Boolean) : (d.imageUrl ? [d.imageUrl] : []);
+  const outputImageNames = Array.isArray(d.imageNames) ? d.imageNames.map((item: unknown) => String(item || '').trim()) : [];
+  const imageName = normalizeExhibitionImageName(d.imageName);
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
 
   const structureImage = useHandleImage(id, 'structure');
@@ -2453,6 +2460,20 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         error: '',
         plannedAt: Date.now(),
       });
+      if (!normalizeExhibitionImageName(d.imageName)) {
+        try {
+          const nextName = await generateExhibitionImageNameWithLlm({
+            generateLlm,
+            model: contentModel,
+            llmKeyId: activeContentLlmConfig?.id,
+            material: buildElevationOutputs(plan).layoutSchedule || response.content || text,
+            fallback: plan.projectTheme || '展陈图',
+          });
+          if (nextName) update({ imageName: nextName });
+        } catch (nameError: any) {
+          logBus.warn(`展陈图生图自动命名失败: ${nameError?.message || nameError}`, `exhibition-img2img:${id.slice(0, 6)}`);
+        }
+      }
       return plan;
     } catch (error: any) {
       update({ status: 'error', error: error?.message || '展示内容生成失败' });
@@ -2465,6 +2486,8 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     contentModel,
     craftPresets,
     d.customCraft,
+    d.imageName,
+    id,
     isReadonly,
     selectedCrafts,
     spaceLightingEnabled,
@@ -2541,19 +2564,54 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       if (plan) promptForRun = buildPromptWithWallPlan(plan, runtimeCrafts);
     }
     const runtimeReferenceImages = await buildRuntimeReferenceImages();
-    const runSeed = seed > 0 ? seed : randomImageSeed();
     const src = `exhibition-img2img:${id.slice(0, 6)}`;
-    const historyContext = {
-      canvasId: activeCanvasId,
-      sourceNodeId: id,
-      sourceNodeType: 'exhibition-img2img',
-      seed: runSeed,
-      nodeTitle: '展陈图生图',
+    const generatedUrls: string[] = [];
+    const generatedRemoteUrls: string[] = [];
+    const generatedNames: string[] = [];
+    const baseImageName = imageName || '展陈图';
+    let latestSeed = seed > 0 && generationCount === 1 ? seed : randomImageSeed();
+    let latestTaskId = d.taskId;
+    const completeRound = (roundIndex: number, urls: string[], remoteUrls: string[] | undefined, runSeed: number, taskId?: string) => {
+      const url = urls.find(Boolean);
+      if (!url) throw new Error('任务完成但未返回图片');
+      const displayName = formatExhibitionOutputImageName(baseImageName, roundIndex, generationCount, '展陈图');
+      generatedUrls.push(url);
+      generatedNames.push(displayName);
+      const remoteUrl = (remoteUrls || []).find(Boolean);
+      if (remoteUrl) generatedRemoteUrls.push(remoteUrl);
+      latestTaskId = taskId || latestTaskId;
+      update({
+        status: roundIndex >= generationCount ? 'success' : 'generating',
+        progress: `${roundIndex}/${generationCount} 完成`,
+        imageUrl: generatedUrls[0],
+        imageUrls: generatedUrls.slice(),
+        imageNames: generatedNames.slice(),
+        remoteImageUrls: generatedRemoteUrls.slice(),
+        lastPrompt: promptForRun,
+        lastSeed: runSeed,
+        taskId: latestTaskId,
+        usedI2I: true,
+        error: '',
+      });
+      logBus.success(`展陈图生图完成 ${displayName} -> ${url}`, src);
     };
     taskCompletionSound.primeAudio();
     pollAbortRef.current = false;
-    update({ status: 'generating', progress: '0%', error: '', lastSeed: runSeed, usedI2I: true });
+    update({ status: 'generating', progress: `0/${generationCount}`, error: '', imageUrl: '', imageUrls: [], lastSeed: latestSeed, usedI2I: true });
     try {
+      for (let roundIndex = 1; roundIndex <= generationCount; roundIndex += 1) {
+        if (pollAbortRef.current) throw new Error('任务已取消');
+        const runSeed = roundIndex === 1 ? latestSeed : randomImageSeed();
+        latestSeed = runSeed;
+        const historyContext = {
+          canvasId: activeCanvasId,
+          sourceNodeId: id,
+          sourceNodeType: 'exhibition-img2img',
+          seed: runSeed,
+          nodeTitle: `展陈图生图 ${roundIndex}/${generationCount}`,
+          outputTitle: formatExhibitionOutputImageName(baseImageName, roundIndex, generationCount, '展陈图'),
+        };
+        update({ progress: `提交生图 ${roundIndex}/${generationCount}`, lastSeed: runSeed, lastPrompt: promptForRun });
       if (isExternalSelected && providerSelection.provider) {
         if (!externalProviderModel) throw new Error('扩展平台未配置可用图像模型');
         const size = externalImageSizeFor(aspectRatio, sizeLevel);
@@ -2576,7 +2634,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           images: runtimeReferenceImages,
           outputFormat,
           seed: runSeed,
-          n: generationCount,
+          n: 1,
           providerParams,
           historyContext,
           async: true,
@@ -2584,9 +2642,10 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         if ((!res.imageUrls?.length) && res.taskId && (res.code === 'running' || res.status === 'running')) {
           let pollingTaskId = res.taskId;
           let transientFailures = 0;
-          update({ progress: '生成中', taskId: pollingTaskId });
+          update({ progress: `${roundIndex}/${generationCount} · 生成中`, taskId: pollingTaskId });
           logBus.info(`展陈图扩展平台任务继续轮询: ${pollingTaskId}`, src);
           for (let i = 0; i < EXTERNAL_IMAGE_MAX_POLLS; i += 1) {
+            if (pollAbortRef.current) throw new Error('任务已取消');
             await new Promise((resolve) => setTimeout(resolve, EXTERNAL_IMAGE_POLL_INTERVAL_MS));
             try {
               res = await queryExternalImageStatus({
@@ -2604,27 +2663,14 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               continue;
             }
             pollingTaskId = res.taskId || pollingTaskId;
-            update({ progress: `${Math.min(99, Math.round(((i + 1) / EXTERNAL_IMAGE_MAX_POLLS) * 100))}%`, taskId: pollingTaskId });
+            update({ progress: `${roundIndex}/${generationCount} · ${Math.min(99, Math.round(((i + 1) / EXTERNAL_IMAGE_MAX_POLLS) * 100))}%`, taskId: pollingTaskId });
             if (res.imageUrls?.length || (res.code && res.code !== 'running')) break;
           }
         }
         const urls = res.imageUrls || [];
         if (!urls.length) throw new Error('扩展平台完成但未返回图片');
-        update({
-          status: 'success',
-          progress: '100%',
-          imageUrl: urls[0],
-          imageUrls: urls,
-          remoteImageUrls: res.remoteImageUrls,
-          lastPrompt: promptForRun,
-          lastSeed: runSeed,
-          taskId: res.taskId || d.taskId,
-          usedI2I: true,
-          error: '',
-        });
-        logBus.success(`展陈图生图完成 → ${urls[0]}`, src);
-        taskCompletionSound.notifyComplete(id, 'image');
-        return;
+        completeRound(roundIndex, urls, res.remoteImageUrls, runSeed, res.taskId);
+        continue;
       }
 
       logBus.info(`展陈图生图提交: model=${apiModel} ratio=${aspectRatio} size=${sizeLevel} refs=${runtimeReferenceImages.length}`, src);
@@ -2636,27 +2682,17 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         aspect_ratio: aspectRatio,
         image_size: sizeLevel,
         images: runtimeReferenceImages,
-        n: generationCount,
+        n: 1,
         outputFormat,
         seed: runSeed,
         historyContext,
       });
       if (submit.sync && submit.urls?.length) {
-        update({
-          status: 'success',
-          progress: '100%',
-          imageUrl: submit.urls[0],
-          imageUrls: submit.urls,
-          lastPrompt: promptForRun,
-          lastSeed: runSeed,
-          usedI2I: true,
-          error: '',
-        });
-        taskCompletionSound.notifyComplete(id, 'image');
-        return;
+        completeRound(roundIndex, submit.urls, undefined, runSeed);
+        continue;
       }
       if (!submit.taskId) throw new Error('未获取到任务 ID');
-      update({ progress: submit.progress || '5%', taskId: submit.taskId });
+      update({ progress: `${roundIndex}/${generationCount} · ${submit.progress || '5%'}`, taskId: submit.taskId });
       let lastProgress = submit.progress || '5%';
       for (let index = 0; index < 1800; index += 1) {
         if (pollAbortRef.current) throw new Error('任务已取消');
@@ -2664,31 +2700,36 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         const q = await queryImageStatus(submit.taskId, apiModel, outputFormat, historyContext);
         if (q.progress && q.progress !== lastProgress) {
           lastProgress = q.progress;
-          update({ progress: q.progress });
+          update({ progress: `${roundIndex}/${generationCount} · ${q.progress}` });
         }
         const status = String(q.status || '').toLowerCase();
         if (status === 'completed' || status === 'success' || status === 'done') {
           const url = q.urls?.[0];
           if (!url) throw new Error('任务完成但未返回图片');
-          update({
-            status: 'success',
-            progress: '100%',
-            imageUrl: url,
-            imageUrls: q.urls,
-            lastPrompt: promptForRun,
-            lastSeed: runSeed,
-            usedI2I: true,
-            error: '',
-          });
-          logBus.success(`展陈图生图完成 → ${url}`, src);
-          taskCompletionSound.notifyComplete(id, 'image');
-          return;
+          completeRound(roundIndex, q.urls || [url], undefined, runSeed, submit.taskId);
+          break;
         }
         if (status === 'failed' || status === 'failure' || status === 'error') {
           throw new Error(q.error || '任务失败');
         }
       }
-      throw new Error('轮询超时');
+      if (generatedUrls.length < roundIndex) throw new Error('轮询超时');
+      }
+      update({
+        status: 'success',
+        progress: '100%',
+        imageUrl: generatedUrls[0] || '',
+        imageUrls: generatedUrls,
+        imageNames: generatedNames,
+        remoteImageUrls: generatedRemoteUrls,
+        lastPrompt: promptForRun,
+        lastSeed: latestSeed,
+        taskId: latestTaskId,
+        usedI2I: true,
+        error: '',
+      });
+      logBus.success(`展陈图生图完成: ${generatedUrls.length} 张`, src);
+      taskCompletionSound.notifyComplete(id, 'image');
     } catch (error: any) {
       const msg = error?.message || '生成失败';
       logBus.error(`展陈图生图失败: ${msg}`, src);
@@ -3510,6 +3551,19 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           </div>
 
           <div>
+            <label className="text-[10px] text-white/50 block mb-1">图像名称</label>
+            <input
+              className={FIELD}
+              value={imageName}
+              disabled={isReadonly || busy}
+              maxLength={12}
+              placeholder="最多6字"
+              onChange={(event) => update({ imageName: normalizeExhibitionImageName(event.target.value) })}
+            />
+            <div className="mt-1 text-[9px] leading-snug text-white/35">为空时，LLM 提炼文本后自动生成；批量输出会追加 -1、-2。</div>
+          </div>
+
+          <div>
             <label className="text-[10px] text-white/50 block mb-1" title="0 = 自动生成并记录随机 seed">Seed (0=random)</label>
             <input
               type="number"
@@ -3539,13 +3593,19 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           <section className="rounded border border-white/10 bg-black/20 p-2">
             <div className={outputImageUrls.length > 1 ? 'grid grid-cols-2 gap-2' : ''}>
               {outputImageUrls.map((url: string, index: number) => (
-                <img
-                  key={`${url}-${index}`}
-                  src={url}
-                  alt=""
-                  className="max-h-52 w-full rounded border border-white/10 object-contain"
-                  draggable={false}
-                />
+                <div key={`${url}-${index}`} className="min-w-0">
+                  <img
+                    src={url}
+                    alt=""
+                    className="max-h-52 w-full rounded border border-white/10 object-contain"
+                    draggable={false}
+                  />
+                  {outputImageNames[index] && (
+                    <div className="mt-1 truncate text-center text-[10px] font-semibold text-cyan-100" title={outputImageNames[index]}>
+                      {outputImageNames[index]}
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           </section>

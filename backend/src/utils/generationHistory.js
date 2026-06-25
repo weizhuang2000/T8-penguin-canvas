@@ -273,6 +273,7 @@ function normalizeHistoryContext(context = {}) {
     sourceNodeId: safeText(context.sourceNodeId),
     sourceNodeType: safeText(context.sourceNodeType),
     nodeTitle: safeText(context.nodeTitle),
+    outputTitle: safeText(context.outputTitle),
   };
 }
 
@@ -286,7 +287,7 @@ function addHistoryItems(items, context = {}, user = null) {
     const kind = normalizeKind(raw?.kind, url);
     if (!url || !kind) continue;
     const fileName = outputUrlToFilename(url);
-    const title = safeText(raw?.title || normalizedContext.nodeTitle || fileName || path.basename(url));
+    const title = safeText(raw?.title || normalizedContext.outputTitle || normalizedContext.nodeTitle || fileName || path.basename(url));
     const existing = byUrl.get(url);
     const patch = {
       kind,

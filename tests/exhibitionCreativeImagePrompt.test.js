@@ -257,6 +257,14 @@ test('exhibition creative image node supports random categorized insert items', 
   assert.match(node, /resolveRuntimeInsertItems/);
   assert.match(node, /-1 表示补入全部未选项/);
   assert.match(node, /min=\{-1\}/);
+  assert.match(node, /图像名称/);
+  assert.match(node, /normalizeExhibitionImageName\(event\.target\.value\)/);
+  assert.match(node, /generateExhibitionImageNameWithLlm/);
+  assert.match(node, /formatExhibitionOutputImageName\(baseImageName, index, generationCount, '创意图'\)/);
+  assert.match(node, /outputTitle/);
+  assert.match(node, /name: displayName/);
   assert.match(canvas, /insertRandomCounts: \{\}/);
+  assert.match(canvas, /imageName: ''/);
+  assert.match(canvas, /imageNames: \[\]/);
   assert.match(backend, /EXHIBITION_CREATIVE_INSERT_CATEGORIES/);
 });

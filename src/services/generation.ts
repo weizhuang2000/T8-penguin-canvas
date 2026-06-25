@@ -42,6 +42,7 @@ export interface GenerationHistoryContext {
   sourceNodeId?: string;
   sourceNodeType?: string;
   nodeTitle?: string;
+  outputTitle?: string;
   seed?: number;
 }
 

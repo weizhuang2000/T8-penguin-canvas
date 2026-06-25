@@ -6,6 +6,15 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
+const designTeamDbPath = require.resolve('../backend/src/auth/designTeamDb.js');
+require.cache[designTeamDbPath] = {
+  id: designTeamDbPath,
+  filename: designTeamDbPath,
+  loaded: true,
+  exports: {
+    findUserById: async () => null,
+  },
+};
 const config = require('../backend/src/config.js');
 const history = require('../backend/src/utils/generationHistory.js');
 
@@ -54,6 +63,23 @@ test('addHistoryItems deduplicates by url and updates context', () => withTempDa
   assert.equal(items.length, 1);
   assert.equal(items[0].title, 'B');
   assert.equal(items[0].prompt, 'new');
+}));
+
+test('history title can use outputTitle before nodeTitle', () => withTempData(() => {
+  writeCanvases([{ id: 'c1', ownerUserId: 'u1' }]);
+  history.addHistoryItems(
+    [{ url: '/files/output/named.png', kind: 'image' }],
+    { canvasId: 'c1', nodeTitle: '节点标题', outputTitle: '序厅-1' },
+    { id: 'u1', role: 'designer' },
+  );
+  history.addHistoryItems(
+    [{ url: '/files/output/fallback.png', kind: 'image' }],
+    { canvasId: 'c1', nodeTitle: '节点标题' },
+    { id: 'u1', role: 'designer' },
+  );
+  const byUrl = new Map(history.listVisibleItems({ id: 'u1', role: 'designer' }).map((item) => [item.url, item]));
+  assert.equal(byUrl.get('/files/output/named.png')?.title, '序厅-1');
+  assert.equal(byUrl.get('/files/output/fallback.png')?.title, '节点标题');
 }));
 
 test('history keeps full long prompts for copy actions', () => withTempData(() => {

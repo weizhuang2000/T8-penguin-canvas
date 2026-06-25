@@ -51,6 +51,11 @@ import {
   type ExhibitionCreativeViewAngle,
 } from '../../utils/exhibitionCreativeImagePrompt';
 import {
+  formatExhibitionOutputImageName,
+  generateExhibitionImageNameWithLlm,
+  normalizeExhibitionImageName,
+} from '../../utils/exhibitionImageName';
+import {
   extractDocument,
   getCurrentUser,
   getElevationPromptPresets,
@@ -123,6 +128,7 @@ const REFERENCE_MARK_POSITION_OPTIONS: Array<{ value: ReferenceMarkPosition; lab
 
 interface CreativeResult {
   index: number;
+  name?: string;
   brief: string;
   prompt: string;
   imageUrl: string;
@@ -558,6 +564,7 @@ function creativeResultsFromData(value: unknown): CreativeResult[] {
       if (!imageUrl) return null;
       return {
         index: Math.max(1, Number(item?.index) || index + 1),
+        name: normalizeExhibitionImageName(item?.name),
         brief: String(item?.brief || '').trim(),
         prompt: String(item?.prompt || '').trim(),
         imageUrl,
@@ -843,6 +850,8 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const sizeLevel = d.sizeLevel || modelDef.defaultSize || '2K';
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
+  const imageName = normalizeExhibitionImageName(d.imageName);
+  const outputImageNames = Array.isArray(d.imageNames) ? d.imageNames.map((item: unknown) => String(item || '').trim()) : [];
   const spaceType = normalizeExhibitionCreativeSpaceType(d.spaceType);
   const manualSpaceSize = normalizeExhibitionCreativeSpaceSize(d.manualSpaceSize);
   const hasManualSpaceSize = manualSpaceSize.width > 0 && manualSpaceSize.depth > 0 && manualSpaceSize.height > 0;
@@ -1419,6 +1428,20 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     update({ status: 'creative', progress: '创意描述中', error: '' });
     try {
       const nextBrief = await buildCreativeBrief(1, []);
+      if (!normalizeExhibitionImageName(d.imageName)) {
+        try {
+          const nextName = await generateExhibitionImageNameWithLlm({
+            generateLlm,
+            model: llmModel,
+            llmKeyId: activeLlmConfig?.id,
+            material: nextBrief,
+            fallback: projectTheme || '创意图',
+          });
+          if (nextName) update({ imageName: nextName });
+        } catch (nameError: any) {
+          logBus.warn(`展陈创意生图自动命名失败: ${nameError?.message || nameError}`, `exhibition-creative-image:${id.slice(0, 6)}`);
+        }
+      }
       update({
         creativeBrief: nextBrief,
         lastCreativeBriefs: [nextBrief],
@@ -1430,7 +1453,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       update({ status: 'error', error: llmErrorMessage(error), progress: '' });
       throw error;
     }
-  }, [buildCreativeBrief, busy, isReadonly, update]);
+  }, [activeLlmConfig?.id, buildCreativeBrief, busy, d.imageName, id, isReadonly, llmModel, projectTheme, update]);
 
   const summarizeDocument = useCallback(async (textOverride?: string, rethrow = false) => {
     if (isReadonly || busy) return;
@@ -1465,12 +1488,29 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       });
       const summary = String(response.content || '').trim();
       if (!summary) throw new Error('LLM 未返回有效资料摘要');
-      update({
+      const patch: Record<string, any> = {
         documentSummary: summary,
         status: 'success',
         progress: '',
         error: '',
         summarizedAt: Date.now(),
+      };
+      if (!normalizeExhibitionImageName(d.imageName)) {
+        try {
+          const nextName = await generateExhibitionImageNameWithLlm({
+            generateLlm,
+            model: documentLlmModel,
+            llmKeyId: activeDocumentLlmConfig?.id,
+            material: summary,
+            fallback: projectTheme || '创意图',
+          });
+          if (nextName) patch.imageName = nextName;
+        } catch (nameError: any) {
+          logBus.warn(`展陈创意生图资料自动命名失败: ${nameError?.message || nameError}`, `exhibition-creative-image:${id.slice(0, 6)}`);
+        }
+      }
+      update({
+        ...patch,
       });
     } catch (error: any) {
       update({ status: 'error', error: llmErrorMessage(error), progress: '' });
@@ -1480,7 +1520,10 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     activeDocumentLlmConfig?.id,
     busy,
     documentLlmModel,
+    d.imageName,
+    id,
     isReadonly,
+    projectTheme,
     sourceText,
     update,
   ]);
@@ -1517,12 +1560,14 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     runSeed,
     roundIndex,
     referenceImages,
+    outputTitle,
   }: {
     brief: string;
     imagePrompt: string;
     runSeed: number;
     roundIndex: number;
     referenceImages: string[];
+    outputTitle: string;
   }): Promise<{ urls: string[]; taskId?: string }> => {
     const historyContext = {
       canvasId: activeCanvasId,
@@ -1530,6 +1575,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       sourceNodeType: 'exhibition-creative-image',
       seed: runSeed,
       nodeTitle: `展陈创意生图 ${roundIndex}/${generationCount}`,
+      outputTitle,
     };
     if (isExternalSelected && providerSelection.provider) {
       if (!externalProviderModel) throw new Error('扩展平台未配置可用图像模型');
@@ -1650,10 +1696,12 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       usedI2I: !!spaceImage,
       creativeResults: [],
       imageUrls: [],
+      imageNames: [],
     });
     const results: CreativeResult[] = [];
     const briefs: string[] = [];
     const imageUrls: string[] = [];
+    const imageNames: string[] = [];
     try {
       const colorMaterialReferenceForModel = colorMaterialReferenceImage
         ? useColorMaterialAbstractCard
@@ -1663,6 +1711,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       const runtimeReferenceImages = [spaceImage, colorMaterialReferenceForModel, ...exhibitReferenceImageUrls].filter(Boolean);
       const runtimeInsertIds = resolveRuntimeInsertItems();
       let sharedBrief = creativeBrief;
+      const baseImageName = imageName || projectTheme || '创意图';
       if (!regenerateEachTime) {
         if (!sharedBrief) {
           update({ progress: `创意描述 1/${generationCount}` });
@@ -1753,16 +1802,19 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
         });
         update({ lastPrompt: imagePrompt, lastSeed: nextSeed, progress: `提交生图 ${index}/${generationCount}` });
         logBus.info(`展陈创意生图提交: ${index}/${generationCount} seed=${nextSeed}`, src);
+        const displayName = formatExhibitionOutputImageName(baseImageName, index, generationCount, '创意图');
         const res = await generateOneImage({
           brief,
           imagePrompt,
           runSeed: nextSeed,
           roundIndex: index,
           referenceImages: runtimeReferenceImages,
+          outputTitle: displayName,
         });
         const url = res.urls[0];
         const nextResult = {
           index,
+          name: displayName,
           brief,
           prompt: imagePrompt,
           imageUrl: url,
@@ -1771,10 +1823,12 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
         };
         results.push(nextResult);
         imageUrls.push(...res.urls.filter(Boolean));
+        imageNames.push(displayName);
         update({
           creativeResults: results.slice(),
           imageUrl: url,
           imageUrls: imageUrls.slice(),
+          imageNames: imageNames.slice(),
           prompt: imagePrompt,
           outputText: imagePrompt,
           text: imagePrompt,
@@ -1787,6 +1841,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
         creativeResults: results,
         imageUrl: imageUrls[imageUrls.length - 1] || '',
         imageUrls,
+        imageNames,
         lastCreativeBriefs: briefs,
         usedI2I: !!spaceImage,
         error: '',
@@ -1808,6 +1863,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     generationCount,
     hasManualSpaceSize,
     id,
+    imageName,
     insertOptions,
     colorMaterial,
     colorMaterialMarkSettings,
@@ -2302,6 +2358,19 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           </label>
         </section>
 
+        <section className="space-y-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
+          <div className="text-[11px] font-semibold text-cyan-100">图像名称</div>
+          <input
+            className={FIELD}
+            value={imageName}
+            disabled={isReadonly || busy}
+            maxLength={12}
+            placeholder="最多6字"
+            onChange={(event) => update({ imageName: normalizeExhibitionImageName(event.target.value) })}
+          />
+          <div className="text-[9px] leading-snug text-white/35">为空时，LLM 提炼文本后自动生成；批量输出会追加 -1、-2。</div>
+        </section>
+
         <section className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-semibold text-cyan-100">植入项</span>
@@ -2700,7 +2769,9 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                 <div key={`${item.index}:${item.imageUrl}`} className="rounded border border-white/10 bg-black/20 p-1.5">
                   <img src={item.imageUrl} alt="" className="h-32 w-full rounded border border-white/10 object-contain" draggable={false} />
                   <div className="mt-1 flex items-center justify-between gap-2 text-[9px] text-white/45">
-                    <span>#{item.index}</span>
+                    <span className="truncate text-cyan-100" title={item.name || outputImageNames[item.index - 1] || `#${item.index}`}>
+                      {item.name || outputImageNames[item.index - 1] || `#${item.index}`}
+                    </span>
                     <span>Seed {item.seed || '-'}</span>
                   </div>
                   <div className="mt-1 line-clamp-2 text-[9px] leading-snug text-white/55" title={item.brief}>{item.brief}</div>
