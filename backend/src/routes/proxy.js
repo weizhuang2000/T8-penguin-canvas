@@ -650,6 +650,7 @@ async function callImageUpstreamAsync({ apiKey, baseUrl, finalApiModel, paramKin
   const lvlLower = String(image_size || '1K').toLowerCase();
   const lvlUpper = String(image_size || '2K').toUpperCase();
   const hasRefs = Array.isArray(refs) && refs.length > 0;
+  const imageCount = Math.max(1, Math.min(4, parseInt(n ?? 1, 10) || 1));
 
   // ===== Grok Image 路径(对齐 gpt-image-2-web Tab 12,默认参考图 Base64) =====
   if (paramKind === 'grok-image') {
@@ -660,7 +661,7 @@ async function callImageUpstreamAsync({ apiKey, baseUrl, finalApiModel, paramKin
         if (converted) grokRefs.push(converted);
       }
     }
-    const body = { model: finalApiModel, prompt, aspect_ratio: isAuto ? '1:1' : ar };
+    const body = { model: finalApiModel, prompt, aspect_ratio: isAuto ? '1:1' : ar, n: imageCount };
     if (seed && Number(seed) > 0) body.seed = Number(seed);
     if (grokRefs.length) body.image = grokRefs;
     const url = `${upstreamBase}/generations?async=true`;
@@ -678,7 +679,7 @@ async function callImageUpstreamAsync({ apiKey, baseUrl, finalApiModel, paramKin
     const px = size || aspectToGptSize(ar, lvlLower);
     form.append('prompt', prompt);
     form.append('model', finalApiModel);
-    form.append('n', String(n || 1));
+    form.append('n', String(imageCount));
     form.append('quality', quality || 'auto');
     form.append('moderation', 'auto');
     form.append('size', px);
@@ -711,6 +712,7 @@ async function callImageUpstreamAsync({ apiKey, baseUrl, finalApiModel, paramKin
     const form = new FormData();
     form.append('prompt', prompt);
     form.append('model', finalApiModel);
+    form.append('n', String(imageCount));
     form.append('aspect_ratio', isAuto ? '1:1' : ar);
     if (String(finalApiModel).includes('nano-banana')) form.append('image_size', lvlUpper);
     if (seed && Number(seed) > 0) form.append('seed', String(Math.floor(Number(seed))));
@@ -725,7 +727,7 @@ async function callImageUpstreamAsync({ apiKey, baseUrl, finalApiModel, paramKin
     return await fetch(url, { method: 'POST', headers: { Authorization: auth }, body: form });
   }
   // 文生图 → JSON /generations?async=true
-  const body = { prompt, model: finalApiModel, aspect_ratio: isAuto ? '1:1' : ar };
+  const body = { prompt, model: finalApiModel, aspect_ratio: isAuto ? '1:1' : ar, n: imageCount };
   if (String(finalApiModel).includes('nano-banana')) body.image_size = lvlUpper;
   if (seed && Number(seed) > 0) body.seed = Number(seed);
   const url = `${upstreamBase}/generations?async=true`;

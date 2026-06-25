@@ -623,7 +623,7 @@ function normalizeInsertRandomCounts(value: unknown): Record<string, number> {
   const out: Record<string, number> = {};
   INSERT_CATEGORIES.forEach((category) => {
     const count = Math.floor(Number(source[category]) || 0);
-    out[category] = Math.max(0, Math.min(99, count));
+    out[category] = Math.max(-1, Math.min(99, count));
   });
   return out;
 }
@@ -876,11 +876,12 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     const picked = new Set(selectedInsertIds);
     for (const group of insertGroups) {
       const count = insertRandomCounts[group.category] || 0;
-      if (count <= 0) continue;
+      if (count === 0) continue;
       const candidates = group.items
         .map((item) => item.id)
         .filter((itemId) => !picked.has(itemId));
-      for (const itemId of shuffleInsertIds(candidates).slice(0, count)) {
+      const nextItemIds = count === -1 ? candidates : shuffleInsertIds(candidates).slice(0, count);
+      for (const itemId of nextItemIds) {
         picked.add(itemId);
       }
     }
@@ -1327,7 +1328,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const setInsertRandomCount = (category: string, value: string | number) => {
     if (isReadonly || busy) return;
     const next = normalizeInsertRandomCounts(insertRandomCounts);
-    next[category] = Math.max(0, Math.min(99, Math.floor(Number(value) || 0)));
+    next[category] = Math.max(-1, Math.min(99, Math.floor(Number(value) || 0)));
     update({ insertRandomCounts: next });
   };
 
@@ -2319,7 +2320,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               )}
             </div>
             <div className="space-y-1.5">
-              <div className="text-[9px] leading-snug text-white/35">随机数量会在每次运行时从该分类未手动选中的植入项中补选，不改变当前勾选状态。</div>
+              <div className="text-[9px] leading-snug text-white/35">随机数量会在每次运行时从该分类未手动选中的植入项中补选；-1 表示补入全部未选项，不改变当前勾选状态。</div>
               {insertGroups.map((group) => (
                 <div key={group.category} className="space-y-1">
                   <div className="flex items-center justify-between gap-2">
@@ -2329,7 +2330,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                       <input
                         className="h-5 w-11 rounded border border-white/10 bg-black/20 px-1 text-center text-[10px] text-white/70 outline-none focus:border-cyan-300/60 disabled:opacity-45"
                         type="number"
-                        min={0}
+                        min={-1}
                         max={Math.max(0, group.items.length - selectedInsertIds.filter((itemId) => group.items.some((item) => item.id === itemId)).length)}
                         step={1}
                         value={insertRandomCounts[group.category] || 0}

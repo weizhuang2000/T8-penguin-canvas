@@ -775,7 +775,7 @@ function normalizeCraftRandomCounts(value: unknown): Record<string, number> {
   const out: Record<string, number> = {};
   CRAFT_CATEGORIES.forEach((category) => {
     const count = Math.floor(Number(source[category]) || 0);
-    out[category] = Math.max(0, Math.min(99, count));
+    out[category] = Math.max(-1, Math.min(99, count));
   });
   return out;
 }
@@ -1639,6 +1639,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const sizeLevel = d.sizeLevel || modelDef.defaultSize || '2K';
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
   const generationCount = clampNumber(d.generationCount, MIN_IMAGE_COUNT, MAX_IMAGE_COUNT, 1);
+  const outputImageUrls = Array.isArray(d.imageUrls) && d.imageUrls.length ? d.imageUrls.filter(Boolean) : (d.imageUrl ? [d.imageUrl] : []);
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
 
   const structureImage = useHandleImage(id, 'structure');
@@ -1706,11 +1707,12 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     const picked = new Set(selectedCrafts);
     for (const group of craftGroups) {
       const count = craftRandomCounts[group.category] || 0;
-      if (count <= 0) continue;
+      if (count === 0) continue;
       const candidates = group.crafts
         .map((craft) => craft.id)
         .filter((craftId) => !picked.has(craftId));
-      for (const craftId of shuffleCraftIds(candidates).slice(0, count)) {
+      const nextCraftIds = count === -1 ? candidates : shuffleCraftIds(candidates).slice(0, count);
+      for (const craftId of nextCraftIds) {
         picked.add(craftId);
       }
     }
@@ -2388,7 +2390,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const setCraftRandomCount = (category: string, value: string | number) => {
     if (isReadonly) return;
     const next = normalizeCraftRandomCounts(craftRandomCounts);
-    next[category] = Math.max(0, Math.min(99, Math.floor(Number(value) || 0)));
+    next[category] = Math.max(-1, Math.min(99, Math.floor(Number(value) || 0)));
     update({ craftRandomCounts: next });
   };
 
@@ -2791,7 +2793,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
             )}
           </div>
           <div className="space-y-1.5">
-            <div className="text-[9px] leading-snug text-white/35">随机数量会在每次运行时从该分类未手动选中的工艺中补选，不改变当前勾选状态。</div>
+            <div className="text-[9px] leading-snug text-white/35">随机数量会在每次运行时从该分类未手动选中的工艺中补选；-1 表示补入全部未选项，不改变当前勾选状态。</div>
             {craftGroups.map((group) => (
               <div key={group.category} className="space-y-1">
                 <div className="flex items-center justify-between gap-2">
@@ -2801,7 +2803,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                     <input
                       className="h-5 w-11 rounded border border-white/10 bg-black/20 px-1 text-center text-[10px] text-white/70 outline-none focus:border-cyan-300/60 disabled:opacity-45"
                       type="number"
-                      min={0}
+                      min={-1}
                       max={Math.max(0, group.crafts.length - selectedCrafts.filter((craftId) => group.crafts.some((craft) => craft.id === craftId)).length)}
                       step={1}
                       value={craftRandomCounts[group.category] || 0}
@@ -3533,9 +3535,19 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           <div className="max-h-56 overflow-y-auto whitespace-pre-wrap break-words text-[10px] leading-relaxed text-white/72">{prompt}</div>
         </section>
 
-        {d.imageUrl && (
+        {outputImageUrls.length > 0 && (
           <section className="rounded border border-white/10 bg-black/20 p-2">
-            <img src={d.imageUrl} alt="" className="max-h-52 w-full rounded border border-white/10 object-contain" draggable={false} />
+            <div className={outputImageUrls.length > 1 ? 'grid grid-cols-2 gap-2' : ''}>
+              {outputImageUrls.map((url: string, index: number) => (
+                <img
+                  key={`${url}-${index}`}
+                  src={url}
+                  alt=""
+                  className="max-h-52 w-full rounded border border-white/10 object-contain"
+                  draggable={false}
+                />
+              ))}
+            </div>
           </section>
         )}
 

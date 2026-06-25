@@ -255,7 +255,8 @@ test('exhibition creative image node supports random categorized insert items', 
   assert.match(node, /INSERT_CATEGORIES = \['装饰', '多媒体', '艺术品', '展陈', '展柜', '展台', '顶部', '其它'\]/);
   assert.match(node, /insertRandomCounts/);
   assert.match(node, /resolveRuntimeInsertItems/);
-  assert.match(node, /随机数量会在每次运行时/);
+  assert.match(node, /-1 表示补入全部未选项/);
+  assert.match(node, /min=\{-1\}/);
   assert.match(canvas, /insertRandomCounts: \{\}/);
   assert.match(backend, /EXHIBITION_CREATIVE_INSERT_CATEGORIES/);
 });
