@@ -118,8 +118,13 @@ function showcaseStyleText(style) {
   return lines.join('\n');
 }
 
-function showcaseScaleRuleText(style) {
+function showcaseScaleRuleText(style, mode) {
   const s = normalizeShowcaseStyle(style);
+  if (normalizeSupportHeightMode(mode) === 'heritage-level') {
+    return s.hasCap
+      ? '生成缩放规则：按文物级别、展品价值和柜内视觉秩序判断展品本体显示高度；展柜宽度、底座高度、玻璃区高度、柜帽高度和柜体总高度保持设定尺寸不变。'
+      : '生成缩放规则：按文物级别、展品价值和柜内视觉秩序判断展品本体显示高度；展柜宽度、底座高度、玻璃区高度和柜体总高度保持设定尺寸不变；顶部保持透明玻璃顶，不安装任何灯具、灯带或射灯。';
+  }
   return s.hasCap
     ? '生成缩放规则：生图时展品本体显示高度必须按用户设定的展品主体目标高度生成；展柜宽度、底座高度、玻璃区高度、柜帽高度和柜体总高度保持设定尺寸不变。'
     : '生成缩放规则：生图时展品本体显示高度必须按用户设定的展品主体目标高度生成；展柜宽度、底座高度、玻璃区高度和柜体总高度保持设定尺寸不变；顶部保持透明玻璃顶，不安装任何灯具、灯带或射灯。';
@@ -160,7 +165,7 @@ function supportHeightModeText(mode) {
     return '展托高度策略：模型按展品价值自动判断。请根据每件展品的珍贵程度、视觉主次、材质和形态判断展托高度；价值高的展品展托更高一点，位置更靠中间或视觉核心区，但不得改变展品主体目标高度。';
   }
   if (supportHeightMode === 'heritage-level') {
-    return '展托高度策略：根据文物级别组织。一级文物优先放在中间或视觉核心区，展托更高、更稳重；二级文物次之；三级文物和未评级展品可使用较低展托或偏侧位置，但仍必须有清晰可见支撑。';
+    return '高度策略：根据文物级别组织。展品主体高度和展托高度都由模型按文物级别、展品价值和柜内视觉秩序判断；一级文物优先放在中间或视觉核心区，展品更突出，展托更高、更稳重；二级文物次之；三级文物和未评级展品可更低或偏侧，但仍必须有清晰可见支撑。';
   }
   return '展托高度策略：按照输入尺寸。每件展品必须按其输入的展托高度生成可见展托、托座或支架，展托从底座或层板连续托举到展品底部。';
 }
@@ -172,13 +177,16 @@ function supportHeightItemText(item, mode) {
     return `文物级别：${level}；展托高度：由模型根据展品价值自动判断，价值高时展托更高一点、位置更靠中间，仍保持展品主体目标高度不变。`;
   }
   if (supportHeightMode === 'heritage-level') {
-    return `文物级别：${level}；展托高度：按文物级别判断，一级居中且展托更高，二级次之，三级/未评级更低或偏侧，仍保持展品主体目标高度不变。`;
+    return `文物级别：${level}；展品主体高度和展托高度均由模型按该级别判断，不使用输入高度数值。`;
   }
   return `文物级别：${level}；展托高度：${item.supportHeightMm} mm，必须绘制可见展托/托座/支架，不要让展品悬浮。`;
 }
 
 function supportHeightAuditText(items, mode) {
   const supportHeightMode = normalizeSupportHeightMode(mode);
+  if (supportHeightMode === 'heritage-level') {
+    return '尺寸复核：当前为按文物级别模式，不输出也不使用每件展品的输入主体高度和输入展托高度；生成前必须按文物级别复核高低关系、中心位置、展托稳定性和柜内留白，一级文物应更突出且展托更高，二级次之，三级/未评级更克制。';
+  }
   const heightList = items.map((item, index) => `展品 ${index + 1} 主体高度 ${item.heightMm} mm`).join('；');
   if (supportHeightMode === 'input') {
     const supportList = items.map((item, index) => `展品 ${index + 1} 展托高度 ${item.supportHeightMm} mm`).join('；');
@@ -249,29 +257,43 @@ function exhibitItemsText(items, style, values = {}) {
   const supportHeightMode = normalizeSupportHeightMode(values.supportHeightMode);
   const lines = [
     '普通 image 输入均视为展品图，只用于提取展品外观、体量、轮廓、材质和摆放重点，不作为色彩材质风格参考。',
-    '参考图顺序：第 1 张参考图 = 展品 1，第 2 张参考图 = 展品 2，以此类推。必须按这个顺序匹配展品参考图和展品主体高度。',
+    supportHeightMode === 'heritage-level'
+      ? '参考图顺序：第 1 张参考图 = 展品 1，第 2 张参考图 = 展品 2，以此类推。必须按这个顺序匹配展品参考图和文物级别。'
+      : '参考图顺序：第 1 张参考图 = 展品 1，第 2 张参考图 = 展品 2，以此类推。必须按这个顺序匹配展品参考图和展品主体高度。',
     '展品视角要求：展品尽量采用侧视图或正侧视图，保持平视、端正摆放；不要俯拍、仰拍、斜拍、倾斜旋转或明显透视变形。',
-    '严格比例规则：每件展品只能按“展品主体目标高度 mm”缩放；这里的高度指参考图中主要物体/展品本体在最终画面中的真实高度，不是参考图片文件的画幅高度、像素高度、裁切框高度或留白高度。',
-    showcaseScaleRuleText(style),
+    supportHeightMode === 'heritage-level'
+      ? '严格比例规则：每件展品按文物级别、展品价值和柜内视觉秩序判断本体显示高度；不要读取或套用输入的展品主体高度、展托高度数值，也不要按参考图片文件的画幅高度、像素高度、裁切框高度或留白高度缩放。'
+      : '严格比例规则：每件展品只能按“展品主体目标高度 mm”缩放；这里的高度指参考图中主要物体/展品本体在最终画面中的真实高度，不是参考图片文件的画幅高度、像素高度、裁切框高度或留白高度。',
+    showcaseScaleRuleText(style, supportHeightMode),
     '标注规则：不要给任何展品本体标注尺寸数字、尺寸线或高度文字；如果开启尺寸标注，只标注展柜、底座、玻璃区、柜帽、层板、托架等柜体/构件尺寸。',
-    '高度定义：展品主体目标高度只指参考图中主要物体/展品本体的可见垂直高度，不包含整张图片画幅、透明边距、背景、托台、托盘、标签牌、底座、支架、阴影、留白或说明文字。',
-    '最终展品本体必须严格按展品主体目标高度形成真实显示比例范围，不得为了构图、焦点或视觉美观而随意放大或缩小。',
+    supportHeightMode === 'heritage-level'
+      ? '高度定义：按级别判断的展品高度只指参考图中主要物体/展品本体的可见垂直高度，不包含整张图片画幅、透明边距、背景、托台、托盘、标签牌、底座、支架、阴影、留白或说明文字。'
+      : '高度定义：展品主体目标高度只指参考图中主要物体/展品本体的可见垂直高度，不包含整张图片画幅、透明边距、背景、托台、托盘、标签牌、底座、支架、阴影、留白或说明文字。',
+    supportHeightMode === 'heritage-level'
+      ? '最终展品本体必须形成符合文物级别的真实显示比例范围，不得为了构图、焦点或视觉美观而破坏一级、二级、三级、未评级之间的主次关系。'
+      : '最终展品本体必须严格按展品主体目标高度形成真实显示比例范围，不得为了构图、焦点或视觉美观而随意放大或缩小。',
     '柜内设计宁可多留空，也不要把展品撑满画面；应保留充足柜内空白，为以后继续放置其它展品预留空间。',
     supportHeightModeText(supportHeightMode),
   ];
 
   normalized.forEach((item, index) => {
     const mentionToken = `@img${index + 1}`;
-    lines.push(`${index + 1}. ${mentionToken}：展品主体目标高度 ${item.heightMm} mm`);
+    lines.push(supportHeightMode === 'heritage-level'
+      ? `${index + 1}. ${mentionToken}`
+      : `${index + 1}. ${mentionToken}：展品主体目标高度 ${item.heightMm} mm`);
     lines.push(`   @ 标注：${mentionToken} 对应参考图顺序中的展品 ${index + 1}，必须按该图提取外观、轮廓、材质与细节。`);
     lines.push(`   ${supportHeightItemText(item, supportHeightMode)}`);
-    lines.push(`   标注限制：不要给展品 ${index + 1} 标注 ${item.heightMm} mm，也不要在展品旁绘制尺寸线或高度数字。`);
+    lines.push(supportHeightMode === 'heritage-level'
+      ? `   标注限制：不要给展品 ${index + 1} 标注任何展品高度、展托高度、尺寸线或高度数字。`
+      : `   标注限制：不要给展品 ${index + 1} 标注 ${item.heightMm} mm，也不要在展品旁绘制尺寸线或高度数字。`);
   });
 
   if (values.hasColorMaterialReferenceImage === true) {
     lines.push('色彩材质参考图使用独立 color-material-reference 输入，并且排在所有展品图之后；它不是展品图，不得套用任何展品高度尺寸。');
   }
-  lines.push('相对尺寸审计：如果两张展品参考图看起来差不多大，但高度数值不同，最终必须按毫米数显示出明显的物理高度差异。');
+  lines.push(supportHeightMode === 'heritage-level'
+    ? '相对尺寸审计：如果两张展品参考图看起来差不多大，最终仍应按文物级别和展品价值形成明确主次，不要按输入高度数值排序。'
+    : '相对尺寸审计：如果两张展品参考图看起来差不多大，但高度数值不同，最终必须按毫米数显示出明显的物理高度差异。');
   lines.push(supportHeightAuditText(normalized, supportHeightMode));
   lines.push('渲染前最终检查：逐一比较每件展品与展柜宽度、玻璃区高度。小尺寸展品必须保持小件感，大尺寸展品只有在数值足够大时才可以成为视觉主体。');
   return lines.join('\n');
@@ -299,6 +321,7 @@ function colorMaterialText(values) {
 
 function outputRequirementText(values) {
   const isManualLayout = values.layoutMode === 'manual';
+  const isHeritageLevelMode = normalizeSupportHeightMode(values.supportHeightMode) === 'heritage-level';
   const s = normalizeShowcaseStyle(values.showcaseStyle || values.dimensions || values);
   const explodedViewText = values.explodedViewEnabled === true
     ? s.hasCap
@@ -317,7 +340,9 @@ function outputRequirementText(values) {
         : '尺寸标注：开启。输出中可加入清晰的工程尺寸标注、毫米单位和关键高度/宽度标注，但文字必须简洁、整洁，像方案图标注。所有标注必须使用用户设定尺寸；只标注展柜、底座、玻璃区、柜帽、层板、托架等柜体/构件尺寸，不标注展品本体尺寸。'
       : isManualLayout
         ? '尺寸标注：关闭。不要绘制尺寸线、毫米数字、红色测量标注、工程尺或标注符号；展品位置和显示大小仍必须严格按第 1 张手动排版合成图。'
-        : '尺寸标注：关闭。不要绘制尺寸线、毫米数字、红色测量标注、工程尺或标注符号，但仍要按给定尺寸比例生成；展品视觉高度按展品主体目标高度，展柜尺寸不变。',
+        : isHeritageLevelMode
+          ? '尺寸标注：关闭。不要绘制尺寸线、毫米数字、红色测量标注、工程尺或标注符号，但仍要按展柜尺寸比例生成；展品视觉高度按文物级别、展品价值和柜内视觉秩序判断，展柜尺寸不变。'
+          : '尺寸标注：关闭。不要绘制尺寸线、毫米数字、红色测量标注、工程尺或标注符号，但仍要按给定尺寸比例生成；展品视觉高度按展品主体目标高度，展柜尺寸不变。',
     explodedViewText,
   ].join('\n');
 }

@@ -1036,11 +1036,11 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
                     <div className="truncate text-[9px] text-white/35">{item.url}</div>
                   </div>
                   <label className="space-y-0.5">
-                    <span className="text-[9px] text-white/45">{layoutMode === 'manual' ? '自动高度停用' : '展品主体高度 mm'}</span>
-                    <input className={`${FIELD} px-1 text-center`} type="number" min={1} value={item.heightMm} disabled={isReadonly || busy} onChange={(event) => updateExhibitSize(item.url, event.target.value)} />
+                    <span className="text-[9px] text-white/45">{layoutMode === 'manual' ? '自动高度停用' : supportHeightMode === 'heritage-level' ? '主体高度按级别' : '展品主体高度 mm'}</span>
+                    <input className={`${FIELD} px-1 text-center`} type="number" min={1} value={item.heightMm} disabled={isReadonly || busy || supportHeightMode === 'heritage-level'} onChange={(event) => updateExhibitSize(item.url, event.target.value)} />
                   </label>
                   <label className="space-y-0.5">
-                    <span className="text-[9px] text-white/45">{layoutMode === 'manual' ? '自动展托停用' : '展托高度 mm'}</span>
+                    <span className="text-[9px] text-white/45">{layoutMode === 'manual' ? '自动展托停用' : supportHeightMode === 'heritage-level' ? '展托按级别' : '展托高度 mm'}</span>
                     <input
                       className={`${FIELD} px-1 text-center`}
                       type="number"

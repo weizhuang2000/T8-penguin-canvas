@@ -141,11 +141,22 @@ test('showcase prompt supports automatic support height strategies and heritage 
   assert.match(modelValue, /展托高度按当前策略判断，但不能反向改变展品主体高度/);
 
   const heritageLevel = buildShowcaseInteriorDesignPrompt({ exhibitItems, supportHeightMode: 'heritage-level' });
-  assert.match(heritageLevel, /展托高度策略：根据文物级别组织/);
-  assert.match(heritageLevel, /一级文物优先放在中间或视觉核心区，展托更高、更稳重/);
+  assert.match(heritageLevel, /高度策略：根据文物级别组织/);
+  assert.match(heritageLevel, /展品主体高度和展托高度都由模型按文物级别、展品价值和柜内视觉秩序判断/);
+  assert.match(heritageLevel, /一级文物优先放在中间或视觉核心区，展品更突出，展托更高、更稳重/);
   assert.match(heritageLevel, /二级文物次之/);
-  assert.match(heritageLevel, /三级文物和未评级展品可使用较低展托或偏侧位置/);
-  assert.match(heritageLevel, /文物级别：三级；展托高度：按文物级别判断/);
+  assert.match(heritageLevel, /三级文物和未评级展品可更低或偏侧/);
+  assert.match(heritageLevel, /1\. @img1\n/);
+  assert.match(heritageLevel, /文物级别：一级；展品主体高度和展托高度均由模型按该级别判断，不使用输入高度数值/);
+  assert.match(heritageLevel, /文物级别：三级；展品主体高度和展托高度均由模型按该级别判断，不使用输入高度数值/);
+  assert.match(heritageLevel, /当前为按文物级别模式，不输出也不使用每件展品的输入主体高度和输入展托高度/);
+  assert.match(heritageLevel, /不要按输入高度数值排序/);
+  assert.match(heritageLevel, /展品视觉高度按文物级别、展品价值和柜内视觉秩序判断/);
+  assert.doesNotMatch(heritageLevel, /展品主体目标高度 420 mm/);
+  assert.doesNotMatch(heritageLevel, /展品主体目标高度 260 mm/);
+  assert.doesNotMatch(heritageLevel, /展托高度：260 mm/);
+  assert.doesNotMatch(heritageLevel, /展托高度：120 mm/);
+  assert.doesNotMatch(heritageLevel, /主体高度 420 mm/);
 });
 
 test('showcase prompt switches dimension marks and exploded view requirements', () => {
