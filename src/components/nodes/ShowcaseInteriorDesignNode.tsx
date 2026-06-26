@@ -35,6 +35,18 @@ const MAX_IMAGE_SEED = 2147483647;
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
 const DEFAULT_EXHIBIT_HEIGHT_MM = 300;
+const DEFAULT_SUPPORT_HEIGHT_MM = 150;
+const HERITAGE_LEVEL_OPTIONS = [
+  { value: 'first', label: '一级' },
+  { value: 'second', label: '二级' },
+  { value: 'third', label: '三级' },
+  { value: 'unrated', label: '未评级' },
+] as const;
+const SUPPORT_HEIGHT_MODE_OPTIONS = [
+  { value: 'input', label: '按输入尺寸' },
+  { value: 'model-value', label: '模型按价值' },
+  { value: 'heritage-level', label: '按文物级别' },
+] as const;
 
 interface InputImageItem {
   id: string;
@@ -54,6 +66,8 @@ interface ManualLayoutItem {
 
 type LayoutMode = 'auto' | 'manual';
 type LayoutDragMode = 'move' | 'scale';
+type HeritageLevel = typeof HERITAGE_LEVEL_OPTIONS[number]['value'];
+type SupportHeightMode = typeof SUPPORT_HEIGHT_MODE_OPTIONS[number]['value'];
 
 interface LayoutDragSession {
   item: ManualLayoutItem;
@@ -190,6 +204,14 @@ function closestAspectRatio(sourceRatio: number, options: string[]): string {
 
 function normalizeLayoutMode(value: unknown): LayoutMode {
   return value === 'manual' ? 'manual' : 'auto';
+}
+
+function normalizeSupportHeightMode(value: unknown): SupportHeightMode {
+  return value === 'model-value' || value === 'heritage-level' ? value : 'input';
+}
+
+function normalizeHeritageLevel(value: unknown): HeritageLevel {
+  return value === 'first' || value === 'second' || value === 'third' ? value : 'unrated';
 }
 
 function defaultManualLayoutItems(
@@ -568,6 +590,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
   const status = String(d.status || 'idle');
   const busy = status === 'generating';
   const layoutMode = normalizeLayoutMode(d.layoutMode);
+  const supportHeightMode = normalizeSupportHeightMode(d.supportHeightMode);
   const emptyExhibitMode: 'search' | 'empty' = d.emptyExhibitMode === 'search' ? 'search' : 'empty';
   const showcaseStyle = normalizeShowcaseStyle(d.showcaseStyle);
   const supplementMentions: MediaMention[] = Array.isArray(d.supplementMentions) ? d.supplementMentions : [];
@@ -590,6 +613,8 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
         url: image.url,
         label: prev?.label || image.label || `展品 ${index + 1}`,
         heightMm: prev?.heightMm || DEFAULT_EXHIBIT_HEIGHT_MM,
+        supportHeightMm: prev?.supportHeightMm ?? DEFAULT_SUPPORT_HEIGHT_MM,
+        heritageLevel: normalizeHeritageLevel(prev?.heritageLevel),
       };
     });
   }, [d.exhibitItems, exhibitImages]);
@@ -623,6 +648,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
     emptyExhibitMode,
     emptyExhibitQuery: d.emptyExhibitQuery,
     layoutMode,
+    supportHeightMode,
     manualLayoutItems,
     colorMaterialPresetText: colorMaterialTextFromPreset(selectedColorMaterialPreset),
     manualColorMaterial: selectedColorMaterialPreset ? '' : d.colorMaterial,
@@ -632,7 +658,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
     dimensionMarksEnabled: d.dimensionMarksEnabled === true,
     explodedViewEnabled: d.explodedViewEnabled === true,
     supplement: resolvedSupplement,
-  }), [colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.emptyExhibitQuery, d.explodedViewEnabled, d.perspectiveEnabled, emptyExhibitMode, exhibitItems, layoutMode, manualLayoutItems, resolvedSupplement, selectedColorMaterialPreset, showcaseStyle.baseHeightMm, showcaseStyle.capHeightMm, showcaseStyle.glassHeightMm, showcaseStyle.hasBodyPattern, showcaseStyle.hasCap, showcaseStyle.widthMm]);
+  }), [colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.emptyExhibitQuery, d.explodedViewEnabled, d.perspectiveEnabled, emptyExhibitMode, exhibitItems, layoutMode, manualLayoutItems, resolvedSupplement, selectedColorMaterialPreset, showcaseStyle.baseHeightMm, showcaseStyle.capHeightMm, showcaseStyle.glassHeightMm, showcaseStyle.hasBodyPattern, showcaseStyle.hasCap, showcaseStyle.widthMm, supportHeightMode]);
 
   useEffect(() => {
     getElevationPromptPresets().then((presets) => setColorMaterialPresets(presets.colorMaterial || [])).catch(() => setColorMaterialPresets([]));
@@ -690,6 +716,21 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
     update({ exhibitItems: next });
   };
 
+  const updateExhibitSupportHeight = (url: string, value: string) => {
+    const n = Number(value);
+    const next = exhibitItems.map((item) => item.url === url
+      ? { ...item, supportHeightMm: Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : DEFAULT_SUPPORT_HEIGHT_MM }
+      : item);
+    update({ exhibitItems: next });
+  };
+
+  const updateExhibitHeritageLevel = (url: string, value: string) => {
+    const next = exhibitItems.map((item) => item.url === url
+      ? { ...item, heritageLevel: normalizeHeritageLevel(value) }
+      : item);
+    update({ exhibitItems: next });
+  };
+
   const updateManualLayoutItems = (items: ManualLayoutItem[]) => {
     update({ manualLayoutItems: items });
   };
@@ -710,6 +751,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
       emptyExhibitMode,
       emptyExhibitQuery: d.emptyExhibitQuery,
       layoutMode,
+      supportHeightMode,
       manualLayoutItems,
       colorMaterialPresetText: colorMaterialTextFromPreset(selectedColorMaterialPreset),
       manualColorMaterial: selectedColorMaterialPreset ? '' : d.colorMaterial,
@@ -881,7 +923,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`柜内设计生成失败: ${msg}`, src);
       throw error;
     }
-  }, [activeCanvasId, apiModel, aspectRatio, busy, colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.emptyExhibitQuery, d.explodedViewEnabled, d.manualLayoutReferenceImage, d.perspectiveEnabled, d.providerParams, d.taskId, emptyExhibitMode, exhibitItems, externalProviderModel, id, isExternalSelected, isReadonly, layoutMode, manualLayoutItems, modelDef.id, modelDef.paramKind, outputFormat, providerSelection.provider, resolvedSupplement, seed, selectedColorMaterialPreset, showcaseStyle, sizeLevel, update]);
+  }, [activeCanvasId, apiModel, aspectRatio, busy, colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.emptyExhibitQuery, d.explodedViewEnabled, d.manualLayoutReferenceImage, d.perspectiveEnabled, d.providerParams, d.taskId, emptyExhibitMode, exhibitItems, externalProviderModel, id, isExternalSelected, isReadonly, layoutMode, manualLayoutItems, modelDef.id, modelDef.paramKind, outputFormat, providerSelection.provider, resolvedSupplement, seed, selectedColorMaterialPreset, showcaseStyle, sizeLevel, supportHeightMode, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -957,6 +999,19 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
           {layoutMode === 'auto' && (
             <div className="space-y-1.5 rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
               <div className="text-[10px] leading-snug text-cyan-50/75">自动尺寸模式会按每张参考图里的主要展品主体高度生成；可输入 @ 引用上游展品图补充说明。</div>
+              <div className="grid grid-cols-3 gap-1 rounded bg-black/20 p-1">
+                {SUPPORT_HEIGHT_MODE_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    disabled={isReadonly || busy}
+                    onClick={() => update({ supportHeightMode: option.value })}
+                    className={`rounded px-2 py-1.5 text-[10px] font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-35 ${supportHeightMode === option.value ? 'bg-cyan-300/20 text-cyan-100' : 'text-white/45 hover:bg-white/[0.08] hover:text-white/75 disabled:hover:bg-transparent disabled:hover:text-white/45'}`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
               <MentionPromptInput
                 title="柜内自动尺寸补充要求"
                 value={String(d.supplement || '')}
@@ -974,7 +1029,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
           {exhibitItems.length > 0 ? (
             <div className="space-y-1.5">
               {exhibitItems.map((item, index) => (
-                <div key={item.url} className="grid grid-cols-[52px_minmax(0,1fr)_84px] items-center gap-2 rounded border border-white/10 bg-black/15 p-1.5">
+                <div key={item.url} className="grid grid-cols-[52px_minmax(0,1fr)_84px_84px_88px] items-center gap-2 rounded border border-white/10 bg-black/15 p-1.5">
                   <img src={item.url} alt="" className="h-12 w-12 rounded border border-white/10 object-cover" draggable={false} />
                   <div className="min-w-0">
                     <div className="truncate text-[10px] font-semibold text-white/75">{index + 1}. {item.label}</div>
@@ -983,6 +1038,30 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
                   <label className="space-y-0.5">
                     <span className="text-[9px] text-white/45">{layoutMode === 'manual' ? '自动高度停用' : '展品主体高度 mm'}</span>
                     <input className={`${FIELD} px-1 text-center`} type="number" min={1} value={item.heightMm} disabled={isReadonly || busy} onChange={(event) => updateExhibitSize(item.url, event.target.value)} />
+                  </label>
+                  <label className="space-y-0.5">
+                    <span className="text-[9px] text-white/45">{layoutMode === 'manual' ? '自动展托停用' : '展托高度 mm'}</span>
+                    <input
+                      className={`${FIELD} px-1 text-center`}
+                      type="number"
+                      min={0}
+                      value={item.supportHeightMm}
+                      disabled={isReadonly || busy || layoutMode === 'manual' || supportHeightMode !== 'input'}
+                      onChange={(event) => updateExhibitSupportHeight(item.url, event.target.value)}
+                    />
+                  </label>
+                  <label className="space-y-0.5">
+                    <span className="text-[9px] text-white/45">文物级别</span>
+                    <select
+                      className={`${FIELD} px-1`}
+                      value={item.heritageLevel}
+                      disabled={isReadonly || busy || layoutMode === 'manual'}
+                      onChange={(event) => updateExhibitHeritageLevel(item.url, event.target.value)}
+                    >
+                      {HERITAGE_LEVEL_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
                   </label>
                 </div>
               ))}

@@ -21,6 +21,8 @@ export interface ShowcaseExhibitItem {
   label?: string;
   name?: string;
   heightMm?: number;
+  supportHeightMm?: number;
+  heritageLevel?: 'first' | 'second' | 'third' | 'unrated';
   displayHeightMm?: number;
   maxSideMm?: number;
   longestSideMm?: number;
@@ -46,6 +48,7 @@ export interface ShowcaseInteriorDesignPromptValues extends ShowcaseStyleValues 
   emptyExhibitMode?: 'search' | 'empty';
   emptyExhibitQuery?: string;
   layoutMode?: 'auto' | 'manual';
+  supportHeightMode?: 'input' | 'model-value' | 'heritage-level';
   manualLayoutItems?: ShowcaseManualLayoutItem[];
   colorMaterialPresetText?: string;
   colorMaterial?: string;

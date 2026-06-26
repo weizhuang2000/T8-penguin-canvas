@@ -71,6 +71,8 @@ test('showcase prompt keeps exhibit order and display height in millimeters', ()
     { url: '/files/input/b.png', label: '陶俑', heightMm: 260 },
   ]);
   assert.deepEqual(items.map((item) => item.heightMm), [420, 260]);
+  assert.deepEqual(items.map((item) => item.supportHeightMm), [150, 150]);
+  assert.deepEqual(items.map((item) => item.heritageLevel), ['unrated', 'unrated']);
 
   const prompt = buildShowcaseInteriorDesignPrompt({ exhibitItems: items, showcaseStyle: { widthMm: 1200, glassHeightMm: 1400 } });
   const promptWithCap = buildShowcaseInteriorDesignPrompt({ exhibitItems: items, showcaseStyle: { widthMm: 1200, glassHeightMm: 1400, hasCap: true } });
@@ -104,6 +106,35 @@ test('showcase prompt keeps exhibit order and display height in millimeters', ()
 
   const legacy = normalizeShowcaseExhibitItems([{ url: '/files/input/legacy.png', maxSideMm: 188 }]);
   assert.equal(legacy[0].heightMm, 188);
+  assert.equal(legacy[0].supportHeightMm, 150);
+  assert.equal(legacy[0].heritageLevel, 'unrated');
+});
+
+test('showcase prompt supports automatic support height strategies and heritage levels', () => {
+  const exhibitItems = [
+    { url: '/files/input/a.png', label: '青铜器', heightMm: 420, supportHeightMm: 260, heritageLevel: 'first' },
+    { url: '/files/input/b.png', label: '陶俑', heightMm: 260, supportHeightMm: 120, heritageLevel: 'third' },
+    { url: '/files/input/c.png', label: '玉佩', heightMm: 180, supportHeightMm: 80, heritageLevel: 'unrated' },
+  ];
+  const inputMode = buildShowcaseInteriorDesignPrompt({ exhibitItems, supportHeightMode: 'input' });
+  assert.match(inputMode, /展托高度策略：按照输入尺寸/);
+  assert.match(inputMode, /文物级别：一级；展托高度：260 mm/);
+  assert.match(inputMode, /文物级别：三级；展托高度：120 mm/);
+  assert.match(inputMode, /文物级别：未评级；展托高度：80 mm/);
+  assert.match(inputMode, /必须绘制可见展托\/托座\/支架/);
+
+  const modelValue = buildShowcaseInteriorDesignPrompt({ exhibitItems, supportHeightMode: 'model-value' });
+  assert.match(modelValue, /展托高度策略：模型按展品价值自动判断/);
+  assert.match(modelValue, /根据每件展品的珍贵程度、视觉主次、材质和形态判断展托高度/);
+  assert.match(modelValue, /价值高的展品展托更高一点，位置更靠中间/);
+  assert.match(modelValue, /文物级别：一级；展托高度：由模型根据展品价值自动判断/);
+
+  const heritageLevel = buildShowcaseInteriorDesignPrompt({ exhibitItems, supportHeightMode: 'heritage-level' });
+  assert.match(heritageLevel, /展托高度策略：根据文物级别组织/);
+  assert.match(heritageLevel, /一级文物优先放在中间或视觉核心区，展托更高、更稳重/);
+  assert.match(heritageLevel, /二级文物次之/);
+  assert.match(heritageLevel, /三级文物和未评级展品可使用较低展托或偏侧位置/);
+  assert.match(heritageLevel, /文物级别：三级；展托高度：按文物级别判断/);
 });
 
 test('showcase prompt switches dimension marks and exploded view requirements', () => {

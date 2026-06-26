@@ -6,6 +6,13 @@ const DEFAULT_SHOWCASE_STYLE = {
   hasCap: false,
   hasBodyPattern: false,
 };
+const DEFAULT_SUPPORT_HEIGHT_MM = 150;
+const HERITAGE_LEVEL_LABELS = {
+  first: '一级',
+  second: '二级',
+  third: '三级',
+  unrated: '未评级',
+};
 
 function cleanText(value, max = 12000) {
   return String(value || '').replace(/\r\n?/g, '\n').trim().slice(0, max);
@@ -20,6 +27,14 @@ function normalizeNumber(value, fallback = 0, min = 0, max = 999999) {
 function formatPercent(value) {
   if (!Number.isFinite(value)) return '0';
   return String(Math.round(value * 10) / 10);
+}
+
+function normalizeHeritageLevel(value) {
+  return ['first', 'second', 'third', 'unrated'].includes(value) ? value : 'unrated';
+}
+
+function normalizeSupportHeightMode(value) {
+  return ['input', 'model-value', 'heritage-level'].includes(value) ? value : 'input';
 }
 
 function textSegments(value) {
@@ -48,8 +63,10 @@ export function normalizeShowcaseExhibitItems(value = []) {
       const url = cleanText(item?.url || item?.imageUrl || '', 1000);
       const label = cleanText(item?.label || item?.name || `展品 ${index + 1}`, 80);
       const heightMm = normalizeNumber(item?.heightMm ?? item?.displayHeightMm ?? item?.maxSideMm ?? item?.longestSideMm ?? item?.sizeMm, 300, 1, 99999);
+      const supportHeightMm = normalizeNumber(item?.supportHeightMm ?? item?.plinthHeightMm ?? item?.standHeightMm, DEFAULT_SUPPORT_HEIGHT_MM, 0, 99999);
+      const heritageLevel = normalizeHeritageLevel(item?.heritageLevel);
       if (!url && !label) return null;
-      return { url, label: label || `展品 ${index + 1}`, heightMm };
+      return { url, label: label || `展品 ${index + 1}`, heightMm, supportHeightMm, heritageLevel };
     })
     .filter(Boolean);
 }
@@ -137,6 +154,29 @@ function showcaseQualityRequirementText(style) {
     : '生成高完成度展陈设计效果图；结构清晰、顶部玻璃通透、材质真实、外部或侧向光线有层次、展品尺度可信；顶部不能出现任何灯具、灯带、射灯或发光结构。';
 }
 
+function supportHeightModeText(mode) {
+  const supportHeightMode = normalizeSupportHeightMode(mode);
+  if (supportHeightMode === 'model-value') {
+    return '展托高度策略：模型按展品价值自动判断。请根据每件展品的珍贵程度、视觉主次、材质和形态判断展托高度；价值高的展品展托更高一点，位置更靠中间或视觉核心区，但不得改变展品主体目标高度。';
+  }
+  if (supportHeightMode === 'heritage-level') {
+    return '展托高度策略：根据文物级别组织。一级文物优先放在中间或视觉核心区，展托更高、更稳重；二级文物次之；三级文物和未评级展品可使用较低展托或偏侧位置，但仍必须有清晰可见支撑。';
+  }
+  return '展托高度策略：按照输入尺寸。每件展品必须按其输入的展托高度生成可见展托、托座或支架，展托从底座或层板连续托举到展品底部。';
+}
+
+function supportHeightItemText(item, mode) {
+  const level = HERITAGE_LEVEL_LABELS[item.heritageLevel] || HERITAGE_LEVEL_LABELS.unrated;
+  const supportHeightMode = normalizeSupportHeightMode(mode);
+  if (supportHeightMode === 'model-value') {
+    return `文物级别：${level}；展托高度：由模型根据展品价值自动判断，价值高时展托更高一点、位置更靠中间，仍保持展品主体目标高度不变。`;
+  }
+  if (supportHeightMode === 'heritage-level') {
+    return `文物级别：${level}；展托高度：按文物级别判断，一级居中且展托更高，二级次之，三级/未评级更低或偏侧，仍保持展品主体目标高度不变。`;
+  }
+  return `文物级别：${level}；展托高度：${item.supportHeightMm} mm，必须绘制可见展托/托座/支架，不要让展品悬浮。`;
+}
+
 function exhibitItemsText(items, style, values = {}) {
   const normalized = normalizeShowcaseExhibitItems(items);
   const s = normalizeShowcaseStyle(style);
@@ -196,6 +236,7 @@ function exhibitItemsText(items, style, values = {}) {
     return lines.join('\n');
   }
 
+  const supportHeightMode = normalizeSupportHeightMode(values.supportHeightMode);
   const lines = [
     '普通 image 输入均视为展品图，只用于提取展品外观、体量、轮廓、材质和摆放重点，不作为色彩材质风格参考。',
     '参考图顺序：第 1 张参考图 = 展品 1，第 2 张参考图 = 展品 2，以此类推。必须按这个顺序匹配展品参考图和展品主体高度。',
@@ -206,6 +247,7 @@ function exhibitItemsText(items, style, values = {}) {
     '高度定义：展品主体目标高度只指参考图中主要物体/展品本体的可见垂直高度，不包含整张图片画幅、透明边距、背景、托台、托盘、标签牌、底座、支架、阴影、留白或说明文字。',
     '最终展品本体必须严格按展品主体目标高度形成真实显示比例范围，不得为了构图、焦点或视觉美观而随意放大或缩小。',
     '柜内设计宁可多留空，也不要把展品撑满画面；应保留充足柜内空白，为以后继续放置其它展品预留空间。',
+    supportHeightModeText(supportHeightMode),
   ];
 
   normalized.forEach((item, index) => {
@@ -213,6 +255,7 @@ function exhibitItemsText(items, style, values = {}) {
     const mentionToken = `@img${index + 1}`;
     lines.push(`${index + 1}. ${mentionToken} ${item.label}：展品主体目标高度 ${item.heightMm} mm；参考图 URL：${item.url || '[上游展品图]'}`);
     lines.push(`   @ 标注：${mentionToken} 对应参考图顺序中的展品 ${index + 1}，必须按该图提取外观、轮廓、材质与细节。`);
+    lines.push(`   ${supportHeightItemText(item, supportHeightMode)}`);
     lines.push(`   比例校验：展品 ${index + 1} 的本体可见高度约为玻璃区高度 ${s.glassHeightMm} mm 的 ${formatPercent(glassPercent)}%。`);
     lines.push(`   标注限制：不要给展品 ${index + 1} 标注 ${item.heightMm} mm，也不要在展品旁绘制尺寸线或高度数字。`);
     lines.push(`   上限约束：展品 ${index + 1} 的本体可见高度不得超过其主体目标高度；如果不确定，宁可略小，不要放大。`);

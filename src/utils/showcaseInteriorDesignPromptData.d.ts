@@ -13,6 +13,8 @@ export interface ShowcaseExhibitItem {
   label?: string;
   name?: string;
   heightMm?: number;
+  supportHeightMm?: number;
+  heritageLevel?: 'first' | 'second' | 'third' | 'unrated';
   displayHeightMm?: number;
   maxSideMm?: number;
   longestSideMm?: number;
@@ -38,6 +40,7 @@ export interface ShowcaseInteriorDesignPromptValues extends ShowcaseStyleValues 
   emptyExhibitMode?: 'search' | 'empty';
   emptyExhibitQuery?: string;
   layoutMode?: 'auto' | 'manual';
+  supportHeightMode?: 'input' | 'model-value' | 'heritage-level';
   manualLayoutItems?: ShowcaseManualLayoutItem[];
   colorMaterialPresetText?: string;
   colorMaterial?: string;
@@ -51,7 +54,7 @@ export interface ShowcaseInteriorDesignPromptValues extends ShowcaseStyleValues 
 }
 
 export function normalizeShowcaseStyle(value?: unknown): Required<ShowcaseStyleValues>;
-export function normalizeShowcaseExhibitItems(value?: unknown): Array<{ url: string; label: string; heightMm: number }>;
+export function normalizeShowcaseExhibitItems(value?: unknown): Array<{ url: string; label: string; heightMm: number; supportHeightMm: number; heritageLevel: 'first' | 'second' | 'third' | 'unrated' }>;
 export function normalizeShowcaseManualLayoutItems(value?: unknown): Array<{ url: string; label: string; xMm: number; yMm: number; widthMm: number; heightMm: number; zIndex: number }>;
 export function colorMaterialTextFromPreset(preset?: unknown): string;
 export function buildShowcaseInteriorDesignPrompt(values?: ShowcaseInteriorDesignPromptValues): string;
