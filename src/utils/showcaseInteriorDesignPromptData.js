@@ -251,14 +251,11 @@ function exhibitItemsText(items, style, values = {}) {
   ];
 
   normalized.forEach((item, index) => {
-    const glassPercent = s.glassHeightMm > 0 ? (item.heightMm / s.glassHeightMm) * 100 : 0;
     const mentionToken = `@img${index + 1}`;
     lines.push(`${index + 1}. ${mentionToken} ${item.label}：展品主体目标高度 ${item.heightMm} mm；参考图 URL：${item.url || '[上游展品图]'}`);
     lines.push(`   @ 标注：${mentionToken} 对应参考图顺序中的展品 ${index + 1}，必须按该图提取外观、轮廓、材质与细节。`);
     lines.push(`   ${supportHeightItemText(item, supportHeightMode)}`);
-    lines.push(`   比例校验：展品 ${index + 1} 的本体可见高度约为玻璃区高度 ${s.glassHeightMm} mm 的 ${formatPercent(glassPercent)}%。`);
     lines.push(`   标注限制：不要给展品 ${index + 1} 标注 ${item.heightMm} mm，也不要在展品旁绘制尺寸线或高度数字。`);
-    lines.push(`   上限约束：展品 ${index + 1} 的本体可见高度不得超过其主体目标高度；如果不确定，宁可略小，不要放大。`);
   });
 
   if (values.hasColorMaterialReferenceImage === true) {

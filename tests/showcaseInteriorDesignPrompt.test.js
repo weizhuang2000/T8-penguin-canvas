@@ -95,10 +95,12 @@ test('showcase prompt keeps exhibit order and display height in millimeters', ()
   assert.match(prompt, /展品主体目标高度只指参考图中主要物体\/展品本体的可见垂直高度，不包含整张图片画幅/);
   assert.match(prompt, /不得为了构图、焦点或视觉美观而随意放大或缩小/);
   assert.match(prompt, /保留充足柜内空白，为以后继续放置其它展品预留空间/);
-  assert.match(prompt, /玻璃区高度 1400 mm 的 30%/);
   assert.match(prompt, /@img1 对应参考图顺序中的展品 1/);
   assert.match(prompt, /不要给展品 1 标注 420 mm/);
-  assert.match(prompt, /本体可见高度不得超过其主体目标高度/);
+  assert.doesNotMatch(prompt, /比例校验：展品/);
+  assert.doesNotMatch(prompt, /玻璃区高度 1400 mm 的 30%/);
+  assert.doesNotMatch(prompt, /上限约束：展品/);
+  assert.doesNotMatch(prompt, /本体可见高度不得超过其主体目标高度/);
   assert.doesNotMatch(prompt, /70%/);
   assert.doesNotMatch(prompt, /生图显示高度/);
   assert.doesNotMatch(prompt, /显示高度约为展柜宽度/);
