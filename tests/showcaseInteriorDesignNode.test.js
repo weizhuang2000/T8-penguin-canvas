@@ -82,6 +82,7 @@ test('showcase interior design component wires shared controls and generation se
   assert.doesNotMatch(source, /disabled=\{isReadonly \|\| busy \|\| mode === 'auto'\}/);
   assert.match(source, /disabled=\{isReadonly \|\| busy\}/);
   assert.match(source, /layoutMode === 'auto'[\s\S]*<MentionPromptInput/);
+  assert.doesNotMatch(source, /高度 mm 与 70% 显示规则/);
   assert.match(source, /setManualLayoutOpen\(true\)/);
   assert.match(source, /排版/);
   assert.match(source, /layoutMode === 'manual'[\s\S]*manualLayoutReferenceImage/);

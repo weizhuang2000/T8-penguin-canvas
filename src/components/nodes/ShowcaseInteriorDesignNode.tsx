@@ -218,7 +218,7 @@ function defaultManualLayoutItems(
         zIndex: Number.isFinite(prev.zIndex) ? prev.zIndex : index + 1,
       };
     }
-    const defaultHeight = clamp(Math.min(item.heightMm * 0.7, glassHeightMm * 0.24), 60, Math.max(60, glassHeightMm * 0.36));
+    const defaultHeight = clamp(Math.min(item.heightMm, glassHeightMm * 0.24), 60, Math.max(60, glassHeightMm * 0.36));
     const defaultWidth = clamp(defaultHeight, 50, Math.max(50, slotW * 0.56));
     const x = clamp(slotW * index + (slotW - defaultWidth) / 2, 0, Math.max(0, widthMm - defaultWidth));
     const y = clamp(glassHeightMm * 0.64 - defaultHeight / 2, 0, Math.max(0, glassHeightMm - defaultHeight));
@@ -948,7 +948,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
           </div>
           {layoutMode === 'manual' && (
             <div className="flex items-center justify-between gap-2 rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
-              <div className="min-w-0 text-[10px] leading-snug text-cyan-50/75">手动模式按排版窗口的位置和缩放生成，不使用高度/70% 自动约束。</div>
+              <div className="min-w-0 text-[10px] leading-snug text-cyan-50/75">手动模式按排版窗口的位置和缩放生成，不使用自动尺寸高度约束。</div>
               <button type="button" className={`${BUTTON} shrink-0 border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy} onClick={() => setManualLayoutOpen(true)}>
                 <Layers size={13} /> 排版
               </button>
@@ -956,7 +956,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
           )}
           {layoutMode === 'auto' && (
             <div className="space-y-1.5 rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
-              <div className="text-[10px] leading-snug text-cyan-50/75">自动尺寸模式会按每张展品的高度 mm 与 70% 显示规则生成；可输入 @ 引用上游展品图补充说明。</div>
+              <div className="text-[10px] leading-snug text-cyan-50/75">自动尺寸模式会按每张展品的高度 mm 生成；可输入 @ 引用上游展品图补充说明。</div>
               <MentionPromptInput
                 title="柜内自动尺寸补充要求"
                 value={String(d.supplement || '')}
