@@ -25,6 +25,16 @@ export interface MaterialPayload {
   sourceNodeId?: string;
   /** 缩略图占位预览, 用于浮层显示 (可空) */
   previewUrl?: string;
+  /** 批量拖拽时携带的素材列表；单项拖拽保持为空 */
+  materials?: Array<{
+    kind: MaterialKind;
+    url?: string;
+    text?: string;
+    name?: string;
+    sourceNodeId?: string;
+    sourceCanvasId?: string;
+    previewUrl?: string;
+  }>;
 }
 
 interface DragMaterialState {

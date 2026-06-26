@@ -1136,6 +1136,29 @@ function sendableFromMaterialPayload(payload: MaterialPayload): SendableMaterial
   };
 }
 
+function sendablesFromMaterialPayload(payload: MaterialPayload): SendableMaterial[] {
+  if (Array.isArray(payload.materials) && payload.materials.length > 0) {
+    return payload.materials
+      .map((item, index) => sendableFromMaterialPayload({
+        kind: item.kind,
+        url: item.url,
+        text: item.text,
+        sourceNodeId: item.sourceNodeId,
+        previewUrl: item.previewUrl,
+      }))
+      .filter((item): item is SendableMaterial => !!item)
+      .map((item, index) => ({
+        ...item,
+        id: item.id || `drag-bulk-${index}-${Date.now()}`,
+        name: payload.materials?.[index]?.name || item.name,
+        sourceCanvasId: payload.materials?.[index]?.sourceCanvasId || item.sourceCanvasId,
+        sourceType: 'drag-material',
+      }));
+  }
+  const single = sendableFromMaterialPayload(payload);
+  return single ? [single] : [];
+}
+
 function removeDuplicateSendBridgeNodes(
   nodes: Node[],
   edges: Edge[],
@@ -2287,19 +2310,19 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
         logBus.warn('当前画布为只读，不能拖入历史素材', '画布权限');
         return;
       }
-      const material = sendableFromMaterialPayload(payload);
-      if (!material) return;
-      const specs = buildSendNodeSpecs([material], 'upload');
+      const materials = sendablesFromMaterialPayload(payload);
+      if (materials.length === 0) return;
+      const specs = buildSendNodeSpecs(materials, 'upload');
       if (specs.length === 0) return;
       const anchor = screenToFlowPosition(atScreen);
       const firstSize = defaultSizeOf(specs[0].type);
       const base = { x: anchor.x - firstSize.w / 2, y: anchor.y - firstSize.h / 2 };
       const nodesBefore = nodesRef.current;
       const newNodes = materialNodesFromSpecs(specs, nodesBefore, base, {
-        signature: sendableMaterialSignature([material]),
+        signature: sendableMaterialSignature(materials),
         mode: 'upload',
         sourceCanvasId: activeId,
-        sourceNodeIds: sourceNodeIdsFromMaterials([material]),
+        sourceNodeIds: sourceNodeIdsFromMaterials(materials),
       });
       const assignedNewNodes = assignActiveNodeSerials(newNodes, nodesBefore);
       const blocked = blockedNodeTypes(assignedNewNodes);
@@ -2308,7 +2331,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
         return;
       }
       setNodes([...nodesBefore.map((node) => ({ ...node, selected: false })), ...assignedNewNodes]);
-      logBus.success(`已拖入 ${summarizeSendableMaterials([material])}`, '历史生成');
+      logBus.success(`已拖入 ${summarizeSendableMaterials(materials)}`, '历史生成');
     },
     [activeId, assignActiveNodeSerials, blockedNodeTypes, canEditActiveCanvas, screenToFlowPosition, warnBlockedNodes],
   );

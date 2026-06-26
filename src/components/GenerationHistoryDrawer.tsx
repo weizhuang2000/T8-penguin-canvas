@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  CheckSquare,
   ChevronDown,
   Clock3,
   Copy,
@@ -9,9 +10,11 @@ import {
   Info,
   Music,
   Pencil,
+  PackagePlus,
   Search,
   Send,
   Star,
+  Square,
   Trash2,
   Video,
   X,
@@ -23,6 +26,7 @@ import type { GenerationHistoryItem, GenerationHistoryKind, GenerationHistoryPro
 import type { GenerationHistoryUserSummary } from '../services/api';
 import { AUDIO_MODELS, IMAGE_MODELS, LLM_MODELS, SUNO_VERSIONS, VIDEO_MODELS } from '../providers/models';
 import { advancedProviderModelOptions, advancedProvidersForNode } from '../utils/advancedProviders';
+import type { SendableMaterial } from '../utils/sendMaterials';
 import LoopingVideo from './LoopingVideo';
 
 interface GenerationHistoryDrawerProps {
@@ -96,6 +100,29 @@ function downloadNameForHistoryItem(item: GenerationHistoryItem): string {
   const fallback = `generation-${item.kind}-${item.id}`;
   const raw = String(item.fileName || item.title || fallback).trim() || fallback;
   return raw.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 180) || fallback;
+}
+
+function sendableFromHistoryItem(item: GenerationHistoryItem): SendableMaterial {
+  return {
+    id: item.id,
+    kind: item.kind,
+    url: item.url,
+    name: item.title || item.fileName || downloadNameForHistoryItem(item),
+    sourceNodeId: item.sourceNodeId || 'generation-history',
+    sourceCanvasId: item.canvasId,
+    sourceType: 'generation-history',
+  };
+}
+
+function bulkDragMaterialsForHistoryItems(items: GenerationHistoryItem[]) {
+  return JSON.stringify(items.map((item) => ({
+    kind: item.kind,
+    url: item.url,
+    name: item.title || item.fileName || downloadNameForHistoryItem(item),
+    sourceNodeId: item.sourceNodeId || 'generation-history',
+    sourceCanvasId: item.canvasId,
+    previewUrl: item.url,
+  })));
 }
 
 function uniqueText(values: unknown[]): string[] {
@@ -304,6 +331,9 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
   const [preview, setPreview] = useState<GenerationHistoryItem | null>(null);
   const [infoItem, setInfoItem] = useState<GenerationHistoryItem | null>(null);
   const [gridColumns, setGridColumns] = useState<HistoryGridColumnCount>(() => readHistoryGridColumns());
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectionAnchorId, setSelectionAnchorId] = useState('');
+  const [bulkBusy, setBulkBusy] = useState('');
   const isAdmin = userRole === 'admin' || userRole === 'manager';
   const itemsRef = useRef<GenerationHistoryItem[]>([]);
   const projectsRef = useRef<GenerationHistoryProject[]>([]);
@@ -325,6 +355,12 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
+
+  useEffect(() => {
+    const visibleIds = new Set(items.map((item) => item.id));
+    setSelectedIds((prev) => prev.filter((id) => visibleIds.has(id)));
+    if (selectionAnchorId && !visibleIds.has(selectionAnchorId)) setSelectionAnchorId('');
+  }, [items, selectionAnchorId]);
 
   useEffect(() => {
     projectsRef.current = projects;
@@ -409,6 +445,28 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
     () => projects.find((project) => project.id === projectId) || null,
     [projectId, projects],
   );
+  const selectedItems = useMemo(() => {
+    const selected = new Set(selectedIds);
+    return items.filter((item) => selected.has(item.id));
+  }, [items, selectedIds]);
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const selectedAllFavorite = selectedItems.length > 0 && selectedItems.every((item) => item.favorite);
+
+  const toggleSelection = (item: GenerationHistoryItem, shiftKey = false) => {
+    const idsInOrder = items.map((entry) => entry.id);
+    if (shiftKey && selectionAnchorId) {
+      const anchorIndex = idsInOrder.indexOf(selectionAnchorId);
+      const currentIndex = idsInOrder.indexOf(item.id);
+      if (anchorIndex >= 0 && currentIndex >= 0) {
+        const [start, end] = anchorIndex < currentIndex ? [anchorIndex, currentIndex] : [currentIndex, anchorIndex];
+        const rangeIds = idsInOrder.slice(start, end + 1);
+        setSelectedIds((prev) => Array.from(new Set([...prev, ...rangeIds])));
+        return;
+      }
+    }
+    setSelectionAnchorId(item.id);
+    setSelectedIds((prev) => (prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]));
+  };
 
   const updateItem = async (item: GenerationHistoryItem, patch: Parameters<typeof api.updateGenerationHistoryItem>[1]) => {
     const r = await api.updateGenerationHistoryItem(item.id, patch);
@@ -519,6 +577,105 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
     setMsg('已触发下载');
   };
 
+  const sendSelectedItems = () => {
+    if (selectedItems.length === 0) return;
+    window.dispatchEvent(new CustomEvent('penguin:open-send-materials', {
+      detail: {
+        materials: selectedItems.map(sendableFromHistoryItem),
+        sourceLabel: `历史生成 · ${selectedItems.length} 个文件`,
+        defaultMode: 'upload',
+      },
+    }));
+  };
+
+  const downloadSelectedItems = () => {
+    if (selectedItems.length === 0) return;
+    let triggered = 0;
+    for (const item of selectedItems) {
+      if (!item.url) continue;
+      downloadItem(item);
+      triggered += 1;
+    }
+    setMsg(triggered > 0 ? `已触发 ${triggered} 个文件下载` : '没有可下载的文件');
+  };
+
+  const addSelectedToResources = async () => {
+    if (selectedItems.length === 0 || bulkBusy) return;
+    setBulkBusy('resources');
+    let saved = 0;
+    const failures: string[] = [];
+    for (const item of selectedItems) {
+      const r = await api.addGenerationHistoryItemToResources(item.id, {
+        title: item.title,
+        tags: item.tags,
+      });
+      if (r.success) saved += 1;
+      else failures.push(r.error || item.title || item.id);
+    }
+    if (saved > 0) window.dispatchEvent(new CustomEvent('penguin:resources-changed'));
+    setMsg(failures.length ? `已加入资源库 ${saved} 个，失败 ${failures.length} 个` : `已加入资源库 ${saved} 个`);
+    setBulkBusy('');
+  };
+
+  const toggleSelectedFavorite = async () => {
+    if (selectedItems.length === 0 || bulkBusy) return;
+    const nextFavorite = !selectedAllFavorite;
+    setBulkBusy('favorite');
+    const updated = new Map<string, GenerationHistoryItem>();
+    let failures = 0;
+    for (const item of selectedItems) {
+      const r = await api.updateGenerationHistoryItem(item.id, { favorite: nextFavorite });
+      if (r.success) updated.set(item.id, r.data);
+      else failures += 1;
+    }
+    if (updated.size > 0) {
+      setItems((prev) => prev.map((entry) => updated.get(entry.id) || entry));
+      window.dispatchEvent(new CustomEvent('penguin:generation-history-changed'));
+    }
+    setMsg(failures ? `已${nextFavorite ? '收藏' : '取消收藏'} ${updated.size} 个，失败 ${failures} 个` : `已${nextFavorite ? '收藏' : '取消收藏'} ${updated.size} 个`);
+    setBulkBusy('');
+  };
+
+  const hideSelectedItems = async () => {
+    if (selectedItems.length === 0 || bulkBusy) return;
+    if (!window.confirm(`从历史中隐藏选中的 ${selectedItems.length} 个文件？文件会保留。`)) return;
+    setBulkBusy('hide');
+    const hiddenIds = new Set<string>();
+    let failures = 0;
+    for (const item of selectedItems) {
+      const r = await api.deleteGenerationHistoryItem(item.id, 'hide');
+      if (r.success) hiddenIds.add(item.id);
+      else failures += 1;
+    }
+    if (hiddenIds.size > 0) {
+      setItems((prev) => prev.filter((entry) => !hiddenIds.has(entry.id)));
+      setSelectedIds((prev) => prev.filter((id) => !hiddenIds.has(id)));
+      window.dispatchEvent(new CustomEvent('penguin:generation-history-changed'));
+    }
+    setMsg(failures ? `已隐藏 ${hiddenIds.size} 个，失败 ${failures} 个` : `已隐藏 ${hiddenIds.size} 个`);
+    setBulkBusy('');
+  };
+
+  const deleteSelectedFiles = async () => {
+    if (!isAdmin || selectedItems.length === 0 || bulkBusy) return;
+    if (!window.confirm(`彻底删除选中的 ${selectedItems.length} 个输出文件？这可能影响画布中仍引用它们的节点。`)) return;
+    setBulkBusy('delete-file');
+    const deletedIds = new Set<string>();
+    let failures = 0;
+    for (const item of selectedItems) {
+      const r = await api.deleteGenerationHistoryItem(item.id, 'delete-file');
+      if (r.success) deletedIds.add(item.id);
+      else failures += 1;
+    }
+    if (deletedIds.size > 0) {
+      setItems((prev) => prev.filter((entry) => !deletedIds.has(entry.id)));
+      setSelectedIds((prev) => prev.filter((id) => !deletedIds.has(id)));
+      window.dispatchEvent(new CustomEvent('penguin:generation-history-changed'));
+    }
+    setMsg(failures ? `已彻底删除 ${deletedIds.size} 个，失败 ${failures} 个` : `已彻底删除 ${deletedIds.size} 个`);
+    setBulkBusy('');
+  };
+
   if (!open) return null;
 
   const panelCls = isPixel
@@ -610,6 +767,44 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
         <button onClick={() => setIncludeHidden((v) => !v)} className={isPixel ? `px-btn px-btn--icon ${includeHidden ? 'px-btn--yellow' : 'px-btn--ghost'}` : `h-9 w-9 rounded-md border flex items-center justify-center ${includeHidden ? 'text-cyan-300 border-cyan-400/50 bg-cyan-400/10' : isDark ? 'border-white/10 hover:bg-white/10' : 'border-black/10 hover:bg-black/5'}`} title="显示隐藏">
           <Eye size={15} />
         </button>
+        {selectedItems.length > 0 && (
+          <div className="flex items-center gap-1">
+            <span className={`flex h-9 min-w-9 items-center justify-center rounded-md px-2 text-xs font-semibold ${isPixel ? 'border-2 border-[var(--px-ink)] bg-[var(--px-yellow)]' : isDark ? 'border border-cyan-400/30 bg-cyan-400/10 text-cyan-100' : 'border border-cyan-300 bg-cyan-50 text-cyan-900'}`}>
+              {selectedItems.length}
+            </span>
+            <button disabled={!!bulkBusy} onClick={sendSelectedItems} className={isPixel ? 'px-btn px-btn--icon px-btn--ghost' : `h-9 w-9 rounded-md border flex items-center justify-center ${isDark ? 'border-white/10 hover:bg-white/10 disabled:text-white/35' : 'border-black/10 hover:bg-black/5 disabled:text-zinc-400'}`} title="发送选中项">
+              <Send size={15} />
+            </button>
+            <button disabled={!!bulkBusy} onClick={downloadSelectedItems} className={isPixel ? 'px-btn px-btn--icon px-btn--ghost' : `h-9 w-9 rounded-md border flex items-center justify-center ${isDark ? 'border-white/10 hover:bg-white/10 disabled:text-white/35' : 'border-black/10 hover:bg-black/5 disabled:text-zinc-400'}`} title="下载选中项">
+              <Download size={15} />
+            </button>
+            <button disabled={!!bulkBusy} onClick={() => void addSelectedToResources()} className={isPixel ? 'px-btn px-btn--icon px-btn--ghost' : `h-9 w-9 rounded-md border flex items-center justify-center ${isDark ? 'border-white/10 hover:bg-white/10 disabled:text-white/35' : 'border-black/10 hover:bg-black/5 disabled:text-zinc-400'}`} title="加入资源库">
+              <PackagePlus size={15} />
+            </button>
+            <button disabled={!!bulkBusy} onClick={() => void toggleSelectedFavorite()} className={isPixel ? `px-btn px-btn--icon ${selectedAllFavorite ? 'px-btn--yellow' : 'px-btn--ghost'}` : `h-9 w-9 rounded-md border flex items-center justify-center ${selectedAllFavorite ? 'text-amber-300 border-amber-400/50 bg-amber-400/10' : isDark ? 'border-white/10 hover:bg-white/10 disabled:text-white/35' : 'border-black/10 hover:bg-black/5 disabled:text-zinc-400'}`} title={selectedAllFavorite ? '取消收藏选中项' : '收藏选中项'}>
+              <Star size={15} fill={selectedAllFavorite ? 'currentColor' : 'none'} />
+            </button>
+            <button disabled={!!bulkBusy} onClick={() => void hideSelectedItems()} className={isPixel ? 'px-btn px-btn--icon px-btn--ghost' : `h-9 w-9 rounded-md border flex items-center justify-center text-red-500 ${isDark ? 'border-white/10 hover:bg-white/10 disabled:text-white/35' : 'border-black/10 hover:bg-black/5 disabled:text-zinc-400'}`} title="隐藏选中历史">
+              <Trash2 size={15} />
+            </button>
+            {isAdmin && (
+              <button disabled={!!bulkBusy} onClick={() => void deleteSelectedFiles()} className={isPixel ? 'px-btn px-btn--icon px-btn--ghost' : `h-9 w-9 rounded-md border flex items-center justify-center text-red-700 ${isDark ? 'border-white/10 hover:bg-white/10 disabled:text-white/35' : 'border-black/10 hover:bg-black/5 disabled:text-zinc-400'}`} title="彻底删除选中文件">
+                <X size={15} />
+              </button>
+            )}
+            <button
+              disabled={!!bulkBusy}
+              onClick={() => {
+                setSelectedIds([]);
+                setSelectionAnchorId('');
+              }}
+              className={isPixel ? 'px-btn px-btn--icon px-btn--ghost' : `h-9 w-9 rounded-md border flex items-center justify-center ${isDark ? 'border-white/10 hover:bg-white/10 disabled:text-white/35' : 'border-black/10 hover:bg-black/5 disabled:text-zinc-400'}`}
+              title="清空选择"
+            >
+              <Square size={15} />
+            </button>
+          </div>
+        )}
       </div>
 
       {isAdmin && (
@@ -672,6 +867,8 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
             {items.map((item) => {
               const Icon = KIND_META[item.kind].icon;
               const seed = validSeed(item.seed);
+              const selected = selectedIdSet.has(item.id);
+              const dragItems = selected ? selectedItems : [item];
               return (
                 <article
                   key={item.id}
@@ -680,17 +877,44 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
                   data-drag-kind={dragKindForHistoryItem(item)}
                   data-drag-url={item.url}
                   data-drag-preview={item.url}
+                  data-drag-materials={dragItems.length > 1 ? bulkDragMaterialsForHistoryItems(dragItems) : undefined}
                   data-drag-node-id={dragSourceNodeId(item)}
                   data-resource-title={item.title}
-                  title={`${item.title}\n拖拽到画布可直接插入`}
-                  className={`overflow-hidden ${isPixel ? 'border-2 border-[var(--px-ink)] bg-[var(--px-surface)] shadow-[3px_3px_0_var(--px-ink)]' : isDark ? 'rounded-lg border border-white/10 bg-white/[0.04]' : 'rounded-lg border border-black/10 bg-black/[0.03]'}`}
+                  title={`${item.title}\n点击选择；按住 Shift 选择区间；拖拽到画布可直接插入`}
+                  onClick={(event) => toggleSelection(item, event.shiftKey)}
+                  className={`overflow-hidden transition ${selected ? (isPixel ? 'ring-2 ring-[var(--px-yellow)]' : 'ring-2 ring-cyan-400') : ''} ${isPixel ? 'border-2 border-[var(--px-ink)] bg-[var(--px-surface)] shadow-[3px_3px_0_var(--px-ink)]' : isDark ? 'rounded-lg border border-white/10 bg-white/[0.04]' : 'rounded-lg border border-black/10 bg-black/[0.03]'}`}
                 >
                   <div className="relative h-32 overflow-hidden bg-black/80">
                     {item.kind === 'image' && <img src={item.url} alt={item.title} className="h-full w-full object-cover" draggable={false} />}
                     {item.kind === 'video' && <LoopingVideo src={item.url} muted className="h-full w-full object-cover" />}
                     {item.kind === 'audio' && <div className="h-full w-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#312e81,#7c3aed,#db2777)' }}><Music size={34} className="text-white" /></div>}
-                    {item.hidden && <span className="absolute left-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">已隐藏</span>}
-                    <button onClick={() => updateItem(item, { favorite: !item.favorite })} className="absolute right-1.5 top-1.5 h-7 w-7 rounded-full bg-black/55 text-amber-300 flex items-center justify-center" title="收藏">
+                    {item.hidden && <span className="absolute left-10 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">已隐藏</span>}
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleSelection(item, event.shiftKey);
+                      }}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      className="absolute left-1.5 top-1.5 h-7 w-7 rounded-full bg-black/55 text-white flex items-center justify-center"
+                      title={selected ? '取消选择' : '选择'}
+                    >
+                      {selected ? <CheckSquare size={14} /> : <Square size={14} />}
+                    </button>
+                    {selectedItems.length > 1 && selected && (
+                      <span className="absolute left-1.5 top-9 rounded-full bg-cyan-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                        {selectedItems.length}
+                      </span>
+                    )}
+                    <button
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        updateItem(item, { favorite: !item.favorite });
+                      }}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      className="absolute right-1.5 top-1.5 h-7 w-7 rounded-full bg-black/55 text-amber-300 flex items-center justify-center"
+                      title="收藏"
+                    >
                       <Star size={13} fill={item.favorite ? 'currentColor' : 'none'} />
                     </button>
                     <button
@@ -708,7 +932,11 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
                     {item.kind === 'image' && (
                       <>
                       <button
-                        onClick={() => copyPrompt(item)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          copyPrompt(item);
+                        }}
+                        onMouseDown={(event) => event.stopPropagation()}
                         disabled={!String(item.prompt || '').trim()}
                         className="absolute right-1.5 top-[66px] h-7 w-7 rounded-full bg-black/55 text-white flex items-center justify-center disabled:cursor-not-allowed disabled:opacity-45"
                         title={String(item.prompt || '').trim() ? '复制提示词' : '没有可复制的提示词'}
@@ -716,7 +944,11 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
                         <Copy size={13} />
                       </button>
                       <button
-                        onClick={() => downloadItem(item)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          downloadItem(item);
+                        }}
+                        onMouseDown={(event) => event.stopPropagation()}
                         disabled={!item.url}
                         className="absolute right-1.5 top-[94px] h-7 w-7 rounded-full bg-black/55 text-white flex items-center justify-center disabled:cursor-not-allowed disabled:opacity-45"
                         title={item.url ? '下载图片' : '没有可下载的文件'}
@@ -733,7 +965,7 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
                     </div>
                     <div className={`text-[10px] truncate ${subtle}`}>{item.provider || item.model || item.fileName}</div>
                     {item.kind === 'audio' && <audio src={item.url} controls className="w-full h-8" />}
-                    <div className="flex items-center justify-center gap-1.5 pt-0.5">
+                    <div className="flex items-center justify-center gap-1.5 pt-0.5" onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
                       <button onClick={() => setPreview(item)} className="h-7 w-7 rounded-full border flex items-center justify-center" title="预览"><Eye size={13} /></button>
                       {seed > 0 && item.kind === 'image' && <button onClick={() => reuseSeed(item)} className="h-7 w-7 rounded-full border flex items-center justify-center text-amber-300" title="使用 seed">#</button>}
                       <button onClick={() => sendItem(item)} className="h-7 w-7 rounded-full border flex items-center justify-center" title="发送到画布"><Send size={13} /></button>

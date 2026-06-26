@@ -26,6 +26,30 @@ import SmartImage from './SmartImage';
 
 const PREVIEW_SIZE = 96;
 
+function parseDragMaterials(value: string | null) {
+  if (!value) return undefined;
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return undefined;
+    return parsed
+      .map((item) => ({
+        kind: item?.kind,
+        url: typeof item?.url === 'string' ? item.url : undefined,
+        text: typeof item?.text === 'string' ? item.text : undefined,
+        name: typeof item?.name === 'string' ? item.name : undefined,
+        sourceNodeId: typeof item?.sourceNodeId === 'string' ? item.sourceNodeId : undefined,
+        sourceCanvasId: typeof item?.sourceCanvasId === 'string' ? item.sourceCanvasId : undefined,
+        previewUrl: typeof item?.previewUrl === 'string' ? item.previewUrl : undefined,
+      }))
+      .filter((item) => (
+        (item.kind === 'image' || item.kind === 'video' || item.kind === 'audio' || item.kind === 'text') &&
+        (!!item.url || !!item.text)
+      ));
+  } catch {
+    return undefined;
+  }
+}
+
 const MaterialDragOverlay = () => {
   const dragging = useDragMaterialStore((s) => s.dragging);
   const payload = useDragMaterialStore((s) => s.payload);
@@ -80,6 +104,7 @@ const MaterialDragOverlay = () => {
       const text = dragEl.getAttribute('data-drag-text') || undefined;
       const sourceNodeId = dragEl.getAttribute('data-drag-node-id') || undefined;
       const previewUrl = dragEl.getAttribute('data-drag-preview') || url;
+      const materials = parseDragMaterials(dragEl.getAttribute('data-drag-materials'));
 
       // 严格拦截: 阻止 ReactFlow Pane 启动选区
       e.preventDefault();
@@ -89,7 +114,7 @@ const MaterialDragOverlay = () => {
       // 只在首个 (pointerdown) 事件中启动拖拽, 后续 mousedown 仅拦截
       if (!useDragMaterialStore.getState().dragging) {
         start(
-          { kind, url, text, sourceNodeId, previewUrl },
+          { kind, url, text, sourceNodeId, previewUrl, materials },
           e.clientX,
           e.clientY,
         );
@@ -135,6 +160,10 @@ const MaterialDragOverlay = () => {
         const kinds = (dropEl.getAttribute('data-drop-kinds') || '').split(',').filter(Boolean);
         const targetId = dropEl.getAttribute('data-node-id') || null;
         const cur = useDragMaterialStore.getState().payload;
+        if (cur?.materials?.length) {
+          move(e.clientX, e.clientY, targetId, false);
+          return;
+        }
         const allowSelf = false;
         if (
           targetId &&
@@ -287,6 +316,8 @@ const MaterialDragOverlay = () => {
     );
   }
 
+  const bulkCount = payload.materials?.length || 0;
+
   const overlay = (
     <div
       style={{
@@ -304,6 +335,24 @@ const MaterialDragOverlay = () => {
       }}
     >
       {content}
+      {bulkCount > 1 && (
+        <div
+          style={{
+            position: 'absolute',
+            right: 4,
+            bottom: 4,
+            borderRadius: 999,
+            background: '#0f172a',
+            color: '#fff',
+            padding: '2px 7px',
+            fontSize: 11,
+            fontWeight: 800,
+            boxShadow: '0 1px 4px rgba(0,0,0,.35)',
+          }}
+        >
+          {bulkCount}
+        </div>
+      )}
     </div>
   );
 
