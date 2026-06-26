@@ -59,7 +59,7 @@ test('showcase interior design component wires shared controls and generation se
   assert.match(source, /queryExternalImageStatus/);
   assert.match(source, /exhibitItems/);
   assert.match(source, /heightMm/);
-  assert.match(source, /高度 mm/);
+  assert.match(source, /展品主体高度 mm/);
   assert.match(source, /layoutMode/);
   assert.match(source, /emptyExhibitMode/);
   assert.match(source, /emptyExhibitQuery/);

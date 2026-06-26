@@ -956,7 +956,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
           )}
           {layoutMode === 'auto' && (
             <div className="space-y-1.5 rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
-              <div className="text-[10px] leading-snug text-cyan-50/75">自动尺寸模式会按每张展品的高度 mm 生成；可输入 @ 引用上游展品图补充说明。</div>
+              <div className="text-[10px] leading-snug text-cyan-50/75">自动尺寸模式会按每张参考图里的主要展品主体高度生成；可输入 @ 引用上游展品图补充说明。</div>
               <MentionPromptInput
                 title="柜内自动尺寸补充要求"
                 value={String(d.supplement || '')}
@@ -981,7 +981,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
                     <div className="truncate text-[9px] text-white/35">{item.url}</div>
                   </div>
                   <label className="space-y-0.5">
-                    <span className="text-[9px] text-white/45">{layoutMode === 'manual' ? '自动高度停用' : '高度 mm'}</span>
+                    <span className="text-[9px] text-white/45">{layoutMode === 'manual' ? '自动高度停用' : '展品主体高度 mm'}</span>
                     <input className={`${FIELD} px-1 text-center`} type="number" min={1} value={item.heightMm} disabled={isReadonly || busy} onChange={(event) => updateExhibitSize(item.url, event.target.value)} />
                   </label>
                 </div>
