@@ -177,6 +177,16 @@ function supportHeightItemText(item, mode) {
   return `文物级别：${level}；展托高度：${item.supportHeightMm} mm，必须绘制可见展托/托座/支架，不要让展品悬浮。`;
 }
 
+function supportHeightAuditText(items, mode) {
+  const supportHeightMode = normalizeSupportHeightMode(mode);
+  const heightList = items.map((item, index) => `展品 ${index + 1} 主体高度 ${item.heightMm} mm`).join('；');
+  if (supportHeightMode === 'input') {
+    const supportList = items.map((item, index) => `展品 ${index + 1} 展托高度 ${item.supportHeightMm} mm`).join('；');
+    return `尺寸复核：生成前必须逐项核对 ${heightList}；${supportList}。展品主体高度和展托高度都必须与上述设置一致，不得按构图、画面留白、文件尺寸或模型偏好擅自改大改小。`;
+  }
+  return `尺寸复核：生成前必须逐项核对 ${heightList}。展品主体高度必须与上述设置一致，不得按构图、画面留白、文件尺寸或模型偏好擅自改大改小；展托高度按当前策略判断，但不能反向改变展品主体高度。`;
+}
+
 function exhibitItemsText(items, style, values = {}) {
   const normalized = normalizeShowcaseExhibitItems(items);
   const s = normalizeShowcaseStyle(style);
@@ -252,7 +262,7 @@ function exhibitItemsText(items, style, values = {}) {
 
   normalized.forEach((item, index) => {
     const mentionToken = `@img${index + 1}`;
-    lines.push(`${index + 1}. ${mentionToken} ${item.label}：展品主体目标高度 ${item.heightMm} mm；参考图 URL：${item.url || '[上游展品图]'}`);
+    lines.push(`${index + 1}. ${mentionToken}：展品主体目标高度 ${item.heightMm} mm`);
     lines.push(`   @ 标注：${mentionToken} 对应参考图顺序中的展品 ${index + 1}，必须按该图提取外观、轮廓、材质与细节。`);
     lines.push(`   ${supportHeightItemText(item, supportHeightMode)}`);
     lines.push(`   标注限制：不要给展品 ${index + 1} 标注 ${item.heightMm} mm，也不要在展品旁绘制尺寸线或高度数字。`);
@@ -262,6 +272,7 @@ function exhibitItemsText(items, style, values = {}) {
     lines.push('色彩材质参考图使用独立 color-material-reference 输入，并且排在所有展品图之后；它不是展品图，不得套用任何展品高度尺寸。');
   }
   lines.push('相对尺寸审计：如果两张展品参考图看起来差不多大，但高度数值不同，最终必须按毫米数显示出明显的物理高度差异。');
+  lines.push(supportHeightAuditText(normalized, supportHeightMode));
   lines.push('渲染前最终检查：逐一比较每件展品与展柜宽度、玻璃区高度。小尺寸展品必须保持小件感，大尺寸展品只有在数值足够大时才可以成为视觉主体。');
   return lines.join('\n');
 }

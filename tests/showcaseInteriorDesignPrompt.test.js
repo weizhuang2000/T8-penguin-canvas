@@ -76,7 +76,7 @@ test('showcase prompt keeps exhibit order and display height in millimeters', ()
 
   const prompt = buildShowcaseInteriorDesignPrompt({ exhibitItems: items, showcaseStyle: { widthMm: 1200, glassHeightMm: 1400 } });
   const promptWithCap = buildShowcaseInteriorDesignPrompt({ exhibitItems: items, showcaseStyle: { widthMm: 1200, glassHeightMm: 1400, hasCap: true } });
-  assert.ok(prompt.indexOf('1. @img1 青铜器：展品主体目标高度 420 mm') < prompt.indexOf('2. @img2 陶俑：展品主体目标高度 260 mm'));
+  assert.ok(prompt.indexOf('1. @img1：展品主体目标高度 420 mm') < prompt.indexOf('2. @img2：展品主体目标高度 260 mm'));
   assert.match(promptWithCap, /展柜宽度、底座高度、玻璃区高度、柜帽高度和柜体总高度保持设定尺寸不变/);
   assert.match(prompt, /参考图顺序：第 1 张参考图 = 展品 1，第 2 张参考图 = 展品 2/);
   assert.doesNotMatch(prompt, /尺寸合成参考图/);
@@ -97,6 +97,14 @@ test('showcase prompt keeps exhibit order and display height in millimeters', ()
   assert.match(prompt, /保留充足柜内空白，为以后继续放置其它展品预留空间/);
   assert.match(prompt, /@img1 对应参考图顺序中的展品 1/);
   assert.match(prompt, /不要给展品 1 标注 420 mm/);
+  assert.match(prompt, /尺寸复核：生成前必须逐项核对 展品 1 主体高度 420 mm；展品 2 主体高度 260 mm/);
+  assert.match(prompt, /展品 1 展托高度 150 mm；展品 2 展托高度 150 mm/);
+  assert.match(prompt, /展品主体高度和展托高度都必须与上述设置一致/);
+  assert.match(prompt, /不得按构图、画面留白、文件尺寸或模型偏好擅自改大改小/);
+  assert.doesNotMatch(prompt, /青铜器：展品主体目标高度/);
+  assert.doesNotMatch(prompt, /陶俑：展品主体目标高度/);
+  assert.doesNotMatch(prompt, /参考图 URL/);
+  assert.doesNotMatch(prompt, /\/files\/input\/a\.png/);
   assert.doesNotMatch(prompt, /比例校验：展品/);
   assert.doesNotMatch(prompt, /玻璃区高度 1400 mm 的 30%/);
   assert.doesNotMatch(prompt, /上限约束：展品/);
@@ -130,6 +138,7 @@ test('showcase prompt supports automatic support height strategies and heritage 
   assert.match(modelValue, /根据每件展品的珍贵程度、视觉主次、材质和形态判断展托高度/);
   assert.match(modelValue, /价值高的展品展托更高一点，位置更靠中间/);
   assert.match(modelValue, /文物级别：一级；展托高度：由模型根据展品价值自动判断/);
+  assert.match(modelValue, /展托高度按当前策略判断，但不能反向改变展品主体高度/);
 
   const heritageLevel = buildShowcaseInteriorDesignPrompt({ exhibitItems, supportHeightMode: 'heritage-level' });
   assert.match(heritageLevel, /展托高度策略：根据文物级别组织/);
@@ -249,7 +258,8 @@ test('showcase prompt separates exhibit images from color material reference', (
   assert.match(prompt, /不得套用任何展品高度尺寸/);
   assert.match(prompt, /共享色彩与材质预设作为次级补充/);
   assert.match(prompt, /手动色彩与材质补充/);
-  assert.match(prompt, /@img1 展品图：展品主体目标高度 300 mm/);
+  assert.match(prompt, /@img1：展品主体目标高度 300 mm/);
+  assert.doesNotMatch(prompt, /@img1 展品图：展品主体目标高度 300 mm/);
 });
 
 test('showcase color material preset keeps only color and material constraints', () => {
