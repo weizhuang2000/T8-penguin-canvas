@@ -664,6 +664,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     colorMaterial: '',
     colorMaterialReferenceTone: '',
     supplement: '',
+    supplementMentions: [],
     providerSource: 'zhenzhen',
     providerId: '',
     providerModel: '',

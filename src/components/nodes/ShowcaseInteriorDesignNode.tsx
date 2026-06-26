@@ -25,6 +25,9 @@ import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
+import MentionPromptInput from './MentionPromptInput';
+import { resolveMediaMentions, type MediaMention } from './mediaMentions';
+import type { Material } from './useUpstreamMaterials';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
@@ -389,12 +392,8 @@ function ShowcaseManualLayoutModal({
       });
       return;
     }
-    const sourceRatio = drag.item.widthMm / Math.max(1, drag.item.heightMm);
-    const deltaMm = Math.max(dxMm, dyMm);
-    const nextWidth = clamp(drag.item.widthMm + deltaMm, 12, Math.max(12, widthMm - drag.item.xMm));
-    const nextHeight = clamp(nextWidth / sourceRatio, 12, Math.max(12, heightMm - drag.item.yMm));
-    const finalWidth = nextHeight * sourceRatio > widthMm - drag.item.xMm ? widthMm - drag.item.xMm : nextHeight * sourceRatio;
-    const finalHeight = finalWidth / sourceRatio;
+    const finalWidth = clamp(drag.item.widthMm + dxMm, 12, Math.max(12, widthMm - drag.item.xMm));
+    const finalHeight = clamp(drag.item.heightMm + dyMm, 12, Math.max(12, heightMm - drag.item.yMm));
     updateItem(drag.item.url, {
       widthMm: roundMm(finalWidth),
       heightMm: roundMm(finalHeight),
@@ -428,7 +427,7 @@ function ShowcaseManualLayoutModal({
         <header className="flex items-center gap-3 border-b border-white/10 px-4 py-3">
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold text-cyan-100">柜内手动排版</div>
-            <div className="text-[10px] text-white/45">玻璃区画布：{widthMm} x {heightMm} mm，展品底边高度对应展托高度，拖拽移动，右下角等比缩放。</div>
+            <div className="text-[10px] text-white/45">玻璃区画布：{widthMm} x {heightMm} mm，展品底边高度对应展托高度，拖拽移动，右下角自由拉伸。</div>
           </div>
           <button type="button" className={BUTTON} onClick={onReset} disabled={disabled}><Layers size={12} /> 重置排版</button>
           <button type="button" className={BUTTON} onClick={removeSelected} disabled={disabled || !selectedItem}><Trash2 size={12} /> 删除选中</button>
@@ -475,7 +474,7 @@ function ShowcaseManualLayoutModal({
                         <button
                           type="button"
                           className="absolute -bottom-3 -right-3 flex h-7 w-7 items-center justify-center rounded-full border border-cyan-200 bg-cyan-500 text-white shadow-lg"
-                          title="等比缩放"
+                          title="自由拉伸"
                           onPointerDown={(event) => startDrag(event, item, 'scale')}
                         >
                           <MoveDiagonal2 size={13} />
@@ -571,6 +570,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
   const layoutMode = normalizeLayoutMode(d.layoutMode);
   const emptyExhibitMode: 'search' | 'empty' = d.emptyExhibitMode === 'search' ? 'search' : 'empty';
   const showcaseStyle = normalizeShowcaseStyle(d.showcaseStyle);
+  const supplementMentions: MediaMention[] = Array.isArray(d.supplementMentions) ? d.supplementMentions : [];
   const autoAspectRatio = useMemo(() => {
     const totalHeightMm = showcaseStyle.baseHeightMm + showcaseStyle.glassHeightMm + (showcaseStyle.hasCap ? showcaseStyle.capHeightMm : 0);
     if (showcaseStyle.widthMm <= 0 || totalHeightMm <= 0) return modelDef.defaultAspectRatio || '1:1';
@@ -593,6 +593,18 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
       };
     });
   }, [d.exhibitItems, exhibitImages]);
+  const mentionMaterials: Material[] = useMemo(() => exhibitImages.map((image, index) => ({
+    id: image.id,
+    kind: 'image',
+    url: image.url,
+    sourceNodeId: image.id.split(':')[0] || `showcase-exhibit-${index + 1}`,
+    origin: 'upstream',
+    label: image.label || `展品 ${index + 1}`,
+  })), [exhibitImages]);
+  const resolvedSupplement = useMemo(
+    () => resolveMediaMentions(String(d.supplement || ''), supplementMentions, mentionMaterials),
+    [d.supplement, mentionMaterials, supplementMentions],
+  );
 
   const manualLayoutItems = useMemo(
     () => defaultManualLayoutItems(exhibitItems, d.manualLayoutItems, showcaseStyle),
@@ -619,8 +631,8 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
     perspectiveEnabled: d.perspectiveEnabled !== false,
     dimensionMarksEnabled: d.dimensionMarksEnabled === true,
     explodedViewEnabled: d.explodedViewEnabled === true,
-    supplement: d.supplement,
-  }), [colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.emptyExhibitQuery, d.explodedViewEnabled, d.perspectiveEnabled, d.supplement, emptyExhibitMode, exhibitItems, layoutMode, manualLayoutItems, selectedColorMaterialPreset, showcaseStyle.baseHeightMm, showcaseStyle.capHeightMm, showcaseStyle.glassHeightMm, showcaseStyle.hasBodyPattern, showcaseStyle.hasCap, showcaseStyle.widthMm]);
+    supplement: resolvedSupplement,
+  }), [colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.emptyExhibitQuery, d.explodedViewEnabled, d.perspectiveEnabled, emptyExhibitMode, exhibitItems, layoutMode, manualLayoutItems, resolvedSupplement, selectedColorMaterialPreset, showcaseStyle.baseHeightMm, showcaseStyle.capHeightMm, showcaseStyle.glassHeightMm, showcaseStyle.hasBodyPattern, showcaseStyle.hasCap, showcaseStyle.widthMm]);
 
   useEffect(() => {
     getElevationPromptPresets().then((presets) => setColorMaterialPresets(presets.colorMaterial || [])).catch(() => setColorMaterialPresets([]));
@@ -706,7 +718,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
       perspectiveEnabled: d.perspectiveEnabled !== false,
       dimensionMarksEnabled: d.dimensionMarksEnabled === true,
       explodedViewEnabled: d.explodedViewEnabled === true,
-      supplement: d.supplement,
+      supplement: resolvedSupplement,
     });
     const runtimeReferenceImages = [
       ...(layoutMode === 'manual' ? [manualLayoutReferenceImage] : exhibitItems.map((item) => item.url)),
@@ -869,7 +881,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`柜内设计生成失败: ${msg}`, src);
       throw error;
     }
-  }, [activeCanvasId, apiModel, aspectRatio, busy, colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.emptyExhibitQuery, d.explodedViewEnabled, d.manualLayoutReferenceImage, d.perspectiveEnabled, d.providerParams, d.supplement, d.taskId, emptyExhibitMode, exhibitItems, externalProviderModel, id, isExternalSelected, isReadonly, layoutMode, manualLayoutItems, modelDef.id, modelDef.paramKind, outputFormat, providerSelection.provider, seed, selectedColorMaterialPreset, showcaseStyle, sizeLevel, update]);
+  }, [activeCanvasId, apiModel, aspectRatio, busy, colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.emptyExhibitQuery, d.explodedViewEnabled, d.manualLayoutReferenceImage, d.perspectiveEnabled, d.providerParams, d.taskId, emptyExhibitMode, exhibitItems, externalProviderModel, id, isExternalSelected, isReadonly, layoutMode, manualLayoutItems, modelDef.id, modelDef.paramKind, outputFormat, providerSelection.provider, resolvedSupplement, seed, selectedColorMaterialPreset, showcaseStyle, sizeLevel, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -924,10 +936,8 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
               <button
                 key={mode}
                 type="button"
-                disabled={isReadonly || busy || mode === 'auto'}
-                title={mode === 'auto' ? '自动尺寸模式暂不可用' : undefined}
+                disabled={isReadonly || busy}
                 onClick={() => {
-                  if (mode === 'auto') return;
                   update({ layoutMode: mode });
                 }}
                 className={`rounded px-2 py-1.5 text-[10px] font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-35 ${layoutMode === mode ? 'bg-cyan-300/20 text-cyan-100' : 'text-white/45 hover:bg-white/[0.08] hover:text-white/75 disabled:hover:bg-transparent disabled:hover:text-white/45'}`}
@@ -942,6 +952,23 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
               <button type="button" className={`${BUTTON} shrink-0 border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy} onClick={() => setManualLayoutOpen(true)}>
                 <Layers size={13} /> 排版
               </button>
+            </div>
+          )}
+          {layoutMode === 'auto' && (
+            <div className="space-y-1.5 rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
+              <div className="text-[10px] leading-snug text-cyan-50/75">自动尺寸模式会按每张展品的高度 mm 与 70% 显示规则生成；可输入 @ 引用上游展品图补充说明。</div>
+              <MentionPromptInput
+                title="柜内自动尺寸补充要求"
+                value={String(d.supplement || '')}
+                mentions={supplementMentions}
+                materials={mentionMaterials}
+                onChange={(value, mentions) => update({ supplement: value, supplementMentions: mentions })}
+                placeholder="补充自动尺寸生成要求，可输入 @ 引用上游展品图"
+                isDark
+                isPixel={false}
+                promptTemplateKind="image"
+                className={`${FIELD} min-h-[56px] resize-y`}
+              />
             </div>
           )}
           {exhibitItems.length > 0 ? (
