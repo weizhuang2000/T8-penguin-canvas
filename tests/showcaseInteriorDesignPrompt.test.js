@@ -94,6 +94,9 @@ test('showcase prompt keeps exhibit order and display height in millimeters', ()
   assert.match(prompt, /保持平视/);
   assert.match(prompt, /倾斜旋转/);
   assert.match(prompt, /生图时展品本体显示高度必须按用户设定的展品主体目标高度生成/);
+  assert.match(prompt, /参考图抗干扰规则：参考图只用于识别展品外观、轮廓、材质、纹样和细节/);
+  assert.match(prompt, /展品主体高度和展托高度只能按毫米设定值换算/);
+  assert.match(prompt, /绝不能受输入展品图的宽高比、像素多少、分辨率高低、主体在图中占比、边缘留白、裁切范围或背景面积影响/);
   assert.match(prompt, /展柜宽度、底座高度、玻璃区高度和柜体总高度保持设定尺寸不变/);
   assert.match(prompt, /顶部保持透明玻璃顶，不安装任何灯具、灯带或射灯/);
   assert.doesNotMatch(prompt, /柜帽高度/);
@@ -108,7 +111,7 @@ test('showcase prompt keeps exhibit order and display height in millimeters', ()
   assert.match(prompt, /尺寸复核：生成前必须逐项核对 展品 1 主体高度 420 mm；展品 2 主体高度 260 mm/);
   assert.match(prompt, /展品 1 展托高度 150 mm；展品 2 展托高度 150 mm/);
   assert.match(prompt, /展品主体高度和展托高度都必须与上述设置一致/);
-  assert.match(prompt, /不得按构图、画面留白、文件尺寸或模型偏好擅自改大改小/);
+  assert.match(prompt, /不得按构图、画面留白、文件尺寸、图片宽高比、像素分辨率、主体在参考图中的占图比例或模型偏好擅自改大改小/);
   assert.match(prompt, /尺度换算：展品 1 的主体高度 420 mm 约占玻璃区高度 1400 mm 的 30%/);
   assert.match(prompt, /展托高度 150 mm 约占玻璃区高度的 10\.7%/);
   assert.doesNotMatch(prompt, /青铜器：展品主体目标高度/);

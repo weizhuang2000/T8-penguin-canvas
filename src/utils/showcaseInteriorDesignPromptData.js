@@ -208,9 +208,9 @@ function supportHeightAuditText(items, mode) {
   const heightList = items.map((item, index) => `展品 ${index + 1} 主体高度 ${item.heightMm} mm`).join('；');
   if (supportHeightMode === 'input') {
     const supportList = items.map((item, index) => `展品 ${index + 1} 展托高度 ${item.supportHeightMm} mm`).join('；');
-    return `尺寸复核：生成前必须逐项核对 ${heightList}；${supportList}。展品主体高度和展托高度都必须与上述设置一致，不得按构图、画面留白、文件尺寸或模型偏好擅自改大改小。`;
+    return `尺寸复核：生成前必须逐项核对 ${heightList}；${supportList}。展品主体高度和展托高度都必须与上述设置一致，不得按构图、画面留白、文件尺寸、图片宽高比、像素分辨率、主体在参考图中的占图比例或模型偏好擅自改大改小。`;
   }
-  return `尺寸复核：生成前必须逐项核对 ${heightList}。展品主体高度必须与上述设置一致，不得按构图、画面留白、文件尺寸或模型偏好擅自改大改小；展托高度按当前策略判断，但不能反向改变展品主体高度。`;
+  return `尺寸复核：生成前必须逐项核对 ${heightList}。展品主体高度必须与上述设置一致，不得按构图、画面留白、文件尺寸、图片宽高比、像素分辨率、主体在参考图中的占图比例或模型偏好擅自改大改小；展托高度按当前策略判断，但不能反向改变展品主体高度。`;
 }
 
 function arrangementRowsText(value) {
@@ -314,6 +314,9 @@ function exhibitItemsText(items, style, values = {}) {
     supportHeightMode === 'heritage-level'
       ? '严格比例规则：每件展品按文物级别、展品价值和柜内视觉秩序判断本体显示高度；不要读取或套用输入的展品主体高度、展托高度数值，也不要按参考图片文件的画幅高度、像素高度、裁切框高度或留白高度缩放。'
       : '严格比例规则：每件展品只能按“展品主体目标高度 mm”缩放；这里的高度指参考图中主要物体/展品本体在最终画面中的真实高度，不是参考图片文件的画幅高度、像素高度、裁切框高度或留白高度。',
+    supportHeightMode === 'heritage-level'
+      ? '参考图抗干扰规则：参考图只用于识别展品外观、轮廓、材质、纹样和细节；图片宽高比、像素多少、分辨率高低、主体在图中占比、边缘留白、裁切范围和背景面积都不得直接决定最终展品大小或展托高度。'
+      : '参考图抗干扰规则：参考图只用于识别展品外观、轮廓、材质、纹样和细节；展品主体高度和展托高度只能按毫米设定值换算，绝不能受输入展品图的宽高比、像素多少、分辨率高低、主体在图中占比、边缘留白、裁切范围或背景面积影响。',
     showcaseScaleRuleText(style, supportHeightMode),
     '标注规则：不要给任何展品本体标注尺寸数字、尺寸线或高度文字；如果开启尺寸标注，只标注展柜、底座、玻璃区、柜帽、层板、托架等柜体/构件尺寸。',
     supportHeightMode === 'heritage-level'
