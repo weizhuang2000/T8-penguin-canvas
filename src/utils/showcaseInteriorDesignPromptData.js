@@ -29,6 +29,11 @@ function formatPercent(value) {
   return String(Math.round(value * 10) / 10);
 }
 
+function formatRatio(value) {
+  if (!Number.isFinite(value)) return '0';
+  return String(Math.round(value * 100) / 100);
+}
+
 function normalizeHeritageLevel(value) {
   return ['first', 'second', 'third', 'unrated'].includes(value) ? value : 'unrated';
 }
@@ -132,9 +137,17 @@ function showcaseScaleRuleText(style, mode) {
 
 function showcaseRatioRequirementText(style) {
   const s = normalizeShowcaseStyle(style);
-  return s.hasCap
+  const totalHeight = s.baseHeightMm + s.glassHeightMm + (s.hasCap ? s.capHeightMm : 0);
+  const cabinetRatio = totalHeight > 0 ? s.widthMm / totalHeight : 0;
+  const basePercent = totalHeight > 0 ? (s.baseHeightMm / totalHeight) * 100 : 0;
+  const glassPercent = totalHeight > 0 ? (s.glassHeightMm / totalHeight) * 100 : 0;
+  const capText = s.hasCap
+    ? `，柜帽高度约占总高度 ${formatPercent((s.capHeightMm / totalHeight) * 100)}%`
+    : '';
+  const prefix = s.hasCap
     ? '比例要求：展柜宽度、底座高度、玻璃区高度、柜帽高度必须形成可信比例；玻璃区应是主要陈列空间，底座承托稳定。'
     : '比例要求：展柜宽度、底座高度、玻璃区高度必须形成可信比例；玻璃区应是主要陈列空间，底座承托稳定；顶部必须是通透玻璃顶。';
+  return `${prefix}\n画面比例硬约束：展柜整体外框宽高比必须接近 ${s.widthMm}:${totalHeight}（宽/高≈${formatRatio(cabinetRatio)}），不要把展柜画成过宽横幅或过矮长条；底座高度约占总高度 ${formatPercent(basePercent)}%，玻璃区高度约占总高度 ${formatPercent(glassPercent)}%${capText}。`;
 }
 
 function showcaseDesignRequirementText(style) {
@@ -193,6 +206,23 @@ function supportHeightAuditText(items, mode) {
     return `尺寸复核：生成前必须逐项核对 ${heightList}；${supportList}。展品主体高度和展托高度都必须与上述设置一致，不得按构图、画面留白、文件尺寸或模型偏好擅自改大改小。`;
   }
   return `尺寸复核：生成前必须逐项核对 ${heightList}。展品主体高度必须与上述设置一致，不得按构图、画面留白、文件尺寸或模型偏好擅自改大改小；展托高度按当前策略判断，但不能反向改变展品主体高度。`;
+}
+
+function equalHeightAuditText(items) {
+  const groups = new Map();
+  items.forEach((item, index) => {
+    const key = String(item.heightMm);
+    const list = groups.get(key) || [];
+    list.push(index + 1);
+    groups.set(key, list);
+  });
+  const lines = [];
+  groups.forEach((indexes, height) => {
+    if (indexes.length > 1) {
+      lines.push(`展品 ${indexes.join('、')} 的主体高度同为 ${height} mm，最终画面中的展品本体可见高度必须完全一致；不得因为参考图构图、器型细长、留白、位置靠边或视觉焦点不同而把其中某一件画得更高。`);
+    }
+  });
+  return lines.join('\n');
 }
 
 function exhibitItemsText(items, style, values = {}) {
@@ -281,6 +311,11 @@ function exhibitItemsText(items, style, values = {}) {
       : `${index + 1}. ${mentionToken}：展品主体目标高度 ${item.heightMm} mm`);
     lines.push(`   @ 标注：${mentionToken} 对应参考图顺序中的展品 ${index + 1}，必须按该图提取外观、轮廓、材质与细节。`);
     lines.push(`   ${supportHeightItemText(item, supportHeightMode)}`);
+    if (supportHeightMode !== 'heritage-level') {
+      const exhibitPercent = s.glassHeightMm > 0 ? (item.heightMm / s.glassHeightMm) * 100 : 0;
+      const supportPercent = s.glassHeightMm > 0 ? (item.supportHeightMm / s.glassHeightMm) * 100 : 0;
+      lines.push(`   尺度换算：展品 ${index + 1} 的主体高度 ${item.heightMm} mm 约占玻璃区高度 ${s.glassHeightMm} mm 的 ${formatPercent(exhibitPercent)}%；展托高度 ${item.supportHeightMm} mm 约占玻璃区高度的 ${formatPercent(supportPercent)}%。`);
+    }
     lines.push(supportHeightMode === 'heritage-level'
       ? `   标注限制：不要给展品 ${index + 1} 标注任何展品高度、展托高度、尺寸线或高度数字。`
       : `   标注限制：不要给展品 ${index + 1} 标注 ${item.heightMm} mm，也不要在展品旁绘制尺寸线或高度数字。`);
@@ -291,9 +326,11 @@ function exhibitItemsText(items, style, values = {}) {
   }
   lines.push(supportHeightMode === 'heritage-level'
     ? '相对尺寸审计：如果两张展品参考图看起来差不多大，最终仍应按文物级别和展品价值形成明确主次，不要按输入高度数值排序。'
-    : '相对尺寸审计：如果两张展品参考图看起来差不多大，但高度数值不同，最终必须按毫米数显示出明显的物理高度差异。');
+    : '相对尺寸审计：如果两张展品参考图看起来差不多大，但高度数值不同，最终必须按毫米数显示出明显的物理高度差异；如果高度数值相同，最终展品本体必须显示为相同高度。');
+  const equalHeightAudit = supportHeightMode === 'heritage-level' ? '' : equalHeightAuditText(normalized);
+  if (equalHeightAudit) lines.push(equalHeightAudit);
   lines.push(supportHeightAuditText(normalized, supportHeightMode));
-  lines.push('渲染前最终检查：逐一比较每件展品与展柜宽度、玻璃区高度。小尺寸展品必须保持小件感，大尺寸展品只有在数值足够大时才可以成为视觉主体。');
+  lines.push('渲染前最终检查：先锁定展柜整体外框宽高比和底座/玻璃区/柜帽分段比例，再逐一比较每件展品与玻璃区高度；小尺寸展品必须保持小件感，同高度展品必须等高，大尺寸展品只有在数值足够大时才可以成为视觉主体。');
   return lines.join('\n');
 }
 

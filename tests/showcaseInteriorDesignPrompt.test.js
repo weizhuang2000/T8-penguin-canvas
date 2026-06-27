@@ -23,6 +23,10 @@ test('showcase prompt includes four showcase dimensions and cap switch in Chines
   assert.match(withCap, /柜帽：开启，柜帽高度 180 mm/);
   assert.match(withCap, /推导总高度：1880 mm/);
   assert.match(withCap, /比例要求：展柜宽度、底座高度、玻璃区高度、柜帽高度必须形成可信比例；玻璃区应是主要陈列空间，底座承托稳定。/);
+  assert.match(withCap, /画面比例硬约束：展柜整体外框宽高比必须接近 1200:1880（宽\/高≈0\.64）/);
+  assert.match(withCap, /底座高度约占总高度 16%/);
+  assert.match(withCap, /玻璃区高度约占总高度 74\.5%/);
+  assert.match(withCap, /柜帽高度约占总高度 9\.6%/);
   assert.doesNotMatch(withCap, /柜帽仅在开启时出现/);
 
   const withoutCap = buildShowcaseInteriorDesignPrompt({
@@ -101,18 +105,20 @@ test('showcase prompt keeps exhibit order and display height in millimeters', ()
   assert.match(prompt, /展品 1 展托高度 150 mm；展品 2 展托高度 150 mm/);
   assert.match(prompt, /展品主体高度和展托高度都必须与上述设置一致/);
   assert.match(prompt, /不得按构图、画面留白、文件尺寸或模型偏好擅自改大改小/);
+  assert.match(prompt, /尺度换算：展品 1 的主体高度 420 mm 约占玻璃区高度 1400 mm 的 30%/);
+  assert.match(prompt, /展托高度 150 mm 约占玻璃区高度的 10\.7%/);
   assert.doesNotMatch(prompt, /青铜器：展品主体目标高度/);
   assert.doesNotMatch(prompt, /陶俑：展品主体目标高度/);
   assert.doesNotMatch(prompt, /参考图 URL/);
   assert.doesNotMatch(prompt, /\/files\/input\/a\.png/);
   assert.doesNotMatch(prompt, /比例校验：展品/);
-  assert.doesNotMatch(prompt, /玻璃区高度 1400 mm 的 30%/);
   assert.doesNotMatch(prompt, /上限约束：展品/);
   assert.doesNotMatch(prompt, /本体可见高度不得超过其主体目标高度/);
   assert.doesNotMatch(prompt, /70%/);
   assert.doesNotMatch(prompt, /生图显示高度/);
   assert.doesNotMatch(prompt, /显示高度约为展柜宽度/);
   assert.match(prompt, /相对尺寸审计/);
+  assert.match(prompt, /如果高度数值相同，最终展品本体必须显示为相同高度/);
 
   const legacy = normalizeShowcaseExhibitItems([{ url: '/files/input/legacy.png', maxSideMm: 188 }]);
   assert.equal(legacy[0].heightMm, 188);
@@ -124,7 +130,7 @@ test('showcase prompt supports automatic support height strategies and heritage 
   const exhibitItems = [
     { url: '/files/input/a.png', label: '青铜器', heightMm: 420, supportHeightMm: 260, heritageLevel: 'first' },
     { url: '/files/input/b.png', label: '陶俑', heightMm: 260, supportHeightMm: 120, heritageLevel: 'third' },
-    { url: '/files/input/c.png', label: '玉佩', heightMm: 180, supportHeightMm: 80, heritageLevel: 'unrated' },
+    { url: '/files/input/c.png', label: '玉佩', heightMm: 420, supportHeightMm: 80, heritageLevel: 'unrated' },
   ];
   const inputMode = buildShowcaseInteriorDesignPrompt({ exhibitItems, supportHeightMode: 'input' });
   assert.match(inputMode, /展托高度策略：按照输入尺寸/);
@@ -132,6 +138,8 @@ test('showcase prompt supports automatic support height strategies and heritage 
   assert.match(inputMode, /文物级别：三级；展托高度：120 mm/);
   assert.match(inputMode, /文物级别：未评级；展托高度：80 mm/);
   assert.match(inputMode, /必须绘制可见展托\/托座\/支架/);
+  assert.match(inputMode, /展品 1、3 的主体高度同为 420 mm，最终画面中的展品本体可见高度必须完全一致/);
+  assert.match(inputMode, /不得因为参考图构图、器型细长、留白、位置靠边或视觉焦点不同而把其中某一件画得更高/);
 
   const modelValue = buildShowcaseInteriorDesignPrompt({ exhibitItems, supportHeightMode: 'model-value' });
   assert.match(modelValue, /参考图顺序：@img1 = 展品 1，@img2 = 展品 2，以此类推。必须按这个顺序匹配展品参考图、展托高度和文物级别。/);
