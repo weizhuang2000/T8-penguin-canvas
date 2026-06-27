@@ -24,6 +24,7 @@ test('showcase prompt includes four showcase dimensions and cap switch in Chines
   assert.match(withCap, /推导总高度：1880 mm/);
   assert.match(withCap, /比例要求：展柜宽度、底座高度、玻璃区高度、柜帽高度必须形成可信比例；玻璃区应是主要陈列空间，底座承托稳定。/);
   assert.match(withCap, /画面比例硬约束：展柜整体外框宽高比必须接近 1200:1880（宽\/高≈0\.64）/);
+  assert.match(withCap, /完整展柜外框必须全部落在画面内，顶部柜帽、底部底座和左右边框都不能被裁切或超出画布/);
   assert.match(withCap, /底座高度约占总高度 16%/);
   assert.match(withCap, /玻璃区高度约占总高度 74\.5%/);
   assert.match(withCap, /柜帽高度约占总高度 9\.6%/);
@@ -83,6 +84,8 @@ test('showcase prompt keeps exhibit order and display height in millimeters', ()
   assert.ok(prompt.indexOf('1. @img1：展品主体目标高度 420 mm') < prompt.indexOf('2. @img2：展品主体目标高度 260 mm'));
   assert.match(promptWithCap, /展柜宽度、底座高度、玻璃区高度、柜帽高度和柜体总高度保持设定尺寸不变/);
   assert.match(prompt, /参考图顺序：@img1 = 展品 1，@img2 = 展品 2，以此类推。必须按这个顺序匹配展品参考图、展托高度和文物级别。/);
+  assert.match(prompt, /陈列行数：1 行。所有展品默认按单排横向陈列/);
+  assert.match(prompt, /不要做前后错排、多排纵深、上下分层或阶梯式多层展架/);
   assert.doesNotMatch(prompt, /尺寸合成参考图/);
   assert.doesNotMatch(prompt, /第 2 张参考图 = 展品 1/);
   assert.match(prompt, /严格比例规则/);
@@ -149,6 +152,15 @@ test('showcase prompt supports automatic support height strategies and heritage 
   assert.match(modelValue, /文物级别：一级；展托高度：由模型根据展品价值自动判断/);
   assert.match(modelValue, /展托高度按当前策略判断，但不能反向改变展品主体高度/);
 
+  const multiRows = buildShowcaseInteriorDesignPrompt({ exhibitItems, supportHeightMode: 'input', arrangementRows: 2 });
+  assert.match(multiRows, /陈列行数：2 行。必须按前后纵深排列，不是上下分层、不是多层层板/);
+  assert.match(multiRows, /第 1 行为前排，后续行依次位于更靠后的深度位置/);
+  assert.match(multiRows, /后排展托必须逐排升高以越过前排遮挡/);
+  assert.match(multiRows, /展柜进深必须明显加大/);
+  assert.match(multiRows, /不能因为后排展托更高就放大展品本体/);
+  assert.match(multiRows, /排列复核：当前为 2 行陈列/);
+  assert.match(multiRows, /后排展托高度必须高于前排展托/);
+
   const heritageLevel = buildShowcaseInteriorDesignPrompt({ exhibitItems, supportHeightMode: 'heritage-level' });
   assert.match(heritageLevel, /参考图顺序：@img1 = 展品 1，@img2 = 展品 2，以此类推。必须按这个顺序匹配展品参考图、展托高度和文物级别。/);
   assert.match(heritageLevel, /高度策略：根据文物级别组织/);
@@ -186,6 +198,8 @@ test('showcase prompt switches dimension marks and exploded view requirements', 
 
   const unmarked = buildShowcaseInteriorDesignPrompt({ perspectiveEnabled: false, dimensionMarksEnabled: false, explodedViewEnabled: false });
   assert.match(unmarked, /透视效果：关闭/);
+  assert.match(unmarked, /画面框定：完整展柜必须居中完整入画/);
+  assert.match(unmarked, /可以缩小整柜在画面中的占比，但不能改变展柜宽高比和各分段高度比例/);
   assert.match(unmarked, /完全平面的正立面\/二维方案效果/);
   assert.match(unmarked, /不要任何 3D 透视/);
   assert.match(unmarked, /所有水平线和垂直线必须保持平行/);

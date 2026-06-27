@@ -23,6 +23,7 @@ test('showcase interior design node is registered in frontend and permissions', 
   assert.match(read('src/components/Canvas.tsx'), /emptyExhibitQuery: ''/);
   assert.match(read('src/components/Canvas.tsx'), /layoutMode: 'manual'/);
   assert.match(read('src/components/Canvas.tsx'), /supportHeightMode: 'input'/);
+  assert.match(read('src/components/Canvas.tsx'), /arrangementRows: 1/);
   assert.match(read('src/components/Canvas.tsx'), /supplementMentions: \[\]/);
   assert.match(read('src/components/Canvas.tsx'), /manualLayoutItems: \[\]/);
   assert.match(read('src/components/Canvas.tsx'), /manualLayoutReferenceImage: ''/);
@@ -61,6 +62,8 @@ test('showcase interior design component wires shared controls and generation se
   assert.match(source, /exhibitItems/);
   assert.match(source, /heightMm/);
   assert.match(source, /supportHeightMode/);
+  assert.match(source, /arrangementRows/);
+  assert.match(source, /normalizeArrangementRows/);
   assert.match(source, /supportHeightMm/);
   assert.match(source, /heritageLevel/);
   assert.match(source, /SUPPORT_HEIGHT_MODE_OPTIONS/);
@@ -74,6 +77,7 @@ test('showcase interior design component wires shared controls and generation se
   assert.match(source, /未评级/);
   assert.match(source, /展品主体高度 mm/);
   assert.match(source, /展托高度 mm/);
+  assert.match(source, /排列行数/);
   assert.match(source, /主体高度按级别/);
   assert.match(source, /展托按级别/);
   assert.match(source, /文物级别/);

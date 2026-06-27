@@ -49,6 +49,7 @@ export interface ShowcaseInteriorDesignPromptValues extends ShowcaseStyleValues 
   emptyExhibitQuery?: string;
   layoutMode?: 'auto' | 'manual';
   supportHeightMode?: 'input' | 'model-value' | 'heritage-level';
+  arrangementRows?: number;
   manualLayoutItems?: ShowcaseManualLayoutItem[];
   colorMaterialPresetText?: string;
   colorMaterial?: string;

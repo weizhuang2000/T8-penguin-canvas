@@ -214,6 +214,12 @@ function normalizeHeritageLevel(value: unknown): HeritageLevel {
   return value === 'first' || value === 'second' || value === 'third' ? value : 'unrated';
 }
 
+function normalizeArrangementRows(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(1, Math.min(6, Math.round(n)));
+}
+
 function defaultManualLayoutItems(
   exhibitItems: Array<{ url: string; label: string; heightMm: number }>,
   savedItems: unknown,
@@ -591,6 +597,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
   const busy = status === 'generating';
   const layoutMode = normalizeLayoutMode(d.layoutMode);
   const supportHeightMode = normalizeSupportHeightMode(d.supportHeightMode);
+  const arrangementRows = normalizeArrangementRows(d.arrangementRows);
   const emptyExhibitMode: 'search' | 'empty' = d.emptyExhibitMode === 'search' ? 'search' : 'empty';
   const showcaseStyle = normalizeShowcaseStyle(d.showcaseStyle);
   const supplementMentions: MediaMention[] = Array.isArray(d.supplementMentions) ? d.supplementMentions : [];
@@ -649,6 +656,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
     emptyExhibitQuery: d.emptyExhibitQuery,
     layoutMode,
     supportHeightMode,
+    arrangementRows,
     manualLayoutItems,
     colorMaterialPresetText: colorMaterialTextFromPreset(selectedColorMaterialPreset),
     manualColorMaterial: selectedColorMaterialPreset ? '' : d.colorMaterial,
@@ -658,7 +666,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
     dimensionMarksEnabled: d.dimensionMarksEnabled === true,
     explodedViewEnabled: d.explodedViewEnabled === true,
     supplement: resolvedSupplement,
-  }), [colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.emptyExhibitQuery, d.explodedViewEnabled, d.perspectiveEnabled, emptyExhibitMode, exhibitItems, layoutMode, manualLayoutItems, resolvedSupplement, selectedColorMaterialPreset, showcaseStyle.baseHeightMm, showcaseStyle.capHeightMm, showcaseStyle.glassHeightMm, showcaseStyle.hasBodyPattern, showcaseStyle.hasCap, showcaseStyle.widthMm, supportHeightMode]);
+  }), [arrangementRows, colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.emptyExhibitQuery, d.explodedViewEnabled, d.perspectiveEnabled, emptyExhibitMode, exhibitItems, layoutMode, manualLayoutItems, resolvedSupplement, selectedColorMaterialPreset, showcaseStyle.baseHeightMm, showcaseStyle.capHeightMm, showcaseStyle.glassHeightMm, showcaseStyle.hasBodyPattern, showcaseStyle.hasCap, showcaseStyle.widthMm, supportHeightMode]);
 
   useEffect(() => {
     getElevationPromptPresets().then((presets) => setColorMaterialPresets(presets.colorMaterial || [])).catch(() => setColorMaterialPresets([]));
@@ -752,6 +760,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
       emptyExhibitQuery: d.emptyExhibitQuery,
       layoutMode,
       supportHeightMode,
+      arrangementRows,
       manualLayoutItems,
       colorMaterialPresetText: colorMaterialTextFromPreset(selectedColorMaterialPreset),
       manualColorMaterial: selectedColorMaterialPreset ? '' : d.colorMaterial,
@@ -923,7 +932,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`柜内设计生成失败: ${msg}`, src);
       throw error;
     }
-  }, [activeCanvasId, apiModel, aspectRatio, busy, colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.emptyExhibitQuery, d.explodedViewEnabled, d.manualLayoutReferenceImage, d.perspectiveEnabled, d.providerParams, d.taskId, emptyExhibitMode, exhibitItems, externalProviderModel, id, isExternalSelected, isReadonly, layoutMode, manualLayoutItems, modelDef.id, modelDef.paramKind, outputFormat, providerSelection.provider, resolvedSupplement, seed, selectedColorMaterialPreset, showcaseStyle, sizeLevel, supportHeightMode, update]);
+  }, [activeCanvasId, apiModel, arrangementRows, aspectRatio, busy, colorMaterialReferenceImage, d.colorMaterial, d.colorMaterialReferenceTone, d.dimensionMarksEnabled, d.emptyExhibitQuery, d.explodedViewEnabled, d.manualLayoutReferenceImage, d.perspectiveEnabled, d.providerParams, d.taskId, emptyExhibitMode, exhibitItems, externalProviderModel, id, isExternalSelected, isReadonly, layoutMode, manualLayoutItems, modelDef.id, modelDef.paramKind, outputFormat, providerSelection.provider, resolvedSupplement, seed, selectedColorMaterialPreset, showcaseStyle, sizeLevel, supportHeightMode, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -1012,6 +1021,19 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
                   </button>
                 ))}
               </div>
+              <label className="grid grid-cols-[78px_minmax(0,1fr)] items-center gap-2 rounded border border-white/10 bg-black/15 px-2 py-1.5">
+                <span className="text-[10px] text-white/55">排列行数</span>
+                <input
+                  className={`${FIELD} px-1 text-center`}
+                  type="number"
+                  min={1}
+                  max={6}
+                  step={1}
+                  value={arrangementRows}
+                  disabled={isReadonly || busy}
+                  onChange={(event) => update({ arrangementRows: normalizeArrangementRows(event.target.value) })}
+                />
+              </label>
               <MentionPromptInput
                 title="柜内自动尺寸补充要求"
                 value={String(d.supplement || '')}

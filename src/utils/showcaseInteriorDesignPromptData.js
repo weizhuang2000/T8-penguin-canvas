@@ -42,6 +42,10 @@ function normalizeSupportHeightMode(value) {
   return ['input', 'model-value', 'heritage-level'].includes(value) ? value : 'input';
 }
 
+function normalizeArrangementRows(value) {
+  return Math.round(normalizeNumber(value, 1, 1, 6));
+}
+
 function textSegments(value) {
   return cleanText(value, 1200)
     .split(/[；;。.\n\r，,、]+/)
@@ -144,10 +148,11 @@ function showcaseRatioRequirementText(style) {
   const capText = s.hasCap
     ? `，柜帽高度约占总高度 ${formatPercent((s.capHeightMm / totalHeight) * 100)}%`
     : '';
+  const topBoundaryText = s.hasCap ? '顶部柜帽' : '顶部玻璃顶';
   const prefix = s.hasCap
     ? '比例要求：展柜宽度、底座高度、玻璃区高度、柜帽高度必须形成可信比例；玻璃区应是主要陈列空间，底座承托稳定。'
     : '比例要求：展柜宽度、底座高度、玻璃区高度必须形成可信比例；玻璃区应是主要陈列空间，底座承托稳定；顶部必须是通透玻璃顶。';
-  return `${prefix}\n画面比例硬约束：展柜整体外框宽高比必须接近 ${s.widthMm}:${totalHeight}（宽/高≈${formatRatio(cabinetRatio)}），不要把展柜画成过宽横幅或过矮长条；底座高度约占总高度 ${formatPercent(basePercent)}%，玻璃区高度约占总高度 ${formatPercent(glassPercent)}%${capText}。`;
+  return `${prefix}\n画面比例硬约束：展柜整体外框宽高比必须接近 ${s.widthMm}:${totalHeight}（宽/高≈${formatRatio(cabinetRatio)}），不要把展柜画成过宽横幅或过矮长条；完整展柜外框必须全部落在画面内，${topBoundaryText}、底部底座和左右边框都不能被裁切或超出画布；底座高度约占总高度 ${formatPercent(basePercent)}%，玻璃区高度约占总高度 ${formatPercent(glassPercent)}%${capText}。`;
 }
 
 function showcaseDesignRequirementText(style) {
@@ -206,6 +211,22 @@ function supportHeightAuditText(items, mode) {
     return `尺寸复核：生成前必须逐项核对 ${heightList}；${supportList}。展品主体高度和展托高度都必须与上述设置一致，不得按构图、画面留白、文件尺寸或模型偏好擅自改大改小。`;
   }
   return `尺寸复核：生成前必须逐项核对 ${heightList}。展品主体高度必须与上述设置一致，不得按构图、画面留白、文件尺寸或模型偏好擅自改大改小；展托高度按当前策略判断，但不能反向改变展品主体高度。`;
+}
+
+function arrangementRowsText(value) {
+  const rows = normalizeArrangementRows(value);
+  if (rows <= 1) {
+    return '陈列行数：1 行。所有展品默认按单排横向陈列，展托落在同一前后深度基准内；不要做前后错排、多排纵深、上下分层或阶梯式多层展架。';
+  }
+  return `陈列行数：${rows} 行。必须按前后纵深排列，不是上下分层、不是多层层板、不是把展品叠成垂直楼层；第 1 行为前排，后续行依次位于更靠后的深度位置。后排展托必须逐排升高以越过前排遮挡，后排展品本体高度仍按各自高度策略执行，不能因为后排展托更高就放大展品本体。展柜进深必须明显加大，形成真实深柜空间、前后保护距离和可落地的维护通道；即使输出正立面，也要通过展托高度、遮挡关系和底台进深表现前后行关系。`;
+}
+
+function arrangementRowsAuditText(value) {
+  const rows = normalizeArrangementRows(value);
+  if (rows <= 1) {
+    return '排列复核：当前为 1 行陈列，只做横向单排；不要添加后排展品，不要为了丰富画面擅自增加展柜进深。';
+  }
+  return `排列复核：当前为 ${rows} 行陈列，生成前必须检查前后行关系。所有后排必须在空间深度上位于前排之后，后排展托高度必须高于前排展托，越靠后的行展托越高；展柜进深必须比单排明显更深，不能把多行误画成同一条直线、上下叠放或普通多层架。`;
 }
 
 function equalHeightAuditText(items) {
@@ -288,6 +309,7 @@ function exhibitItemsText(items, style, values = {}) {
   const lines = [
     '普通 image 输入均视为展品图，只用于提取展品外观、体量、轮廓、材质和摆放重点，不作为色彩材质风格参考。',
     '参考图顺序：@img1 = 展品 1，@img2 = 展品 2，以此类推。必须按这个顺序匹配展品参考图、展托高度和文物级别。',
+    arrangementRowsText(values.arrangementRows),
     '展品视角要求：展品尽量采用侧视图或正侧视图，保持平视、端正摆放；不要俯拍、仰拍、斜拍、倾斜旋转或明显透视变形。',
     supportHeightMode === 'heritage-level'
       ? '严格比例规则：每件展品按文物级别、展品价值和柜内视觉秩序判断本体显示高度；不要读取或套用输入的展品主体高度、展托高度数值，也不要按参考图片文件的画幅高度、像素高度、裁切框高度或留白高度缩放。'
@@ -330,6 +352,7 @@ function exhibitItemsText(items, style, values = {}) {
   const equalHeightAudit = supportHeightMode === 'heritage-level' ? '' : equalHeightAuditText(normalized);
   if (equalHeightAudit) lines.push(equalHeightAudit);
   lines.push(supportHeightAuditText(normalized, supportHeightMode));
+  lines.push(arrangementRowsAuditText(values.arrangementRows));
   lines.push('渲染前最终检查：先锁定展柜整体外框宽高比和底座/玻璃区/柜帽分段比例，再逐一比较每件展品与玻璃区高度；小尺寸展品必须保持小件感，同高度展品必须等高，大尺寸展品只有在数值足够大时才可以成为视觉主体。');
   return lines.join('\n');
 }
@@ -358,12 +381,14 @@ function outputRequirementText(values) {
   const isManualLayout = values.layoutMode === 'manual';
   const isHeritageLevelMode = normalizeSupportHeightMode(values.supportHeightMode) === 'heritage-level';
   const s = normalizeShowcaseStyle(values.showcaseStyle || values.dimensions || values);
+  const topCropText = s.hasCap ? '柜帽' : '顶部玻璃顶';
   const explodedViewText = values.explodedViewEnabled === true
     ? s.hasCap
       ? '分解爆炸图：开启。输出应表现柜体、玻璃罩、底座、柜帽、托架、展品、灯光组件的分解关系，可用轻微错位或爆炸图形式展示结构层级。'
       : '分解爆炸图：开启。输出应表现柜体、玻璃罩、底座、透明玻璃顶、托架和展品的分解关系，可用轻微错位或爆炸图形式展示结构层级；顶部仍为玻璃且不安装任何灯具、灯带或射灯。'
     : '分解爆炸图：关闭。输出应为完整组装后的柜内陈列效果图，不要把柜体构件拆散漂浮。';
   return [
+    `画面框定：完整展柜必须居中完整入画，顶部、底部、左右外边界和尺寸标注都要保留安全边距；不得裁掉${topCropText}、底座、总高度标注箭头或底部边线；可以缩小整柜在画面中的占比，但不能改变展柜宽高比和各分段高度比例。`,
     values.perspectiveEnabled === false
       ? '透视效果：关闭。必须输出完全平面的正立面/二维方案效果，不要任何 3D 透视、斜视角、消失点、近大远小、景深、透视玻璃边或空间纵深；所有水平线和垂直线必须保持平行，像正投影立面图。'
       : isManualLayout

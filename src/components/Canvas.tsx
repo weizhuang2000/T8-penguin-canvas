@@ -656,6 +656,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     emptyExhibitQuery: '',
     layoutMode: 'manual',
     supportHeightMode: 'input',
+    arrangementRows: 1,
     manualLayoutItems: [],
     manualLayoutReferenceImage: '',
     perspectiveEnabled: true,
