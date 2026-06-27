@@ -331,7 +331,7 @@ function exhibitItemsText(items, style, values = {}) {
     lines.push(supportHeightMode === 'heritage-level'
       ? `${index + 1}. ${mentionToken}`
       : `${index + 1}. ${mentionToken}：展品主体目标高度 ${item.heightMm} mm`);
-    lines.push(`   @ 标注：${mentionToken} 对应参考图顺序中的展品 ${index + 1}，必须按该图提取外观、轮廓、材质与细节。`);
+    lines.push(`   图像输入：${mentionToken} 对应参考图顺序中的展品 ${index + 1}，必须按该图提取外观、轮廓、材质与细节。`);
     lines.push(`   ${supportHeightItemText(item, supportHeightMode)}`);
     if (supportHeightMode !== 'heritage-level') {
       const exhibitPercent = s.glassHeightMm > 0 ? (item.heightMm / s.glassHeightMm) * 100 : 0;
