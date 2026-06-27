@@ -78,7 +78,7 @@ test('showcase prompt keeps exhibit order and display height in millimeters', ()
   const promptWithCap = buildShowcaseInteriorDesignPrompt({ exhibitItems: items, showcaseStyle: { widthMm: 1200, glassHeightMm: 1400, hasCap: true } });
   assert.ok(prompt.indexOf('1. @img1：展品主体目标高度 420 mm') < prompt.indexOf('2. @img2：展品主体目标高度 260 mm'));
   assert.match(promptWithCap, /展柜宽度、底座高度、玻璃区高度、柜帽高度和柜体总高度保持设定尺寸不变/);
-  assert.match(prompt, /参考图顺序：第 1 张参考图 = 展品 1，第 2 张参考图 = 展品 2/);
+  assert.match(prompt, /参考图顺序：@img1 = 展品 1，@img2 = 展品 2，以此类推。必须按这个顺序匹配展品参考图、展托高度和文物级别。/);
   assert.doesNotMatch(prompt, /尺寸合成参考图/);
   assert.doesNotMatch(prompt, /第 2 张参考图 = 展品 1/);
   assert.match(prompt, /严格比例规则/);
@@ -134,6 +134,7 @@ test('showcase prompt supports automatic support height strategies and heritage 
   assert.match(inputMode, /必须绘制可见展托\/托座\/支架/);
 
   const modelValue = buildShowcaseInteriorDesignPrompt({ exhibitItems, supportHeightMode: 'model-value' });
+  assert.match(modelValue, /参考图顺序：@img1 = 展品 1，@img2 = 展品 2，以此类推。必须按这个顺序匹配展品参考图、展托高度和文物级别。/);
   assert.match(modelValue, /展托高度策略：模型按展品价值自动判断/);
   assert.match(modelValue, /根据每件展品的珍贵程度、视觉主次、材质和形态判断展托高度/);
   assert.match(modelValue, /价值高的展品展托更高一点，位置更靠中间/);

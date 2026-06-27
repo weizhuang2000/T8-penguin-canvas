@@ -257,9 +257,7 @@ function exhibitItemsText(items, style, values = {}) {
   const supportHeightMode = normalizeSupportHeightMode(values.supportHeightMode);
   const lines = [
     '普通 image 输入均视为展品图，只用于提取展品外观、体量、轮廓、材质和摆放重点，不作为色彩材质风格参考。',
-    supportHeightMode === 'heritage-level'
-      ? '参考图顺序：@img1 = 展品 1，@img2 = 展品 2，以此类推。必须按这个顺序匹配展品参考图、展托高度和文物级别。'
-      : '参考图顺序：第 1 张参考图 = 展品 1，第 2 张参考图 = 展品 2，以此类推。必须按这个顺序匹配展品参考图和展品主体高度。',
+    '参考图顺序：@img1 = 展品 1，@img2 = 展品 2，以此类推。必须按这个顺序匹配展品参考图、展托高度和文物级别。',
     '展品视角要求：展品尽量采用侧视图或正侧视图，保持平视、端正摆放；不要俯拍、仰拍、斜拍、倾斜旋转或明显透视变形。',
     supportHeightMode === 'heritage-level'
       ? '严格比例规则：每件展品按文物级别、展品价值和柜内视觉秩序判断本体显示高度；不要读取或套用输入的展品主体高度、展托高度数值，也不要按参考图片文件的画幅高度、像素高度、裁切框高度或留白高度缩放。'
