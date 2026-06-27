@@ -141,6 +141,7 @@ test('showcase prompt supports automatic support height strategies and heritage 
   assert.match(modelValue, /展托高度按当前策略判断，但不能反向改变展品主体高度/);
 
   const heritageLevel = buildShowcaseInteriorDesignPrompt({ exhibitItems, supportHeightMode: 'heritage-level' });
+  assert.match(heritageLevel, /参考图顺序：@img1 = 展品 1，@img2 = 展品 2，以此类推。必须按这个顺序匹配展品参考图、展托高度和文物级别。/);
   assert.match(heritageLevel, /高度策略：根据文物级别组织/);
   assert.match(heritageLevel, /展品主体高度和展托高度都由模型按文物级别、展品价值和柜内视觉秩序判断/);
   assert.match(heritageLevel, /一级文物优先放在中间或视觉核心区，展品更突出，展托更高、更稳重/);
