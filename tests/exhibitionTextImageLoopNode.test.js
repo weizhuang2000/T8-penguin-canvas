@@ -19,6 +19,7 @@ test('exhibition text-image loop node is registered across frontend surfaces', (
   assert.match(read('src/components/Canvas.tsx'), /'exhibition-text-image-loop'/);
   assert.match(read('src/components/NodeActionBar.tsx'), /'exhibition-text-image-loop'/);
   assert.match(read('src/utils/nodePlacement.ts'), /'exhibition-text-image-loop': \{ w: 330, h: 320 \}/);
+  assert.match(read('backend/src/auth/toolPermissions.js'), /'exhibition-text-image-loop'/);
 });
 
 test('exhibition text-image loop node supports paired text and image execution modes', () => {
@@ -27,6 +28,8 @@ test('exhibition text-image loop node supports paired text and image execution m
   assert.match(source, /buildPairs/);
   assert.match(source, /id="text"/);
   assert.match(source, /id="image"/);
+  assert.match(source, /id="text" type="source"/);
+  assert.match(source, /id="image" type="source"/);
   assert.match(source, /buildPairPatch/);
   assert.match(source, /textSegments/);
   assert.match(source, /imageUrls/);
@@ -38,4 +41,8 @@ test('exhibition text-image loop node supports paired text and image execution m
   assert.match(source, /'exhibition-img2img'/);
   assert.match(source, /'unit-panel-design'/);
   assert.match(source, /'exhibition-creative-image'/);
+  assert.match(read('src/components/nodes/useUpstreamMaterials.ts'), /n\.type === 'exhibition-text-image-loop'/);
+  assert.match(read('src/components/nodes/useUpstreamMaterials.ts'), /handles\.has\('text'\)/);
+  assert.match(read('src/components/nodes/useUpstreamMaterials.ts'), /handles\.has\('image'\)/);
+  assert.match(read('src/components/nodes/OutputNode.tsx'), /\?\.type === 'exhibition-text-image-loop'/);
 });

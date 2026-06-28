@@ -264,6 +264,9 @@ export function useUpstreamMaterials(nodeId: string): UpstreamMaterials {
       const ud: any = n.data || {};
       const handles = handleMap.get(sid) || new Set<string | null>([null]);
       const textMeta = textMetaFromData(ud);
+      const isTextImageLoop = n.type === 'exhibition-text-image-loop';
+      const wantsTextOutput = !isTextImageLoop || handles.has('text') || handles.has(null);
+      const wantsImageOutput = !isTextImageLoop || handles.has('image') || handles.has(null);
 
       // 显式素材集: 保留素材集内部顺序，并用序号 key 避免相同 URL 被全局去重误删。
       // 同时跳过下面的旧字段读取，避免 imageUrls/textSegments 双写后重复出现。
@@ -300,6 +303,7 @@ export function useUpstreamMaterials(nodeId: string): UpstreamMaterials {
       }
 
       // 文本: textSegments/texts 数组优先, 避免文本分割节点再把 joined prompt 当成第 N+1 项
+      if (wantsTextOutput) {
       const textArrayFields = ['textSegments', 'segments', 'texts'];
       const textArrayField = textArrayFields.find((f) => Array.isArray(ud[f]) && ud[f].length > 0);
       if (textArrayField) {
@@ -322,6 +326,7 @@ export function useUpstreamMaterials(nodeId: string): UpstreamMaterials {
           pushText(sid, ud.text, `text-field:${sid}:text`, undefined, textMeta);
         }
       }
+      }
 
       // === v1.2.8.3: FramePair 双端口语义 ===
       // 节点同时具备 firstFrameUrl + lastFrameUrl 字段时按 sourceHandle 过滤,
@@ -342,6 +347,7 @@ export function useUpstreamMaterials(nodeId: string): UpstreamMaterials {
       }
 
       // 图像: 单 + 多
+      if (wantsImageOutput) {
       pushUrl(sid, 'image', ud.imageUrl, images);
       const arrFields = ['imageUrls', 'urls', 'generatedImages'];
       for (const f of arrFields) {
@@ -349,6 +355,7 @@ export function useUpstreamMaterials(nodeId: string): UpstreamMaterials {
         if (Array.isArray(v)) {
           for (const u of v) pushUrl(sid, 'image', u, images);
         }
+      }
       }
 
       // 视频: 单 + 多 (v1.2.8.2: videoUrls 数组 — LoopNode 聚合多视频产物)

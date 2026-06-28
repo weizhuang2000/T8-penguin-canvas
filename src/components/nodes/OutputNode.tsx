@@ -260,6 +260,9 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
         const ud: any = n?.data || {};
         const sid = (n as any)?.id || '';
         const handles = handleMap.get(sid) || new Set<string | null>([null]);
+        const isTextImageLoop = (n as any)?.type === 'exhibition-text-image-loop';
+        const wantsTextOutput = !isTextImageLoop || handles.has('text') || handles.has(null);
+        const wantsImageOutput = !isTextImageLoop || handles.has('image') || handles.has(null);
 
         // 显式素材集: 按内部顺序透传；跳过旧字段读取，避免素材集同步字段造成重复。
         if ((n as any)?.type === 'material-set' && Array.isArray(ud.materialSetItems)) {
@@ -277,6 +280,7 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
         if (ud.__loopAccumulate) continue;
 
       // 文本: textSegments/texts 数组优先, 避免文本分割节点再把 joined prompt 当成第 N+1 项
+        if (wantsTextOutput) {
         const textArrayFields = ['textSegments', 'segments', 'texts'];
         const textArrayField = textArrayFields.find((f) => Array.isArray(ud[f]) && ud[f].length > 0);
         if (textArrayField) {
@@ -286,6 +290,7 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
           pushUniqueText(out.texts, ud.reply);
           pushUniqueText(out.texts, ud.prompt);
           pushUniqueText(out.texts, ud.text);
+        }
         }
 
       // === v1.2.8.4: FramePair 双端口语义 ===
@@ -307,12 +312,14 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
         }
 
       // 图像 - 单
+        if (wantsImageOutput) {
         pushUnique(out.images, ud.imageUrl);
         // 图像 - 多
         const arrFields = ['imageUrls', 'urls', 'generatedImages'];
         for (const f of arrFields) {
           const v = ud[f];
           if (Array.isArray(v)) v.forEach((u) => (f === 'urls' ? pushClassifiedUrl(u) : pushUnique(out.images, u)));
+        }
         }
 
       // 3D 模型

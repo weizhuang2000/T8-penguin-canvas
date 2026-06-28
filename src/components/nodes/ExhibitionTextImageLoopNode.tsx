@@ -559,7 +559,8 @@ const ExhibitionTextImageLoopNode = ({ id, data, selected }: NodeProps) => {
     <div className="relative" style={containerStyle}>
       <Handle id="text" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '34%', left: -6, background: PORT_COLOR.text }} title="输入：文本素材集" />
       <Handle id="image" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '58%', left: -6, background: PORT_COLOR.image }} title="输入：图像素材集" />
-      <Handle type="source" position={Position.Right} className="!h-3 !w-3 !border-0" style={{ top: '50%', right: -6, background: COLOR }} title="输出：同步文本与图像" />
+      <Handle id="text" type="source" position={Position.Right} className="!h-3 !w-3 !border-0" style={{ top: '38%', right: -6, background: PORT_COLOR.text }} title="输出：文本" />
+      <Handle id="image" type="source" position={Position.Right} className="!h-3 !w-3 !border-0" style={{ top: '62%', right: -6, background: PORT_COLOR.image }} title="输出：图像" />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderBottom: panelBorder, background: isPixel ? 'var(--px-surface)' : isDark ? 'rgba(34,211,238,0.12)' : 'rgba(34,211,238,0.1)', borderRadius: isPixel ? '6px 6px 0 0' : '10px 10px 0 0' }}>
         <div style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: isPixel ? 0 : 7, border: isPixel ? '2px solid var(--px-ink)' : 'none', background: isPixel ? 'var(--px-mint)' : 'rgba(34,211,238,0.18)' }}>

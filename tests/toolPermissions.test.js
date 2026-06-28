@@ -87,6 +87,24 @@ test('tool permissions merge new default-visible nodes into old configs', () => 
   assert.equal(permissions.canUseNode({ id: 'u2', role: 'designer' }, 'exhibition-lighting-heatmap'), true);
 }));
 
+test('tool permissions keep exhibition text-image loop grants when saved from user management', () => withTempData(() => {
+  permissions.writeDb({
+    defaultVisibleNodeTypes: ['text'],
+    roleRules: {
+      designer: { mode: 'custom', allowedNodeTypes: ['exhibition-text-image-loop'], deniedNodeTypes: [] },
+    },
+    userRules: {},
+  });
+
+  const db = permissions.readDb();
+  const resolved = permissions.resolveToolPermissions({ id: 'u2', role: 'designer' }, db);
+  assert.equal(permissions.ALL_NODE_TYPES.includes('exhibition-text-image-loop'), true);
+  assert.equal(permissions.DEFAULT_VISIBLE_NODE_TYPES.includes('exhibition-text-image-loop'), true);
+  assert.deepEqual(db.roleRules.designer.allowedNodeTypes, ['exhibition-text-image-loop']);
+  assert.equal(resolved.visibleNodeTypes.includes('exhibition-text-image-loop'), true);
+  assert.equal(permissions.canUseNode({ id: 'u2', role: 'designer' }, 'exhibition-text-image-loop', db), true);
+}));
+
 test('findUnauthorizedNewNodes allows existing blocked nodes but rejects new ones', () => withTempData(() => {
   permissions.writeDb({
     defaultVisibleNodeTypes: ['text'],
