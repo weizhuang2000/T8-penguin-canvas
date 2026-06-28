@@ -119,9 +119,9 @@ function showcaseStyleText(style) {
     `玻璃区高度：${s.glassHeightMm} mm`,
   ];
   if (s.hasCap) {
-    lines.push(`柜帽：开启，柜帽高度 ${s.capHeightMm} mm`);
+    lines.push(`柜帽：有柜帽，柜帽高度 ${s.capHeightMm} mm`);
   } else {
-    lines.push('顶部形式：透明玻璃顶，顶部没有额外封板或设备层；顶部不安装任何灯具、灯带或射灯。');
+    lines.push('柜帽：没有柜帽，顶部是玻璃');
   }
   lines.push(`推导总高度：${totalHeight} mm`);
   return lines.join('\n');

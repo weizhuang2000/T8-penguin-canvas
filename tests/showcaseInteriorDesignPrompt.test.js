@@ -20,7 +20,7 @@ test('showcase prompt includes four showcase dimensions and cap switch in Chines
   assert.match(withCap, /展柜宽度：1200 mm/);
   assert.match(withCap, /底座高度：300 mm/);
   assert.match(withCap, /玻璃区高度：1400 mm/);
-  assert.match(withCap, /柜帽：开启，柜帽高度 180 mm/);
+  assert.match(withCap, /柜帽：有柜帽，柜帽高度 180 mm/);
   assert.match(withCap, /推导总高度：1880 mm/);
   assert.match(withCap, /比例要求：展柜宽度、底座高度、玻璃区高度、柜帽高度必须形成可信比例；玻璃区应是主要陈列空间，底座承托稳定。/);
   assert.match(withCap, /画面比例硬约束：展柜整体外框宽高比必须接近 1200:1880（宽\/高≈0\.64）/);
@@ -34,10 +34,10 @@ test('showcase prompt includes four showcase dimensions and cap switch in Chines
     showcaseStyle: { widthMm: 1200, baseHeightMm: 300, glassHeightMm: 1400, capHeightMm: 180, hasCap: false },
   });
   assert.match(withoutCap, /推导总高度：1700 mm/);
-  assert.match(withoutCap, /顶部形式：透明玻璃顶/);
-  assert.match(withoutCap, /顶部不安装任何灯具、灯带或射灯/);
+  assert.match(withoutCap, /柜帽：没有柜帽，顶部是玻璃/);
   assert.match(withoutCap, /顶部必须是通透玻璃顶/);
-  assert.doesNotMatch(withoutCap, /柜帽/);
+  assert.doesNotMatch(withoutCap, /柜帽：开启/);
+  assert.doesNotMatch(withoutCap, /柜帽：有柜帽/);
 
   assert.deepEqual(normalizeShowcaseStyle({}), {
     widthMm: 1200,
@@ -61,7 +61,8 @@ test('showcase prompt disables body patterns by default and keeps current logic 
   });
   assert.match(withoutPatternAndCap, /柜体图案：关闭/);
   assert.match(withoutPatternAndCap, /柜体、底座、边框和顶部玻璃连接构件都不要出现图案、纹样、花纹/);
-  assert.doesNotMatch(withoutPatternAndCap, /柜帽/);
+  assert.doesNotMatch(withoutPatternAndCap, /柜帽：开启/);
+  assert.doesNotMatch(withoutPatternAndCap, /柜帽：有柜帽/);
 
   const withPattern = buildShowcaseInteriorDesignPrompt({
     showcaseStyle: { hasCap: true, hasBodyPattern: true },
