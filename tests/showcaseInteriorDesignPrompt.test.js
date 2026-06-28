@@ -262,6 +262,8 @@ test('showcase prompt supports manual layout mode without auto height scaling', 
   assert.match(prompt, /必须保持合成图中每个展品的像素占比/);
   assert.match(prompt, /排版窗口中每个展品的垂直位置直接对应它在玻璃区内的实际展示高度/);
   assert.match(prompt, /每件展品下面使用独立展托、托座或支架托举到排版窗口指定高度/);
+  assert.doesNotMatch(prompt, /不同展品的展托高度可以不同/);
+  assert.doesNotMatch(prompt, /不能把所有展品统一落在同一条底线/);
   assert.match(prompt, /必须把展托画成清晰可见的实体构件/);
   assert.match(prompt, /展托必须从底座或层板连续连接到展品底部/);
   assert.match(prompt, /不要隐藏展托、不要把展托做成完全透明不可见/);
