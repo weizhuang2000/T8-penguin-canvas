@@ -83,7 +83,7 @@ test('showcase interior design component wires shared controls and generation se
   assert.match(source, /文物级别/);
   assert.match(source, /updateExhibitSupportHeight/);
   assert.match(source, /updateExhibitHeritageLevel/);
-  assert.match(source, /disabled=\{isReadonly \|\| busy \|\| supportHeightMode === 'heritage-level'\}/);
+  assert.match(source, /disabled=\{isReadonly \|\| busy \|\| layoutMode === 'manual' \|\| supportHeightMode === 'heritage-level'\}/);
   assert.match(source, /supportHeightMode !== 'input'/);
   assert.match(source, /layoutMode/);
   assert.match(source, /emptyExhibitMode/);
