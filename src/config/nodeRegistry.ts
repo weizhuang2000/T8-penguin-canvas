@@ -104,6 +104,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: 'exhibition-recolor', label: '主色调更换', category: 'exhibition', description: '展陈空间主色调更换：输入原始图像，使用主色、辅助色、点缀色和明暗度进行语义换色，并保护指定展品对象', icon: 'Palette', color: 'cyan' },
   { type: 'exhibition-lighting-heatmap', label: '灯光热力图', category: 'exhibition', description: '展陈空间灯光热力分析：输入图像后生成覆盖层或独立伪彩色光照热力图，支持模型、尺寸和格式选择', icon: 'ThermometerSun', color: 'cyan' },
   { type: 'exhibition-creative-image', label: '展陈创意生图', category: 'exhibition', description: '面向序厅、尾厅和重亮点展项空间：单空间图约束建筑空间，LLM 创意描述后多次图生图', icon: 'Layers3', color: 'cyan' },
+  { type: 'exhibition-text-image-loop', label: '图文循环器', category: 'exhibition', description: '同步接入文本和图像素材集，按一一配对 / 短集循环 / 全组合驱动下游展陈生图节点', icon: 'Repeat2', color: 'cyan' },
   { type: 'exhibition-outline-split', label: '展陈大纲拆分', category: 'exhibition', description: '读取展陈资料文档，按指定单元数或自动模式拆分大纲并提炼总结，输出多段文本', icon: 'ListTree', color: 'cyan' },
   { type: 'exhibition-plan-layout', label: '平面自动布局', category: 'exhibition', description: '根据建筑平面图和展陈大纲自动生成展陈平面布局图，支持动线、标注和说明文字开关', icon: 'Map', color: 'cyan' },
   { type: 'unit-panel-design', label: '单元板设计', category: 'exhibition', description: '生成单元板/整套板式设计图：两级文字提炼、多语言排序、材质选择、色材参考和尺寸标注', icon: 'PanelsTopLeft', color: 'cyan' },

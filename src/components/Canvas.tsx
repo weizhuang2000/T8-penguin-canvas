@@ -117,6 +117,7 @@ import ExhibitionStyleTransferNode from './nodes/ExhibitionStyleTransferNode';
 import ExhibitionRecolorNode from './nodes/ExhibitionRecolorNode';
 import ExhibitionLightingHeatmapNode from './nodes/ExhibitionLightingHeatmapNode';
 import ExhibitionCreativeImageNode from './nodes/ExhibitionCreativeImageNode';
+import ExhibitionTextImageLoopNode from './nodes/ExhibitionTextImageLoopNode';
 import ExhibitionOutlineSplitNode from './nodes/ExhibitionOutlineSplitNode';
 import ExhibitionPlanLayoutNode from './nodes/ExhibitionPlanLayoutNode';
 import UnitPanelDesignNode from './nodes/UnitPanelDesignNode';
@@ -217,6 +218,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'exhibition-recolor': ExhibitionRecolorNode,
   'exhibition-lighting-heatmap': ExhibitionLightingHeatmapNode,
   'exhibition-creative-image': ExhibitionCreativeImageNode,
+  'exhibition-text-image-loop': ExhibitionTextImageLoopNode,
   'exhibition-outline-split': ExhibitionOutlineSplitNode,
   'exhibition-plan-layout': ExhibitionPlanLayoutNode,
   'unit-panel-design': UnitPanelDesignNode,
@@ -517,6 +519,23 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     imageUrls: [],
     referenceImages: [],
     creativeResults: [],
+    status: 'idle',
+    error: '',
+  },
+  'exhibition-text-image-loop': {
+    mode: 'serial',
+    pairingMode: 'zip',
+    outputs: [],
+    progress: { done: 0, total: 0, ok: 0, fail: 0 },
+    text: '',
+    prompt: '',
+    outputText: '',
+    texts: [],
+    textSegments: [],
+    segments: [],
+    imageUrl: '',
+    imageUrls: [],
+    urls: [],
     status: 'idle',
     error: '',
   },
@@ -888,6 +907,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'exhibition-recolor',
   'exhibition-lighting-heatmap',
   'exhibition-creative-image',
+  'exhibition-text-image-loop',
   'exhibition-outline-split',
   'exhibition-plan-layout',
   'unit-panel-design',
@@ -4482,7 +4502,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
     // v1.2.9.9: 'loop' 也加入 — 循环器自身不产出最终结果 (累积已由下游 EXEC→OutputNode 链路接管),
     //          autoOutput 若给 LoopNode 自动建 OutputNode 会让用户看到 “循环器自己生了 N 个素材” 的错误体验。
     // PoseMaster 自己负责写入单张/合集 OutputNode；通用 autoOutput 再处理会把批量合集拆出重复单体。
-    const SKIP_TYPES = new Set(['output', 'groupBox', 'bulkPhantom', 'upload', 'material-set', 'pick-from-set', 'loop', 'pose-master']);
+    const SKIP_TYPES = new Set(['output', 'groupBox', 'bulkPhantom', 'upload', 'material-set', 'pick-from-set', 'loop', 'exhibition-text-image-loop', 'pose-master']);
 
     const toAddNodes: Node[] = [];
     const toAddEdges: Edge[] = [];
@@ -4508,7 +4528,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
       // v1.2.8.2: 循环器仅在完成后才让 autoOutput 处理, 避免运行中注入 items[i] 时被误认为
       // “已生产产物” 并创建个空的 OutputNode。在 status='success' 时 d.imageUrls/videoUrls/audioUrls
       // 数组才是最终聚合产物, 交给 autoOutput 判并拆为 N 个 OutputNode (每行 3 个网格)。
-      if (t === 'loop' && d?.status !== 'success') continue;
+      if ((t === 'loop' || t === 'exhibition-text-image-loop') && d?.status !== 'success') continue;
 
       // === v1.2.8.3: FramePair 双端口专属路径 ===
       // 不走通用 imageUrls 聚合 (FramePair 已不再写 imageUrl/imageUrls), 按 first/last
