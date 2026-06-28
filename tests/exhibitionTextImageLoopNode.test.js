@@ -31,12 +31,15 @@ test('exhibition text-image loop node supports paired text and image execution m
   assert.match(source, /id="text" type="source"/);
   assert.match(source, /id="image" type="source"/);
   assert.match(source, /buildPairPatch/);
+  assert.match(source, /waitForPairData/);
   assert.match(source, /textSegments/);
   assert.match(source, /imageUrls/);
   assert.match(source, /runSerial/);
   assert.match(source, /runParallel/);
+  assert.doesNotMatch(source, /setTimeout\(resolve,\s*80\)/);
   assert.match(source, /__loopAccumulate/);
   assert.match(source, /type: 'relay'/);
+  assert.match(source, /sourceHandle: \(edge as any\)\.sourceHandle/);
   assert.match(source, /targetHandle: \(edge as any\)\.targetHandle/);
   assert.match(source, /'exhibition-img2img'/);
   assert.match(source, /'unit-panel-design'/);

@@ -80,6 +80,48 @@ function buildResetPatch() {
   };
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+}
+
+function dataHasPair(data: any, pair: TextImagePair): boolean {
+  const textValue = pair.text.url;
+  const imageValue = pair.image.url;
+  const hasText =
+    data?.text === textValue ||
+    data?.prompt === textValue ||
+    data?.outputText === textValue ||
+    (Array.isArray(data?.texts) && data.texts.includes(textValue)) ||
+    (Array.isArray(data?.textSegments) && data.textSegments.includes(textValue)) ||
+    (Array.isArray(data?.segments) && data.segments.includes(textValue));
+  const hasImage =
+    data?.imageUrl === imageValue ||
+    (Array.isArray(data?.imageUrls) && data.imageUrls.includes(imageValue)) ||
+    (Array.isArray(data?.urls) && data.urls.includes(imageValue));
+  return hasText && hasImage;
+}
+
+async function waitForPairData(
+  getNode: () => Node | undefined,
+  pair: TextImagePair,
+  timeoutMs = 1500,
+): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (dataHasPair((getNode()?.data as any) || {}, pair)) {
+      await nextFrame();
+      await nextFrame();
+      return true;
+    }
+    await sleep(40);
+  }
+  return false;
+}
+
 function buildPairs(texts: Material[], images: Material[], mode: PairingMode): TextImagePair[] {
   if (texts.length === 0 || images.length === 0) return [];
   const pairs: TextImagePair[] = [];
@@ -327,10 +369,13 @@ const ExhibitionTextImageLoopNode = ({ id, data, selected }: NodeProps) => {
     try {
       for (let index = 0; index < pairs.length; index++) {
         if (cancelRef.current) break;
-        update({ ...buildResetPatch(), ...buildPairPatch(pairs[index]) });
-        await new Promise<void>((resolve) => window.setTimeout(resolve, 80));
+        const pair = pairs[index];
+        update({ ...buildResetPatch(), ...buildPairPatch(pair) });
+        const pairReady = await waitForPairData(() => rf.getNode(id), pair);
         let chainOk = true;
+        if (!pairReady) chainOk = false;
         for (const nodeId of order) {
+          if (!chainOk) break;
           if (cancelRef.current) {
             chainOk = false;
             break;
@@ -343,7 +388,7 @@ const ExhibitionTextImageLoopNode = ({ id, data, selected }: NodeProps) => {
         }
         let result: string | null = null;
         if (chainOk) {
-          await new Promise<void>((resolve) => window.setTimeout(resolve, 40));
+          await sleep(40);
           harvestFromExec(execSubIds, execAccumulator);
           writeFreshToOutputs(execSubIds, execAccumulator, knownOutputs);
           result = collectNodeResult(rf.getNode(directs[0]));
@@ -362,7 +407,7 @@ const ExhibitionTextImageLoopNode = ({ id, data, selected }: NodeProps) => {
         delete nextData.__loopAccumulate;
         return { ...node, data: nextData };
       }));
-      await new Promise<void>((resolve) => window.setTimeout(resolve, 200));
+      await sleep(200);
       harvestFromExec(execSubIds, execAccumulator);
       writeFreshToOutputs(execSubIds, execAccumulator, knownOutputs);
     }
@@ -468,6 +513,7 @@ const ExhibitionTextImageLoopNode = ({ id, data, selected }: NodeProps) => {
       const carrierEdges: Edge[] = entryEdges.map((edge, edgeIndex) => ({
         id: `exhibition-text-image-loop-${id}-${ts}-${pairIndex}-carrier-e${edgeIndex}`,
         source: carrierId,
+        sourceHandle: (edge as any).sourceHandle,
         target: idMap.get(edge.target)!,
         targetHandle: (edge as any).targetHandle,
         type: 'deletable',
@@ -481,7 +527,14 @@ const ExhibitionTextImageLoopNode = ({ id, data, selected }: NodeProps) => {
     if (allNewEdges.length > 0) rf.setEdges((edges) => [...edges, ...allNewEdges]);
 
     update(buildPairPatch(pairs[0]));
-    await new Promise<void>((resolve) => window.setTimeout(resolve, 140));
+    const firstPairReady = await waitForPairData(() => rf.getNode(id), pairs[0]);
+    const carrierReady = await Promise.all(
+      cloneIdMaps.map((_, index) => {
+        const pairIndex = index + 1;
+        const carrierId = `exhibition-text-image-loop-${id}-${ts}-${pairIndex}-carrier`;
+        return waitForPairData(() => rf.getNode(carrierId), pairs[pairIndex]);
+      }),
+    );
 
     const chainOrders = [originalOrder, ...cloneIdMaps.map((idMap) => originalOrder.map((nodeId) => idMap.get(nodeId) || nodeId))];
     const collected: Array<string | null> = new Array(pairs.length).fill(null);
@@ -490,6 +543,12 @@ const ExhibitionTextImageLoopNode = ({ id, data, selected }: NodeProps) => {
     const updateProgress = () => update({ outputs: [...collected], progress: { done: okCount + failCount, total: pairs.length, ok: okCount, fail: failCount } });
 
     const runChain = async (chainIndex: number) => {
+      if (chainIndex === 0 ? !firstPairReady : !carrierReady[chainIndex - 1]) {
+        collected[chainIndex] = null;
+        failCount += 1;
+        updateProgress();
+        return;
+      }
       const chain = chainOrders[chainIndex];
       let chainOk = true;
       for (const nodeId of chain) {
