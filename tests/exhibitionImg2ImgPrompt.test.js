@@ -24,6 +24,38 @@ test('exhibition img2img node exposes final prompt as text output', () => {
   assert.match(output, /handles\.has\('prompt'\) \|\| handles\.has\(null\)/);
 });
 
+test('exhibition img2img content planning can limit final prompt to a wall range', () => {
+  const node = readFileSync(new URL('../src/components/nodes/ExhibitionImg2ImgNode.tsx', import.meta.url), 'utf8');
+  const canvas = readFileSync(new URL('../src/components/Canvas.tsx', import.meta.url), 'utf8');
+  assert.match(canvas, /contentWallStart:\s*1/);
+  assert.match(canvas, /contentWallEnd:\s*3/);
+  assert.match(node, /function normalizeContentWallRange/);
+  assert.match(node, /const contentWallRange = normalizeContentWallRange\(d\.contentWallStart, d\.contentWallEnd, wallMode, wallCount\)/);
+  assert.match(node, /const promptContentOutputs = useMemo/);
+  assert.match(node, /contentOutputs\.walls\.slice\(contentWallRange\.start - 1, contentWallRange\.end\)/);
+  assert.match(node, /const wallContentPrompt = hasContentPlanning \? promptContentOutputs\.mainOutput : ''/);
+  assert.match(node, /walls: plan\.walls\.slice\(contentWallRange\.start - 1, contentWallRange\.end\)/);
+  assert.match(node, /contentWallEnd: Math\.max\(nextStart, contentWallRange\.end\)/);
+  assert.match(node, /clampWallIndex\(event\.target\.value, contentWallRange\.start, contentWallRange\.total, contentWallRange\.total\)/);
+  assert.match(node, /wasFullRange \? nextCount : contentWallRange\.end/);
+  assert.match(node, /title="起始立面"/);
+  assert.match(node, /title="截止立面"/);
+});
+
+test('exhibition img2img content planning exposes wall length mode and totals', () => {
+  const node = readFileSync(new URL('../src/components/nodes/ExhibitionImg2ImgNode.tsx', import.meta.url), 'utf8');
+  const canvas = readFileSync(new URL('../src/components/Canvas.tsx', import.meta.url), 'utf8');
+  assert.match(canvas, /wallLengthMode:\s*'estimate'/);
+  assert.match(node, /estimateElevationWallLength/);
+  assert.match(node, /const wallLengthMode: 'estimate' \| 'llm'/);
+  assert.match(node, /wallLengthMode,\s*wallRangeStart: contentWallRange\.start,\s*wallRangeEnd: contentWallRange\.end/s);
+  assert.match(node, /value=\{wallLengthMode\}/);
+  assert.match(node, /<option value="estimate">按内容估算长度<\/option>/);
+  assert.match(node, /<option value="llm">AI 生成长度<\/option>/);
+  assert.match(node, /范围合计约 \{Number\(promptContentOutputs\.wallLengthTotalM \|\| 0\)\.toFixed\(1\)\}m/);
+  assert.match(node, /大致长度：\{Number\(wall\.approxLengthM \|\| estimateElevationWallLength\(wall\)\)\.toFixed\(1\)\}m/);
+});
+
 test('exhibition img2img node exposes mutually exclusive plan layout input', () => {
   const node = readFileSync(new URL('../src/components/nodes/ExhibitionImg2ImgNode.tsx', import.meta.url), 'utf8');
   const canvas = readFileSync(new URL('../src/components/Canvas.tsx', import.meta.url), 'utf8');

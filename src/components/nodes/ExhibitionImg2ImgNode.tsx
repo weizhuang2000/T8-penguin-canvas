@@ -48,6 +48,7 @@ import {
   ELEVATION_CRAFTS,
   buildElevationContentPlanMessages,
   buildElevationOutputs,
+  estimateElevationWallLength,
   normalizeElevationAnalysis,
   parseElevationContentPlanResponse,
   type ElevationCraft,
@@ -238,6 +239,20 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number)
   const num = Number(value);
   if (!Number.isFinite(num)) return fallback;
   return Math.max(min, Math.min(max, num));
+}
+
+function clampWallIndex(value: unknown, min: number, max: number, fallback: number): number {
+  const num = Math.floor(Number(value));
+  if (!Number.isFinite(num)) return fallback;
+  return Math.max(min, Math.min(max, num));
+}
+
+function normalizeContentWallRange(startValue: unknown, endValue: unknown, wallMode: 'single' | 'multi', wallCount: number) {
+  const total = Math.max(1, Math.min(12, Math.floor(Number(wallCount) || 1)));
+  if (wallMode === 'single') return { start: 1, end: 1, total: 1 };
+  const start = clampWallIndex(startValue, 1, total, 1);
+  const end = Math.max(start, clampWallIndex(endValue, 1, total, total));
+  return { start, end, total };
 }
 
 function normalizeAngle(value: unknown): number {
@@ -1714,6 +1729,8 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const regenerateContentEachRun = d.regenerateContentEachRun === true;
   const wallMode: 'single' | 'multi' = d.wallMode === 'single' ? 'single' : 'multi';
   const wallCount = Math.max(1, Math.min(12, Number(d.wallCount) || 3));
+  const contentWallRange = normalizeContentWallRange(d.contentWallStart, d.contentWallEnd, wallMode, wallCount);
+  const wallLengthMode: 'estimate' | 'llm' = d.wallLengthMode === 'llm' ? 'llm' : 'estimate';
   const analysis = useMemo(
     () => normalizeElevationAnalysis(d.analysis) as ElevationAnalysis,
     [d.analysis],
@@ -1809,6 +1826,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       walls: Array.isArray(d.walls) ? d.walls : [],
       wallMode,
       wallCount,
+      wallLengthMode,
       outputMode: d.outputMode === 'overview' ? 'overview' : 'segments',
       downstreamContent: 'schedule',
       selectedCrafts,
@@ -1841,7 +1859,47 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     Array.isArray(d.walls) && d.walls.length > 0 ||
     !!d.contentPlanningPrompt
   );
-  const wallContentPrompt = hasContentPlanning ? contentOutputs.mainOutput : '';
+  const promptContentOutputs = useMemo(() => {
+    const rangeWalls = contentOutputs.walls.slice(contentWallRange.start - 1, contentWallRange.end);
+    return buildElevationOutputs({
+      analysis,
+      walls: rangeWalls,
+      wallMode,
+      wallCount: rangeWalls.length || 1,
+      wallLengthMode,
+      wallRangeStart: contentWallRange.start,
+      wallRangeEnd: contentWallRange.end,
+      outputMode: d.outputMode === 'overview' ? 'overview' : 'segments',
+      downstreamContent: 'schedule',
+      selectedCrafts,
+      customCraft: d.customCraft,
+      aspectRatio: d.aspectRatio,
+      dimensions: d.dimensions,
+      density: d.density,
+      colorMaterial: d.colorMaterial,
+      visualStyle: d.visualStyle,
+      supplement: d.contentSupplement,
+      craftPresets,
+    });
+  }, [
+    analysis,
+    contentOutputs.walls,
+    contentWallRange.end,
+    contentWallRange.start,
+    craftPresets,
+    d.aspectRatio,
+    d.colorMaterial,
+    d.contentSupplement,
+    d.customCraft,
+    d.density,
+    d.dimensions,
+    d.outputMode,
+    d.visualStyle,
+    selectedCrafts,
+    wallMode,
+    wallLengthMode,
+  ]);
+  const wallContentPrompt = hasContentPlanning ? promptContentOutputs.mainOutput : '';
   const planCameraDraft = useMemo(() => normalizePlanCameraState(d.planCameraDraft), [d.planCameraDraft]);
   const planCameraViewport = useMemo(() => normalizePlanCameraViewport(d.planCameraViewport), [d.planCameraViewport]);
   const planCameraConfirmed = !!(
@@ -1960,9 +2018,12 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     };
     const nextContentOutputs = buildElevationOutputs({
       analysis: nextAnalysis,
-      walls: plan.walls,
+      walls: plan.walls.slice(contentWallRange.start - 1, contentWallRange.end),
       wallMode,
-      wallCount,
+      wallCount: Math.max(1, contentWallRange.end - contentWallRange.start + 1),
+      wallLengthMode,
+      wallRangeStart: contentWallRange.start,
+      wallRangeEnd: contentWallRange.end,
       outputMode: d.outputMode === 'overview' ? 'overview' : 'segments',
       downstreamContent: 'schedule',
       selectedCrafts: effectiveCrafts,
@@ -2029,6 +2090,9 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     spatialInputMode,
     spaceLightingEnabled,
     spaceLightingLevel,
+    contentWallRange.end,
+    contentWallRange.start,
+    wallLengthMode,
     wallCount,
     wallMode,
   ]);
@@ -2394,6 +2458,13 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   }, [colorMaterialEditorOpen, colorMaterialPresets]);
 
   useEffect(() => {
+    const patch: Record<string, any> = {};
+    if (d.contentWallStart !== contentWallRange.start) patch.contentWallStart = contentWallRange.start;
+    if (d.contentWallEnd !== contentWallRange.end) patch.contentWallEnd = contentWallRange.end;
+    if (Object.keys(patch).length > 0) update(patch);
+  }, [contentWallRange.end, contentWallRange.start, d.contentWallEnd, d.contentWallStart, update]);
+
+  useEffect(() => {
     const patch = {
       contentPlanningPrompt: wallContentPrompt,
       contentWalls: contentOutputs.walls,
@@ -2539,6 +2610,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         sourceText: text,
         wallMode,
         wallCount,
+        wallLengthMode,
         selectedCrafts: effectiveCrafts,
         customCraft: d.customCraft,
         craftPresets,
@@ -2553,13 +2625,19 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         max_tokens: 4096,
       });
       const plan = parseElevationContentPlanResponse(response.content);
+      const plannedWalls = plan.walls.map((wall: ElevationWall) => ({
+        ...wall,
+        approxLengthM: wallLengthMode === 'llm' && Number(wall.approxLengthM) > 0
+          ? wall.approxLengthM
+          : estimateElevationWallLength(wall),
+      }));
       update({
         analysis: {
           projectTheme: plan.projectTheme,
           coreMessage: plan.coreMessage,
           sections: [],
         },
-        walls: plan.walls,
+        walls: plannedWalls,
         status: 'success',
         error: '',
         plannedAt: Date.now(),
@@ -2578,7 +2656,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           logBus.warn(`展陈图生图自动命名失败: ${nameError?.message || nameError}`, `exhibition-img2img:${id.slice(0, 6)}`);
         }
       }
-      return plan;
+      return { ...plan, walls: plannedWalls };
     } catch (error: any) {
       update({ status: 'error', error: error?.message || '展示内容生成失败' });
       if (rethrow) throw error;
@@ -2599,6 +2677,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     sourceText,
     update,
     wallCount,
+    wallLengthMode,
     wallMode,
   ]);
 
@@ -2631,9 +2710,13 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
 
   const patchWall = (index: number, patch: Partial<ElevationWall>) => {
     if (isReadonly || !contentEnabled) return;
-    const next = contentOutputs.walls.map((wall: ElevationWall, wallIndex: number) => (
-      wallIndex === index ? { ...wall, ...patch } : wall
-    ));
+    const next = contentOutputs.walls.map((wall: ElevationWall, wallIndex: number) => {
+      if (wallIndex !== index) return wall;
+      const merged = { ...wall, ...patch };
+      return wallLengthMode === 'estimate'
+        ? { ...merged, approxLengthM: estimateElevationWallLength(merged) }
+        : merged;
+    });
     update({ walls: next });
   };
 
@@ -3471,6 +3554,8 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                       update({
                         wallMode: nextMode,
                         wallCount: nextMode === 'single' ? 1 : wallCount,
+                        contentWallStart: 1,
+                        contentWallEnd: nextMode === 'single' ? 1 : wallCount,
                         walls: [],
                       });
                     }}
@@ -3487,7 +3572,19 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                     value={wallMode === 'single' ? 1 : wallCount}
                     onChange={(event) => {
                       const nextCount = Math.max(1, Math.min(12, Number(event.target.value) || 1));
-                      update({ wallCount: nextCount, walls: [] });
+                      const wasFullRange = contentWallRange.start === 1 && contentWallRange.end === wallCount;
+                      const nextRange = normalizeContentWallRange(
+                        contentWallRange.start,
+                        wasFullRange ? nextCount : contentWallRange.end,
+                        wallMode,
+                        nextCount,
+                      );
+                      update({
+                        wallCount: nextCount,
+                        contentWallStart: nextRange.start,
+                        contentWallEnd: nextRange.end,
+                        walls: [],
+                      });
                     }}
                     title="立面数量"
                   />
@@ -3500,6 +3597,52 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                     <option value="segments">逐面集合</option>
                     <option value="overview">整套总览</option>
                   </select>
+                </div>
+                <div className="mt-1 grid grid-cols-2 gap-1">
+                  <input
+                    className={FIELD}
+                    type="number"
+                    min={1}
+                    max={contentWallRange.total}
+                    disabled={isReadonly || contentBusy || wallMode === 'single'}
+                    value={contentWallRange.start}
+                    onChange={(event) => {
+                      const nextStart = clampWallIndex(event.target.value, 1, contentWallRange.total, 1);
+                      update({
+                        contentWallStart: nextStart,
+                        contentWallEnd: Math.max(nextStart, contentWallRange.end),
+                      });
+                    }}
+                    title="起始立面"
+                  />
+                  <input
+                    className={FIELD}
+                    type="number"
+                    min={contentWallRange.start}
+                    max={contentWallRange.total}
+                    disabled={isReadonly || contentBusy || wallMode === 'single'}
+                    value={contentWallRange.end}
+                    onChange={(event) => {
+                      const nextEnd = clampWallIndex(event.target.value, contentWallRange.start, contentWallRange.total, contentWallRange.total);
+                      update({ contentWallEnd: nextEnd });
+                    }}
+                    title="截止立面"
+                  />
+                </div>
+                <div className="mt-1 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1">
+                  <select
+                    className={FIELD}
+                    disabled={isReadonly || contentBusy}
+                    value={wallLengthMode}
+                    onChange={(event) => update({ wallLengthMode: event.target.value === 'llm' ? 'llm' : 'estimate' })}
+                    title="立面长度计算方式"
+                  >
+                    <option value="estimate">按内容估算长度</option>
+                    <option value="llm">AI 生成长度</option>
+                  </select>
+                  <div className="rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[10px] text-cyan-100" title={promptContentOutputs.wallLengthSummary || ''}>
+                    范围合计约 {Number(promptContentOutputs.wallLengthTotalM || 0).toFixed(1)}m
+                  </div>
                 </div>
                 <PromptExpandableInput
                   title="扩大编辑"
@@ -3520,6 +3663,10 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                 <div className="mt-2 max-h-56 space-y-1.5 overflow-y-auto">
                   {contentOutputs.walls.map((wall: ElevationWall, index: number) => (
                     <div key={wall.id || index} className="rounded border border-white/10 bg-white/[0.035] p-1.5">
+                      <div className="mb-1 flex items-center justify-between gap-2 text-[10px] text-cyan-100/80">
+                        <span>立面 {index + 1}</span>
+                        <span>大致长度：{Number(wall.approxLengthM || estimateElevationWallLength(wall)).toFixed(1)}m</span>
+                      </div>
                       <PromptExpandableInput
                         title="扩大编辑"
                         className={FIELD}

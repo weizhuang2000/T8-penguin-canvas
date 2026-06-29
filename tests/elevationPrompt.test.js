@@ -247,3 +247,29 @@ test('manual layout schedule override is used for schedule output', () => {
   assert.equal(result.layoutSchedule, '人工确认版排版清单');
   assert.equal(result.mainOutput, '人工确认版排版清单');
 });
+
+test('content plan wall lengths are parsed, estimated and emitted to schedule output', () => {
+  const parsed = parseElevationContentPlanResponse(JSON.stringify({
+    projectTheme: 'Length test',
+    coreMessage: 'Core',
+    walls: [
+      { id: 'wall-1', title: 'A', content: 'Short content', exactText: ['A'], craftNotes: 'Panels', approxLengthM: 7.5 },
+      { id: 'wall-2', title: 'B', content: 'Long content '.repeat(40), exactText: ['B'], craftNotes: 'Panels', approxLengthM: -1 },
+    ],
+  }));
+  assert.equal(parsed.walls[0].approxLengthM, 7.5);
+  assert.ok(parsed.walls[1].approxLengthM > 0);
+
+  const result = buildElevationOutputs({
+    analysis,
+    walls: parsed.walls,
+    wallMode: 'multi',
+    downstreamContent: 'schedule',
+    wallRangeStart: 2,
+    wallRangeEnd: 3,
+  });
+  assert.match(result.layoutSchedule, /立面长度：约 7\.5m/);
+  assert.match(result.layoutSchedule, /立面长度：约 \d+\.\d+m/);
+  assert.match(result.mainOutput, /当前效果图立面范围：第 2-3 面；范围总长度：约 \d+\.\d+m/);
+  assert.ok(result.wallLengthTotalM > 7.5);
+});

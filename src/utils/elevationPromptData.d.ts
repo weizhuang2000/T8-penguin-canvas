@@ -27,6 +27,7 @@ export interface ElevationWall {
   exactText: string[];
   craftIds?: string[];
   craftNotes?: string;
+  approxLengthM?: number;
 }
 
 export interface ElevationContentPlan {
@@ -40,6 +41,9 @@ export interface ElevationPromptValues {
   walls?: ElevationWall[];
   wallMode?: 'single' | 'multi' | 'auto';
   wallCount?: number;
+  wallLengthMode?: 'estimate' | 'llm';
+  wallRangeStart?: number;
+  wallRangeEnd?: number;
   outputMode?: 'segments' | 'overview';
   downstreamContent?: 'concept' | 'schedule' | 'combined';
   selectedCrafts?: string[];
@@ -61,6 +65,8 @@ export interface ElevationOutputs {
   overviewPrompt: string;
   layoutSchedule: string;
   generatedLayoutSchedule: string;
+  wallLengthTotalM: number;
+  wallLengthSummary: string;
   mainOutput: string;
   textSegments: string[];
 }
@@ -80,6 +86,7 @@ export function wallsFromAnalysis(
   count?: number,
 ): ElevationWall[];
 export function buildElevationOutputs(values?: ElevationPromptValues): ElevationOutputs;
+export function estimateElevationWallLength(wall?: Partial<ElevationWall>): number;
 export function buildElevationAnalysisMessages(
   sourceText: string,
   wallMode?: 'single' | 'multi' | 'auto',
@@ -91,6 +98,7 @@ export function buildElevationContentPlanMessages(values?: {
   sourceText?: string;
   wallMode?: 'single' | 'multi' | 'auto';
   wallCount?: number;
+  wallLengthMode?: 'estimate' | 'llm';
   selectedCrafts?: string[];
   craftPresets?: ElevationCraft[];
   customCraft?: string;

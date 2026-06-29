@@ -3,6 +3,7 @@ import {
   buildElevationContentPlanMessages,
   buildElevationOutputs,
   ELEVATION_CRAFTS,
+  estimateElevationWallLength,
   normalizeElevationAnalysis,
   parseElevationContentPlanResponse,
   parseElevationAnalysisResponse,
@@ -38,6 +39,7 @@ export interface ElevationWall {
   exactText: string[];
   craftIds?: string[];
   craftNotes?: string;
+  approxLengthM?: number;
 }
 
 export interface ElevationContentPlan {
@@ -51,6 +53,7 @@ export {
   buildElevationContentPlanMessages,
   buildElevationOutputs,
   ELEVATION_CRAFTS,
+  estimateElevationWallLength,
   normalizeElevationAnalysis,
   parseElevationContentPlanResponse,
   parseElevationAnalysisResponse,

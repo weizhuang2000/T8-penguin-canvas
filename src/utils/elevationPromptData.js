@@ -23,6 +23,42 @@ function cleanList(value, maxItems = 12, maxChars = 1200) {
   return value.map((item) => cleanText(item, maxChars)).filter(Boolean).slice(0, maxItems);
 }
 
+function clampApproxLength(value, fallback = 0) {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num <= 0) return fallback;
+  return Math.max(1.2, Math.min(24, Math.round(num * 10) / 10));
+}
+
+function formatLength(value) {
+  return `${clampApproxLength(value, 1.2).toFixed(1)}m`;
+}
+
+function estimateWallLength(wall = {}) {
+  const title = cleanText(wall.title, 120);
+  const content = cleanText(wall.content, 2400);
+  const craftNotes = cleanText(wall.craftNotes, 1200);
+  const exact = cleanList(wall.exactText, 20, 500).join(' ');
+  const craftIds = cleanList(wall.craftIds, 12, 120);
+  const textWeight = title.length * 0.025 + content.length * 0.012 + exact.length * 0.018 + craftNotes.length * 0.01;
+  const craftWeight = Math.min(2.4, craftIds.length * 0.35 + (craftNotes ? 0.6 : 0));
+  return clampApproxLength(3.2 + textWeight + craftWeight, 3.6);
+}
+
+function wallLength(wall = {}) {
+  return clampApproxLength(wall.approxLengthM, estimateWallLength(wall));
+}
+
+export function estimateElevationWallLength(wall = {}) {
+  return wallLength(wall);
+}
+
+function normalizeWallLengthSummary(values, walls) {
+  const rangeStart = Math.max(1, Math.floor(Number(values.wallRangeStart) || 1));
+  const rangeEnd = Math.max(rangeStart, Math.floor(Number(values.wallRangeEnd) || (rangeStart + Math.max(0, walls.length - 1))));
+  const totalLengthM = Math.round(walls.reduce((sum, wall) => sum + wallLength(wall), 0) * 10) / 10;
+  return { rangeStart, rangeEnd, totalLengthM };
+}
+
 const SPACE_LIGHTING_LEVELS = {
   'very-dark': {
     label: '非常暗',
@@ -121,6 +157,7 @@ export function wallsFromAnalysis(analysisValue, mode = 'multi', count = 3) {
       exactText,
       craftIds: cleanList(bucket.flatMap((item) => item.suggestedCrafts || []), 8, 80),
       craftNotes: '',
+      approxLengthM: estimateWallLength({ title: titles.join(' '), content: focus || analysis.coreMessage, exactText }),
     };
   });
 }
@@ -176,6 +213,7 @@ function buildWallPrompt(values, wall, index, total) {
     `生成一张专业展陈彩立面平面设计概念图，第 ${index + 1}/${total} 面，正立面、无透视、完整展示墙面边界。`,
     `项目主题：${cleanText(values.analysis?.projectTheme || wall.title || '展陈主题')}`,
     `本面标题：${cleanText(wall.title || `立面 ${index + 1}`)}`,
+    `立面长度：约 ${formatLength(wallLength(wall))}`,
     `展示内容：${cleanText(wall.content || values.analysis?.coreMessage || '围绕项目主题进行图文信息设计')}`,
     `立面比例/尺寸：${cleanText(values.dimensions || values.aspectRatio || '横向展墙，比例协调')}`,
     `内容密度：${cleanText(values.density || '适中，主次分明，保留呼吸感')}`,
@@ -201,6 +239,7 @@ function buildWallSchedule(values, wall, index) {
   const exact = cleanList(wall.exactText, 20, 800);
   return [
     `立面 ${index + 1}｜${cleanText(wall.title || `立面 ${index + 1}`)}`,
+    `立面长度：约 ${formatLength(wallLength(wall))}`,
     `内容摘要：${cleanText(wall.content || values.analysis?.coreMessage || '待补充')}`,
     `准确文案：${exact.length ? exact.join(' / ') : '未提取关键原文，请人工补充最终上墙文案'}`,
     `工艺配置：${craftNotes || (craftLabels.length ? craftLabels.join('、') : '常规展板与图文喷绘')}`,
@@ -224,6 +263,8 @@ function normalizeContentPlan(value) {
         const craftIds = cleanList(item.craftIds || item.crafts || item.selectedCrafts, 12, 120);
         const craftNotes = cleanText(item.craftNotes || item.craftPlan || item.technique || '', 1200);
         if (!title && !content && !craftNotes && exactText.length === 0) return null;
+        const approxLengthM = clampApproxLength(item.approxLengthM || item.lengthM || item.wallLengthM, 0)
+          || estimateWallLength({ title, content, exactText, craftIds, craftNotes });
         return {
           id: cleanText(item.id || `wall-${index + 1}`, 80),
           title,
@@ -231,6 +272,7 @@ function normalizeContentPlan(value) {
           exactText,
           craftIds,
           craftNotes,
+          approxLengthM,
         };
       })
       .filter(Boolean)
@@ -273,10 +315,11 @@ export function buildElevationContentPlanMessages(values = {}) {
         '你是专业展陈策划与空间图文设计师。请直接根据用户内容生成可用于展陈效果图的展墙展示内容方案。',
         lightingPrecondition,
         '不要先做资料提炼说明，不要输出 Markdown，不要解释，只输出 JSON。',
-        'JSON 结构必须为：{"projectTheme":"项目主题","coreMessage":"核心叙事","walls":[{"id":"wall-1","title":"立面标题","content":"具体展示内容与画面组织描述","exactText":["建议清晰出现的短标题或关键词"],"craftIds":["从候选工艺 id 中选择本立面适合的若干项"],"craftNotes":"说明这些工艺如何服务具体内容"}]}。',
+        'JSON 结构必须为：{"projectTheme":"项目主题","coreMessage":"核心叙事","walls":[{"id":"wall-1","title":"立面标题","content":"具体展示内容与画面组织描述","exactText":["建议清晰出现的短标题或关键词"],"craftIds":["从候选工艺 id 中选择本立面适合的若干项"],"craftNotes":"说明这些工艺如何服务具体内容","approxLengthM":6.5}]}。',
         wallMode === 'auto'
           ? '立面数量：由你根据内容体量、叙事节奏和展墙连续性自动判断，输出 1 到 12 个连续立面；每个 walls 条目就是一个立面。'
           : `立面数量：${wallCount}；${wallMode === 'single' ? '只生成一个综合立面。' : '按内容自然分配为多个连续立面。'}`,
+        values.wallLengthMode === 'llm' ? '每个 walls 条目必须包含 approxLengthM，表示该立面大致长度，单位米，只写数字；请根据内容体量、展品密度、短文案数量和工艺复杂度估算，常规范围 3-12。' : '',
         '每个立面不需要使用全部候选工艺，只选择最合适的工艺。必须写清工艺如何承载具体内容，例如：用立体字展示标题、用图文展板展示青花瓷纹样、用沿墙文物柜展示青花瓷展品、用灯箱突出重点图像。',
         '不得虚构用户内容中没有的关键事实；可以把长内容转化为适合上墙的短标题、关键词、图文展示重点和展品展示方式。',
         `候选工艺：\n${craftTextForPrompt}`,
@@ -308,15 +351,23 @@ export function buildElevationOutputs(values = {}) {
     }];
   }
   if (walls.length === 0) walls = wallsFromAnalysis(analysis, mode, values.wallCount);
+  walls = walls.map((wall) => ({
+    ...wall,
+    approxLengthM: wallLength(wall),
+  }));
   const conceptPrompts = walls.map((wall, index) => buildWallPrompt({ ...values, analysis }, wall, index, walls.length));
   const scheduleSegments = walls.map((wall, index) => buildWallSchedule({ ...values, analysis }, wall, index));
+  const lengthSummary = normalizeWallLengthSummary(values, walls);
+  const rangeLengthLine = `当前效果图立面范围：第 ${lengthSummary.rangeStart}-${lengthSummary.rangeEnd} 面；范围总长度：约 ${formatLength(lengthSummary.totalLengthM)}`;
   const overviewPrompt = [
     `整套展陈彩立面设计，共 ${walls.length} 面，保持统一的视觉识别、网格、色彩、材质和工艺语言。`,
+    rangeLengthLine,
     ...conceptPrompts.map((prompt) => `\n${prompt}`),
   ].join('\n');
   const generatedLayoutSchedule = [
     `项目：${analysis.projectTheme || '未命名展陈项目'}`,
     `核心信息：${analysis.coreMessage || '待补充'}`,
+    rangeLengthLine,
     '',
     ...scheduleSegments,
   ].join('\n\n');
@@ -345,6 +396,8 @@ export function buildElevationOutputs(values = {}) {
     overviewPrompt,
     layoutSchedule,
     generatedLayoutSchedule,
+    wallLengthTotalM: lengthSummary.totalLengthM,
+    wallLengthSummary: rangeLengthLine,
     mainOutput,
     textSegments: useSegments ? segmentOutputs : [],
   };
