@@ -41,6 +41,26 @@ const KIND_META: Record<ResourceKind, { label: string; icon: typeof ImageIcon; a
   workflow: { label: '工作流', icon: Workflow, accent: '#60a5fa' },
 };
 
+const RESOURCE_GRID_COLUMN_STORAGE_KEY = 'penguin:resource-library-columns';
+const RESOURCE_GRID_COLUMN_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
+type ResourceGridColumnCount = (typeof RESOURCE_GRID_COLUMN_OPTIONS)[number];
+
+function normalizeResourceGridColumns(value: unknown): ResourceGridColumnCount {
+  const n = Number(value);
+  return RESOURCE_GRID_COLUMN_OPTIONS.includes(n as ResourceGridColumnCount)
+    ? (n as ResourceGridColumnCount)
+    : 2;
+}
+
+function readResourceGridColumns(): ResourceGridColumnCount {
+  if (typeof window === 'undefined') return 2;
+  try {
+    return normalizeResourceGridColumns(window.localStorage?.getItem(RESOURCE_GRID_COLUMN_STORAGE_KEY));
+  } catch {
+    return 2;
+  }
+}
+
 function resourceItemDragKind(item: ResourceItem) {
   return item.kind === 'panorama' ? 'image' : item.kind;
 }
@@ -246,6 +266,7 @@ export default function ResourceLibraryDrawer({ open, onClose, onInsertMaterial 
   const [batchUploading, setBatchUploading] = useState(false);
   const [msg, setMsg] = useState('');
   const [hoverPreview, setHoverPreview] = useState<{ src: string; title: string; left: number; top: number } | null>(null);
+  const [gridColumns, setGridColumns] = useState<ResourceGridColumnCount>(() => readResourceGridColumns());
   const batchInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = useCallback(async () => {
@@ -284,6 +305,15 @@ export default function ResourceLibraryDrawer({ open, onClose, onInsertMaterial 
     setCategoryId('all');
     setFavoriteOnly(false);
   }, [kind]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage?.setItem(RESOURCE_GRID_COLUMN_STORAGE_KEY, String(gridColumns));
+    } catch {
+      // Ignore private browsing or storage quota failures.
+    }
+  }, [gridColumns]);
 
   const activeMeta = KIND_META[kind];
   const ActiveIcon = activeMeta.icon;
@@ -490,9 +520,13 @@ export default function ResourceLibraryDrawer({ open, onClose, onInsertMaterial 
     color: isPixel ? '#dc2626' : '#dc2626',
   };
   const canBatchUpload = kind === 'image' || kind === 'panorama';
+  const drawerWidth = `min(calc(100vw - 18px), ${Math.max(440, 160 + gridColumns * 170)}px)`;
 
   return (
-    <div className={`resource-library-drawer fixed top-0 right-0 z-50 h-screen w-[440px] max-w-[calc(100vw-18px)] shadow-2xl flex flex-col ${panelCls}`}>
+    <div
+      className={`resource-library-drawer fixed top-0 right-0 z-50 h-screen shadow-2xl flex flex-col ${panelCls}`}
+      style={{ width: drawerWidth }}
+    >
       <div className={`h-[52px] px-4 py-3 flex items-center justify-between shrink-0 ${isPixel ? 'border-b-2 border-[var(--px-ink)] bg-[var(--px-muted)]' : isDark ? 'border-b border-white/10' : 'border-b border-black/10'}`}>
         <div className="flex items-center gap-2 min-w-0">
           <Library size={18} style={{ color: activeMeta.accent }} />
@@ -501,9 +535,39 @@ export default function ResourceLibraryDrawer({ open, onClose, onInsertMaterial 
             <div className={`text-[11px] mt-1 ${subtle}`}>{totalText}</div>
           </div>
         </div>
-        <button onClick={onClose} className={isPixel ? 't8-mini-icon-button px-btn px-btn--icon px-btn--ghost' : `t8-mini-icon-button h-9 w-9 p-0 rounded-md ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`} title="关闭">
-          <X size={16} />
-        </button>
+        <div className="ml-2 flex items-center gap-1 shrink-0 min-w-0">
+          <div
+            className={isPixel ? 'resource-library-column-control flex max-w-[240px] items-center gap-0.5 overflow-x-auto' : `resource-library-column-control flex max-w-[240px] items-center overflow-x-auto rounded-md border p-0.5 ${isDark ? 'border-white/10 bg-white/5' : 'border-black/10 bg-black/5'}`}
+            title="Columns"
+          >
+            {RESOURCE_GRID_COLUMN_OPTIONS.map((count) => (
+              <button
+                key={count}
+                type="button"
+                onClick={() => setGridColumns(count)}
+                className={
+                  isPixel
+                    ? `px-btn px-btn--sm min-w-7 ${gridColumns === count ? 'px-btn--yellow' : 'px-btn--ghost'}`
+                    : `h-7 min-w-7 rounded text-[11px] font-semibold transition ${
+                        gridColumns === count
+                          ? isDark
+                            ? 'bg-cyan-400 text-zinc-950'
+                            : 'bg-cyan-500 text-white'
+                          : isDark
+                            ? 'text-white/60 hover:bg-white/10'
+                            : 'text-zinc-500 hover:bg-black/10'
+                      }`
+                }
+                title={`${count} columns`}
+              >
+                {count}
+              </button>
+            ))}
+          </div>
+          <button onClick={onClose} className={isPixel ? 't8-mini-icon-button px-btn px-btn--icon px-btn--ghost' : `t8-mini-icon-button h-9 w-9 p-0 rounded-md ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`} title="Close">
+            <X size={16} />
+          </button>
+        </div>
       </div>
 
       <div className={`px-3 py-2 flex items-center gap-1.5 shrink-0 ${isPixel ? 'border-b-2 border-[var(--px-ink)]' : isDark ? 'border-b border-white/10' : 'border-b border-black/10'}`}>
@@ -665,7 +729,10 @@ export default function ResourceLibraryDrawer({ open, onClose, onInsertMaterial 
               <span className="mt-2">暂无资源</span>
             </div>
           )}
-          <div className="grid grid-cols-2 gap-2">
+          <div
+            className="grid gap-2"
+            style={{ gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))` }}
+          >
             {items.map((item) => {
               const isPortraitResource = isPortraitResourceItem(item);
               return (

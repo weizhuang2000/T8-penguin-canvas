@@ -260,3 +260,14 @@ test('resource library drawer supports batch image upload into selected category
   assert.match(drawer, /api\.addResourceItem\(\{/);
   assert.match(drawer, /categoryId:\s*targetCategoryId/);
 });
+
+test('resource library drawer exposes persisted grid column controls', () => {
+  const drawer = readFileSync(new URL('../src/components/ResourceLibraryDrawer.tsx', import.meta.url), 'utf8');
+
+  assert.match(drawer, /RESOURCE_GRID_COLUMN_STORAGE_KEY/);
+  assert.match(drawer, /penguin:resource-library-columns/);
+  assert.match(drawer, /resource-library-column-control/);
+  assert.match(drawer, /RESOURCE_GRID_COLUMN_OPTIONS\.map/);
+  assert.match(drawer, /setGridColumns\(count\)/);
+  assert.match(drawer, /gridTemplateColumns:\s*`repeat\(\$\{gridColumns\}, minmax\(0, 1fr\)\)`/);
+});
