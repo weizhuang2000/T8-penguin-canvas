@@ -1,7 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
 import { PORT_COLOR } from '../../config/portTypes';
-import { useCompactAttrs } from '../../stores/exhibitionCompact';
 import { ArrowDown, ArrowUp, Brain, FileText, Image as ImageIcon, Loader2, Palette, Play, Upload } from 'lucide-react';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
 import { extractDocument, getCurrentUser, getElevationPromptPresets, getUnitPanelMaterials, MAX_DOCUMENT_FILE_SIZE, MAX_DOCUMENT_FILE_SIZE_MB, updateUnitPanelMaterials, type AuthUser, type ElevationColorMaterialPresetItem, type ExtractedDocument, type UnitPanelMaterialItem } from '../../services/api';
@@ -198,7 +197,6 @@ function llmErrorMessage(error: any) {
 const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
-  const compactAttrs = useCompactAttrs(id, 'unit-panel-design');
   const fileRef = useRef<HTMLInputElement>(null);
   const pollAbortRef = useRef(false);
   const upstream = useUpstreamMaterials(id);
@@ -602,7 +600,6 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
 
   return (
     <div
-      {...compactAttrs}
       className={`relative w-[720px] rounded-xl border-2 transition-all ${selected ? 'border-cyan-300 shadow-2xl shadow-cyan-500/15' : 'border-white/15 hover:border-white/30'}`}
       style={{ background: 'rgba(17,24,39,.96)', backdropFilter: 'blur(8px)' }}
     >
@@ -622,7 +619,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
         {isReadonly && <div className="rounded border border-amber-300/30 bg-amber-300/10 px-2 py-1.5 text-[10px] text-amber-100">当前画布为只读，仅可查看结果。</div>}
         {d.error && <div className="rounded border border-red-300/25 bg-red-400/10 px-2 py-1.5 text-[10px] text-red-200">{d.error}</div>}
 
-        <section data-exhibition-compact-section="layout-size" className="grid grid-cols-2 gap-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section className="grid grid-cols-2 gap-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <label className="space-y-1">
             <span className="text-[10px] text-white/55">输出形态</span>
             <select className={FIELD} value={outputMode} disabled={isReadonly || busy} onChange={(e) => update({ outputMode: normalizeUnitPanelOutputMode(e.target.value) })}>
@@ -677,7 +674,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
           </label>
         </section>
 
-        <section data-exhibition-compact-section="prompt-outline" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><FileText size={13} /> 文本导入与提炼</div>
             <input ref={fileRef} type="file" className="hidden" accept=".txt,.md,.pdf,.docx" onChange={(e) => void pickDocument(e.target.files?.[0] || undefined)} />
@@ -712,7 +709,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
           </div>
         </section>
 
-        <section data-exhibition-compact-section="prompt-outline" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="text-[11px] font-semibold text-cyan-100">多语言排序</div>
           <div className="space-y-1">
             {languages.map((lang: string, index: number) => {
@@ -744,7 +741,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
           </select>
         </section>
 
-        <section data-exhibition-compact-section="craft-style" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center justify-between gap-2 rounded border border-cyan-300/20 bg-cyan-300/10 px-2 py-2">
             <div>
               <div className="text-[11px] font-semibold text-cyan-100">单元板数量</div>
@@ -796,7 +793,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
           </div>
         </section>
 
-        <section data-exhibition-compact-section="color-material" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center justify-between gap-2">
             <div className="text-[11px] font-semibold text-cyan-100">材质与字体</div>
             {canManageMaterials && <button type="button" className={BUTTON} onClick={() => setMaterialsOpen(true)}>编辑材质</button>}
@@ -845,7 +842,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
           ) : <div className="rounded border border-dashed border-white/15 p-2 text-center text-[10px] text-white/35">可连接色彩与材质参考图，自动读取主色调</div>}
         </section>
 
-        <section data-exhibition-compact-section="generate-action" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} /> 生图</div>
             <button type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy} onClick={() => void runGenerate()}><Play size={13} /> 生成单元板</button>

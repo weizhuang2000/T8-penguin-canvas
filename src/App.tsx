@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { LogOut, Moon, Settings, Sun, Wifi, WifiOff, Sparkles, Cloud, ExternalLink, Copy, Check, Gift, Heart, Youtube, PlayCircle, Bell, Wand2, Globe, MessageCircle, CalendarDays, Rocket, Key, Library, Palette, Skull, Sailboat, Clock3, UserCog } from 'lucide-react';
 import { useThemeStore } from './stores/theme';
 import { useApiKeysStore } from './stores/apiKeys';
-import { useExhibitionCompactStore } from './stores/exhibitionCompact';
 import { useShortcutStore } from './stores/shortcuts';
 import Sidebar from './components/Sidebar';
 import GenerationHistoryDrawer from './components/GenerationHistoryDrawer';
@@ -127,7 +126,6 @@ function InfiniteCanvasBootLoading() {
 function App() {
   const { theme, style, templateId, customTemplates, toggleTheme, loadCustomTemplates } = useThemeStore();
   const { load: loadSettings } = useApiKeysStore();
-  const setExhibitionCompactForm = useExhibitionCompactStore((s) => s.setExhibitionCompactForm);
   const shortcuts = useShortcutStore((s) => s.shortcuts);
   const currentTemplate = useMemo(
     () => resolveThemeTemplate(templateId, customTemplates),
@@ -252,11 +250,7 @@ function App() {
     if (!authUser) return;
     loadSettings();
     loadCustomTemplates();
-    // 同步精简窗体配置到 store
-    if (authUser.permissions?.exhibitionCompactForm) {
-      setExhibitionCompactForm(authUser.permissions.exhibitionCompactForm);
-    }
-  }, [authUser, loadSettings, loadCustomTemplates, setExhibitionCompactForm]);
+  }, [authUser, loadSettings, loadCustomTemplates]);
 
   // 资源库快捷键：未选中任何节点时打开 / 关闭资源库。输入框内不拦截，避免打断提示词编辑。
   useEffect(() => {

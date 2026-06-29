@@ -1,7 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, useReactFlow, type NodeProps } from '@xyflow/react';
 import { PORT_COLOR } from '../../config/portTypes';
-import { useCompactAttrs } from '../../stores/exhibitionCompact';
 import { Image as ImageIcon, Palette, Play, Settings, Shuffle } from 'lucide-react';
 import { IMAGE_MODELS } from '../../providers/models';
 import {
@@ -252,7 +251,6 @@ function ImageSlot({ title, subtitle, url }: { title: string; subtitle: string; 
 const ExhibitionStyleTransferNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
-  const compactAttrs = useCompactAttrs(id, 'exhibition-style-transfer');
   const rf = useReactFlow();
   const pollAbortRef = useRef(false);
   const originalImage = useInputImageByHandle(id, 'original-image');
@@ -626,7 +624,6 @@ const ExhibitionStyleTransferNode = ({ id, data, selected }: NodeProps) => {
 
   return (
     <div
-      {...compactAttrs}
       className={`relative w-[680px] rounded-xl border-2 transition-all ${
         selected ? 'border-cyan-300 shadow-2xl shadow-cyan-500/15' : 'border-white/15 hover:border-white/30'
       }`}
@@ -649,12 +646,12 @@ const ExhibitionStyleTransferNode = ({ id, data, selected }: NodeProps) => {
         {isReadonly && <div className="rounded border border-amber-300/30 bg-amber-300/10 px-2 py-1.5 text-[10px] text-amber-100">当前画布为只读，仅可查看结果。</div>}
         {d.error && <div className="rounded border border-red-300/25 bg-red-400/10 px-2 py-1.5 text-[10px] text-red-200">{d.error}</div>}
 
-        <section data-exhibition-compact-section="input-material" className="grid grid-cols-2 gap-2">
+        <section className="grid grid-cols-2 gap-2">
           <ImageSlot title="原始图像" subtitle="空间、展品、文字、展示手段和构图唯一依据" url={originalImage} />
           <ImageSlot title="设计风格参考图" subtitle={mode === 'style-reference' ? '只提取风格、色彩、材质、肌理和灯光氛围' : '当前模式会自动断开并清空此输入'} url={mode === 'style-reference' ? styleReferenceImage : ''} />
         </section>
 
-        <section data-exhibition-compact-section="craft-style" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100">
             <Palette size={13} /> 风格控制
           </div>
@@ -739,7 +736,7 @@ const ExhibitionStyleTransferNode = ({ id, data, selected }: NodeProps) => {
           )}
         </section>
 
-        <section data-exhibition-compact-section="generate-action" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} /> 生成</div>
             <button type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy} onClick={() => void runGenerate()}><Play size={13} /> 生成风格迁移</button>

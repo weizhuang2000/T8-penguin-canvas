@@ -14,14 +14,12 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNodes, useViewport, useReactFlow, type Node } from '@xyflow/react';
-import { Play, Square, X, Maximize2, Minimize2 } from 'lucide-react';
+import { Play, Square, X, Maximize2 } from 'lucide-react';
 import { useThemeStore } from '../stores/theme';
 import { useRunBusStore } from '../stores/runBus';
 import { useFullscreenNodeStore } from '../stores/fullscreenNode';
 import { trackAchievementEvent } from '../stores/achievements';
 import { useHiddenFeatureStore, isRhDuckUploadEnabled, isYyhPortraitEnabled } from '../stores/hiddenFeatures';
-import { useExhibitionCompactStore } from '../stores/exhibitionCompact';
-import { EXHIBITION_COMPACT_NODE_TYPE_SET } from '../config/exhibitionCompactForm';
 import { resolveThemeTemplate } from '../theme/defaultTemplates';
 import { getMediaItemsFromData } from '../utils/mediaCollection';
 
@@ -92,8 +90,6 @@ const NodeActionBar = () => {
   const clearRhDuckUpload = useHiddenFeatureStore((s) => s.clearRhDuckUpload);
   const toggleYyhPortrait = useHiddenFeatureStore((s) => s.toggleYyhPortrait);
   const setFullscreenNode = useFullscreenNodeStore((s) => s.setFullscreenNode);
-  const toggleCompact = useExhibitionCompactStore((s) => s.toggleCompact);
-  const isCompactActive = useExhibitionCompactStore((s) => s.isCompactActive);
   const holdTimerRef = useRef<number | null>(null);
   const suppressClickRef = useRef(false);
   const [holdArmed, setHoldArmed] = useState(false);
@@ -272,7 +268,7 @@ const NodeActionBar = () => {
       : actionColors.run;
 
   // 按钮通用样式生成器
-  const mkBtn = (kind: 'run' | 'stop' | 'close' | 'fullscreen' | 'compact'): React.CSSProperties => {
+  const mkBtn = (kind: 'run' | 'stop' | 'close' | 'fullscreen'): React.CSSProperties => {
     const color =
       kind === 'run'
         ? runColor
@@ -280,8 +276,6 @@ const NodeActionBar = () => {
           ? actionColors.stop
           : kind === 'fullscreen'
             ? (isDark ? '#a78bfa' : '#7c3aed')
-          : kind === 'compact'
-            ? (isDark ? '#f59e0b' : '#d97706')
             : actionColors.close;
     if (isPixel) {
       return {
@@ -324,16 +318,16 @@ const NodeActionBar = () => {
   };
 
   // hover 增强
-  const onEnter = (e: React.MouseEvent, kind: 'run' | 'stop' | 'close' | 'fullscreen' | 'compact') => {
+  const onEnter = (e: React.MouseEvent, kind: 'run' | 'stop' | 'close' | 'fullscreen') => {
     const color =
-      kind === 'run' ? runColor : kind === 'stop' ? actionColors.stop : kind === 'fullscreen' ? (isDark ? '#a78bfa' : '#7c3aed') : kind === 'compact' ? (isDark ? '#f59e0b' : '#d97706') : actionColors.close;
+      kind === 'run' ? runColor : kind === 'stop' ? actionColors.stop : kind === 'fullscreen' ? (isDark ? '#a78bfa' : '#7c3aed') : actionColors.close;
     if (isPixel) return;
     (e.currentTarget as HTMLElement).style.background = `${color}33`;
     (e.currentTarget as HTMLElement).style.borderColor = color;
   };
-  const onLeave = (e: React.MouseEvent, kind: 'run' | 'stop' | 'close' | 'fullscreen' | 'compact') => {
+  const onLeave = (e: React.MouseEvent, kind: 'run' | 'stop' | 'close' | 'fullscreen') => {
     const color =
-      kind === 'run' ? runColor : kind === 'stop' ? actionColors.stop : kind === 'fullscreen' ? (isDark ? '#a78bfa' : '#7c3aed') : kind === 'compact' ? (isDark ? '#f59e0b' : '#d97706') : actionColors.close;
+      kind === 'run' ? runColor : kind === 'stop' ? actionColors.stop : kind === 'fullscreen' ? (isDark ? '#a78bfa' : '#7c3aed') : actionColors.close;
     if (isPixel) return;
     (e.currentTarget as HTMLElement).style.background =
       kind === 'run'
@@ -411,23 +405,6 @@ const NodeActionBar = () => {
           >
             <Play size={12} fill="currentColor" />
             <span>RUN</span>
-          </button>
-        )}
-
-        {/* 精简窗体 (仅展陈节点) */}
-        {selectedExe.type && EXHIBITION_COMPACT_NODE_TYPE_SET.has(selectedExe.type) && (
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); toggleCompact(selectedExe.id); }}
-            onMouseEnter={(e) => onEnter(e, 'compact')}
-            onMouseLeave={(e) => onLeave(e, 'compact')}
-            title={isCompactActive(selectedExe.id) ? '退出精简窗体' : '精简窗体'}
-            style={{
-              ...mkBtn('compact'),
-              ...(isCompactActive(selectedExe.id) ? { background: isPixel ? (isDark ? '#f59e0b' : '#d97706') : `${isDark ? '#f59e0b' : '#d97706'}33`, borderColor: isDark ? '#f59e0b' : '#d97706' } : {}),
-            }}
-          >
-            <Minimize2 size={12} />
           </button>
         )}
 

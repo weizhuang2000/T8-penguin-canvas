@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, Loader2, Minimize2, Search, Shield, UserCog, X } from 'lucide-react';
+import { Check, Loader2, Search, Shield, UserCog, X } from 'lucide-react';
 import { NODE_GROUPS, NODE_REGISTRY } from '../config/nodeRegistry';
-import { EXHIBITION_COMPACT_NODES, defaultExhibitionCompactForm } from '../config/exhibitionCompactForm';
-import { useExhibitionCompactStore } from '../stores/exhibitionCompact';
 import * as api from '../services/api';
 import type { AuthUser, ToolPermissionRule, ToolPermissionsConfig } from '../services/api';
 import type { NodeType } from '../types/canvas';
@@ -60,10 +58,9 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
   const [message, setMessage] = useState('');
   const [query, setQuery] = useState('');
   const [config, setConfig] = useState<ToolPermissionsConfig | null>(null);
-  const [activeMode, setActiveMode] = useState<'role' | 'user' | 'compact'>('role');
+  const [activeMode, setActiveMode] = useState<'role' | 'user'>('role');
   const [activeRole, setActiveRole] = useState('designer');
   const [activeUserId, setActiveUserId] = useState('');
-  const [activeCompactNode, setActiveCompactNode] = useState(EXHIBITION_COMPACT_NODES[0]?.nodeType || '');
 
   const users = config?.users || [];
   const activeUser = users.find((user) => user.id === activeUserId) || users[0] || null;
@@ -78,10 +75,6 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
   const activeTypes = resolvedTypes(editingRule, inheritedTypes);
   const activeTypeSet = useMemo(() => new Set(activeTypes), [activeTypes]);
 
-  // 精简窗体配置本地编辑状态
-  const [compactForm, setCompactForm] = useState<Record<string, string[]>>(() => defaultExhibitionCompactForm());
-  const setExhibitionCompactForm = useExhibitionCompactStore((s) => s.setExhibitionCompactForm);
-
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -91,7 +84,6 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
       .then((data) => {
         if (cancelled) return;
         setConfig(data);
-        if (data.exhibitionCompactForm) setCompactForm(data.exhibitionCompactForm);
         if (!activeUserId && data.users?.[0]) setActiveUserId(data.users[0].id);
       })
       .catch((e) => {
@@ -119,20 +111,6 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
 
   const resetToInherit = () => patchRule(defaultRule());
 
-  const toggleCompactSection = (nodeType: string, sectionId: string) => {
-    setCompactForm((prev) => {
-      const current = prev[nodeType] || defaultExhibitionCompactForm()[nodeType] || [];
-      const next = current.includes(sectionId)
-        ? current.filter((id) => id !== sectionId)
-        : [...current, sectionId];
-      return { ...prev, [nodeType]: next };
-    });
-  };
-
-  const setAllCompactSections = (nodeType: string, sectionIds: string[]) => {
-    setCompactForm((prev) => ({ ...prev, [nodeType]: sectionIds }));
-  };
-
   const save = async () => {
     if (!config) return;
     setSaving(true);
@@ -140,12 +118,10 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
     try {
       const saved = await api.updateToolPermissions({
         defaultVisibleNodeTypes: config.defaultVisibleNodeTypes,
-        exhibitionCompactForm: compactForm,
         roleRules: config.roleRules,
         userRules: config.userRules,
       });
       setConfig({ ...config, ...saved });
-      setExhibitionCompactForm(compactForm);
       setMessage('权限已保存');
       await onPermissionsChanged?.();
     } catch (e: any) {
@@ -187,7 +163,6 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
             <div className="mb-3 flex gap-1">
               <button className={`${btnCls} flex-1 ${activeMode === 'role' ? 'bg-emerald-500/15 text-emerald-300' : ''}`} onClick={() => setActiveMode('role')} type="button">角色</button>
               <button className={`${btnCls} flex-1 ${activeMode === 'user' ? 'bg-emerald-500/15 text-emerald-300' : ''}`} onClick={() => setActiveMode('user')} type="button">个人</button>
-              <button className={`${btnCls} flex-1 ${activeMode === 'compact' ? 'bg-amber-500/15 text-amber-300' : ''}`} onClick={() => setActiveMode('compact')} type="button"><Minimize2 size={12} className="mr-0.5 inline" />精简</button>
             </div>
 
             {activeMode === 'role' ? (
@@ -198,7 +173,7 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
                   </button>
                 ))}
               </div>
-            ) : activeMode === 'user' ? (
+            ) : (
               <>
                 <div className="relative mb-2">
                   <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 opacity-55" />
@@ -219,124 +194,61 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
                   {!loading && users.length === 0 && <div className="px-2 py-3 text-xs opacity-55">没有匹配用户</div>}
                 </div>
               </>
-            ) : (
-              <div className="space-y-1">
-                {EXHIBITION_COMPACT_NODES.map((node) => (
-                  <button key={node.nodeType} className={`${btnCls} w-full justify-start text-left ${activeCompactNode === node.nodeType ? 'bg-amber-500/15 text-amber-300' : ''}`} onClick={() => setActiveCompactNode(node.nodeType)} type="button">
-                    <Minimize2 size={13} className="mr-1 inline" /> {node.nodeLabel}
-                  </button>
-                ))}
-              </div>
             )}
           </aside>
 
           <main className="min-h-0 overflow-y-auto p-4">
-            {activeMode === 'compact' ? (
-              <>
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold">
-                      精简窗体配置
-                    </div>
-                    <div className={`text-[11px] ${isDark ? 'text-white/45' : 'text-zinc-500'}`}>
-                      配置展陈节点精简模式下允许显示的功能区块
-                    </div>
-                  </div>
-                  <button className={primaryCls} type="button" onClick={save} disabled={saving || loading || !config}>
-                    {saving ? <Loader2 size={13} className="mr-1 inline animate-spin" /> : <Check size={13} className="mr-1 inline" />}
-                    保存
-                  </button>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold">
+                  {activeMode === 'role' ? `角色: ${activeRole}` : `个人: ${activeUser?.name || activeUser?.username || '-'}`}
                 </div>
-
-                {message && <div className={`mb-3 rounded-md px-3 py-2 text-xs ${isDark ? 'bg-white/10 text-white/70' : 'bg-black/5 text-zinc-600'}`}>{message}</div>}
-
-                {(() => {
-                  const nodeDef = EXHIBITION_COMPACT_NODES.find((n) => n.nodeType === activeCompactNode);
-                  if (!nodeDef) return <div className="text-xs opacity-55">请从左侧选择展陈节点</div>;
-                  const allowed = new Set(compactForm[activeCompactNode] || defaultExhibitionCompactForm()[activeCompactNode] || []);
-                  return (
-                    <section className={`rounded-md border p-4 ${isDark ? 'border-white/10 bg-white/[0.03]' : 'border-black/10 bg-black/[0.02]'}`}>
-                      <div className="mb-3 flex items-center gap-2">
-                        <Minimize2 size={14} className="text-amber-400" />
-                        <div className="flex-1 text-xs font-semibold">{nodeDef.nodeLabel} · {allowed.size}/{nodeDef.sections.length}</div>
-                        <button className={btnCls} type="button" onClick={() => setAllCompactSections(activeCompactNode, nodeDef.sections.map((s) => s.id))}>全选</button>
-                        <button className={btnCls} type="button" onClick={() => setAllCompactSections(activeCompactNode, [])}>全不选</button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-4">
-                        {nodeDef.sections.map((sec) => {
-                          const checked = allowed.has(sec.id);
-                          return (
-                            <label key={sec.id} className={`flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 text-xs ${checked ? 'border-amber-400/50 bg-amber-500/10' : isDark ? 'border-white/10 bg-black/10' : 'border-black/10 bg-white'}`}>
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => toggleCompactSection(activeCompactNode, sec.id)}
-                              />
-                              <span className="min-w-0 flex-1 truncate">{sec.label}</span>
-                              <span className="truncate text-[10px] opacity-45">{sec.id}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </section>
-                  );
-                })()}
-              </>
-            ) : (
-              <>
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold">
-                      {activeMode === 'role' ? `角色: ${activeRole}` : `个人: ${activeUser?.name || activeUser?.username || '-'}`}
-                    </div>
-                    <div className={`text-[11px] ${isDark ? 'text-white/45' : 'text-zinc-500'}`}>
-                      {editingRule?.mode === 'custom' ? `自定义 ${activeTypes.length} 个工具` : `继承 ${inheritedTypes.length} 个工具`}
-                    </div>
-                  </div>
-                  <button className={btnCls} type="button" onClick={() => patchRule(customRule(activeTypes))}>转为自定义</button>
-                  <button className={btnCls} type="button" onClick={resetToInherit}>继承默认</button>
-                  <button className={primaryCls} type="button" onClick={save} disabled={saving || loading || !config}>
-                    {saving ? <Loader2 size={13} className="mr-1 inline animate-spin" /> : <Check size={13} className="mr-1 inline" />}
-                    保存
-                  </button>
+                <div className={`text-[11px] ${isDark ? 'text-white/45' : 'text-zinc-500'}`}>
+                  {editingRule?.mode === 'custom' ? `自定义 ${activeTypes.length} 个工具` : `继承 ${inheritedTypes.length} 个工具`}
                 </div>
+              </div>
+              <button className={btnCls} type="button" onClick={() => patchRule(customRule(activeTypes))}>转为自定义</button>
+              <button className={btnCls} type="button" onClick={resetToInherit}>继承默认</button>
+              <button className={primaryCls} type="button" onClick={save} disabled={saving || loading || !config}>
+                {saving ? <Loader2 size={13} className="mr-1 inline animate-spin" /> : <Check size={13} className="mr-1 inline" />}
+                保存
+              </button>
+            </div>
 
-                {message && <div className={`mb-3 rounded-md px-3 py-2 text-xs ${isDark ? 'bg-white/10 text-white/70' : 'bg-black/5 text-zinc-600'}`}>{message}</div>}
-                {loading && <div className="text-xs opacity-55">加载中...</div>}
+            {message && <div className={`mb-3 rounded-md px-3 py-2 text-xs ${isDark ? 'bg-white/10 text-white/70' : 'bg-black/5 text-zinc-600'}`}>{message}</div>}
+            {loading && <div className="text-xs opacity-55">加载中...</div>}
 
-                <div className="space-y-3">
-                  {Object.entries(NODE_GROUPS).map(([key, group]) => {
-                    const groupTypes = group.nodes.map((node) => node.type);
-                    const checkedCount = groupTypes.filter((type) => activeTypeSet.has(type)).length;
-                    return (
-                      <section key={key} className={`rounded-md border p-3 ${isDark ? 'border-white/10 bg-white/[0.03]' : 'border-black/10 bg-black/[0.02]'}`}>
-                        <div className="mb-2 flex items-center gap-2">
-                          <div className="flex-1 text-xs font-semibold">{group.label} · {checkedCount}/{groupTypes.length}</div>
-                          <button className={btnCls} type="button" onClick={() => patchRule(applyGroup(editingRule, inheritedTypes, groupTypes, true))}>全选</button>
-                          <button className={btnCls} type="button" onClick={() => patchRule(applyGroup(editingRule, inheritedTypes, groupTypes, false))}>全不选</button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-4">
-                          {group.nodes.map((node) => {
-                            const checked = activeTypeSet.has(node.type);
-                            return (
-                              <label key={node.type} className={`flex min-w-0 cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 text-xs ${checked ? 'border-emerald-400/50 bg-emerald-500/10' : isDark ? 'border-white/10 bg-black/10' : 'border-black/10 bg-white'}`}>
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() => patchRule(toggleType(editingRule, inheritedTypes, node.type))}
-                                />
-                                <span className="min-w-0 flex-1 truncate">{node.label}</span>
-                                <span className="truncate text-[10px] opacity-45">{node.type}</span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </section>
-                    );
-                  })}
-                </div>
-              </>
-            )}
+            <div className="space-y-3">
+              {Object.entries(NODE_GROUPS).map(([key, group]) => {
+                const groupTypes = group.nodes.map((node) => node.type);
+                const checkedCount = groupTypes.filter((type) => activeTypeSet.has(type)).length;
+                return (
+                  <section key={key} className={`rounded-md border p-3 ${isDark ? 'border-white/10 bg-white/[0.03]' : 'border-black/10 bg-black/[0.02]'}`}>
+                    <div className="mb-2 flex items-center gap-2">
+                      <div className="flex-1 text-xs font-semibold">{group.label} · {checkedCount}/{groupTypes.length}</div>
+                      <button className={btnCls} type="button" onClick={() => patchRule(applyGroup(editingRule, inheritedTypes, groupTypes, true))}>全选</button>
+                      <button className={btnCls} type="button" onClick={() => patchRule(applyGroup(editingRule, inheritedTypes, groupTypes, false))}>全不选</button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-4">
+                      {group.nodes.map((node) => {
+                        const checked = activeTypeSet.has(node.type);
+                        return (
+                          <label key={node.type} className={`flex min-w-0 cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 text-xs ${checked ? 'border-emerald-400/50 bg-emerald-500/10' : isDark ? 'border-white/10 bg-black/10' : 'border-black/10 bg-white'}`}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => patchRule(toggleType(editingRule, inheritedTypes, node.type))}
+                            />
+                            <span className="min-w-0 flex-1 truncate">{node.label}</span>
+                            <span className="truncate text-[10px] opacity-45">{node.type}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
           </main>
         </div>
       </div>

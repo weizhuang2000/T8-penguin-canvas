@@ -5,17 +5,6 @@ html[data-theme-template] #root {
   font-family: var(--t8-font-family);
 }
 
-/* ── 展陈节点精简窗体 ── */
-/* 精简模式激活时，未在白名单中的 section 隐藏 */
-[data-exhibition-compact-active="true"]:not([data-exhibition-compact-allowed-sections*="input-material"]) [data-exhibition-compact-section="input-material"] { display: none !important; }
-[data-exhibition-compact-active="true"]:not([data-exhibition-compact-allowed-sections*="prompt-outline"]) [data-exhibition-compact-section="prompt-outline"] { display: none !important; }
-[data-exhibition-compact-active="true"]:not([data-exhibition-compact-allowed-sections*="craft-style"]) [data-exhibition-compact-section="craft-style"] { display: none !important; }
-[data-exhibition-compact-active="true"]:not([data-exhibition-compact-allowed-sections*="color-material"]) [data-exhibition-compact-section="color-material"] { display: none !important; }
-[data-exhibition-compact-active="true"]:not([data-exhibition-compact-allowed-sections*="layout-size"]) [data-exhibition-compact-section="layout-size"] { display: none !important; }
-[data-exhibition-compact-active="true"]:not([data-exhibition-compact-allowed-sections*="model-params"]) [data-exhibition-compact-section="model-params"] { display: none !important; }
-[data-exhibition-compact-active="true"]:not([data-exhibition-compact-allowed-sections*="generate-action"]) [data-exhibition-compact-section="generate-action"] { display: none !important; }
-[data-exhibition-compact-active="true"]:not([data-exhibition-compact-allowed-sections*="result-preview"]) [data-exhibition-compact-section="result-preview"] { display: none !important; }
-
 html[data-theme-template] ::selection {
   background: var(--t8-accent);
   color: var(--t8-accent-text);

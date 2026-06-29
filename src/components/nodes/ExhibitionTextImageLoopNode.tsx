@@ -1,7 +1,6 @@
 import { memo, useCallback, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Handle, Position, useReactFlow, type Edge, type Node, type NodeProps } from '@xyflow/react';
 import { AlertCircle, GitBranch, Image as ImageIcon, Layers, Loader2, Play, Repeat2, Square, Type } from 'lucide-react';
-import { useCompactAttrs } from '../../stores/exhibitionCompact';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useRunBusStore } from '../../stores/runBus';
 import { useThemeStore } from '../../stores/theme';
@@ -205,7 +204,6 @@ const PAIRING_OPTIONS: Array<{ id: PairingMode; label: string; title: string }> 
 const ExhibitionTextImageLoopNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
-  const compactAttrs = useCompactAttrs(id, 'exhibition-text-image-loop');
   const rf = useReactFlow();
   const { theme, style } = useThemeStore();
   const isDark = theme === 'dark';
@@ -617,7 +615,7 @@ const ExhibitionTextImageLoopNode = ({ id, data, selected }: NodeProps) => {
   const stopButton: CSSProperties = { ...primaryButton, background: isPixel ? 'var(--px-peach)' : '#ef4444', color: isPixel ? 'var(--px-ink)' : '#fff' };
 
   return (
-    <div {...compactAttrs} className="relative" style={containerStyle}>
+    <div className="relative" style={containerStyle}>
       <Handle id="text" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '34%', left: -6, background: PORT_COLOR.text }} title="输入：文本素材集" />
       <Handle id="image" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '58%', left: -6, background: PORT_COLOR.image }} title="输入：图像素材集" />
       <Handle id="text" type="source" position={Position.Right} className="!h-3 !w-3 !border-0" style={{ top: '38%', right: -6, background: PORT_COLOR.text }} title="输出：文本" />

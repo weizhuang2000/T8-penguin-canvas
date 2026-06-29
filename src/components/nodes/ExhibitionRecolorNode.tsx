@@ -1,7 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
 import { PORT_COLOR } from '../../config/portTypes';
-import { useCompactAttrs } from '../../stores/exhibitionCompact';
 import { ChevronDown, ChevronRight, FileText, Image as ImageIcon, Loader2, Palette, Play, Settings, SlidersHorizontal, X } from 'lucide-react';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
 import {
@@ -591,7 +590,6 @@ function ImageSlot({ url }: { url: string }) {
 const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
-  const compactAttrs = useCompactAttrs(id, 'exhibition-recolor');
   const pollAbortRef = useRef(false);
   const originalImage = useInputImageByHandle(id, 'original-image');
   const activeCanvas = useCanvasStore((state) => state.canvases.find((canvas) => canvas.id === state.activeId) || null);
@@ -1009,7 +1007,6 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
 
   return (
     <div
-      {...compactAttrs}
       className={`relative w-[640px] rounded-xl border-2 transition-all ${
         selected ? 'border-cyan-300 shadow-2xl shadow-cyan-500/15' : 'border-white/15 hover:border-white/30'
       }`}
@@ -1033,7 +1030,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
 
         <ImageSlot url={originalImage} />
 
-        <section data-exhibition-compact-section="color-material" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><Palette size={13} /> 色调</div>
             <label className="ml-auto inline-flex items-center gap-1.5 text-[10px] text-white/65">
@@ -1084,7 +1081,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
           </label>
         </section>
 
-        <section data-exhibition-compact-section="layout-size" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><SlidersHorizontal size={13} /> 地面与天花板</div>
           </div>
@@ -1122,7 +1119,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
           </div>
         </section>
 
-        <section data-exhibition-compact-section="craft-style" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><SlidersHorizontal size={13} /> 保护排除项</div>
             {canManageTeam && (
@@ -1158,7 +1155,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
           />
         </section>
 
-        <section data-exhibition-compact-section="generate-action" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} /> 生成</div>
             <button type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy || !originalImage} onClick={() => void runGenerate()}><Play size={13} /> 生成换色图</button>
