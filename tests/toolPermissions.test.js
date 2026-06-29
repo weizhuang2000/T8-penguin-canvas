@@ -105,6 +105,24 @@ test('tool permissions keep exhibition text-image loop grants when saved from us
   assert.equal(permissions.canUseNode({ id: 'u2', role: 'designer' }, 'exhibition-text-image-loop', db), true);
 }));
 
+test('tool permissions keep render-to-elevation grants when saved from user management', () => withTempData(() => {
+  permissions.writeDb({
+    defaultVisibleNodeTypes: ['text'],
+    roleRules: {
+      designer: { mode: 'custom', allowedNodeTypes: ['exhibition-render-to-elevation'], deniedNodeTypes: [] },
+    },
+    userRules: {},
+  });
+
+  const db = permissions.readDb();
+  const resolved = permissions.resolveToolPermissions({ id: 'u2', role: 'designer' }, db);
+  assert.equal(permissions.ALL_NODE_TYPES.includes('exhibition-render-to-elevation'), true);
+  assert.equal(permissions.DEFAULT_VISIBLE_NODE_TYPES.includes('exhibition-render-to-elevation'), true);
+  assert.deepEqual(db.roleRules.designer.allowedNodeTypes, ['exhibition-render-to-elevation']);
+  assert.equal(resolved.visibleNodeTypes.includes('exhibition-render-to-elevation'), true);
+  assert.equal(permissions.canUseNode({ id: 'u2', role: 'designer' }, 'exhibition-render-to-elevation', db), true);
+}));
+
 test('tool permissions default exhibition compact form for old configs', () => withTempData(() => {
   permissions.writeDb({
     defaultVisibleNodeTypes: ['text'],

@@ -7,12 +7,14 @@ test('render to elevation node is registered in canvas, ports, types and sidebar
   const ports = readFileSync(new URL('../src/config/portTypes.ts', import.meta.url), 'utf8');
   const registry = readFileSync(new URL('../src/config/nodeRegistry.ts', import.meta.url), 'utf8');
   const canvas = readFileSync(new URL('../src/components/Canvas.tsx', import.meta.url), 'utf8');
+  const permissions = readFileSync(new URL('../backend/src/auth/toolPermissions.js', import.meta.url), 'utf8');
   assert.match(types, /'exhibition-render-to-elevation'/);
   assert.match(ports, /'exhibition-render-to-elevation':\s*\{\s*inputs:\s*\['text', 'image'\],\s*outputs:\s*\['image'\]\s*\}/);
   assert.match(registry, /type: 'exhibition-render-to-elevation'/);
   assert.match(registry, /效果图转立面/);
   assert.match(canvas, /import ExhibitionRenderToElevationNode/);
   assert.match(canvas, /'exhibition-render-to-elevation': ExhibitionRenderToElevationNode/);
+  assert.match(permissions, /'exhibition-render-to-elevation'/);
 });
 
 test('render to elevation node default data includes model and result fields', () => {
@@ -42,4 +44,18 @@ test('render to elevation component exposes text and image handles', () => {
   assert.match(node, /buildRenderToElevationImagePrompt/);
   assert.match(node, /submitImageAsync/);
   assert.match(node, /generateExternalImage/);
+});
+
+test('render to elevation node supports action bar, compact form and canvas dragging', () => {
+  const node = readFileSync(new URL('../src/components/nodes/ExhibitionRenderToElevationNode.tsx', import.meta.url), 'utf8');
+  const actionBar = readFileSync(new URL('../src/components/NodeActionBar.tsx', import.meta.url), 'utf8');
+  const compact = readFileSync(new URL('../src/config/exhibitionCompactForm.ts', import.meta.url), 'utf8');
+  const backendCompact = readFileSync(new URL('../backend/src/auth/exhibitionCompactForm.js', import.meta.url), 'utf8');
+  assert.match(actionBar, /'exhibition-render-to-elevation'/);
+  assert.match(compact, /nodeType: 'exhibition-render-to-elevation'/);
+  assert.match(backendCompact, /nodeType: 'exhibition-render-to-elevation'/);
+  assert.match(node, /data-exhibition-compact-section="input"/);
+  assert.match(node, /data-exhibition-compact-section="model"/);
+  assert.match(node, /data-exhibition-compact-section="result"/);
+  assert.doesNotMatch(node, /<div className="nodrag nopan space-y-3 p-3 text-white">/);
 });

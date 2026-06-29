@@ -73,6 +73,15 @@ const EXHIBITION_COMPACT_FORM_DEFINITIONS = [
     ],
   },
   {
+    nodeType: 'exhibition-render-to-elevation',
+    label: '??????',
+    sections: [
+      { id: 'input', label: '????' },
+      { id: 'model', label: '????' },
+      { id: 'result', label: '????' },
+    ],
+  },
+  {
     nodeType: 'exhibition-text-image-loop',
     label: '图文循环器',
     sections: [

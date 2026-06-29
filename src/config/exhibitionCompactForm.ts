@@ -61,6 +61,11 @@ export const EXHIBITION_COMPACT_FORM_DEFINITIONS: ExhibitionCompactNodeDefinitio
     { id: 'prompt', label: '提示词' },
     { id: 'result', label: '结果预览' },
   ] },
+  { nodeType: 'exhibition-render-to-elevation', label: '效果图转立面', sections: [
+    { id: 'input', label: '输入素材' },
+    { id: 'model', label: '模型参数' },
+    { id: 'result', label: '立面结果' },
+  ] },
   { nodeType: 'exhibition-text-image-loop', label: '图文循环器', sections: [
     { id: 'input', label: '输入素材' },
     { id: 'pairing', label: '配对模式' },

@@ -423,7 +423,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
       <Handle id="document-text" type="target" position={Position.Left} className="!border-0" style={{ top: '30%', background: PORT_COLOR.text }} title="输入：立面文本" />
       <Handle id="reference-image" type="target" position={Position.Left} className="!border-0" style={{ top: '58%', background: PORT_COLOR.image }} title="输入：效果图参考" />
 
-      <div className="nodrag nopan space-y-3 p-3 text-white">
+      <div className="space-y-3 p-3 text-white">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-sm font-semibold">
@@ -437,7 +437,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
           <div className="rounded bg-white/[0.06] px-2 py-1 text-[10px] text-white/60">{status}</div>
         </div>
 
-        <div className="grid grid-cols-[112px_1fr] gap-2 text-[11px]">
+        <div className="nodrag nopan grid grid-cols-[112px_1fr] gap-2 text-[11px]" data-exhibition-compact-section="input">
           <div className="rounded border border-white/10 bg-black/15 p-2">
             <div className="mb-1 text-white/50">立面文本</div>
             <div className="line-clamp-4 text-white/75">{sourceText || '接入文本素材'}</div>
@@ -454,7 +454,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="nodrag nopan grid grid-cols-2 gap-2" data-exhibition-compact-section="model">
           <label className="space-y-1">
             <span className="text-[10px] text-white/45">LLM Key</span>
             <select
@@ -570,7 +570,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
           </label>
         </div>
 
-        <label className="block space-y-1">
+        <label className="nodrag nopan block space-y-1" data-exhibition-compact-section="model">
           <span className="text-[10px] text-white/45">补充要求</span>
           <textarea
             className={`${FIELD} min-h-[54px] resize-y`}
@@ -582,7 +582,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
         </label>
 
         {parsedElevations.length > 0 && (
-          <div className="rounded border border-white/10 bg-black/15 p-2">
+          <div className="nodrag nopan rounded border border-white/10 bg-black/15 p-2" data-exhibition-compact-section="result">
             <div className="mb-1 text-[10px] text-white/45">已识别立面</div>
             <div className="flex flex-wrap gap-1">
               {parsedElevations.map((item: RenderToElevationSection) => (
@@ -595,7 +595,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
         )}
 
         {outputImageUrls.length > 0 && (
-          <div className="grid grid-cols-3 gap-2">
+          <div className="nodrag nopan grid grid-cols-3 gap-2" data-exhibition-compact-section="result">
             {outputImageUrls.map((url: string, index: number) => (
               <div key={`${url}-${index}`} className="overflow-hidden rounded border border-white/10 bg-black/20">
                 <img src={url} alt={outputImageNames[index] || `立面${index + 1}`} className="h-24 w-full object-cover" draggable={false} />
@@ -606,12 +606,12 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
         )}
 
         {(d.progress || d.error) && (
-          <div className={`rounded px-2 py-1 text-[10px] ${d.error ? 'bg-red-500/10 text-red-200' : 'bg-cyan-400/10 text-cyan-100'}`}>
+          <div className={`nodrag nopan rounded px-2 py-1 text-[10px] ${d.error ? 'bg-red-500/10 text-red-200' : 'bg-cyan-400/10 text-cyan-100'}`} data-exhibition-compact-section="result">
             {d.error || d.progress}
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-2">
+        <div className="nodrag nopan flex items-center justify-between gap-2" data-exhibition-compact-section="result">
           <button
             type="button"
             className={BUTTON}
@@ -639,7 +639,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
         </div>
 
         {isGenerating && (
-          <div className="flex items-center gap-2 text-[10px] text-cyan-100">
+          <div className="nodrag nopan flex items-center gap-2 text-[10px] text-cyan-100" data-exhibition-compact-section="result">
             <Loader2 size={12} className="animate-spin" />
             {d.progress || '处理中'}
           </div>
