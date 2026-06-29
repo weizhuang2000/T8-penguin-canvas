@@ -479,7 +479,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
   useRunTrigger(id, runSplit, 'text');
 
   return (
-    <div className={`t8-node relative w-[620px] transition-all ${selected ? 'ring-2 ring-cyan-300' : ''}`}>
+    <div data-exhibition-compact-node-type="exhibition-outline-split" className={`t8-node relative w-[620px] transition-all ${selected ? 'ring-2 ring-cyan-300' : ''}`}>
       <Handle type="target" position={Position.Left} className="!border-0" style={{ background: PORT_COLOR.text }} title="输入：展陈资料文档文本（DOCX/PDF/TXT 或直接粘贴）" />
       <Handle id={OUTLINE_TEXT_HANDLE} type="source" position={Position.Right} className="!border-0" style={{ top: '42%', background: PORT_COLOR.text }} title="输出：拆分后的大纲文本段（可连接多个下游节点）" />
       <Handle id={OUTLINE_IMAGE_HANDLE} type="source" position={Position.Right} className="!border-0" style={{ top: '58%', background: PORT_COLOR.image }} title="输出：拆分过程中提取的配图（如有）" />
@@ -500,7 +500,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
       </div>
 
       <div className="space-y-3 p-3 text-xs">
-        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="source" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-1.5">
             <FileText size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">创意资料文档</span>
@@ -637,7 +637,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
           </label>
         </section>
 
-        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="split" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-1.5">
             <Sparkles size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">拆分设置</span>
@@ -729,7 +729,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
           </div>
         </section>
 
-        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="output" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-1.5">
             <ImageIcon size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">输出单元</span>
@@ -777,7 +777,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
           </div>
         </section>
 
-        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="result" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-1.5">
             <Clipboard size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">分段输出</span>

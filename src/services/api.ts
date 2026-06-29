@@ -12,6 +12,7 @@ import type {
   CloudUploadSummary,
   CloudUploadTargetConfig,
 } from '../types/canvas';
+import type { ExhibitionCompactFormConfig } from '../config/exhibitionCompactForm';
 import type { ThemeTemplate } from '../theme/types';
 import type { MediaKind } from '../utils/mediaCollection';
 
@@ -64,6 +65,7 @@ export interface ResolvedToolPermissions {
   isAdmin: boolean;
   visibleNodeTypes: string[];
   allowedNodeTypes: string[];
+  exhibitionCompactForm?: ExhibitionCompactFormConfig;
 }
 
 export interface ToolPermissionsConfig {
@@ -73,6 +75,7 @@ export interface ToolPermissionsConfig {
   defaultVisibleNodeTypes: string[];
   roleRules: Record<string, ToolPermissionRule>;
   userRules: Record<string, ToolPermissionRule>;
+  exhibitionCompactForm?: ExhibitionCompactFormConfig;
   allNodeTypes?: string[];
   users?: AuthUser[];
 }

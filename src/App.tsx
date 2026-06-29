@@ -280,6 +280,7 @@ function App() {
   const canManageSettings = authUser?.role === 'admin' || authUser?.role === 'manager';
   const visibleNodeTypes = authUser?.permissions?.visibleNodeTypes;
   const allowedNodeTypes = authUser?.permissions?.allowedNodeTypes;
+  const exhibitionCompactForm = authUser?.permissions?.exhibitionCompactForm;
 
   const handleLogout = async () => {
     await api.logout().catch(() => {});
@@ -674,7 +675,12 @@ function App() {
         <Sidebar onAddNode={handleAddNode} visibleNodeTypes={visibleNodeTypes} />
         <ErrorBoundary fallbackTitle="画布渲染出错了，已被错误边界捕获">
           <Suspense fallback={<InfiniteCanvasBootLoading />}>
-            <Canvas onAddNodeRef={addNodeRef} onInsertWorkflowRef={insertWorkflowRef} allowedNodeTypes={allowedNodeTypes} />
+            <Canvas
+              onAddNodeRef={addNodeRef}
+              onInsertWorkflowRef={insertWorkflowRef}
+              allowedNodeTypes={allowedNodeTypes}
+              exhibitionCompactForm={exhibitionCompactForm}
+            />
           </Suspense>
         </ErrorBoundary>
       </div>

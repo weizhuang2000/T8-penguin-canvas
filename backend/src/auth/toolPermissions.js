@@ -4,6 +4,11 @@ const fs = require('fs');
 const path = require('path');
 const config = require('../config');
 const { isAdminRole } = require('./middleware');
+const {
+  EXHIBITION_COMPACT_FORM_DEFINITIONS,
+  defaultExhibitionCompactForm,
+  normalizeExhibitionCompactForm,
+} = require('./exhibitionCompactForm');
 
 const ALL_NODE_TYPES = [
   'upload',
@@ -196,11 +201,12 @@ function normalizeRule(raw = {}) {
 function emptyDb() {
   return {
     schema: 't8-tool-permissions',
-    version: 1,
+    version: 2,
     updatedAt: nowIso(),
     defaultVisibleNodeTypes: [...DEFAULT_VISIBLE_NODE_TYPES],
     roleRules: {},
     userRules: {},
+    exhibitionCompactForm: defaultExhibitionCompactForm(),
   };
 }
 
@@ -222,6 +228,7 @@ function readDb() {
     const key = String(userId || '').trim();
     if (key) db.userRules[key] = normalizeRule(rule);
   }
+  db.exhibitionCompactForm = normalizeExhibitionCompactForm(raw?.exhibitionCompactForm);
   return db;
 }
 
@@ -247,6 +254,7 @@ function normalizeDb(raw = {}) {
     const key = String(userId || '').trim();
     if (key) db.userRules[key] = normalizeRule(rule);
   }
+  db.exhibitionCompactForm = normalizeExhibitionCompactForm(raw.exhibitionCompactForm);
   return db;
 }
 
@@ -258,11 +266,13 @@ function applyRule(baseTypes, rule) {
 }
 
 function resolveToolPermissions(user, db = readDb()) {
+  const exhibitionCompactForm = normalizeExhibitionCompactForm(db.exhibitionCompactForm);
   if (isAdminRole(user?.role)) {
     return {
       isAdmin: true,
       visibleNodeTypes: [...ALL_NODE_TYPES],
       allowedNodeTypes: [...ALL_NODE_TYPES],
+      exhibitionCompactForm,
     };
   }
   const roleRule = db.roleRules[String(user?.role || '')];
@@ -273,6 +283,7 @@ function resolveToolPermissions(user, db = readDb()) {
     isAdmin: false,
     visibleNodeTypes: [...finalTypes],
     allowedNodeTypes: [...finalTypes],
+    exhibitionCompactForm,
   };
 }
 
@@ -352,11 +363,14 @@ function findUnauthorizedNewNodes(user, incomingNodes, existingNodes = []) {
 module.exports = {
   ALL_NODE_TYPES,
   DEFAULT_VISIBLE_NODE_TYPES,
+  EXHIBITION_COMPACT_FORM_DEFINITIONS,
   assertCanUseNode,
   canUseNode,
+  defaultExhibitionCompactForm,
   findUnauthorizedNewNodes,
   nodeTypeFromRequest,
   normalizeDb,
+  normalizeExhibitionCompactForm,
   readDb,
   requireNodePermission,
   resolveToolPermissions,

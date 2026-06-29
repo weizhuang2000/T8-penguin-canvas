@@ -1007,6 +1007,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
 
   return (
     <div
+      data-exhibition-compact-node-type="exhibition-recolor"
       className={`relative w-[640px] rounded-xl border-2 transition-all ${
         selected ? 'border-cyan-300 shadow-2xl shadow-cyan-500/15' : 'border-white/15 hover:border-white/30'
       }`}
@@ -1030,7 +1031,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
 
         <ImageSlot url={originalImage} />
 
-        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="input" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><Palette size={13} /> 色调</div>
             <label className="ml-auto inline-flex items-center gap-1.5 text-[10px] text-white/65">
@@ -1081,7 +1082,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
           </label>
         </section>
 
-        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="palette" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><SlidersHorizontal size={13} /> 地面与天花板</div>
           </div>
@@ -1119,7 +1120,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
           </div>
         </section>
 
-        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="protection" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><SlidersHorizontal size={13} /> 保护排除项</div>
             {canManageTeam && (
@@ -1155,7 +1156,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
           />
         </section>
 
-        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="model" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} /> 生成</div>
             <button type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy || !originalImage} onClick={() => void runGenerate()}><Play size={13} /> 生成换色图</button>

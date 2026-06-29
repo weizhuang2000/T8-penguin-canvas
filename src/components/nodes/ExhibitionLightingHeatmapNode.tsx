@@ -393,6 +393,7 @@ const ExhibitionLightingHeatmapNode = ({ id, data, selected }: NodeProps) => {
 
   return (
     <div
+      data-exhibition-compact-node-type="exhibition-lighting-heatmap"
       className={`relative w-[640px] rounded-xl border-2 transition-all ${
         selected ? 'border-cyan-300 shadow-2xl shadow-cyan-500/15' : 'border-white/15 hover:border-white/30'
       }`}
@@ -416,7 +417,7 @@ const ExhibitionLightingHeatmapNode = ({ id, data, selected }: NodeProps) => {
 
         <ImageSlot url={sourceImage} />
 
-        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="analysis" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100">
             <SunMedium size={13} /> 热力分析
           </div>
@@ -468,7 +469,7 @@ const ExhibitionLightingHeatmapNode = ({ id, data, selected }: NodeProps) => {
           />
         </section>
 
-        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="model" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} /> 生成</div>
             <button type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy} onClick={() => void runGenerate()}><Play size={13} /> 生成灯光热力图</button>

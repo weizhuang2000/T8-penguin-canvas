@@ -615,7 +615,7 @@ const ExhibitionTextImageLoopNode = ({ id, data, selected }: NodeProps) => {
   const stopButton: CSSProperties = { ...primaryButton, background: isPixel ? 'var(--px-peach)' : '#ef4444', color: isPixel ? 'var(--px-ink)' : '#fff' };
 
   return (
-    <div className="relative" style={containerStyle}>
+    <div data-exhibition-compact-node-type="exhibition-text-image-loop" className="relative" style={containerStyle}>
       <Handle id="text" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '34%', left: -6, background: PORT_COLOR.text }} title="输入：文本素材集" />
       <Handle id="image" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '58%', left: -6, background: PORT_COLOR.image }} title="输入：图像素材集" />
       <Handle id="text" type="source" position={Position.Right} className="!h-3 !w-3 !border-0" style={{ top: '38%', right: -6, background: PORT_COLOR.text }} title="输出：文本" />
@@ -633,7 +633,7 @@ const ExhibitionTextImageLoopNode = ({ id, data, selected }: NodeProps) => {
       </div>
 
       <div className="nodrag nopan" style={{ padding: 10 }} onMouseDown={(event) => event.stopPropagation()} onWheelCapture={(event) => event.stopPropagation()}>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+        <div data-exhibition-compact-section="run" style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
           <button type="button" style={{ ...buttonBase, ...activeButton(mode === 'serial') }} disabled={status === 'running'} onClick={() => update({ mode: 'serial' })} title="逐组运行同一条下游链路">
             <GitBranch size={12} />串联
           </button>
@@ -642,7 +642,7 @@ const ExhibitionTextImageLoopNode = ({ id, data, selected }: NodeProps) => {
           </button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 5, marginBottom: 9 }}>
+        <div data-exhibition-compact-section="pairing" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 5, marginBottom: 9 }}>
           {PAIRING_OPTIONS.map((option) => (
             <button
               key={option.id}
@@ -657,7 +657,7 @@ const ExhibitionTextImageLoopNode = ({ id, data, selected }: NodeProps) => {
           ))}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
+        <div data-exhibition-compact-section="input" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
           <div style={{ border: panelBorder, borderRadius: 6, padding: 6, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: subColor, fontSize: 10, marginBottom: 5 }}><Type size={11} />文本</div>
             <div style={{ maxHeight: 92, overflow: 'hidden', color: textColor, fontSize: 10, lineHeight: 1.35 }}>
@@ -692,7 +692,7 @@ const ExhibitionTextImageLoopNode = ({ id, data, selected }: NodeProps) => {
           </div>
         )}
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div data-exhibition-compact-section="status" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {status === 'running' ? (
             <button type="button" style={stopButton} onClick={handleStop}><Square size={12} />取消</button>
           ) : (

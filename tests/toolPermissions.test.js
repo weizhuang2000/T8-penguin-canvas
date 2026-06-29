@@ -105,6 +105,52 @@ test('tool permissions keep exhibition text-image loop grants when saved from us
   assert.equal(permissions.canUseNode({ id: 'u2', role: 'designer' }, 'exhibition-text-image-loop', db), true);
 }));
 
+test('tool permissions default exhibition compact form for old configs', () => withTempData(() => {
+  permissions.writeDb({
+    defaultVisibleNodeTypes: ['text'],
+    roleRules: {},
+    userRules: {},
+  });
+
+  const db = permissions.readDb();
+  assert.ok(db.exhibitionCompactForm.sectionsByNodeType['exhibition-img2img'].includes('craft'));
+  assert.ok(db.exhibitionCompactForm.sectionsByNodeType['showcase-interior-design'].includes('showcase'));
+}));
+
+test('tool permissions filters unknown compact form node types and sections', () => withTempData(() => {
+  permissions.writeDb({
+    defaultVisibleNodeTypes: ['text'],
+    roleRules: {},
+    userRules: {},
+    exhibitionCompactForm: {
+      sectionsByNodeType: {
+        'exhibition-img2img': ['craft', 'unknown-section', 'craft'],
+        'unknown-node': ['craft'],
+      },
+    },
+  });
+
+  const db = permissions.readDb();
+  assert.deepEqual(db.exhibitionCompactForm.sectionsByNodeType['exhibition-img2img'], ['craft']);
+  assert.equal(Object.hasOwn(db.exhibitionCompactForm.sectionsByNodeType, 'unknown-node'), false);
+}));
+
+test('resolved permissions expose exhibition compact form to normal users', () => withTempData(() => {
+  const db = permissions.normalizeDb({
+    defaultVisibleNodeTypes: ['text'],
+    roleRules: {},
+    userRules: {},
+    exhibitionCompactForm: {
+      sectionsByNodeType: {
+        'exhibition-lighting-heatmap': ['analysis'],
+      },
+    },
+  });
+
+  const resolved = permissions.resolveToolPermissions({ id: 'u2', role: 'designer' }, db);
+  assert.deepEqual(resolved.exhibitionCompactForm.sectionsByNodeType['exhibition-lighting-heatmap'], ['analysis']);
+}));
+
 test('findUnauthorizedNewNodes allows existing blocked nodes but rejects new ones', () => withTempData(() => {
   permissions.writeDb({
     defaultVisibleNodeTypes: ['text'],

@@ -30,6 +30,7 @@ import { useShortcutStore } from '../stores/shortcuts';
 import { getTemplateMode, resolveThemeTemplate } from '../theme/defaultTemplates';
 import { useRunBusStore } from '../stores/runBus';
 import { useGroupBusStore, GROUP_COLORS, DEFAULT_GROUP_NAME } from '../stores/groupBus';
+import { useExhibitionCompactFormStore } from '../stores/exhibitionCompactForm';
 import { topologicalSort } from '../utils/topologicalSort';
 import { installGlobalWheelBlockObserver } from '../utils/wheelBlock';
 // v1.2.10.5: 节点落点防重叠解析器 (单节点/整组双模式 + 兜底+toast+飞镜)
@@ -93,6 +94,7 @@ import ThemeMusicToggle from './ThemeMusicToggle';
 import SendMaterialsModal from './SendMaterialsModal';
 import { useCanvasHistory } from '../hooks/useCanvasHistory';
 import type { CanvasTemplate } from '../config/canvasTemplates';
+import type { ExhibitionCompactFormConfig } from '../config/exhibitionCompactForm';
 import PlaceholderNode from './nodes/PlaceholderNode';
 import TextNode from './nodes/TextNode';
 import ImageNode from './nodes/ImageNode';
@@ -346,6 +348,60 @@ function withNodeSerialBadge(Component: ComponentType<any>): ComponentType<any> 
   );
   WrappedNode.displayName = `NodeSerialBadge(${Component.displayName || Component.name || 'Node'})`;
   return WrappedNode;
+}
+
+function ExhibitionCompactFormController({ config }: { config?: ExhibitionCompactFormConfig }) {
+  const setConfig = useExhibitionCompactFormStore((s) => s.setConfig);
+  const compactConfig = useExhibitionCompactFormStore((s) => s.config);
+  const activeNodeIds = useExhibitionCompactFormStore((s) => s.activeNodeIds);
+  const getAllowedSections = useExhibitionCompactFormStore((s) => s.getAllowedSections);
+
+  useEffect(() => {
+    setConfig(config);
+  }, [config, setConfig]);
+
+  useEffect(() => {
+    let frame = 0;
+    const applyCompactState = () => {
+      frame = 0;
+      const activeIds = new Set(activeNodeIds);
+      document.querySelectorAll<HTMLElement>('.react-flow__node[data-id]').forEach((nodeEl) => {
+        const nodeId = nodeEl.getAttribute('data-id') || '';
+        const contentEl = nodeEl.querySelector<HTMLElement>('[data-exhibition-compact-node-type]');
+        if (!contentEl) return;
+        const nodeType = contentEl.dataset.exhibitionCompactNodeType || '';
+        const active = activeIds.has(nodeId);
+        contentEl.toggleAttribute('data-exhibition-compact-active', active);
+        if (active) {
+          const allowedSections = new Set(getAllowedSections(nodeType));
+          contentEl.dataset.exhibitionCompactVisibleSections = Array.from(allowedSections).join(' ');
+          contentEl.querySelectorAll<HTMLElement>('[data-exhibition-compact-section]').forEach((sectionEl) => {
+            const sectionId = sectionEl.dataset.exhibitionCompactSection || '';
+            sectionEl.dataset.exhibitionCompactVisible = allowedSections.has(sectionId) ? 'true' : 'false';
+          });
+        } else {
+          delete contentEl.dataset.exhibitionCompactVisibleSections;
+          contentEl.querySelectorAll<HTMLElement>('[data-exhibition-compact-section]').forEach((sectionEl) => {
+            delete sectionEl.dataset.exhibitionCompactVisible;
+          });
+        }
+      });
+    };
+    const scheduleApply = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(applyCompactState);
+    };
+    applyCompactState();
+    const observer = new MutationObserver(scheduleApply);
+    const flowNodes = document.querySelector('.react-flow__nodes') || document.body;
+    observer.observe(flowNodes, { childList: true, subtree: true });
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [activeNodeIds, compactConfig, getAllowedSections]);
+
+  return null;
 }
 
 // 节点初始 data(用于区分共享组件的 kind/preset/model 等)
@@ -1493,9 +1549,10 @@ interface CanvasInnerProps {
   onAddNodeRef?: React.MutableRefObject<AddNodeFn | null>;
   onInsertWorkflowRef?: React.MutableRefObject<InsertWorkflowFn | null>;
   allowedNodeTypes?: string[];
+  exhibitionCompactForm?: ExhibitionCompactFormConfig;
 }
 
-function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: CanvasInnerProps) {
+function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes, exhibitionCompactForm }: CanvasInnerProps) {
   const { activeId, canvases, loadCanvases, setActive } = useCanvasStore();
   const { theme, style, templateId, customTemplates } = useThemeStore();
   const shortcuts = useShortcutStore((s) => s.shortcuts);
@@ -5523,6 +5580,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes }: Ca
           nodeColor={() => (isOp ? themeTokens.secondary : isNaruto ? themeTokens.accent : isEva ? themeTokens.danger : isYyh ? themeTokens.success : isSlamdunk ? themeTokens.accent : isDark ? '#a1a1aa' : '#52525b')}
         />
         {/* 选中可执行节点时的浮动操作栏 (执行 / 中止 / 关闭) */}
+        <ExhibitionCompactFormController config={exhibitionCompactForm} />
         <NodeActionBar />
       </ReactFlow>
       </CanvasRuntimeProvider>
@@ -5932,6 +5990,7 @@ interface CanvasProps {
   onAddNodeRef?: React.MutableRefObject<AddNodeFn | null>;
   onInsertWorkflowRef?: React.MutableRefObject<InsertWorkflowFn | null>;
   allowedNodeTypes?: string[];
+  exhibitionCompactForm?: ExhibitionCompactFormConfig;
 }
 
 export default function Canvas(props: CanvasProps) {

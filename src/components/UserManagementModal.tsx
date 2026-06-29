@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check, Loader2, Search, Shield, UserCog, X } from 'lucide-react';
 import { NODE_GROUPS, NODE_REGISTRY } from '../config/nodeRegistry';
+import {
+  defaultExhibitionCompactForm,
+  EXHIBITION_COMPACT_FORM_DEFINITIONS,
+  normalizeExhibitionCompactFormConfig,
+} from '../config/exhibitionCompactForm';
 import * as api from '../services/api';
 import type { AuthUser, ToolPermissionRule, ToolPermissionsConfig } from '../services/api';
 import type { NodeType } from '../types/canvas';
@@ -58,7 +63,7 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
   const [message, setMessage] = useState('');
   const [query, setQuery] = useState('');
   const [config, setConfig] = useState<ToolPermissionsConfig | null>(null);
-  const [activeMode, setActiveMode] = useState<'role' | 'user'>('role');
+  const [activeMode, setActiveMode] = useState<'role' | 'user' | 'compact'>('role');
   const [activeRole, setActiveRole] = useState('designer');
   const [activeUserId, setActiveUserId] = useState('');
 
@@ -74,6 +79,7 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
   const inheritedTypes = activeMode === 'role' ? defaultTypes : inheritedForUser;
   const activeTypes = resolvedTypes(editingRule, inheritedTypes);
   const activeTypeSet = useMemo(() => new Set(activeTypes), [activeTypes]);
+  const compactConfig = normalizeExhibitionCompactFormConfig(config?.exhibitionCompactForm);
 
   useEffect(() => {
     if (!open) return;
@@ -105,6 +111,7 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
       setConfig({ ...config, roleRules: { ...config.roleRules, [activeRole]: nextRule } });
       return;
     }
+    if (activeMode === 'compact') return;
     if (!activeUser) return;
     setConfig({ ...config, userRules: { ...config.userRules, [activeUser.id]: nextRule } });
   };
@@ -120,6 +127,7 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
         defaultVisibleNodeTypes: config.defaultVisibleNodeTypes,
         roleRules: config.roleRules,
         userRules: config.userRules,
+        exhibitionCompactForm: config.exhibitionCompactForm,
       });
       setConfig({ ...config, ...saved });
       setMessage('权限已保存');
@@ -144,6 +152,24 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
     ? 'px-btn px-btn--sm px-btn--mint'
     : 'rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-400 disabled:opacity-60';
 
+  const patchCompactNodeSections = (nodeType: string, sections: string[]) => {
+    if (!config) return;
+    const normalized = normalizeExhibitionCompactFormConfig({
+      sectionsByNodeType: {
+        ...compactConfig.sectionsByNodeType,
+        [nodeType]: sections,
+      },
+    });
+    setConfig({ ...config, exhibitionCompactForm: normalized });
+  };
+
+  const toggleCompactSection = (nodeType: string, sectionId: string) => {
+    const current = new Set(compactConfig.sectionsByNodeType[nodeType] || []);
+    if (current.has(sectionId)) current.delete(sectionId);
+    else current.add(sectionId);
+    patchCompactNodeSections(nodeType, Array.from(current));
+  };
+
   return (
     <div className={`fixed inset-0 z-[90] flex items-center justify-center ${isPixel ? 'px-modal-mask' : 'bg-black/55'}`} onMouseDown={onClose}>
       <div className={`${panelCls} flex h-[min(780px,calc(100vh-36px))] w-[min(1120px,calc(100vw-36px))] flex-col overflow-hidden`} onMouseDown={(e) => e.stopPropagation()}>
@@ -165,7 +191,18 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
               <button className={`${btnCls} flex-1 ${activeMode === 'user' ? 'bg-emerald-500/15 text-emerald-300' : ''}`} onClick={() => setActiveMode('user')} type="button">个人</button>
             </div>
 
-            {activeMode === 'role' ? (
+            <button className={`${btnCls} mb-3 w-full justify-start text-left ${activeMode === 'compact' ? 'bg-emerald-500/15 text-emerald-300' : ''}`} onClick={() => setActiveMode('compact')} type="button">精简窗体</button>
+
+            {activeMode === 'compact' ? (
+              <div className="space-y-2 text-xs">
+                <div className={`rounded-md border px-2 py-2 ${isDark ? 'border-cyan-300/20 bg-cyan-300/10 text-cyan-100' : 'border-cyan-200 bg-cyan-50 text-cyan-800'}`}>
+                  全局展陈精简窗体
+                </div>
+                <button className={`${btnCls} w-full justify-start text-left`} type="button" onClick={() => setConfig(config ? { ...config, exhibitionCompactForm: defaultExhibitionCompactForm() } : config)}>
+                  恢复全部默认
+                </button>
+              </div>
+            ) : activeMode === 'role' ? (
               <div className="space-y-1">
                 {ROLE_OPTIONS.map((role) => (
                   <button key={role} className={`${btnCls} w-full justify-start text-left ${activeRole === role ? 'bg-sky-500/15 text-sky-300' : ''}`} onClick={() => setActiveRole(role)} type="button">
@@ -207,8 +244,12 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
                   {editingRule?.mode === 'custom' ? `自定义 ${activeTypes.length} 个工具` : `继承 ${inheritedTypes.length} 个工具`}
                 </div>
               </div>
-              <button className={btnCls} type="button" onClick={() => patchRule(customRule(activeTypes))}>转为自定义</button>
-              <button className={btnCls} type="button" onClick={resetToInherit}>继承默认</button>
+              {activeMode !== 'compact' && (
+                <>
+                  <button className={btnCls} type="button" onClick={() => patchRule(customRule(activeTypes))}>转为自定义</button>
+                  <button className={btnCls} type="button" onClick={resetToInherit}>继承默认</button>
+                </>
+              )}
               <button className={primaryCls} type="button" onClick={save} disabled={saving || loading || !config}>
                 {saving ? <Loader2 size={13} className="mr-1 inline animate-spin" /> : <Check size={13} className="mr-1 inline" />}
                 保存
@@ -218,7 +259,40 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
             {message && <div className={`mb-3 rounded-md px-3 py-2 text-xs ${isDark ? 'bg-white/10 text-white/70' : 'bg-black/5 text-zinc-600'}`}>{message}</div>}
             {loading && <div className="text-xs opacity-55">加载中...</div>}
 
-            <div className="space-y-3">
+            {activeMode === 'compact' && (
+              <div className="space-y-3">
+                {EXHIBITION_COMPACT_FORM_DEFINITIONS.map((definition) => {
+                  const selected = new Set(compactConfig.sectionsByNodeType[definition.nodeType] || []);
+                  return (
+                    <section key={definition.nodeType} className={`rounded-md border p-3 ${isDark ? 'border-white/10 bg-white/[0.03]' : 'border-black/10 bg-black/[0.02]'}`}>
+                      <div className="mb-2 flex items-center gap-2">
+                        <div className="flex-1 text-xs font-semibold">{definition.label} · {selected.size}/{definition.sections.length}</div>
+                        <button className={btnCls} type="button" onClick={() => patchCompactNodeSections(definition.nodeType, definition.sections.map((section) => section.id))}>全选</button>
+                        <button className={btnCls} type="button" onClick={() => patchCompactNodeSections(definition.nodeType, [])}>全不选</button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-4">
+                        {definition.sections.map((section) => {
+                          const checked = selected.has(section.id);
+                          return (
+                            <label key={section.id} className={`flex min-w-0 cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 text-xs ${checked ? 'border-cyan-300/50 bg-cyan-400/10' : isDark ? 'border-white/10 bg-black/10' : 'border-black/10 bg-white'}`}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleCompactSection(definition.nodeType, section.id)}
+                              />
+                              <span className="min-w-0 flex-1 truncate">{section.label}</span>
+                              <span className="truncate text-[10px] opacity-45">{section.id}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className={activeMode === 'compact' ? 'hidden' : 'space-y-3'}>
               {Object.entries(NODE_GROUPS).map(([key, group]) => {
                 const groupTypes = group.nodes.map((node) => node.type);
                 const checkedCount = groupTypes.filter((type) => activeTypeSet.has(type)).length;
