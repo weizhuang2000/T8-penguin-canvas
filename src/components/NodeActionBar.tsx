@@ -14,7 +14,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNodes, useViewport, useReactFlow, type Node } from '@xyflow/react';
-import { Play, Square, X, Maximize2, PanelTop } from 'lucide-react';
+import { Play, Square, X, Maximize2, PanelTop, PanelTopClose } from 'lucide-react';
 import { useThemeStore } from '../stores/theme';
 import { useRunBusStore } from '../stores/runBus';
 import { useFullscreenNodeStore } from '../stores/fullscreenNode';
@@ -434,7 +434,7 @@ const NodeActionBar = () => {
             title={compactActive ? '退出精简窗体' : '精简窗体'}
             style={mkBtn('compact')}
           >
-            <PanelTop size={12} />
+            {compactActive ? <PanelTopClose size={12} /> : <PanelTop size={12} />}
           </button>
         )}
 

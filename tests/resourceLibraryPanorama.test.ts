@@ -231,6 +231,7 @@ test('panorama resource kind is wired through frontend save, drawer, and insert 
   assert.match(drawer, /item\.kind === 'image' \|\| item\.kind === 'panorama'/);
   assert.match(drawer, /nextCats\.filter\(\(cat\) => cat\.kind === kind\)/);
   assert.match(drawer, /nextItems\.filter\(\(item\) => item\.kind === kind\)/);
+  assert.match(drawer, /'data-drag-direct':\s*true/);
   assert.match(app, /item\.kind === 'panorama' \? 'image' : item\.kind/);
   assert.match(sendMaterials, /item\.kind === 'panorama' \? 'image'/);
   assert.match(panorama, /getResourceCategories\('panorama'\)/);

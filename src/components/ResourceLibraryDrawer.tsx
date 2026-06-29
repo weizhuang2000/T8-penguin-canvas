@@ -732,6 +732,7 @@ export default function ResourceLibraryDrawer({ open, onClose, onInsertMaterial 
                   ? {}
                   : {
                       'data-drag-source': true,
+                      'data-drag-direct': true,
                       'data-drag-kind': resourceItemDragKind(item),
                       'data-drag-url': item.fileUrl,
                       'data-drag-preview': item.thumbUrl || item.fileUrl,
