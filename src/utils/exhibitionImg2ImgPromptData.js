@@ -108,6 +108,31 @@ function exhibitReferenceText(value) {
   return lines.join('\n');
 }
 
+function referenceRoleHintText(value) {
+  const hints = Array.isArray(value) ? value : [];
+  const lines = hints
+    .map((item) => {
+      const token = cleanText(item?.token || '', 32);
+      if (!/^@img\d+\b/.test(token)) return '';
+      if (item?.role === 'structure') return `${token} = 空间结构示意图。`;
+      if (item?.role === 'plan-layout') return `${token} = 平面布局相机视角图。`;
+      if (item?.role === 'color-material-reference') return `${token} = 色彩与材质参考图。`;
+      if (item?.role === 'exhibit-reference') {
+        const index = Number(item?.index);
+        return `${token} = 展品参考图 ${Number.isFinite(index) && index > 0 ? index : ''}。`.replace(/\s+。$/, '。');
+      }
+      return '';
+    })
+    .filter(Boolean);
+  if (!lines.length) return '';
+  return [
+    '【图像输入引用顺序】',
+    '以下 @imgN 必须与实际传入生图模型的第 N 张参考图一致；提示词中引用图像时必须按此顺序理解，不得按接口名称自行重排。',
+    ...lines,
+  ].join('\n');
+}
+
+
 export function normalizeExhibitionImg2ImgPriority(value) {
   const out = [];
   const list = Array.isArray(value) ? value : [];
@@ -404,6 +429,7 @@ export function buildExhibitionImg2ImgPrompt(values = {}) {
   const priorityOrder = normalizeExhibitionImg2ImgPriority(values.priorityOrder);
   const supplement = cleanText(values.supplement);
   const exhibitReference = exhibitReferenceText(values.exhibitReferenceItems);
+  const referenceRoleHints = referenceRoleHintText(values.referenceRoleHints);
   const excludeItemsText = exhibitionImg2ImgExcludeItemsText(
     values.excludeItems,
     values.excludeItemOptions || EXHIBITION_IMG2IMG_EXCLUDE_ITEMS,
@@ -423,6 +449,8 @@ export function buildExhibitionImg2ImgPrompt(values = {}) {
     '',
     '2. 执行优先级（除空间结构外）',
     '',
+    referenceRoleHints,
+    referenceRoleHints ? '' : '',
     executionPriorityText(priorityOrder, values),
     '',
     '3. 工艺与版式深化',

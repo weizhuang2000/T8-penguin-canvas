@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
+import { PORT_COLOR } from '../../config/portTypes';
 import { Brain, FileText, Image as ImageIcon, Loader2, Map, Play, Route, Upload } from 'lucide-react';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
 import {
@@ -530,9 +531,9 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
       className={`relative w-[720px] rounded-xl border-2 transition-all ${selected ? 'border-cyan-300 shadow-2xl shadow-cyan-500/15' : 'border-white/15 hover:border-white/30'}`}
       style={{ background: 'rgba(17,24,39,.96)', backdropFilter: 'blur(8px)' }}
     >
-      <Handle id="plan-image" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-amber-300" style={{ top: '22%' }} title="输入：原始建筑平面图" />
-      <Handle id="outline-text" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-sky-300" style={{ top: '42%' }} title="输入：大纲/资料文本" />
-      <Handle type="source" position={Position.Right} className="!bg-cyan-300 !border-0" title="输出：展陈平面布局图" />
+      <Handle id="plan-image" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '22%', background: PORT_COLOR.image }} title="输入：原始建筑平面图" />
+      <Handle id="outline-text" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '42%', background: PORT_COLOR.text }} title="输入：大纲/资料文本" />
+      <Handle type="source" position={Position.Right} className="!border-0" style={{ background: PORT_COLOR.image }} title="输出：展陈平面布局图" />
 
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex h-8 w-8 items-center justify-center rounded bg-cyan-300/15 text-cyan-200"><Map size={16} /></div>

@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Handle, Position, useNodeConnections, useNodesData, useReactFlow, type NodeProps } from '@xyflow/react';
+import { PORT_COLOR } from '../../config/portTypes';
 import {
   ArrowDown,
   ArrowUp,
@@ -84,8 +85,11 @@ import { useThemeStore } from '../../stores/theme';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
+import MentionPromptInput from './MentionPromptInput';
+import { materialMentionKey, resolveMediaMentions, type MediaMention } from './mediaMentions';
 import PromptExpandableInput from '../PromptExpandableInput';
 import PromptTextarea from '../PromptTextarea';
+import type { Material } from './useUpstreamMaterials';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
@@ -168,6 +172,18 @@ interface ExhibitReferenceInputImage {
 
 interface ExhibitReferenceItem extends ExhibitReferenceInputImage {
   description: string;
+  descriptionMentions?: MediaMention[];
+}
+
+interface ExhibitionReferenceMaterialRole {
+  id: string;
+  kind: 'image';
+  url: string;
+  label: string;
+  sourceNodeId: string;
+  origin: 'upstream';
+  role: 'structure' | 'plan-layout' | 'color-material-reference' | 'exhibit-reference';
+  roleIndex?: number;
 }
 
 function same(valueA: unknown, valueB: unknown) {
@@ -787,6 +803,22 @@ function normalizeCraftRandomCounts(value: unknown): Record<string, number> {
   return out;
 }
 
+function mediaMentions(value: unknown): MediaMention[] {
+  return Array.isArray(value) ? (value as MediaMention[]) : [];
+}
+
+function imageTokenForUrl(url: string, materials: Material[]): string {
+  const material = materials.find((item) => item.kind === 'image' && item.url === url);
+  if (!material) return '';
+  let imageIndex = 0;
+  for (const item of materials) {
+    if (item.kind !== 'image') continue;
+    imageIndex += 1;
+    if (materialMentionKey(item) === materialMentionKey(material)) return `@img${imageIndex}`;
+  }
+  return '';
+}
+
 function shuffleCraftIds(ids: string[]) {
   const out = ids.slice();
   for (let index = out.length - 1; index > 0; index -= 1) {
@@ -960,8 +992,8 @@ function ImageSlot({
         id={handleId}
         type="target"
         position={Position.Left}
-        className="!h-3 !w-3 !border-0 !bg-cyan-300"
-        style={{ top }}
+        className="!h-3 !w-3 !border-0"
+        style={{ top, background: PORT_COLOR.image }}
         title={`输入：${title} — ${subtitle}`}
       />
       <div className="rounded border border-white/10 bg-black/15 p-2">
@@ -1650,6 +1682,12 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const outputImageNames = Array.isArray(d.imageNames) ? d.imageNames.map((item: unknown) => String(item || '').trim()) : [];
   const imageName = normalizeExhibitionImageName(d.imageName);
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
+  const customCraftMentions = mediaMentions(d.customCraftMentions);
+  const visualStyleMentions = mediaMentions(d.visualStyleMentions);
+  const supplementMentions = mediaMentions(d.supplementMentions);
+  const colorMaterialPaletteMentions = mediaMentions(d.colorMaterialPaletteMentions);
+  const colorMaterialTexturesMentions = mediaMentions(d.colorMaterialTexturesMentions);
+  const colorMaterialReferenceToneMentions = mediaMentions(d.colorMaterialReferenceToneMentions);
 
   const structureImage = useHandleImage(id, 'structure');
   const planLayoutImage = useHandleImage(id, 'plan-layout');
@@ -1664,8 +1702,8 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     return exhibitReferenceInputImages.map((image) => {
       const existing = saved.find((item) => item.url === image.url);
       return existing
-        ? { ...existing, id: image.id, label: image.label }
-        : { ...image, description: '' };
+        ? { ...existing, id: image.id, label: image.label, descriptionMentions: mediaMentions(existing.descriptionMentions) }
+        : { ...image, description: '', descriptionMentions: [] };
     });
   }, [d.exhibitReferenceItems, exhibitReferenceInputImages]);
   const priorityOrder = normalizeExhibitionImg2ImgPriority(d.priorityOrder);
@@ -1819,6 +1857,100 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     : structureImage;
   const planCameraPromptDescription = spatialInputMode === 'plan-camera' ? planCameraDescription(planCameraDraft, planCameraViewport) : '';
   const hasSpatialInput = !!activeSpatialReferenceImage;
+  const orderedReferenceMaterials = useMemo<ExhibitionReferenceMaterialRole[]>(() => {
+    const spatialRole: ExhibitionReferenceMaterialRole['role'] = spatialInputMode === 'plan-camera' ? 'plan-layout' : 'structure';
+    const imageForPriority: Record<string, ExhibitionReferenceMaterialRole[]> = {
+      structureAnnotations: activeSpatialReferenceImage ? [{
+        id: `${id}:reference:${spatialRole}:${activeSpatialReferenceImage}`,
+        kind: 'image',
+        url: activeSpatialReferenceImage,
+        sourceNodeId: id,
+        origin: 'upstream',
+        label: spatialRole === 'plan-layout' ? '平面布局相机视角图' : '空间结构示意图',
+        role: spatialRole,
+      }] : [],
+      craftLayout: [],
+      colorMaterialReference: activeColorMaterialReferenceImage ? [{
+        id: `${id}:reference:color-material-reference:${activeColorMaterialReferenceImage}`,
+        kind: 'image',
+        url: activeColorMaterialReferenceImage,
+        sourceNodeId: id,
+        origin: 'upstream',
+        label: '色彩与材质参考图',
+        role: 'color-material-reference',
+      }] : [],
+    };
+    const out: ExhibitionReferenceMaterialRole[] = [];
+    const seen = new Set<string>();
+    const push = (item: ExhibitionReferenceMaterialRole) => {
+      if (!item.url || seen.has(item.url)) return;
+      seen.add(item.url);
+      out.push(item);
+    };
+    for (const key of priorityOrder) {
+      for (const item of imageForPriority[key]) push(item);
+    }
+    for (const [index, item] of exhibitReferenceItems.entries()) {
+      push({
+        id: item.id,
+        kind: 'image',
+        url: item.url,
+        sourceNodeId: item.id.split(':')[0] || id,
+        origin: 'upstream',
+        label: item.label || `展品参考图 ${index + 1}`,
+        role: 'exhibit-reference',
+        roleIndex: index + 1,
+      });
+    }
+    return out;
+  }, [activeColorMaterialReferenceImage, activeSpatialReferenceImage, exhibitReferenceItems, id, priorityOrder, spatialInputMode]);
+  const orderedReferenceImages = useMemo(() => orderedReferenceMaterials.map((item) => item.url), [orderedReferenceMaterials]);
+  const mentionMaterials: Material[] = useMemo(() => orderedReferenceMaterials.map((item) => ({
+    id: item.id,
+    kind: item.kind,
+    url: item.url,
+    sourceNodeId: item.sourceNodeId,
+    origin: item.origin,
+    label: item.label,
+  })), [orderedReferenceMaterials]);
+  const referenceRoleHints = useMemo(() => orderedReferenceMaterials.map((item) => ({
+    token: imageTokenForUrl(item.url, mentionMaterials),
+    role: item.role,
+    index: item.roleIndex,
+  })).filter((item) => item.token), [mentionMaterials, orderedReferenceMaterials]);
+
+  const resolvedPromptInputs = useMemo(() => {
+    const resolveText = (value: unknown, mentions: MediaMention[]) => (
+      resolveMediaMentions(String(value || ''), mentions, mentionMaterials)
+    );
+    return {
+      customCraft: resolveText(d.customCraft, customCraftMentions),
+      visualStyle: resolveText(d.visualStyle, visualStyleMentions),
+      supplement: resolveText(d.supplement, supplementMentions),
+      colorMaterialPalette: resolveText(promptColorMaterialPalette, colorMaterialPaletteMentions),
+      colorMaterialTextures: resolveText(promptColorMaterialTextures, colorMaterialTexturesMentions),
+      colorMaterialReferenceTone: resolveText(colorMaterialReferenceTone, colorMaterialReferenceToneMentions),
+      exhibitReferenceItems: exhibitReferenceItems.map((item) => ({
+        ...item,
+        description: resolveText(item.description, mediaMentions(item.descriptionMentions)),
+      })),
+    };
+  }, [
+    colorMaterialReferenceTone,
+    colorMaterialReferenceToneMentions,
+    colorMaterialPaletteMentions,
+    colorMaterialTexturesMentions,
+    customCraftMentions,
+    d.customCraft,
+    d.supplement,
+    d.visualStyle,
+    exhibitReferenceItems,
+    mentionMaterials,
+    promptColorMaterialPalette,
+    promptColorMaterialTextures,
+    supplementMentions,
+    visualStyleMentions,
+  ]);
 
   const buildPromptWithWallPlan = useCallback((plan: ElevationContentPlan, effectiveCrafts = selectedCrafts) => {
     const nextAnalysis = {
@@ -1834,42 +1966,43 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       outputMode: d.outputMode === 'overview' ? 'overview' : 'segments',
       downstreamContent: 'schedule',
       selectedCrafts: effectiveCrafts,
-      customCraft: d.customCraft,
+      customCraft: resolvedPromptInputs.customCraft,
       aspectRatio: d.aspectRatio,
       dimensions: d.dimensions,
       density: d.density,
       colorMaterial: d.colorMaterial,
-      visualStyle: d.visualStyle,
+      visualStyle: resolvedPromptInputs.visualStyle,
       supplement: d.contentSupplement,
       craftPresets,
     });
     return buildExhibitionImg2ImgPrompt({
       priorityOrder,
       selectedCrafts: effectiveCrafts,
-      customCraft: d.customCraft,
+      customCraft: resolvedPromptInputs.customCraft,
       craftPresets,
       density: d.density,
       dimensions: d.dimensions,
       colorMaterial: promptColorMaterial,
-      visualStyle: d.visualStyle,
-      colorMaterialPalette: promptColorMaterialPalette,
-      colorMaterialTextures: promptColorMaterialTextures,
+      visualStyle: resolvedPromptInputs.visualStyle,
+      colorMaterialPalette: resolvedPromptInputs.colorMaterialPalette,
+      colorMaterialTextures: resolvedPromptInputs.colorMaterialTextures,
       hasColorMaterialPreset,
       hasColorMaterialReferenceImage: !!activeColorMaterialReferenceImage,
-      colorMaterialReferenceTone,
+      colorMaterialReferenceTone: resolvedPromptInputs.colorMaterialReferenceTone,
       colorMaterialPriorityMode,
       colorMaterialReferenceMode,
       colorMaterialReferenceMarkText: colorMaterialMarkSettings.text,
       colorMaterialReferenceMarkPosition: colorMaterialMarkSettings.position,
       spaceLightingEnabled,
       spaceLightingLevel,
-      supplement: d.supplement,
+      supplement: resolvedPromptInputs.supplement,
       excludeItems: selectedExcludeIds,
       excludeItemOptions: excludeOptions,
       wallContentPrompt: nextContentOutputs.mainOutput,
-      exhibitReferenceItems,
+      exhibitReferenceItems: resolvedPromptInputs.exhibitReferenceItems,
       spatialInputMode,
       planCameraDescription: planCameraPromptDescription,
+      referenceRoleHints,
     });
   }, [
     activeColorMaterialReferenceImage,
@@ -1877,25 +2010,20 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     colorMaterialMarkSettings.text,
     colorMaterialPriorityMode,
     colorMaterialReferenceMode,
-    colorMaterialReferenceTone,
     craftPresets,
     d.aspectRatio,
     d.colorMaterial,
     d.contentSupplement,
-    d.customCraft,
     d.density,
     d.dimensions,
     d.outputMode,
-    d.supplement,
-    d.visualStyle,
     excludeOptions,
-    exhibitReferenceItems,
     hasColorMaterialPreset,
     planCameraPromptDescription,
     priorityOrder,
     promptColorMaterial,
-    promptColorMaterialPalette,
-    promptColorMaterialTextures,
+    referenceRoleHints,
+    resolvedPromptInputs,
     selectedCrafts,
     selectedExcludeIds,
     spatialInputMode,
@@ -1908,32 +2036,33 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const buildPromptForCrafts = useCallback((effectiveCrafts: string[], effectiveWallContentPrompt = wallContentPrompt) => buildExhibitionImg2ImgPrompt({
       priorityOrder,
       selectedCrafts: effectiveCrafts,
-      customCraft: d.customCraft,
+      customCraft: resolvedPromptInputs.customCraft,
       craftPresets,
       density: d.density,
       dimensions: d.dimensions,
       colorMaterial: promptColorMaterial,
-      visualStyle: d.visualStyle,
-      colorMaterialPalette: promptColorMaterialPalette,
-      colorMaterialTextures: promptColorMaterialTextures,
+      visualStyle: resolvedPromptInputs.visualStyle,
+      colorMaterialPalette: resolvedPromptInputs.colorMaterialPalette,
+      colorMaterialTextures: resolvedPromptInputs.colorMaterialTextures,
       hasColorMaterialPreset,
       hasColorMaterialReferenceImage: !!activeColorMaterialReferenceImage,
-      colorMaterialReferenceTone,
+      colorMaterialReferenceTone: resolvedPromptInputs.colorMaterialReferenceTone,
       colorMaterialPriorityMode,
       colorMaterialReferenceMode,
       colorMaterialReferenceMarkText: colorMaterialMarkSettings.text,
       colorMaterialReferenceMarkPosition: colorMaterialMarkSettings.position,
       spaceLightingEnabled,
       spaceLightingLevel,
-      supplement: d.supplement,
+      supplement: resolvedPromptInputs.supplement,
       excludeItems: selectedExcludeIds,
       excludeItemOptions: excludeOptions,
       wallContentPrompt: effectiveWallContentPrompt,
-      exhibitReferenceItems,
+      exhibitReferenceItems: resolvedPromptInputs.exhibitReferenceItems,
       spatialInputMode,
       planCameraDescription: planCameraPromptDescription,
+      referenceRoleHints,
     }),
-    [activeColorMaterialReferenceImage, colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPriorityMode, colorMaterialReferenceMode, colorMaterialReferenceTone, craftPresets, d.customCraft, d.density, d.dimensions, d.supplement, d.visualStyle, excludeOptions, exhibitReferenceItems, hasColorMaterialPreset, planCameraPromptDescription, priorityOrder, promptColorMaterial, promptColorMaterialPalette, promptColorMaterialTextures, selectedCrafts, selectedExcludeIds, spatialInputMode, spaceLightingEnabled, spaceLightingLevel, wallContentPrompt],
+    [activeColorMaterialReferenceImage, colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPriorityMode, colorMaterialReferenceMode, craftPresets, d.density, d.dimensions, excludeOptions, hasColorMaterialPreset, planCameraPromptDescription, priorityOrder, promptColorMaterial, referenceRoleHints, resolvedPromptInputs, selectedExcludeIds, spatialInputMode, spaceLightingEnabled, spaceLightingLevel, wallContentPrompt],
   );
 
   const prompt = useMemo(
@@ -2281,52 +2410,23 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     }
   }, [contentOutputs.conceptPrompts, contentOutputs.layoutSchedule, contentOutputs.walls, d.contentConceptPrompts, d.contentLayoutSchedule, d.contentPlanningPrompt, d.contentWalls, update, wallContentPrompt]);
 
-  const orderedReferenceImages = useMemo(() => {
-    const imageForPriority: Record<string, string[]> = {
-      structureAnnotations: activeSpatialReferenceImage ? [activeSpatialReferenceImage] : [],
-      craftLayout: [],
-      colorMaterialReference: activeColorMaterialReferenceImage ? [activeColorMaterialReferenceImage] : [],
-    };
-    const out: string[] = [];
-    for (const key of priorityOrder) {
-      for (const url of imageForPriority[key]) {
-        if (url && !out.includes(url)) out.push(url);
-      }
-    }
-    for (const url of exhibitReferenceImageUrls) {
-      if (url && !out.includes(url)) out.push(url);
-    }
-    return out;
-  }, [activeColorMaterialReferenceImage, activeSpatialReferenceImage, exhibitReferenceImageUrls, priorityOrder]);
-
   const buildRuntimeReferenceImages = useCallback(async () => {
     const runtimeColorMaterialReference = activeColorMaterialReferenceImage && colorMaterialPriorityMode === 'llm'
       ? useColorMaterialAbstractCard
         ? await createColorMaterialAbstractCardDataUrl(activeColorMaterialReferenceImage, colorMaterialMarkSettings)
         : await markImageDataUrl(activeColorMaterialReferenceImage, colorMaterialMarkSettings)
       : activeColorMaterialReferenceImage;
-    const imageForPriority: Record<string, string[]> = {
-      structureAnnotations: activeSpatialReferenceImage ? [activeSpatialReferenceImage] : [],
-      craftLayout: [],
-      colorMaterialReference: runtimeColorMaterialReference ? [runtimeColorMaterialReference] : [],
-    };
     const out: string[] = [];
-    for (const key of priorityOrder) {
-      for (const url of imageForPriority[key]) {
-        if (url && !out.includes(url)) out.push(url);
-      }
-    }
-    for (const url of exhibitReferenceImageUrls) {
+    for (const item of orderedReferenceMaterials) {
+      const url = item.role === 'color-material-reference' ? runtimeColorMaterialReference : item.url;
       if (url && !out.includes(url)) out.push(url);
     }
     return out;
   }, [
     activeColorMaterialReferenceImage,
-    activeSpatialReferenceImage,
     colorMaterialMarkSettings,
     colorMaterialPriorityMode,
-    exhibitReferenceImageUrls,
-    priorityOrder,
+    orderedReferenceMaterials,
     useColorMaterialAbstractCard,
   ]);
 
@@ -2418,7 +2518,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     update({ excludeItems: allExcludeSelected ? [] : excludeOptions.map((item) => item.id) });
   };
 
-  const patchExhibitReferenceItem = useCallback((url: string, patch: Partial<Pick<ExhibitReferenceItem, 'description'>>) => {
+  const patchExhibitReferenceItem = useCallback((url: string, patch: Partial<Pick<ExhibitReferenceItem, 'description' | 'descriptionMentions'>>) => {
     if (isReadonly) return;
     const next = exhibitReferenceItems.map((item) => (
       item.url === url ? { ...item, ...patch } : item
@@ -2754,13 +2854,13 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       }`}
       style={{ background: 'rgba(17,24,39,.96)', backdropFilter: 'blur(8px)' }}
     >
-      <Handle type="source" position={Position.Right} className="!bg-cyan-300 !border-0" title="输出：展陈图生图结果（图像）" />
+      <Handle type="source" position={Position.Right} className="!border-0" style={{ background: PORT_COLOR.image }} title="输出：展陈图生图结果（图像）" />
       <Handle
         id="document-text"
         type="target"
         position={Position.Left}
-        className="!h-3 !w-3 !border-0 !bg-sky-300"
-        style={{ top: '69%' }}
+        className="!h-3 !w-3 !border-0"
+        style={{ top: '69%', background: PORT_COLOR.text }}
         title="输入：展墙内容文本（接入后自动启用展墙内容设计）"
       />
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
@@ -2894,7 +2994,18 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               </div>
             </div>
           )}
-          <PromptExpandableInput title="扩大编辑" className={`${FIELD} mt-1.5`} value={d.customCraft || ''} disabled={isReadonly} placeholder="自定义工艺" onValueChange={(value) => update({ customCraft: value })} />
+          <MentionPromptInput
+            title="扩大编辑"
+            className={`${FIELD} mt-1.5`}
+            value={d.customCraft || ''}
+            mentions={customCraftMentions}
+            materials={mentionMaterials}
+            isDark
+            isPixel={false}
+            promptTemplateKind="image"
+            placeholder="自定义工艺"
+            onChange={(value, mentions) => update({ customCraft: value, customCraftMentions: mentions })}
+          />
           <div className="mt-1 grid grid-cols-2 gap-1">
             <select className={FIELD} value={d.density || '适中，图文层级均衡'} disabled={isReadonly} onChange={(event) => update({ density: event.target.value })}>
               <option value="疏朗，强调大图与留白">疏朗</option>
@@ -2911,11 +3022,31 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               placeholder="空间高度"
               onChange={(event) => update({ dimensions: event.target.value })}
             />
-            <PromptExpandableInput title="扩大编辑" className={FIELD} value={d.visualStyle || ''} disabled={isReadonly} placeholder="视觉风格" onValueChange={(value) => update({ visualStyle: value })} />
+            <MentionPromptInput
+              title="扩大编辑"
+              className={FIELD}
+              value={d.visualStyle || ''}
+              mentions={visualStyleMentions}
+              materials={mentionMaterials}
+              isDark
+              isPixel={false}
+              promptTemplateKind="image"
+              placeholder="视觉风格"
+              onChange={(value, mentions) => update({ visualStyle: value, visualStyleMentions: mentions })}
+            />
           </div>
-          <PromptTextarea compact title="扩大编辑" className={`${FIELD} mt-1 min-h-[48px] resize-y`} value={d.supplement || ''} disabled={isReadonly} placeholder="补充要求" onValueChange={(value) => update({ supplement: value })}
-                readOnly={isReadonly}
-              />
+          <MentionPromptInput
+            title="扩大编辑"
+            className={`${FIELD} mt-1 min-h-[48px] resize-y`}
+            value={d.supplement || ''}
+            mentions={supplementMentions}
+            materials={mentionMaterials}
+            isDark
+            isPixel={false}
+            promptTemplateKind="image"
+            placeholder="补充要求"
+            onChange={(value, mentions) => update({ supplement: value, supplementMentions: mentions })}
+          />
         </section>
 
         <section className="space-y-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
@@ -3090,17 +3221,22 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                   <span className="truncate text-[8px] text-amber-200/75" title={d.colorMaterialReferenceToneStatus}>需手动确认</span>
                 )}
               </div>
-              <PromptTextarea compact title="扩大编辑"
+              <MentionPromptInput
+                title="扩大编辑"
                 className={`${FIELD} mt-1 min-h-[46px] resize-y text-[10px] leading-snug${colorMaterialPriorityMode === 'llm' ? ' select-none pointer-events-none' : ''}`}
                 value={colorMaterialReferenceTone}
-                disabled={isReadonly || busy || hasColorMaterialPreset || colorMaterialPriorityMode === 'llm'}
+                mentions={colorMaterialReferenceToneMentions}
+                materials={mentionMaterials}
+                isDark
+                isPixel={false}
+                promptTemplateKind="image"
                 placeholder="接入图片后自动识别主色调，可手动修正"
-                onValueChange={(value) => update({
+                onChange={(value, mentions) => update({
                   colorMaterialReferenceTone: value,
+                  colorMaterialReferenceToneMentions: mentions,
                   colorMaterialReferenceToneSource: colorMaterialReferenceImage,
                   colorMaterialReferenceToneStatus: '',
                 })}
-                readOnly={isReadonly || busy || hasColorMaterialPreset || colorMaterialPriorityMode === 'llm'}
               />
               {renderColorMaterialMarkSettings('色彩与材质图标识', colorMaterialMarkSettings)}
             </div>
@@ -3117,30 +3253,40 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
             />
           )}
           <div className="grid grid-cols-2 gap-1">
-            <PromptTextarea compact title="扩大编辑"
+            <MentionPromptInput
+              title="扩大编辑"
               className={`${FIELD} min-h-[54px] resize-y text-[10px] leading-snug`}
               value={colorMaterialPalette || d.colorMaterial || ''}
-              disabled={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
+              mentions={colorMaterialPaletteMentions}
+              materials={mentionMaterials}
+              isDark
+              isPixel={false}
+              promptTemplateKind="image"
               placeholder="Color palette / 主色、辅助色、明暗、冷暖"
-              onValueChange={(value) => update({
+              onChange={(value, mentions) => update({
                 colorMaterialPalette: value,
+                colorMaterialPaletteMentions: mentions,
                 colorMaterial: combineColorMaterialText(value, colorMaterialTextures, d.colorMaterial || ''),
                 colorMaterialPreset: '',
               })}
-                readOnly={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
-              />
-            <PromptTextarea compact title="扩大编辑"
+            />
+            <MentionPromptInput
+              title="扩大编辑"
               className={`${FIELD} min-h-[54px] resize-y text-[10px] leading-snug`}
               value={colorMaterialTextures || d.colorMaterial || ''}
-              disabled={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
+              mentions={colorMaterialTexturesMentions}
+              materials={mentionMaterials}
+              isDark
+              isPixel={false}
+              promptTemplateKind="image"
               placeholder="Materials/textures / 墙面、地面、展柜、灯光材质"
-              onValueChange={(value) => update({
+              onChange={(value, mentions) => update({
                 colorMaterialTextures: value,
+                colorMaterialTexturesMentions: mentions,
                 colorMaterial: combineColorMaterialText(colorMaterialPalette, value, d.colorMaterial || ''),
                 colorMaterialPreset: '',
               })}
-                readOnly={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
-              />
+            />
           </div>
           {hasColorMaterialReference && (
             <div className="rounded border border-rose-300/15 bg-rose-300/5 px-2 py-1 text-[10px] leading-snug text-rose-50/70">
@@ -3167,13 +3313,17 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                 <div key={item.url} className="grid grid-cols-[54px_minmax(0,1fr)] items-start gap-1.5 rounded border border-white/10 bg-black/15 p-1.5">
                   <img src={item.url} alt="" className="h-12 w-12 rounded border border-white/10 object-cover" draggable={false} />
                   <div className="min-w-0">
-                    <PromptExpandableInput
+                    <MentionPromptInput
                       title="扩大编辑"
                       className={FIELD}
                       value={item.description}
-                      disabled={isReadonly || busy}
+                      mentions={mediaMentions(item.descriptionMentions)}
+                      materials={mentionMaterials}
+                      isDark
+                      isPixel={false}
+                      promptTemplateKind="image"
                       placeholder={`展品 ${index + 1} 特征描述，如"红色的茶壶"`}
-                      onValueChange={(value) => patchExhibitReferenceItem(item.url, { description: value })}
+                      onChange={(value, mentions) => patchExhibitReferenceItem(item.url, { description: value, descriptionMentions: mentions })}
                     />
                     <div className="mt-0.5 truncate text-[9px] text-white/35" title={item.url}>{item.label}</div>
                   </div>

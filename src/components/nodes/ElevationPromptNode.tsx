@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { PORT_COLOR } from '../../config/portTypes';
 import {
   Check,
   Clipboard,
@@ -623,7 +624,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
       }`}
       style={{ background: 'rgba(17,24,39,.96)', backdropFilter: 'blur(8px)' }}
     >
-      <Handle type="source" position={Position.Right} className="!bg-cyan-300 !border-0" title="输出：彩立面概念 Prompt 与图文工艺排版清单（文本）" />
+      <Handle type="source" position={Position.Right} className="!border-0" style={{ background: PORT_COLOR.text }} title="输出：彩立面概念 Prompt 与图文工艺排版清单（文本）" />
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex h-8 w-8 items-center justify-center rounded bg-cyan-300/15 text-cyan-200">
           <FileText size={16} />

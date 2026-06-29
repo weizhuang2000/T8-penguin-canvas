@@ -22,6 +22,39 @@ test('exhibition img2img node exposes mutually exclusive plan layout input', () 
   assert.match(canvas, /exclusiveExhibitionImg2ImgHandle/);
 });
 
+test('exhibition img2img node supports @ image mentions for prompt image references', () => {
+  const node = readFileSync(new URL('../src/components/nodes/ExhibitionImg2ImgNode.tsx', import.meta.url), 'utf8');
+  const canvas = readFileSync(new URL('../src/components/Canvas.tsx', import.meta.url), 'utf8');
+  assert.match(node, /import MentionPromptInput from '\.\/MentionPromptInput'/);
+  assert.match(node, /resolveMediaMentions/);
+  assert.match(node, /type MediaMention/);
+  assert.match(node, /import type \{ Material \} from '\.\/useUpstreamMaterials'/);
+  assert.match(node, /const orderedReferenceMaterials = useMemo/);
+  assert.match(node, /const orderedReferenceImages = useMemo\(\(\) => orderedReferenceMaterials\.map\(\(item\) => item\.url\)/);
+  assert.match(node, /const mentionMaterials: Material\[\] = useMemo\(\(\) => orderedReferenceMaterials\.map/);
+  assert.match(node, /referenceRoleHints/);
+  assert.match(node, /spatialRole === 'plan-layout'/);
+  assert.match(node, /role: 'color-material-reference'/);
+  assert.match(node, /role: 'exhibit-reference'/);
+  assert.match(node, /for \(const item of orderedReferenceMaterials\)[\s\S]*item\.role === 'color-material-reference'/);
+  assert.match(node, /<MentionPromptInput[\s\S]*mentions=\{customCraftMentions\}[\s\S]*materials=\{mentionMaterials\}[\s\S]*customCraftMentions: mentions/);
+  assert.match(node, /<MentionPromptInput[\s\S]*mentions=\{visualStyleMentions\}[\s\S]*materials=\{mentionMaterials\}[\s\S]*visualStyleMentions: mentions/);
+  assert.match(node, /<MentionPromptInput[\s\S]*mentions=\{supplementMentions\}[\s\S]*materials=\{mentionMaterials\}[\s\S]*supplementMentions: mentions/);
+  assert.match(node, /mentions=\{colorMaterialPaletteMentions\}/);
+  assert.match(node, /mentions=\{colorMaterialTexturesMentions\}/);
+  assert.match(node, /mentions=\{colorMaterialReferenceToneMentions\}/);
+  assert.match(node, /descriptionMentions: mentions/);
+  assert.match(node, /resolveText\(d\.customCraft, customCraftMentions\)/);
+  assert.match(node, /resolveText\(d\.visualStyle, visualStyleMentions\)/);
+  assert.match(node, /resolveText\(d\.supplement, supplementMentions\)/);
+  assert.match(node, /resolveText\(promptColorMaterialPalette, colorMaterialPaletteMentions\)/);
+  assert.match(node, /resolveText\(promptColorMaterialTextures, colorMaterialTexturesMentions\)/);
+  assert.match(node, /resolveText\(colorMaterialReferenceTone, colorMaterialReferenceToneMentions\)/);
+  assert.match(node, /description: resolveText\(item\.description, mediaMentions\(item\.descriptionMentions\)\)/);
+  assert.match(canvas, /customCraftMentions: \[\]/);
+  assert.match(canvas, /colorMaterialReferenceToneMentions: \[\]/);
+});
+
 test('exhibition img2img craft presets are grouped by category', () => {
   const node = readFileSync(new URL('../src/components/nodes/ExhibitionImg2ImgNode.tsx', import.meta.url), 'utf8');
   const backend = readFileSync(new URL('../backend/src/routes/promptLibrary.js', import.meta.url), 'utf8');
@@ -43,7 +76,7 @@ test('exhibition img2img craft presets are grouped by category', () => {
   assert.match(node, /completeRound\(roundIndex/);
   assert.match(node, /n: 1/);
   assert.match(node, /图像名称/);
-  assert.match(node, /normalizeExhibitionImageName\(event\.target\.value\)/);
+  assert.match(node, /normalizeExhibitionImageName\((event\.target\.value|value)\)/);
   assert.match(node, /formatExhibitionOutputImageName\(baseImageName, roundIndex, generationCount, '展陈图'\)/);
   assert.match(node, /outputTitle: formatExhibitionOutputImageName/);
   assert.match(node, /generateExhibitionImageNameWithLlm/);
@@ -70,6 +103,23 @@ test('exhibition img2img prompt can use plan layout camera mode', () => {
   assert.doesNotMatch(prompt, /画面选区比例/);
   assert.doesNotMatch(prompt, /偏移 x=/);
   assert.doesNotMatch(prompt, /空间结构示意图是最终画面的唯一空间骨架和布局蓝本/);
+});
+
+test('exhibition img2img prompt documents @img reference roles in runtime order', () => {
+  const prompt = buildExhibitionImg2ImgPrompt({
+    referenceRoleHints: [
+      { token: '@img1', role: 'plan-layout' },
+      { token: '@img2', role: 'color-material-reference' },
+      { token: '@img3', role: 'exhibit-reference', index: 1 },
+      { token: '@img4', role: 'exhibit-reference', index: 2 },
+    ],
+  });
+  assert.match(prompt, /图像输入引用顺序/);
+  assert.match(prompt, /@imgN 必须与实际传入生图模型的第 N 张参考图一致/);
+  assert.match(prompt, /@img1 = 平面布局相机视角图/);
+  assert.match(prompt, /@img2 = 色彩与材质参考图/);
+  assert.match(prompt, /@img3 = 展品参考图 1/);
+  assert.match(prompt, /@img4 = 展品参考图 2/);
 });
 
 test('exhibition img2img prompt defaults to structure priority', () => {

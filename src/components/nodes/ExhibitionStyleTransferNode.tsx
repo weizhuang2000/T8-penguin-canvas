@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, useReactFlow, type NodeProps } from '@xyflow/react';
+import { PORT_COLOR } from '../../config/portTypes';
 import { Image as ImageIcon, Palette, Play, Settings, Shuffle } from 'lucide-react';
 import { IMAGE_MODELS } from '../../providers/models';
 import {
@@ -628,9 +629,9 @@ const ExhibitionStyleTransferNode = ({ id, data, selected }: NodeProps) => {
       }`}
       style={{ background: 'rgba(17,24,39,.96)', backdropFilter: 'blur(8px)' }}
     >
-      <Handle id="original-image" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-rose-300" style={{ top: '24%' }} title="输入：原始图像" />
-      <Handle id="style-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-rose-300" style={{ top: '39%' }} title="输入：设计风格参考图" />
-      <Handle type="source" position={Position.Right} className="!bg-cyan-300 !border-0" title="输出：风格迁移结果（图像）" />
+      <Handle id="original-image" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '24%', background: PORT_COLOR.image }} title="输入：原始图像" />
+      <Handle id="style-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '39%', background: PORT_COLOR.image }} title="输入：设计风格参考图" />
+      <Handle type="source" position={Position.Right} className="!border-0" style={{ background: PORT_COLOR.image }} title="输出：风格迁移结果（图像）" />
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex h-8 w-8 items-center justify-center rounded bg-cyan-300/15 text-cyan-200">
           <Shuffle size={16} />

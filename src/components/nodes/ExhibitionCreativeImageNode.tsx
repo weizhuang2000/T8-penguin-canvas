@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, useReactFlow, type NodeProps } from '@xyflow/react';
+import { PORT_COLOR } from '../../config/portTypes';
 import {
   Brain,
   CheckCircle2,
@@ -1908,11 +1909,11 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       }`}
       style={{ background: 'rgba(17,24,39,.96)', backdropFilter: 'blur(8px)' }}
     >
-      <Handle type="source" position={Position.Right} className="!bg-cyan-300 !border-0" title="输出：展陈创意生图结果（图像）" />
-      <Handle id="space" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-cyan-300" style={{ top: '30%' }} title="输入：空间图 — 约束建筑空间结构" />
-      <Handle id="color-material-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-rose-300" style={{ top: '43%' }} title="输入：色彩材质参考图（可选）" />
-      <Handle id="exhibit-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-amber-300" style={{ top: '56%' }} title="输入：展品参考图（可选）" />
-      <Handle id="document-text" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-sky-300" style={{ top: '69%' }} title="输入：项目资料文档（DOCX/PDF/TXT，可选）" />
+      <Handle type="source" position={Position.Right} className="!border-0" style={{ background: PORT_COLOR.image }} title="输出：展陈创意生图结果（图像）" />
+      <Handle id="space" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '30%', background: PORT_COLOR.image }} title="输入：空间图 — 约束建筑空间结构" />
+      <Handle id="color-material-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '43%', background: PORT_COLOR.image }} title="输入：色彩材质参考图（可选）" />
+      <Handle id="exhibit-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '56%', background: PORT_COLOR.image }} title="输入：展品参考图（可选）" />
+      <Handle id="document-text" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '69%', background: PORT_COLOR.text }} title="输入：项目资料文档（DOCX/PDF/TXT，可选）" />
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex h-8 w-8 items-center justify-center rounded bg-cyan-300/15 text-cyan-200">
           <Layers3 size={16} />

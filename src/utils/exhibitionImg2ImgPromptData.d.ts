@@ -41,6 +41,7 @@ export interface ExhibitionImg2ImgPromptValues {
   excludeItemOptions?: ExhibitionImg2ImgExcludeItem[];
   wallContentPrompt?: string;
   exhibitReferenceItems?: Array<{ id?: string; url?: string; label?: string; description?: string }>;
+  referenceRoleHints?: Array<{ token?: string; role?: 'structure' | 'plan-layout' | 'color-material-reference' | 'exhibit-reference'; index?: number }>;
   spatialInputMode?: 'structure' | 'plan-camera';
   planCameraDescription?: string;
 }

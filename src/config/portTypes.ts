@@ -287,8 +287,8 @@ export function isConnectionValid(
  * 端口类型 → 颜色映射(用于 Handle 颜色与 UI 提示)
  */
 export const PORT_COLOR: Record<PortType, string> = {
-  text: '#7dd3fc',     // sky-300
-  image: '#fcd34d',    // amber-300
+  text: '#facc15',     // yellow-400
+  image: '#60a5fa',    // blue-400
   video: '#fda4af',    // rose-300
   audio: '#c4b5fd',    // violet-300
   model3d: '#93c5fd',  // blue-300
