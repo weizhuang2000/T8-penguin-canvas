@@ -244,7 +244,6 @@ function buildWallSchedule(values, wall, index) {
     `准确文案：${exact.length ? exact.join(' / ') : '未提取关键原文，请人工补充最终上墙文案'}`,
     `工艺配置：${craftNotes || (craftLabels.length ? craftLabels.join('、') : '常规展板与图文喷绘')}`,
     `尺寸/比例：${cleanText(values.dimensions || values.aspectRatio || '待现场复核')}`,
-    `版式备注：${cleanText(values.density || '适中')}；${cleanText(values.colorMaterial || '沿用整体视觉体系')}`,
   ].join('\n');
 }
 

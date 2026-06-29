@@ -351,11 +351,9 @@ function formatWallContentPrompt(value) {
   if (core) out.push(`核心叙事：${core}`);
   if (!wallStartIndexes.length) {
     const genericCraft = lineValue(lines, '工艺配置');
-    const genericLayout = lineValue(lines, '版式备注');
     const rest = lines.filter((line) => !/^\s*(工艺配置|版式备注)\s*[:：]/u.test(line));
     if (rest.length) out.push(rest.join('\n'));
     if (genericCraft) out.push(`工艺落位：${genericCraft}`);
-    if (genericLayout) out.push(`备注：${genericLayout}`);
     out.push('重要说明：以上内容仅用于设计效果图中各展墙的主题、图文层级、内容分区、重点文案占位和工艺落位；必须贴合结构示意图中的展墙/隔断位置，不得改变空间结构。');
     return out.join('\n\n');
   }
@@ -369,7 +367,6 @@ function formatWallContentPrompt(value) {
     const summary = lineValue(block, '内容摘要');
     const exactText = lineValue(block, '准确文案');
     const craftConfig = lineValue(block, '工艺配置');
-    const layoutNote = lineValue(block, '版式备注');
     const elements = splitSentences(summary).slice(0, 8);
     const crafts = splitSentences(craftConfig).slice(0, 10);
     const wallLines = [
@@ -387,7 +384,6 @@ function formatWallContentPrompt(value) {
       wallLines.push('', '工艺落位：');
       crafts.forEach((item) => wallLines.push(`${item}。`));
     }
-    if (layoutNote) wallLines.push('', `备注：${layoutNote}`);
     out.push(wallLines.join('\n'));
   });
   out.push('✧ 重要说明：以上立面组织结果仅用于设计效果图中各展墙的主题、图文层级、内容分区、重点文案占位和工艺落位；必须贴合结构示意图中的展墙/隔断位置，不得改变空间结构。');

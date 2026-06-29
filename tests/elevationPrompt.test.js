@@ -273,3 +273,25 @@ test('content plan wall lengths are parsed, estimated and emitted to schedule ou
   assert.match(result.mainOutput, /当前效果图立面范围：第 2-3 面；范围总长度：约 \d+\.\d+m/);
   assert.ok(result.wallLengthTotalM > 7.5);
 });
+
+test('wall schedule omits per-wall layout notes with color material presets', () => {
+  const result = buildElevationOutputs({
+    analysis,
+    walls: [
+      {
+        id: 'wall-1',
+        title: 'Preset duplication check',
+        content: 'Wall content',
+        exactText: ['Key text'],
+        craftNotes: 'Panel craft',
+      },
+    ],
+    wallMode: 'multi',
+    downstreamContent: 'schedule',
+    density: 'Dense layout',
+    colorMaterial: 'Do not repeat this material preset per wall',
+  });
+
+  assert.doesNotMatch(result.layoutSchedule, /版式备注/);
+  assert.doesNotMatch(result.layoutSchedule, /Do not repeat this material preset per wall/);
+});

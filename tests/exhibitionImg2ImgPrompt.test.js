@@ -286,6 +286,7 @@ test('exhibition img2img prompt forbids rendering design instruction fields as w
   assert.match(prompt, /不得将“展陈工艺”、“版式密度”、“工艺配置”、“版式备注”等字段或其后跟随的具体要求，作为画面中的文字呈现/);
   assert.match(prompt, /工艺落位：展板、立体字/);
   assert.doesNotMatch(prompt, /^工艺配置：/m);
+  assert.doesNotMatch(prompt, /备注：适中/);
 });
 
 test('exhibition img2img prompt uses color material reference image as material source', () => {
