@@ -65,6 +65,7 @@ export type NodeType =
   | 'video-motion'
   | 'elevation-prompt'
   | 'exhibition-img2img'
+  | 'exhibition-render-to-elevation'
   | 'exhibition-style-transfer'
   | 'exhibition-recolor'
   | 'exhibition-lighting-heatmap'

@@ -119,6 +119,7 @@ import ExhibitionStyleTransferNode from './nodes/ExhibitionStyleTransferNode';
 import ExhibitionRecolorNode from './nodes/ExhibitionRecolorNode';
 import ExhibitionLightingHeatmapNode from './nodes/ExhibitionLightingHeatmapNode';
 import ExhibitionCreativeImageNode from './nodes/ExhibitionCreativeImageNode';
+import ExhibitionRenderToElevationNode from './nodes/ExhibitionRenderToElevationNode';
 import ExhibitionTextImageLoopNode from './nodes/ExhibitionTextImageLoopNode';
 import ExhibitionOutlineSplitNode from './nodes/ExhibitionOutlineSplitNode';
 import ExhibitionPlanLayoutNode from './nodes/ExhibitionPlanLayoutNode';
@@ -220,6 +221,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'exhibition-recolor': ExhibitionRecolorNode,
   'exhibition-lighting-heatmap': ExhibitionLightingHeatmapNode,
   'exhibition-creative-image': ExhibitionCreativeImageNode,
+  'exhibition-render-to-elevation': ExhibitionRenderToElevationNode,
   'exhibition-text-image-loop': ExhibitionTextImageLoopNode,
   'exhibition-outline-split': ExhibitionOutlineSplitNode,
   'exhibition-plan-layout': ExhibitionPlanLayoutNode,
@@ -586,6 +588,39 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     imageUrls: [],
     referenceImages: [],
     creativeResults: [],
+    status: 'idle',
+    error: '',
+  },
+  'exhibition-render-to-elevation': {
+    model: 'gpt-image-2',
+    apiModel: 'gpt-image-2-all',
+    aspectRatio: '16:9',
+    sizeLevel: '2K',
+    outputFormat: 'jpg',
+    providerSource: 'zhenzhen',
+    providerId: '',
+    providerModel: '',
+    providerParams: {},
+    llmKeyId: '',
+    llmModel: '',
+    sourceText: '',
+    supplement: '',
+    seed: 0,
+    parsedElevations: [],
+    elevationResults: [],
+    analysisText: '',
+    prompt: '',
+    outputText: '',
+    text: '',
+    imageUrl: '',
+    imageUrls: [],
+    imageNames: [],
+    urls: [],
+    referenceImages: [],
+    lastPrompt: '',
+    lastSeed: 0,
+    taskId: '',
+    progress: '',
     status: 'idle',
     error: '',
   },
