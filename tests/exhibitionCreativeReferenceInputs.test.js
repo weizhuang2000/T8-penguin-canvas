@@ -18,9 +18,33 @@ test('exhibition creative node exposes color/material and exhibit reference hand
   assert.match(nodeSource, /useInputImagesByHandle\(id, 'exhibit-reference'\)/);
 });
 
+test('exhibition creative node supports @ mentions for reference image prompt fields', () => {
+  assert.match(nodeSource, /MentionPromptInput/);
+  assert.match(nodeSource, /resolveMediaMentions/);
+  assert.match(nodeSource, /type MediaMention/);
+  assert.match(nodeSource, /import type \{ Material \}/);
+  assert.match(nodeSource, /orderedReferenceMaterials/);
+  assert.match(nodeSource, /mentionMaterials/);
+  assert.match(nodeSource, /role: 'space'/);
+  assert.match(nodeSource, /role: 'color-material-reference'/);
+  assert.match(nodeSource, /role: 'exhibit-reference'/);
+  assert.match(nodeSource, /materials=\{mentionMaterials\}/);
+  assert.match(nodeSource, /promptTemplateKind="image"/);
+  assert.match(nodeSource, /projectThemeMentions/);
+  assert.match(nodeSource, /inspirationMentions/);
+  assert.match(nodeSource, /documentSummaryMentions/);
+  assert.match(nodeSource, /creativeBriefMentions/);
+  assert.match(nodeSource, /colorMaterialPaletteMentions/);
+  assert.match(nodeSource, /colorMaterialTexturesMentions/);
+  assert.match(nodeSource, /colorMaterialReferenceToneMentions/);
+  assert.match(nodeSource, /descriptionMentions/);
+  assert.match(nodeSource, /resolvedPromptInputs/);
+});
+
 test('exhibition creative node disables manual color material inputs when reference image is connected', () => {
   assert.match(nodeSource, /已由接入的色彩与材质参考图接管/);
   assert.match(nodeSource, /disabled=\{isReadonly \|\| busy \|\| hasColorMaterialReference/);
+  assert.match(nodeSource, /disabled=\{isReadonly \|\| busy \|\| hasColorMaterialPreset \|\| colorMaterialPriorityMode === 'llm'\}/);
   assert.match(nodeSource, /colorMaterial: effectiveColorMaterial/);
   assert.match(nodeSource, /hasColorMaterialReferenceImage: hasColorMaterialReference/);
 });
@@ -69,7 +93,8 @@ test('exhibition creative node creates transient marked data urls without save A
   assert.match(nodeSource, /const colorMaterialReferenceForModel = colorMaterialReferenceImage/);
   assert.match(nodeSource, /await createColorMaterialAbstractCardDataUrl\(colorMaterialReferenceImage, colorMaterialMarkSettings\)/);
   assert.match(nodeSource, /await markImageDataUrl\(colorMaterialReferenceImage, colorMaterialMarkSettings\)/);
-  assert.match(nodeSource, /const runtimeReferenceImages = \[spaceImage, colorMaterialReferenceForModel, \.\.\.exhibitReferenceImageUrls\]\.filter\(Boolean\)/);
+  assert.match(nodeSource, /const runtimeReferenceImages = orderedReferenceMaterials\.map/);
+  assert.match(nodeSource, /item\.role === 'color-material-reference' \? colorMaterialReferenceForModel : item\.url/);
   assert.match(nodeSource, /colorMaterialReferenceMode: ColorMaterialReferenceMode = useColorMaterialAbstractCard \? 'abstract-card' : 'marked-image'/);
   assert.match(nodeSource, /images: referenceImages/);
   assert.doesNotMatch(nodeSource, /markedSpaceImage/);

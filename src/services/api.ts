@@ -64,6 +64,7 @@ export interface ResolvedToolPermissions {
   isAdmin: boolean;
   visibleNodeTypes: string[];
   allowedNodeTypes: string[];
+  exhibitionCompactForm?: Record<string, string[]>;
 }
 
 export interface ToolPermissionsConfig {
@@ -71,6 +72,7 @@ export interface ToolPermissionsConfig {
   version: number;
   updatedAt: string;
   defaultVisibleNodeTypes: string[];
+  exhibitionCompactForm?: Record<string, string[]>;
   roleRules: Record<string, ToolPermissionRule>;
   userRules: Record<string, ToolPermissionRule>;
   allNodeTypes?: string[];

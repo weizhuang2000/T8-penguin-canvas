@@ -43,6 +43,8 @@ interface Props {
   expandable?: boolean;
   promptTemplateKind?: PromptTemplateKind | false;
   onSubmit?: (value: string, mentions: MediaMention[]) => void;
+  disabled?: boolean;
+  readOnly?: boolean;
   /** Force the editor to fill a flex parent instead of growing with long text. */
   fillHeight?: boolean;
 }
@@ -300,9 +302,12 @@ const MentionPromptInput = ({
   expandable = true,
   promptTemplateKind = false,
   onSubmit,
+  disabled = false,
+  readOnly = false,
   fillHeight = false,
 }: Props) => {
   const localRef = useRef<HTMLDivElement | null>(null);
+  const isDisabled = disabled || readOnly;
   const composingRef = useRef(false);
   const lastPlainInputRef = useRef<PlainInputSnapshot | null>(null);
   const compositionLeakRef = useRef<CompositionLeakSnapshot | null>(null);
@@ -374,6 +379,7 @@ const MentionPromptInput = ({
   };
 
   const openExpanded = () => {
+    if (isDisabled) return;
     setDraftValue(value || '');
     setDraftMentions(mentions || []);
     setQueryState((s) => ({ ...s, open: false }));
@@ -386,6 +392,7 @@ const MentionPromptInput = ({
   };
 
   const applyExpanded = () => {
+    if (isDisabled) return;
     onChange(draftValue, draftMentions);
     closeExpanded();
   };
@@ -698,14 +705,19 @@ const MentionPromptInput = ({
       <div className={fillLayout ? 'relative flex min-h-0 flex-1 flex-col' : 'relative'}>
         <div
           ref={setEditorRef}
-          contentEditable
+          contentEditable={!isDisabled}
           suppressContentEditableWarning
           role="textbox"
           aria-multiline="true"
-          tabIndex={0}
+          aria-disabled={isDisabled}
+          tabIndex={isDisabled ? -1 : 0}
           data-placeholder={placeholder || ''}
           onInput={handleEditorInput}
           onBeforeInput={(event) => {
+            if (isDisabled) {
+              event.preventDefault();
+              return;
+            }
             if (isImeCompositionInput(event.nativeEvent)) composingRef.current = true;
           }}
           onCompositionStart={() => {
@@ -744,12 +756,15 @@ const MentionPromptInput = ({
             }, 16);
           }}
           onFocus={() => {
+            if (isDisabled) return;
             setIsFocused(true);
           }}
           onClick={() => {
+            if (isDisabled) return;
             openFromEditor();
           }}
           onKeyUp={(e) => {
+            if (isDisabled) return;
             const el = localRef.current;
             if (!el) return;
             if (composingRef.current || isImeKeyboardEvent(e.nativeEvent)) return;
@@ -758,6 +773,10 @@ const MentionPromptInput = ({
             openFromCaret(text, getCaretPlainOffset(el), nextMentions);
           }}
           onKeyDown={(e) => {
+            if (isDisabled) {
+              e.preventDefault();
+              return;
+            }
             if (isImeKeyboardEvent(e.nativeEvent)) {
               composingRef.current = true;
               setQueryState((s) => ({ ...s, open: false }));
@@ -817,6 +836,7 @@ const MentionPromptInput = ({
           }}
           onPaste={(e) => {
             e.preventDefault();
+            if (isDisabled) return;
             const text = e.clipboardData.getData('text/plain');
             document.execCommand('insertText', false, text);
           }}
@@ -830,7 +850,8 @@ const MentionPromptInput = ({
             minHeight: fillLayout ? 0 : (style?.minHeight ?? 56),
             lineHeight: 1.45,
             caretColor: 'currentColor',
-            cursor: 'text',
+            cursor: isDisabled ? 'not-allowed' : 'text',
+            opacity: isDisabled ? 0.55 : style?.opacity,
             paddingRight: expandable ? (templateEnabled ? 64 : 34) : style?.paddingRight,
           }}
         />
@@ -854,6 +875,7 @@ const MentionPromptInput = ({
             <button
               type="button"
               data-prompt-template-trigger
+              disabled={isDisabled}
               className="nodrag nopan absolute right-[34px] top-1.5 z-10 inline-flex h-6 w-6 items-center justify-center rounded border border-white/10 bg-black/45 text-white/70 shadow-sm hover:text-white"
               onMouseDown={(event) => {
                 event.preventDefault();
@@ -873,6 +895,7 @@ const MentionPromptInput = ({
           <button
             type="button"
             data-prompt-expand-trigger
+            disabled={isDisabled}
             className="nodrag nopan absolute right-1.5 top-1.5 z-10 inline-flex h-6 w-6 items-center justify-center rounded border border-white/10 bg-black/45 text-white/70 shadow-sm hover:text-white"
             onMouseDown={(event) => {
               event.preventDefault();

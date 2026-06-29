@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { PORT_COLOR } from '../../config/portTypes';
+import { useCompactAttrs } from '../../stores/exhibitionCompact';
 import {
   Check,
   Clipboard,
@@ -206,6 +207,7 @@ function parseCraftPresetEditorText(text: string) {
 const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
+  const compactAttrs = useCompactAttrs(id, 'elevation-prompt');
   const fileRef = useRef<HTMLInputElement>(null);
   const jsonFileRef = useRef<HTMLInputElement>(null);
   const activeCanvas = useCanvasStore((state) => state.canvases.find((canvas) => canvas.id === state.activeId) || null);
@@ -619,6 +621,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
 
   return (
     <div
+      {...compactAttrs}
       className={`relative w-[430px] rounded-xl border-2 transition-all ${
         selected ? 'border-cyan-300 shadow-2xl shadow-cyan-500/15' : 'border-white/15 hover:border-white/30'
       }`}
@@ -651,7 +654,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
           </div>
         )}
 
-        <section className="rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="prompt-outline" className="rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1.5 flex items-center gap-2">
             <span className="text-[11px] font-semibold text-cyan-100">1. 导入文档</span>
             <button
@@ -687,7 +690,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
               />
         </section>
 
-        <section className="rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="prompt-outline" className="rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1.5 flex items-center gap-2">
             <span className="text-[11px] font-semibold text-cyan-100">2. AI 提炼</span>
             <label className="ml-auto flex min-w-[150px] items-center gap-1.5 text-[10px] text-white/55" title="控制 AI 结构化提炼的目标字数">
@@ -788,7 +791,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
           </details>
         </section>
 
-        <section className="rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="craft-style" className="rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1.5 flex items-center gap-2">
             <span className="text-[11px] font-semibold text-cyan-100">3. 立面组织</span>
             <button type="button" className={`${BUTTON} ml-auto`} disabled={isReadonly} onClick={rebuildWalls}>
@@ -875,7 +878,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
           </div>
         </section>
 
-        <section className="rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="craft-style" className="rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1.5 flex items-center gap-2">
             <span className="text-[11px] font-semibold text-cyan-100">4. 工艺与版式</span>
             {canManageTeam && (
@@ -1087,7 +1090,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
           </div>
         </section>
 
-        <section className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
+        <section data-exhibition-compact-section="result-preview" className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
           <div className="mb-1.5 flex items-center gap-2">
             <span className="text-[11px] font-semibold text-cyan-100">5. 下游输出</span>
             <select className={`${FIELD} ml-auto !w-auto`} disabled={isReadonly} value={d.downstreamContent || 'concept'} onChange={(event) => update({ downstreamContent: event.target.value })}>

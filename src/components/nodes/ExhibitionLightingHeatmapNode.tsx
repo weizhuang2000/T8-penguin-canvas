@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
 import { PORT_COLOR } from '../../config/portTypes';
+import { useCompactAttrs } from '../../stores/exhibitionCompact';
 import { Image as ImageIcon, Play, SunMedium, ThermometerSun } from 'lucide-react';
 import { IMAGE_MODELS } from '../../providers/models';
 import {
@@ -138,6 +139,7 @@ function ImageSlot({ url }: { url: string }) {
 const ExhibitionLightingHeatmapNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
+  const compactAttrs = useCompactAttrs(id, 'exhibition-lighting-heatmap');
   const pollAbortRef = useRef(false);
   const sourceImage = useInputImageByHandle(id, 'source-image');
   const activeCanvas = useCanvasStore((state) => state.canvases.find((canvas) => canvas.id === state.activeId) || null);
@@ -393,6 +395,7 @@ const ExhibitionLightingHeatmapNode = ({ id, data, selected }: NodeProps) => {
 
   return (
     <div
+      {...compactAttrs}
       className={`relative w-[640px] rounded-xl border-2 transition-all ${
         selected ? 'border-cyan-300 shadow-2xl shadow-cyan-500/15' : 'border-white/15 hover:border-white/30'
       }`}
@@ -416,7 +419,7 @@ const ExhibitionLightingHeatmapNode = ({ id, data, selected }: NodeProps) => {
 
         <ImageSlot url={sourceImage} />
 
-        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="craft-style" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100">
             <SunMedium size={13} /> 热力分析
           </div>
@@ -468,7 +471,7 @@ const ExhibitionLightingHeatmapNode = ({ id, data, selected }: NodeProps) => {
           />
         </section>
 
-        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="generate-action" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} /> 生成</div>
             <button type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy} onClick={() => void runGenerate()}><Play size={13} /> 生成灯光热力图</button>

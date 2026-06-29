@@ -193,12 +193,67 @@ function normalizeRule(raw = {}) {
   };
 }
 
+// ── 精简窗体：展陈节点支持的 section ID 清单 ──
+const EXHIBITION_COMPACT_NODE_TYPES = [
+  'elevation-prompt',
+  'exhibition-img2img',
+  'exhibition-style-transfer',
+  'exhibition-recolor',
+  'exhibition-lighting-heatmap',
+  'exhibition-creative-image',
+  'exhibition-text-image-loop',
+  'exhibition-outline-split',
+  'exhibition-plan-layout',
+  'unit-panel-design',
+  'showcase-interior-design',
+];
+
+const EXHIBITION_COMPACT_SECTIONS = {
+  'elevation-prompt': ['input-material', 'prompt-outline', 'craft-style', 'color-material', 'layout-size', 'model-params', 'generate-action', 'result-preview'],
+  'exhibition-img2img': ['input-material', 'prompt-outline', 'craft-style', 'color-material', 'layout-size', 'model-params', 'generate-action', 'result-preview'],
+  'exhibition-style-transfer': ['input-material', 'prompt-outline', 'craft-style', 'color-material', 'layout-size', 'model-params', 'generate-action', 'result-preview'],
+  'exhibition-recolor': ['input-material', 'prompt-outline', 'craft-style', 'color-material', 'layout-size', 'model-params', 'generate-action', 'result-preview'],
+  'exhibition-lighting-heatmap': ['input-material', 'prompt-outline', 'craft-style', 'color-material', 'layout-size', 'model-params', 'generate-action', 'result-preview'],
+  'exhibition-creative-image': ['input-material', 'prompt-outline', 'craft-style', 'color-material', 'layout-size', 'model-params', 'generate-action', 'result-preview'],
+  'exhibition-text-image-loop': ['input-material', 'prompt-outline', 'craft-style', 'color-material', 'layout-size', 'model-params', 'generate-action', 'result-preview'],
+  'exhibition-outline-split': ['input-material', 'prompt-outline', 'craft-style', 'color-material', 'layout-size', 'model-params', 'generate-action', 'result-preview'],
+  'exhibition-plan-layout': ['input-material', 'prompt-outline', 'craft-style', 'color-material', 'layout-size', 'model-params', 'generate-action', 'result-preview'],
+  'unit-panel-design': ['input-material', 'prompt-outline', 'craft-style', 'color-material', 'layout-size', 'model-params', 'generate-action', 'result-preview'],
+  'showcase-interior-design': ['input-material', 'prompt-outline', 'craft-style', 'color-material', 'layout-size', 'model-params', 'generate-action', 'result-preview'],
+};
+
+function defaultExhibitionCompactForm() {
+  const out = {};
+  for (const [nodeType, sections] of Object.entries(EXHIBITION_COMPACT_SECTIONS)) {
+    out[nodeType] = [...sections];
+  }
+  return out;
+}
+
+function normalizeExhibitionCompactForm(value) {
+  if (!value || typeof value !== 'object') return defaultExhibitionCompactForm();
+  const out = {};
+  for (const nodeType of EXHIBITION_COMPACT_NODE_TYPES) {
+    const known = new Set(EXHIBITION_COMPACT_SECTIONS[nodeType] || []);
+    const raw = Array.isArray(value[nodeType]) ? value[nodeType] : [];
+    const valid = raw.map((s) => String(s || '').trim()).filter((s) => known.has(s));
+    const seen = new Set();
+    const deduped = [];
+    for (const s of valid) {
+      if (!seen.has(s)) { seen.add(s); deduped.push(s); }
+    }
+    out[nodeType] = deduped.length ? deduped : [...known];
+  }
+  return out;
+}
+
 function emptyDb() {
   return {
     schema: 't8-tool-permissions',
     version: 1,
     updatedAt: nowIso(),
     defaultVisibleNodeTypes: [...DEFAULT_VISIBLE_NODE_TYPES],
+    exhibitionCompactForm: defaultExhibitionCompactForm(),
     roleRules: {},
     userRules: {},
   };
@@ -214,6 +269,7 @@ function readDb() {
   }
   const db = emptyDb();
   db.defaultVisibleNodeTypes = normalizeDefaultVisibleNodeTypes(raw?.defaultVisibleNodeTypes);
+  db.exhibitionCompactForm = normalizeExhibitionCompactForm(raw?.exhibitionCompactForm);
   for (const [role, rule] of Object.entries(raw?.roleRules || {})) {
     const key = String(role || '').trim();
     if (key) db.roleRules[key] = normalizeRule(rule);
@@ -239,6 +295,7 @@ function writeDb(db) {
 function normalizeDb(raw = {}) {
   const db = emptyDb();
   db.defaultVisibleNodeTypes = normalizeDefaultVisibleNodeTypes(raw.defaultVisibleNodeTypes);
+  db.exhibitionCompactForm = normalizeExhibitionCompactForm(raw.exhibitionCompactForm);
   for (const [role, rule] of Object.entries(raw.roleRules || {})) {
     const key = String(role || '').trim();
     if (key) db.roleRules[key] = normalizeRule(rule);
@@ -258,11 +315,13 @@ function applyRule(baseTypes, rule) {
 }
 
 function resolveToolPermissions(user, db = readDb()) {
+  const compactForm = db.exhibitionCompactForm || defaultExhibitionCompactForm();
   if (isAdminRole(user?.role)) {
     return {
       isAdmin: true,
       visibleNodeTypes: [...ALL_NODE_TYPES],
       allowedNodeTypes: [...ALL_NODE_TYPES],
+      exhibitionCompactForm: compactForm,
     };
   }
   const roleRule = db.roleRules[String(user?.role || '')];
@@ -273,6 +332,7 @@ function resolveToolPermissions(user, db = readDb()) {
     isAdmin: false,
     visibleNodeTypes: [...finalTypes],
     allowedNodeTypes: [...finalTypes],
+    exhibitionCompactForm: compactForm,
   };
 }
 
@@ -352,6 +412,10 @@ function findUnauthorizedNewNodes(user, incomingNodes, existingNodes = []) {
 module.exports = {
   ALL_NODE_TYPES,
   DEFAULT_VISIBLE_NODE_TYPES,
+  EXHIBITION_COMPACT_NODE_TYPES,
+  EXHIBITION_COMPACT_SECTIONS,
+  defaultExhibitionCompactForm,
+  normalizeExhibitionCompactForm,
   assertCanUseNode,
   canUseNode,
   findUnauthorizedNewNodes,

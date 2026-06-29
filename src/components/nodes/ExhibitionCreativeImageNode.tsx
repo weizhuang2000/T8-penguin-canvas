@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, useReactFlow, type NodeProps } from '@xyflow/react';
 import { PORT_COLOR } from '../../config/portTypes';
+import { useCompactAttrs } from '../../stores/exhibitionCompact';
 import {
   Brain,
   CheckCircle2,
@@ -83,8 +84,11 @@ import { useThemeStore } from '../../stores/theme';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
+import MentionPromptInput from './MentionPromptInput';
+import { materialMentionKey, resolveMediaMentions, type MediaMention } from './mediaMentions';
 import PromptExpandableInput from '../PromptExpandableInput';
 import PromptTextarea from '../PromptTextarea';
+import type { Material } from './useUpstreamMaterials';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
@@ -160,6 +164,22 @@ function normalizeSpaceDimensionInput(value: unknown): number {
   return Math.min(200, Math.round(number * 100) / 100);
 }
 
+function mediaMentions(value: unknown): MediaMention[] {
+  return Array.isArray(value) ? (value as MediaMention[]) : [];
+}
+
+function imageTokenForUrl(url: string, materials: Material[]): string {
+  const material = materials.find((item) => item.kind === 'image' && item.url === url);
+  if (!material) return '';
+  let imageIndex = 0;
+  for (const item of materials) {
+    if (item.kind !== 'image') continue;
+    imageIndex += 1;
+    if (materialMentionKey(item) === materialMentionKey(material)) return `@img${imageIndex}`;
+  }
+  return '';
+}
+
 function imagesFromData(data: any): string[] {
   const out: string[] = [];
   const push = (value: any) => {
@@ -188,6 +208,18 @@ interface ExhibitReferenceInputImage {
 
 interface ExhibitReferenceItem extends ExhibitReferenceInputImage {
   description: string;
+  descriptionMentions?: MediaMention[];
+}
+
+interface CreativeReferenceMaterialRole {
+  id: string;
+  kind: 'image';
+  url: string;
+  label: string;
+  sourceNodeId: string;
+  origin: 'upstream';
+  role: 'space' | 'color-material-reference' | 'exhibit-reference';
+  roleIndex?: number;
 }
 
 function shortFileLabel(url: string, fallback = '展品') {
@@ -773,6 +805,7 @@ function parseInsertPresetEditorText(text: string) {
 const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
+  const compactAttrs = useCompactAttrs(id, 'exhibition-creative-image');
   const rf = useReactFlow();
   const fileRef = useRef<HTMLInputElement>(null);
   const colorMaterialPresetDisconnectRef = useRef(false);
@@ -921,6 +954,13 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const colorMaterialPalette = String(d.colorMaterialPalette || '').trim();
   const colorMaterialTextures = String(d.colorMaterialTextures || '').trim();
   const combinedColorMaterial = combineColorMaterialText(colorMaterialPalette, colorMaterialTextures, colorMaterial);
+  const projectThemeMentions = mediaMentions(d.projectThemeMentions);
+  const inspirationMentions = mediaMentions(d.inspirationMentions);
+  const documentSummaryMentions = mediaMentions(d.documentSummaryMentions);
+  const creativeBriefMentions = mediaMentions(d.creativeBriefMentions);
+  const colorMaterialPaletteMentions = mediaMentions(d.colorMaterialPaletteMentions);
+  const colorMaterialTexturesMentions = mediaMentions(d.colorMaterialTexturesMentions);
+  const colorMaterialReferenceToneMentions = mediaMentions(d.colorMaterialReferenceToneMentions);
   const hasColorMaterialPreset = !!String(d.colorMaterialPreset || '').trim();
   const colorMaterialPriorityMode = normalizeColorMaterialPriorityMode(d.colorMaterialPriorityMode);
   const spaceLightingEnabled = d.spaceLightingEnabled === true;
@@ -945,8 +985,8 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     return exhibitReferenceInputImages.map((image, index) => {
       const existing = saved.find((item) => item.url === image.url);
       return existing
-        ? { ...existing, id: image.id, label: image.label }
-        : { ...image, description: '' };
+        ? { ...existing, id: image.id, label: image.label, descriptionMentions: mediaMentions(existing.descriptionMentions) }
+        : { ...image, description: '', descriptionMentions: [] };
     });
   }, [d.exhibitReferenceItems, exhibitReferenceInputImages]);
   const exhibitReferenceImage = exhibitReferenceInputImages[0]?.url || '';
@@ -964,6 +1004,64 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     d.colorMaterialMarkText,
   ]);
   const inputDocumentText = useInputDocumentText(id);
+  const orderedReferenceMaterials = useMemo<CreativeReferenceMaterialRole[]>(() => {
+    const out: CreativeReferenceMaterialRole[] = [];
+    const seen = new Set<string>();
+    const push = (item: CreativeReferenceMaterialRole) => {
+      if (!item.url || seen.has(item.url)) return;
+      seen.add(item.url);
+      out.push(item);
+    };
+    if (spaceImage) {
+      push({
+        id: `${id}:reference:space:${spaceImage}`,
+        kind: 'image',
+        url: spaceImage,
+        sourceNodeId: id,
+        origin: 'upstream',
+        label: '空间图',
+        role: 'space',
+      });
+    }
+    if (colorMaterialReferenceImage) {
+      push({
+        id: `${id}:reference:color-material-reference:${colorMaterialReferenceImage}`,
+        kind: 'image',
+        url: colorMaterialReferenceImage,
+        sourceNodeId: id,
+        origin: 'upstream',
+        label: '色彩材质参考图',
+        role: 'color-material-reference',
+      });
+    }
+    for (const [index, item] of exhibitReferenceItems.entries()) {
+      push({
+        id: item.id,
+        kind: 'image',
+        url: item.url,
+        sourceNodeId: item.id.split(':')[0] || id,
+        origin: 'upstream',
+        label: item.label || `展品参考图 ${index + 1}`,
+        role: 'exhibit-reference',
+        roleIndex: index + 1,
+      });
+    }
+    return out;
+  }, [colorMaterialReferenceImage, exhibitReferenceItems, id, spaceImage]);
+  const orderedReferenceImages = useMemo(() => orderedReferenceMaterials.map((item) => item.url), [orderedReferenceMaterials]);
+  const mentionMaterials: Material[] = useMemo(() => orderedReferenceMaterials.map((item) => ({
+    id: item.id,
+    kind: item.kind,
+    url: item.url,
+    sourceNodeId: item.sourceNodeId,
+    origin: item.origin,
+    label: item.label,
+  })), [orderedReferenceMaterials]);
+  const referenceRoleHints = useMemo(() => orderedReferenceMaterials.map((item) => ({
+    token: imageTokenForUrl(item.url, mentionMaterials),
+    role: item.role,
+    index: item.roleIndex,
+  })).filter((item) => item.token), [mentionMaterials, orderedReferenceMaterials]);
 
   const disconnectColorMaterialReferenceInput = useCallback(() => {
     colorMaterialPresetDisconnectRef.current = true;
@@ -1035,32 +1133,73 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     };
   }, [colorMaterialReferenceImage, colorMaterialReferenceTone, d.colorMaterialReferenceToneSource, d.colorMaterialReferenceToneStatus, hasColorMaterialPreset, update]);
 
+  const resolvedPromptInputs = useMemo(() => {
+    const resolveText = (value: unknown, mentions: MediaMention[]) => (
+      resolveMediaMentions(String(value || ''), mentions, mentionMaterials)
+    );
+    const promptColorMaterialPalette = hasColorMaterialPreset || !hasColorMaterialReference ? (colorMaterialPalette || colorMaterial) : '';
+    const promptColorMaterialTextures = hasColorMaterialPreset || !hasColorMaterialReference ? (colorMaterialTextures || colorMaterial) : '';
+    return {
+      projectTheme: resolveText(projectTheme, projectThemeMentions),
+      inspiration: resolveText(inspiration, inspirationMentions),
+      documentSummary: resolveText(documentSummaryForImagePrompt, documentSummaryMentions),
+      creativeBrief: normalizeExhibitionCreativeBrief(resolveText(creativeBrief, creativeBriefMentions)),
+      colorMaterialPalette: resolveText(promptColorMaterialPalette, colorMaterialPaletteMentions),
+      colorMaterialTextures: resolveText(promptColorMaterialTextures, colorMaterialTexturesMentions),
+      colorMaterialReferenceTone: resolveText(colorMaterialReferenceTone, colorMaterialReferenceToneMentions),
+      exhibitReferenceItems: exhibitReferenceItems.map((item) => ({
+        ...item,
+        description: resolveText(item.description, mediaMentions(item.descriptionMentions)),
+      })),
+    };
+  }, [
+    colorMaterial,
+    colorMaterialPalette,
+    colorMaterialPaletteMentions,
+    colorMaterialReferenceTone,
+    colorMaterialReferenceToneMentions,
+    colorMaterialTextures,
+    colorMaterialTexturesMentions,
+    creativeBrief,
+    creativeBriefMentions,
+    documentSummaryForImagePrompt,
+    documentSummaryMentions,
+    exhibitReferenceItems,
+    hasColorMaterialPreset,
+    hasColorMaterialReference,
+    inspiration,
+    inspirationMentions,
+    mentionMaterials,
+    projectTheme,
+    projectThemeMentions,
+  ]);
+
   const previewPrompt = useMemo(
     () => buildExhibitionCreativeImagePrompt({
       spaceType,
-      projectTheme,
+      projectTheme: resolvedPromptInputs.projectTheme,
       colorMaterial: effectiveColorMaterial,
-      colorMaterialPalette: hasColorMaterialPreset || !hasColorMaterialReference ? (colorMaterialPalette || colorMaterial) : '',
-      colorMaterialTextures: hasColorMaterialPreset || !hasColorMaterialReference ? (colorMaterialTextures || colorMaterial) : '',
+      colorMaterialPalette: resolvedPromptInputs.colorMaterialPalette,
+      colorMaterialTextures: resolvedPromptInputs.colorMaterialTextures,
       hasColorMaterialPreset,
       hasColorMaterialReferenceImage: hasColorMaterialReference,
-      colorMaterialReferenceTone,
+      colorMaterialReferenceTone: resolvedPromptInputs.colorMaterialReferenceTone,
       colorMaterialPriorityMode,
       colorMaterialReferenceMode,
       colorMaterialReferenceMarkText: colorMaterialMarkSettings.text,
       colorMaterialReferenceMarkPosition: colorMaterialMarkSettings.position,
       spaceLightingEnabled,
       spaceLightingLevel,
-      inspiration,
-      documentSummary: documentSummaryForImagePrompt,
-      creativeBrief,
+      inspiration: resolvedPromptInputs.inspiration,
+      documentSummary: resolvedPromptInputs.documentSummary,
+      creativeBrief: resolvedPromptInputs.creativeBrief,
       insertItems: selectedInsertIds,
       insertItemOptions: insertOptions,
       excludeItems: selectedExcludeIds,
       excludeItemOptions: excludeOptions,
       hasSpaceImage: !!spaceImage,
       hasExhibitReferenceImage: hasExhibitReference,
-      exhibitReferenceItems,
+      exhibitReferenceItems: resolvedPromptInputs.exhibitReferenceItems,
       annotationTextEffective: d.annotationTextEffective === true,
       spaceSize: manualSpaceSize,
       viewControlEnabled,
@@ -1068,8 +1207,9 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       viewAngleOptions,
       roundIndex: 1,
       total: generationCount,
+      referenceRoleHints,
     }),
-    [colorMaterial, colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPalette, colorMaterialPriorityMode, colorMaterialReferenceMode, colorMaterialReferenceTone, colorMaterialTextures, creativeBrief, d.annotationTextEffective, documentSummaryForImagePrompt, effectiveColorMaterial, exhibitReferenceItems, excludeOptions, generationCount, hasColorMaterialPreset, hasColorMaterialReference, hasExhibitReference, inspiration, insertOptions, manualSpaceSize, projectTheme, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceLightingEnabled, spaceLightingLevel, spaceType, viewAngleOptions, viewControlEnabled],
+    [colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPriorityMode, colorMaterialReferenceMode, d.annotationTextEffective, effectiveColorMaterial, excludeOptions, generationCount, hasColorMaterialPreset, hasColorMaterialReference, hasExhibitReference, insertOptions, manualSpaceSize, referenceRoleHints, resolvedPromptInputs, selectedExcludeIds, selectedInsertIds, selectedViewAngleIds, spaceImage, spaceLightingEnabled, spaceLightingLevel, spaceType, viewAngleOptions, viewControlEnabled],
   );
 
   const renderMarkSettings = (
@@ -1141,22 +1281,21 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   );
 
   useEffect(() => {
-    const refs = [spaceImage, colorMaterialReferenceImage, ...exhibitReferenceImageUrls].filter(Boolean);
     const patch = {
       prompt: previewPrompt,
       outputText: previewPrompt,
       text: previewPrompt,
-      referenceImages: refs,
+      referenceImages: orderedReferenceImages,
     };
     if (
       d.prompt !== patch.prompt ||
       d.outputText !== patch.outputText ||
       d.text !== patch.text ||
-      JSON.stringify(d.referenceImages || []) !== JSON.stringify(refs)
+      JSON.stringify(d.referenceImages || []) !== JSON.stringify(orderedReferenceImages)
     ) {
       update(patch);
     }
-  }, [colorMaterialReferenceImage, d.outputText, d.prompt, d.referenceImages, d.text, exhibitReferenceImageUrls, previewPrompt, spaceImage, update]);
+  }, [d.outputText, d.prompt, d.referenceImages, d.text, orderedReferenceImages, previewPrompt, update]);
 
   useEffect(() => {
     if (!inputDocumentText || d.sourceText === inputDocumentText) return;
@@ -1166,11 +1305,15 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   useEffect(() => {
     const saved: ExhibitReferenceItem[] = Array.isArray(d.exhibitReferenceItems) ? d.exhibitReferenceItems : [];
     const same = saved.length === exhibitReferenceItems.length
-      && saved.every((item, i) => item.url === exhibitReferenceItems[i].url && item.description === exhibitReferenceItems[i].description);
+      && saved.every((item, i) => (
+        item.url === exhibitReferenceItems[i].url
+        && item.description === exhibitReferenceItems[i].description
+        && JSON.stringify(mediaMentions(item.descriptionMentions)) === JSON.stringify(mediaMentions(exhibitReferenceItems[i].descriptionMentions))
+      ));
     if (!same) update({ exhibitReferenceItems });
   }, [d.exhibitReferenceItems, exhibitReferenceItems, update]);
 
-  const patchExhibitReferenceItem = useCallback((url: string, patch: Partial<Pick<ExhibitReferenceItem, 'description'>>) => {
+  const patchExhibitReferenceItem = useCallback((url: string, patch: Partial<Pick<ExhibitReferenceItem, 'description' | 'descriptionMentions'>>) => {
     const next = exhibitReferenceItems.map((item) =>
       item.url === url ? { ...item, ...patch } : item
     );
@@ -1714,7 +1857,9 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           ? await createColorMaterialAbstractCardDataUrl(colorMaterialReferenceImage, colorMaterialMarkSettings)
           : await markImageDataUrl(colorMaterialReferenceImage, colorMaterialMarkSettings)
         : '';
-      const runtimeReferenceImages = [spaceImage, colorMaterialReferenceForModel, ...exhibitReferenceImageUrls].filter(Boolean);
+      const runtimeReferenceImages = orderedReferenceMaterials.map((item) => (
+        item.role === 'color-material-reference' ? colorMaterialReferenceForModel : item.url
+      )).filter(Boolean);
       const runtimeInsertIds = resolveRuntimeInsertItems();
       let sharedBrief = creativeBrief;
       const baseImageName = imageName || projectTheme || '创意图';
@@ -1775,29 +1920,29 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
         }
         const imagePrompt = buildExhibitionCreativeImagePrompt({
           spaceType,
-          projectTheme,
+          projectTheme: resolvedPromptInputs.projectTheme,
           colorMaterial: effectiveColorMaterial,
-          colorMaterialPalette: hasColorMaterialPreset || !hasColorMaterialReference ? (colorMaterialPalette || colorMaterial) : '',
-          colorMaterialTextures: hasColorMaterialPreset || !hasColorMaterialReference ? (colorMaterialTextures || colorMaterial) : '',
+          colorMaterialPalette: resolvedPromptInputs.colorMaterialPalette,
+          colorMaterialTextures: resolvedPromptInputs.colorMaterialTextures,
           hasColorMaterialPreset,
           hasColorMaterialReferenceImage: hasColorMaterialReference,
-          colorMaterialReferenceTone,
+          colorMaterialReferenceTone: resolvedPromptInputs.colorMaterialReferenceTone,
           colorMaterialPriorityMode,
           colorMaterialReferenceMode,
           colorMaterialReferenceMarkText: colorMaterialMarkSettings.text,
           colorMaterialReferenceMarkPosition: colorMaterialMarkSettings.position,
           spaceLightingEnabled,
           spaceLightingLevel,
-          inspiration,
-          documentSummary: documentSummaryForImagePrompt,
-          creativeBrief: brief,
+          inspiration: resolvedPromptInputs.inspiration,
+          documentSummary: resolvedPromptInputs.documentSummary,
+          creativeBrief: normalizeExhibitionCreativeBrief(resolveMediaMentions(brief, creativeBriefMentions, mentionMaterials)),
           insertItems: runtimeInsertIds,
           insertItemOptions: insertOptions,
           excludeItems: selectedExcludeIds,
           excludeItemOptions: excludeOptions,
           hasSpaceImage: !!spaceImage,
           hasExhibitReferenceImage: hasExhibitReference,
-          exhibitReferenceItems,
+          exhibitReferenceItems: resolvedPromptInputs.exhibitReferenceItems,
           annotationTextEffective: d.annotationTextEffective === true,
           spaceSize: manualSpaceSize,
           viewControlEnabled,
@@ -1805,6 +1950,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           viewAngleOptions,
           roundIndex: index,
           total: generationCount,
+          referenceRoleHints,
         });
         update({ lastPrompt: imagePrompt, lastSeed: nextSeed, progress: `提交生图 ${index}/${generationCount}` });
         logBus.info(`展陈创意生图提交: ${index}/${generationCount} seed=${nextSeed}`, src);
@@ -1871,24 +2017,24 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     id,
     imageName,
     insertOptions,
-    colorMaterial,
     colorMaterialMarkSettings,
-    colorMaterialPalette,
     colorMaterialPriorityMode,
     colorMaterialReferenceImage,
-    colorMaterialReferenceTone,
-    colorMaterialTextures,
+    creativeBriefMentions,
     inspiration,
     effectiveColorMaterial,
-    exhibitReferenceImageUrls,
-    exhibitReferenceItems,
     hasColorMaterialPreset,
+    hasColorMaterialReference,
+    hasExhibitReference,
     isReadonly,
     manualSpaceSize,
+    mentionMaterials,
+    orderedReferenceMaterials,
     projectTheme,
+    referenceRoleHints,
     regenerateEachTime,
+    resolvedPromptInputs,
     selectedExcludeIds,
-    selectedInsertIds,
     selectedViewAngleIds,
     seed,
     spaceImage,
@@ -1904,6 +2050,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
 
   return (
     <div
+      {...compactAttrs}
       className={`relative w-[780px] rounded-xl border-2 transition-all ${
         selected ? 'border-cyan-300 shadow-2xl shadow-cyan-500/15' : 'border-white/15 hover:border-white/30'
       }`}
@@ -1938,7 +2085,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
         )}
 
         <div className="columns-2 gap-2 [&>section]:mb-2 [&>section]:break-inside-avoid">
-        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="input-material" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1 flex items-center gap-1.5">
             <ImageIcon size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">室内建筑空间输入</span>
@@ -2044,18 +2191,24 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                         <span className="truncate text-[8px] text-amber-200/75" title={d.colorMaterialReferenceToneStatus}>需手动确认</span>
                       )}
                     </div>
-                    <PromptTextarea compact title="扩大编辑"
+                    <MentionPromptInput
+                      title="扩大编辑"
                       className={`${FIELD} min-h-[46px] resize-y text-[10px] leading-snug${colorMaterialPriorityMode === 'llm' ? ' select-none pointer-events-none' : ''}`}
                       value={colorMaterialReferenceTone}
+                      mentions={colorMaterialReferenceToneMentions}
+                      materials={mentionMaterials}
                       disabled={isReadonly || busy || hasColorMaterialPreset || colorMaterialPriorityMode === 'llm'}
+                      isDark
+                      isPixel={false}
+                      promptTemplateKind="image"
                       placeholder="接入图片后自动识别主色调，可手动修正"
-                      onValueChange={(value) => update({
+                      onChange={(value, mentions) => update({
                         colorMaterialReferenceTone: value,
+                        colorMaterialReferenceToneMentions: mentions,
                         colorMaterialReferenceToneSource: colorMaterialReferenceImage,
                         colorMaterialReferenceToneStatus: '',
                       })}
-                readOnly={isReadonly || busy || hasColorMaterialPreset || colorMaterialPriorityMode === 'llm'}
-              />
+                    />
                   </div>
                 </>
               ) : (
@@ -2079,13 +2232,18 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                     <div key={item.url} className="grid grid-cols-[54px_minmax(0,1fr)] items-start gap-1.5 rounded border border-white/10 bg-black/15 p-1.5">
                       <img src={item.url} alt="" className="h-12 w-12 rounded border border-white/10 object-cover" draggable={false} />
                       <div className="min-w-0">
-                        <PromptExpandableInput
+                        <MentionPromptInput
                           title="扩大编辑"
                           className={FIELD}
                           value={item.description}
+                          mentions={mediaMentions(item.descriptionMentions)}
+                          materials={mentionMaterials}
                           disabled={isReadonly || busy}
+                          isDark
+                          isPixel={false}
+                          promptTemplateKind="image"
                           placeholder={`展品 ${index + 1} 特征描述，如"红色的茶壶"`}
-                          onValueChange={(value) => patchExhibitReferenceItem(item.url, { description: value })}
+                          onChange={(value, mentions) => patchExhibitReferenceItem(item.url, { description: value, descriptionMentions: mentions })}
                         />
                         <div className="mt-0.5 truncate text-[9px] text-white/35" title={item.url}>{item.label}</div>
                       </div>
@@ -2203,42 +2361,59 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                 onSave={saveColorMaterialPresetItems}
               />
             )}
-              <PromptTextarea compact title="扩大编辑"
+              <MentionPromptInput
+                title="扩大编辑"
                 className={`${FIELD} min-h-[46px] resize-y`}
                 value={colorMaterialPalette || d.colorMaterial || ''}
+                mentions={colorMaterialPaletteMentions}
+                materials={mentionMaterials}
                 disabled={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
+                isDark
+                isPixel={false}
+                promptTemplateKind="image"
                 placeholder="Color palette"
-                onValueChange={(value) => update({
+                onChange={(value, mentions) => update({
                   colorMaterialPalette: value,
+                  colorMaterialPaletteMentions: mentions,
                   colorMaterial: combineColorMaterialText(value, colorMaterialTextures, d.colorMaterial || ''),
                   colorMaterialPreset: '',
                 })}
-                readOnly={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
               />
-              <PromptTextarea compact title="扩大编辑"
+              <MentionPromptInput
+                title="扩大编辑"
                 className={`${FIELD} min-h-[46px] resize-y`}
                 value={colorMaterialTextures || d.colorMaterial || ''}
+                mentions={colorMaterialTexturesMentions}
+                materials={mentionMaterials}
                 disabled={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
+                isDark
+                isPixel={false}
+                promptTemplateKind="image"
                 placeholder="Materials/textures"
-                onValueChange={(value) => update({
+                onChange={(value, mentions) => update({
                   colorMaterialTextures: value,
+                  colorMaterialTexturesMentions: mentions,
                   colorMaterial: combineColorMaterialText(colorMaterialPalette, value, d.colorMaterial || ''),
                   colorMaterialPreset: '',
                 })}
-                readOnly={isReadonly || busy || hasColorMaterialReference || hasColorMaterialPreset}
               />
           </div>
-          <PromptTextarea compact title="扩大编辑"
+          <MentionPromptInput
+            title="扩大编辑"
             className={`${FIELD} min-h-[78px] resize-y`}
             value={inspiration}
+            mentions={inspirationMentions}
+            materials={mentionMaterials}
             disabled={isReadonly || busy}
+            isDark
+            isPixel={false}
+            promptTemplateKind="image"
             placeholder="个人灵感：想要的情绪、装置、材料、互动、叙事方向"
-            onValueChange={(value) => update({ inspiration: value })}
-                readOnly={isReadonly || busy}
-              />
+            onChange={(value, mentions) => update({ inspiration: value, inspirationMentions: mentions })}
+          />
         </section>
 
-        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="prompt-outline" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1 flex items-center gap-1.5">
             <FileText size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">创意资料文档</span>
@@ -2314,17 +2489,22 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               摘要会参与后续创意描述和生图 Prompt。
             </span>
           </div>
-          <PromptTextarea compact title="扩大编辑"
+          <MentionPromptInput
+            title="扩大编辑"
             className={`${FIELD} min-h-[92px] resize-y`}
             value={documentSummary}
+            mentions={documentSummaryMentions}
+            materials={mentionMaterials}
             disabled={isReadonly || busy}
+            isDark
+            isPixel={false}
+            promptTemplateKind="image"
             placeholder="LLM 总结后的创意资料摘要，可手动调整"
-            onValueChange={(value) => update({ documentSummary: value })}
-                readOnly={isReadonly || busy}
-              />
+            onChange={(value, mentions) => update({ documentSummary: value, documentSummaryMentions: mentions })}
+          />
         </section>
 
-        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="prompt-outline" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1 flex items-center gap-1.5">
             <Brain size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">LLM 创意描述</span>
@@ -2352,14 +2532,19 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             </select>
             <PromptExpandableInput title="扩大编辑" className={FIELD} disabled value={llmModel} />
           </div>
-          <PromptTextarea compact title="扩大编辑"
+          <MentionPromptInput
+            title="扩大编辑"
             className={`${FIELD} min-h-[132px] resize-y`}
             value={creativeBrief}
+            mentions={creativeBriefMentions}
+            materials={mentionMaterials}
             disabled={isReadonly || busy}
+            isDark
+            isPixel={false}
+            promptTemplateKind="image"
             placeholder="点击生成创意，或在这里手动微调 LLM 创意描述"
-            onValueChange={(value) => update({ creativeBrief: value })}
-                readOnly={isReadonly || busy}
-              />
+            onChange={(value, mentions) => update({ creativeBrief: value, creativeBriefMentions: mentions })}
+          />
           <label className="flex items-center gap-1.5 text-[10px] text-white/60">
             <input
               type="checkbox"
@@ -2372,7 +2557,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           </label>
         </section>
 
-        <section className="space-y-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="layout-size" className="space-y-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="text-[11px] font-semibold text-cyan-100">图像名称</div>
           <PromptExpandableInput
             title="扩大编辑"
@@ -2386,7 +2571,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           <div className="text-[9px] leading-snug text-white/35">为空时，LLM 提炼文本后自动生成；批量输出会追加 -1、-2。</div>
         </section>
 
-        <section className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2">
+        <section data-exhibition-compact-section="craft-style" className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-semibold text-cyan-100">植入项</span>
               <span className="min-w-0 flex-1 truncate text-[9px] text-white/40">
@@ -2478,7 +2663,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             )}
         </section>
 
-        <section className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2">
+        <section data-exhibition-compact-section="layout-size" className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-semibold text-cyan-100">视角控制</span>
               <span className="min-w-0 flex-1 truncate text-[9px] text-white/40">
@@ -2558,7 +2743,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             )}
         </section>
 
-        <section className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2">
+        <section data-exhibition-compact-section="craft-style" className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-semibold text-cyan-100">排除项</span>
               <span className="min-w-0 flex-1 truncate text-[9px] text-white/40">
@@ -2635,7 +2820,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             )}
         </section>
 
-        <section className="rounded border border-white/10 bg-white/[0.035] p-2 space-y-2">
+        <section data-exhibition-compact-section="model-params" className="rounded border border-white/10 bg-white/[0.035] p-2 space-y-2">
           <div className="text-[11px] font-semibold text-cyan-100">模型与输出</div>
           {imageAdvancedProviders.length > 0 && (
             <div className="rounded border border-white/10 bg-white/[0.03] p-2 space-y-2">
@@ -2767,7 +2952,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           </div>
         </section>
 
-        <section className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
+        <section data-exhibition-compact-section="generate-action" className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
           <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100">
             <Clipboard size={13} />
             <span>当前生图 Prompt</span>
@@ -2779,7 +2964,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
         </section>
 
         {creativeResults.length > 0 && (
-          <section className="col-span-2 rounded border border-white/10 bg-white/[0.035] p-2">
+          <section data-exhibition-compact-section="result-preview" className="col-span-2 rounded border border-white/10 bg-white/[0.035] p-2">
             <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100">
               <CheckCircle2 size={13} />
               <span>生成结果</span>

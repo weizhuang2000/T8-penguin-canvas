@@ -291,6 +291,25 @@ function exhibitionCreativeInputImagesText(values) {
   return '无输入图；按手动空间尺寸、项目资料和创意描述生成。';
 }
 
+function exhibitionCreativeReferenceRoleHintsText(values) {
+  const hints = Array.isArray(values.referenceRoleHints) ? values.referenceRoleHints : [];
+  const lines = hints
+    .map((item) => {
+      const token = cleanExhibitionCreativeText(item && item.token, 24);
+      if (!/^@img\d+$/.test(token)) return '';
+      if (item.role === 'space') return `${token} = 空间图`;
+      if (item.role === 'color-material-reference') return `${token} = 色彩材质参考图`;
+      if (item.role === 'exhibit-reference') {
+        const index = Math.max(1, Number(item.index) || 1);
+        return `${token} = 展品参考图 ${index}`;
+      }
+      return '';
+    })
+    .filter(Boolean);
+  if (lines.length === 0) return '';
+  return `图像输入引用顺序：${lines.join('；')}。所有 @imgN 均以实际发送给生图模型的参考图数组顺序为准，不按 UI 区块固定编号。`;
+}
+
 function exhibitionCreativeColorPaletteText({ colorMaterialPalette, colorMaterial, colorMaterialPriorityMode, colorMaterialReferenceTone, hasColorMaterialReferenceImage }) {
   const palette = cleanExhibitionCreativeText(colorMaterialPalette, 1000) || colorMaterial;
   if (palette) return palette;
@@ -392,6 +411,7 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
     `Asset type: 专业展陈空间效果图 / ${meta.label}方案比选`,
     `Primary request: ${primaryRequestParts.join('')}`,
     `Input images: ${exhibitionCreativeInputImagesText(values)}`,
+    exhibitionCreativeReferenceRoleHintsText(values),
     `Scene/backdrop: ${meta.prompt}`,
     `Subject: ${subjectParts.join(' ')}`,
     'Style/medium: photorealistic interior architectural visualization, high-end exhibition design render',

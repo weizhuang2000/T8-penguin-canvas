@@ -18,6 +18,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
+import { useCompactAttrs } from '../../stores/exhibitionCompact';
 import {
   DEFAULT_LLM_MODEL,
   IMAGE_MODELS,
@@ -1627,6 +1628,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const update = useUpdateNodeData(id);
   const rf = useReactFlow();
   const fileRef = useRef<HTMLInputElement>(null);
+  const compactAttrs = useCompactAttrs(id, 'exhibition-img2img');
   const colorMaterialPresetDisconnectRef = useRef(false);
   const { style } = useThemeStore();
   const isPixel = style === 'pixel';
@@ -2849,6 +2851,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
 
   return (
     <div
+      {...compactAttrs}
       className={`relative w-[860px] rounded-xl border-2 transition-all ${
         selected ? 'border-cyan-300 shadow-2xl shadow-cyan-500/15' : 'border-white/15 hover:border-white/30'
       }`}
@@ -2887,7 +2890,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         )}
 
         <div className="columns-2 gap-2 [&>section]:mb-2 [&>section]:break-inside-avoid">
-        <section className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="input-material" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <ImageSlot handleId="plan-layout" title="平面布局图" subtitle="与空间结构示意图互斥；添加相机后决定渲染视角" url={planLayoutImage} top="31.5%" />
           {planLayoutImage && (
             <PlanCameraModalEditor
@@ -2917,7 +2920,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           />
         </section>
 
-        <section className="rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="prompt-outline" className="rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1.5 text-[11px] font-semibold text-cyan-100">优先级顺序</div>
           <div className="mb-1.5 text-[10px] leading-snug text-white/45">
             仅调整工艺、色彩材质与表现完成度取舍；空间结构始终完全按结构示意图。
@@ -2929,7 +2932,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           />
         </section>
 
-        <section className="rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="craft-style" className="rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1.5 flex items-center gap-2">
             <span className="text-[11px] font-semibold text-cyan-100">工艺与版式</span>
             {canManageTeam && (
@@ -3049,7 +3052,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           />
         </section>
 
-        <section className="space-y-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="craft-style" className="space-y-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-semibold text-cyan-100">排除项</span>
             <span className="min-w-0 flex-1 truncate text-[10px] text-white/45">与展陈创意生图共享预设</span>
@@ -3124,7 +3127,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           )}
         </section>
 
-        <section className="rounded border border-white/10 bg-white/[0.035] p-2 space-y-2">
+        <section data-exhibition-compact-section="color-material" className="rounded border border-white/10 bg-white/[0.035] p-2 space-y-2">
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-semibold text-cyan-100">色彩与材质预设</span>
             <span className="min-w-0 flex-1 truncate text-[9px] text-white/40">
@@ -3295,7 +3298,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           )}
         </section>
 
-        <section className="rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="input-material" className="rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1.5 flex items-center gap-2">
             <ImageIcon size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">展品参考图</span>
@@ -3333,7 +3336,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           )}
         </section>
 
-        <section className="rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="prompt-outline" className="rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1.5 flex items-center gap-2">
             <FileText size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">展墙内容设计</span>
@@ -3530,7 +3533,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           )}
         </section>
 
-        <section className="rounded border border-white/10 bg-white/[0.035] p-2 space-y-2">
+        <section data-exhibition-compact-section="model-params" className="rounded border border-white/10 bg-white/[0.035] p-2 space-y-2">
           <div className="text-[11px] font-semibold text-cyan-100">模型与输出</div>
           {imageAdvancedProviders.length > 0 && (
             <div className="rounded border border-white/10 bg-white/[0.03] p-2 space-y-2">
@@ -3753,7 +3756,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           </div>
         </section>
 
-        <section className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
+        <section data-exhibition-compact-section="generate-action" className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
           <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100">
             <Clipboard size={13} />
             <span>当前生图 Prompt</span>
@@ -3765,7 +3768,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         </section>
 
         {outputImageUrls.length > 0 && (
-          <section className="rounded border border-white/10 bg-black/20 p-2">
+          <section data-exhibition-compact-section="result-preview" className="rounded border border-white/10 bg-black/20 p-2">
             <div className={outputImageUrls.length > 1 ? 'grid grid-cols-2 gap-2' : ''}>
               {outputImageUrls.map((url: string, index: number) => (
                 <div key={`${url}-${index}`} className="min-w-0">

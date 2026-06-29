@@ -231,6 +231,24 @@ test('exhibition creative prompt uses custom mark labels and suppresses color ma
   assert.match(briefPrompt, /可以保留的个人灵感/);
 });
 
+test('exhibition creative image prompt writes @ image reference role hints', () => {
+  const prompt = buildExhibitionCreativeImagePrompt({
+    hasSpaceImage: true,
+    hasColorMaterialReferenceImage: true,
+    hasExhibitReferenceImage: true,
+    referenceRoleHints: [
+      { token: '@img1', role: 'space' },
+      { token: '@img2', role: 'color-material-reference' },
+      { token: '@img3', role: 'exhibit-reference', index: 1 },
+    ],
+  });
+  assert.match(prompt, /@img1 = /);
+  assert.match(prompt, /@img2 = /);
+  assert.match(prompt, /@img3 = .*1/);
+  assert.match(prompt, /@imgN/);
+  assert.match(prompt, /UI/);
+});
+
 test('exhibition creative brief prompt can reuse one creative direction', () => {
   const prompt = buildExhibitionCreativeBriefPrompt({
     spaceType: 'outro-hall',
@@ -258,12 +276,16 @@ test('exhibition creative image node supports random categorized insert items', 
   assert.match(node, /-1 表示补入全部未选项/);
   assert.match(node, /min=\{-1\}/);
   assert.match(node, /图像名称/);
-  assert.match(node, /normalizeExhibitionImageName\(event\.target\.value\)/);
+  assert.match(node, /normalizeExhibitionImageName\(value\)/);
   assert.match(node, /generateExhibitionImageNameWithLlm/);
   assert.match(node, /formatExhibitionOutputImageName\(baseImageName, index, generationCount, '创意图'\)/);
   assert.match(node, /outputTitle/);
   assert.match(node, /name: displayName/);
+  assert.match(node, /referenceRoleHints/);
+  assert.match(node, /resolveMediaMentions/);
   assert.match(canvas, /insertRandomCounts: \{\}/);
+  assert.match(canvas, /projectThemeMentions: \[\]/);
+  assert.match(canvas, /creativeBriefMentions: \[\]/);
   assert.match(canvas, /imageName: ''/);
   assert.match(canvas, /imageNames: \[\]/);
   assert.match(backend, /EXHIBITION_CREATIVE_INSERT_CATEGORIES/);

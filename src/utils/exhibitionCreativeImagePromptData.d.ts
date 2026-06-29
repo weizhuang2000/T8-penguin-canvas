@@ -65,7 +65,8 @@ export interface ExhibitionCreativeImagePromptValues extends ExhibitionCreativeB
   spaceLightingEnabled?: boolean;
   spaceLightingLevel?: 'very-dark' | 'dark' | 'bright' | 'very-bright';
   hasExhibitReferenceImage?: boolean;
-  exhibitReferenceItems?: Array<{ id?: string; url: string; label?: string; description?: string }>;
+  exhibitReferenceItems?: Array<{ id?: string; url: string; label?: string; description?: string; descriptionMentions?: unknown[] }>;
+  referenceRoleHints?: Array<{ token?: string; role?: 'space' | 'color-material-reference' | 'exhibit-reference'; index?: number }>;
   annotationTextEffective?: boolean;
   spaceSize?: {
     width?: number | string;
