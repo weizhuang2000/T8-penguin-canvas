@@ -248,3 +248,15 @@ test('resource library category controls are isolated from canvas drag gestures'
   assert.match(drawer, /stopResourceControlEvent/);
   assert.match(drawer, /nodrag nopan/);
 });
+
+test('resource library drawer supports batch image upload into selected category', () => {
+  const drawer = readFileSync(new URL('../src/components/ResourceLibraryDrawer.tsx', import.meta.url), 'utf8');
+
+  assert.match(drawer, /resource-library-batch-upload/);
+  assert.match(drawer, /multiple/);
+  assert.match(drawer, /accept="image\/\*"/);
+  assert.match(drawer, /imageToJpegFile/);
+  assert.match(drawer, /uploadInputFile/);
+  assert.match(drawer, /api\.addResourceItem\(\{/);
+  assert.match(drawer, /categoryId:\s*targetCategoryId/);
+});

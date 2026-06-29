@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Eye,
   FolderPlus,
@@ -15,6 +15,7 @@ import {
   Send,
   Star,
   Trash2,
+  Upload,
   UserRoundCog,
   Video,
   Workflow,
@@ -170,6 +171,67 @@ function stopResourceControlEvent(event: { stopPropagation: () => void }) {
   event.stopPropagation();
 }
 
+function isJpegFile(file: File) {
+  const type = String(file.type || '').toLowerCase();
+  const name = String(file.name || '').toLowerCase();
+  return type === 'image/jpeg' || /\.jpe?g$/i.test(name);
+}
+
+function imageToJpegFile(file: File): Promise<File> {
+  if (isJpegFile(file)) return Promise.resolve(file);
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      try {
+        const width = img.naturalWidth || img.width;
+        const height = img.naturalHeight || img.height;
+        if (!width || !height) throw new Error('无法读取图片尺寸');
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('浏览器不支持图片转换');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            URL.revokeObjectURL(url);
+            if (!blob) {
+              reject(new Error('图片转换失败'));
+              return;
+            }
+            const baseName = (file.name || 'resource').replace(/\.[^.]+$/, '') || 'resource';
+            resolve(new File([blob], `${baseName}.jpg`, { type: 'image/jpeg', lastModified: file.lastModified || Date.now() }));
+          },
+          'image/jpeg',
+          0.96,
+        );
+      } catch (error) {
+        URL.revokeObjectURL(url);
+        reject(error);
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('无法读取图片文件'));
+    };
+    img.src = url;
+  });
+}
+
+async function uploadInputFile(file: File): Promise<{ url: string; filename?: string; size?: number; mime?: string }> {
+  const fd = new FormData();
+  fd.append('file', file, file.name);
+  const res = await fetch('/api/files/upload', { method: 'POST', body: fd });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json?.success || !json?.data?.url) {
+    throw new Error(json?.error || `上传失败 HTTP ${res.status}`);
+  }
+  return json.data;
+}
+
 export default function ResourceLibraryDrawer({ open, onClose, onInsertMaterial }: ResourceLibraryDrawerProps) {
   const { theme, style } = useThemeStore();
   const isDark = theme === 'dark';
@@ -181,8 +243,10 @@ export default function ResourceLibraryDrawer({ open, onClose, onInsertMaterial 
   const [categories, setCategories] = useState<ResourceCategory[]>([]);
   const [items, setItems] = useState<ResourceItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [batchUploading, setBatchUploading] = useState(false);
   const [msg, setMsg] = useState('');
   const [hoverPreview, setHoverPreview] = useState<{ src: string; title: string; left: number; top: number } | null>(null);
+  const batchInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = useCallback(async () => {
     if (!open) return;
@@ -284,6 +348,51 @@ export default function ResourceLibraryDrawer({ open, onClose, onInsertMaterial 
     }
   };
 
+  const batchUploadFiles = async (files: File[]) => {
+    if (batchUploading) return;
+    if (kind !== 'image' && kind !== 'panorama') {
+      setMsg('批量上传仅支持图像资源');
+      return;
+    }
+    const imageFiles = files.filter((file) => String(file.type || '').startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp|avif|tiff?)$/i.test(file.name || ''));
+    const skipped = files.length - imageFiles.length;
+    if (imageFiles.length === 0) {
+      setMsg('请选择图片文件');
+      return;
+    }
+    const targetCategoryId = categoryId !== 'all' ? categoryId : `${kind}_uncategorized`;
+    setBatchUploading(true);
+    setMsg(`正在批量上传 0/${imageFiles.length}`);
+    let saved = 0;
+    const errors: string[] = [];
+    for (let i = 0; i < imageFiles.length; i += 1) {
+      const file = imageFiles[i];
+      try {
+        setMsg(`正在批量上传 ${i + 1}/${imageFiles.length}`);
+        const jpegFile = await imageToJpegFile(file);
+        const uploaded = await uploadInputFile(jpegFile);
+        const savedResource = await api.addResourceItem({
+          url: uploaded.url,
+          kind,
+          categoryId: targetCategoryId,
+          title: (file.name || jpegFile.name).replace(/\.[^.]+$/, ''),
+        });
+        if (!savedResource.success) throw new Error(savedResource.error || '资源归档失败');
+        saved += 1;
+      } catch (error: any) {
+        errors.push(`${file.name || `文件 ${i + 1}`}: ${error?.message || '上传失败'}`);
+      }
+    }
+    setBatchUploading(false);
+    if (batchInputRef.current) batchInputRef.current.value = '';
+    await load();
+    window.dispatchEvent(new CustomEvent('penguin:resources-changed'));
+    const parts = [`已上传 ${saved} 个`];
+    if (skipped > 0) parts.push(`跳过 ${skipped} 个非图片文件`);
+    if (errors.length > 0) parts.push(`失败 ${errors.length} 个：${errors.slice(0, 2).join('；')}`);
+    setMsg(parts.join('，'));
+  };
+
   const insertItem = async (item: ResourceItem) => {
     try {
       await onInsertMaterial(item);
@@ -380,6 +489,7 @@ export default function ResourceLibraryDrawer({ open, onClose, onInsertMaterial 
     ...miniActionBase,
     color: isPixel ? '#dc2626' : '#dc2626',
   };
+  const canBatchUpload = kind === 'image' || kind === 'panorama';
 
   return (
     <div className={`resource-library-drawer fixed top-0 right-0 z-50 h-screen w-[440px] max-w-[calc(100vw-18px)] shadow-2xl flex flex-col ${panelCls}`}>
@@ -416,6 +526,18 @@ export default function ResourceLibraryDrawer({ open, onClose, onInsertMaterial 
 
       <div className={`px-3 py-2 shrink-0 space-y-2 ${isPixel ? 'border-b-2 border-[var(--px-ink)]' : isDark ? 'border-b border-white/10' : 'border-b border-black/10'}`}>
         <div className="flex items-center gap-2">
+          <input
+            ref={batchInputRef}
+            type="file"
+            className="hidden"
+            accept="image/*"
+            multiple
+            onChange={(event) => {
+              const files = Array.from(event.target.files || []);
+              event.currentTarget.value = '';
+              void batchUploadFiles(files);
+            }}
+          />
           <div className="relative flex-1">
             <Search size={14} className={`absolute left-2.5 top-1/2 -translate-y-1/2 ${subtle}`} />
             <input
@@ -425,6 +547,16 @@ export default function ResourceLibraryDrawer({ open, onClose, onInsertMaterial 
               className={`${inputCls} w-full pl-8`}
             />
           </div>
+          <button
+            type="button"
+            onClick={() => canBatchUpload && !batchUploading && batchInputRef.current?.click()}
+            disabled={!canBatchUpload || batchUploading}
+            className={isPixel ? `resource-library-batch-upload t8-mini-icon-button px-btn px-btn--icon ${batchUploading ? 'px-btn--yellow' : 'px-btn--ghost'}` : `resource-library-batch-upload t8-mini-icon-button h-9 w-9 p-0 rounded-md border flex items-center justify-center ${batchUploading ? 'text-cyan-300 border-cyan-400/50 bg-cyan-400/10' : isDark ? 'border-white/10 hover:bg-white/10 disabled:opacity-40' : 'border-black/10 hover:bg-black/5 disabled:opacity-40'}`}
+            title={canBatchUpload ? '批量上传到当前分类' : '批量上传仅支持图像资源'}
+            aria-label="批量上传到当前分类"
+          >
+            <Upload size={15} />
+          </button>
           <button
             onClick={() => setFavoriteOnly((v) => !v)}
             className={isPixel ? `resource-library-favorite-filter t8-mini-icon-button px-btn px-btn--icon ${favoriteOnly ? 'px-btn--yellow' : 'px-btn--ghost'}` : `resource-library-favorite-filter t8-mini-icon-button h-9 w-9 p-0 rounded-md border flex items-center justify-center ${favoriteOnly ? 'text-amber-300 border-amber-400/50 bg-amber-400/10' : isDark ? 'border-white/10 hover:bg-white/10' : 'border-black/10 hover:bg-black/5'}`}
