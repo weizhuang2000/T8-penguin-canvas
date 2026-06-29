@@ -8,6 +8,7 @@ test('render to elevation node is registered in canvas, ports, types and sidebar
   const registry = readFileSync(new URL('../src/config/nodeRegistry.ts', import.meta.url), 'utf8');
   const canvas = readFileSync(new URL('../src/components/Canvas.tsx', import.meta.url), 'utf8');
   const permissions = readFileSync(new URL('../backend/src/auth/toolPermissions.js', import.meta.url), 'utf8');
+  const proxy = readFileSync(new URL('../backend/src/routes/proxy.js', import.meta.url), 'utf8');
   assert.match(types, /'exhibition-render-to-elevation'/);
   assert.match(ports, /'exhibition-render-to-elevation':\s*\{\s*inputs:\s*\['text', 'image'\],\s*outputs:\s*\['image'\]\s*\}/);
   assert.match(registry, /type: 'exhibition-render-to-elevation'/);
@@ -15,6 +16,8 @@ test('render to elevation node is registered in canvas, ports, types and sidebar
   assert.match(canvas, /import ExhibitionRenderToElevationNode/);
   assert.match(canvas, /'exhibition-render-to-elevation': ExhibitionRenderToElevationNode/);
   assert.match(permissions, /'exhibition-render-to-elevation'/);
+  assert.match(proxy, /\/image\/submit[\s\S]*'exhibition-render-to-elevation'/);
+  assert.match(proxy, /\/image\/status\/:tid[\s\S]*'exhibition-render-to-elevation'/);
 });
 
 test('render to elevation node default data includes model and result fields', () => {

@@ -813,7 +813,7 @@ router.post('/image', requireNodePermission(['image', 'exhibition-img2img', 'exh
 // POST /api/proxy/image/submit -> { taskId }(同 submit 逻辑,但不同步轮询)
 // GET  /api/proxy/image/status/:tid -> { status, progress, urls? }
 // ========================================================================
-router.post('/image/submit', requireNodePermission(['image', 'exhibition-img2img', 'exhibition-style-transfer', 'exhibition-lighting-heatmap', 'exhibition-creative-image', 'unit-panel-design', 'showcase-interior-design']), async (req, res) => {
+router.post('/image/submit', requireNodePermission(['image', 'exhibition-img2img', 'exhibition-style-transfer', 'exhibition-lighting-heatmap', 'exhibition-creative-image', 'exhibition-render-to-elevation', 'unit-panel-design', 'showcase-interior-design']), async (req, res) => {
   const settings = loadRawSettings();
   try {
     const { model, apiModel, paramKind: paramKindIn, prompt, n,
@@ -863,7 +863,7 @@ router.post('/image/submit', requireNodePermission(['image', 'exhibition-img2img
 });
 
 // 查询异步图像任务状态
-router.get('/image/status/:tid', requireNodePermission(['image', 'exhibition-img2img', 'exhibition-style-transfer', 'exhibition-lighting-heatmap', 'exhibition-creative-image', 'unit-panel-design', 'showcase-interior-design']), async (req, res) => {
+router.get('/image/status/:tid', requireNodePermission(['image', 'exhibition-img2img', 'exhibition-style-transfer', 'exhibition-lighting-heatmap', 'exhibition-creative-image', 'exhibition-render-to-elevation', 'unit-panel-design', 'showcase-interior-design']), async (req, res) => {
   const settings = loadRawSettings();
   // 优先从 submit 阶段记录的 (taskId → key) 映射恢复，防止前端未传 model 导致 fallback 错 key。
   const remembered = recallTaskKey(req.params.tid);
