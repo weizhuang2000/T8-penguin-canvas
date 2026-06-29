@@ -26,6 +26,29 @@ test('render to elevation parser reads numbered elevation sections', () => {
   assert.equal(sections[2].title, '荣誉墙');
 });
 
+test('render to elevation image prompt defaults to img2img reference mode and can disable it', () => {
+  const enabled = buildRenderToElevationImagePrompt({
+    index: 1,
+    title: '序厅主形象墙',
+    content: '品牌大标题、序言、灯箱展板',
+  });
+  assert.match(enabled, /@img1/);
+  assert.match(enabled, /形式参考/);
+  assert.match(enabled, /透视墙面区域/);
+  assert.match(enabled, /正投影/);
+  assert.match(enabled, /平面展开/);
+
+  const disabled = buildRenderToElevationImagePrompt({
+    index: 1,
+    title: '序厅主形象墙',
+    content: '品牌大标题、序言、灯箱展板',
+    img2imgModeEnabled: false,
+  });
+  assert.doesNotMatch(disabled, /@img1/);
+  assert.doesNotMatch(disabled, /形式参考/);
+  assert.doesNotMatch(disabled, /透视墙面区域/);
+});
+
 test('render to elevation llm fallback prompt includes strict JSON schema and image part', () => {
   const messages = buildRenderToElevationAnalysisMessages({
     sourceText: '序厅做品牌墙，尾厅做荣誉墙',

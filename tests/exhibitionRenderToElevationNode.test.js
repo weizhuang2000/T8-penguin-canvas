@@ -28,6 +28,7 @@ test('render to elevation node default data includes model and result fields', (
   assert.match(canvas, /llmKeyId: ''/);
   assert.match(canvas, /llmModel: ''/);
   assert.match(canvas, /providerSource: 'zhenzhen'/);
+  assert.match(canvas, /img2imgModeEnabled: true/);
   assert.match(canvas, /aspectRatio: '16:9'/);
   assert.match(canvas, /sizeLevel: '2K'/);
   assert.match(canvas, /seed: 0/);
@@ -45,6 +46,10 @@ test('render to elevation component exposes text and image handles', () => {
   assert.match(node, /parseElevationSectionsFromText/);
   assert.match(node, /buildRenderToElevationAnalysisMessages/);
   assert.match(node, /buildRenderToElevationImagePrompt/);
+  assert.match(node, /img2imgModeEnabled = d\.img2imgModeEnabled !== false/);
+  assert.match(node, /img2imgModeEnabled,/);
+  assert.match(node, /referenceToken: '@img1'/);
+  assert.match(node, /图生图模式/);
   assert.match(node, /submitImageAsync/);
   assert.match(node, /generateExternalImage/);
 });

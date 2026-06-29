@@ -168,6 +168,8 @@ export function buildRenderToElevationImagePrompt(values = {}) {
   const styleAnchor = cleanText(values.styleAnchor, 1200);
   const llmPrompt = cleanText(values.prompt, 5000);
   const supplement = cleanText(values.supplement, 2000);
+  const img2imgModeEnabled = values.img2imgModeEnabled !== false;
+  const referenceToken = cleanText(values.referenceToken || '@img1', 32) || '@img1';
   const lines = [
     `任务：生成一张独立展陈立面图，标题为“立面${index}-${title}”。`,
     '必须参照输入效果图风格，尤其是对应立面部分的色彩体系、材质肌理、灯光氛围、工艺语言、图文层级和空间品牌气质。',
@@ -178,6 +180,16 @@ export function buildRenderToElevationImagePrompt(values = {}) {
     '当前立面内容：',
     content || title,
   ];
+  if (img2imgModeEnabled) {
+    lines.push(
+      '',
+      '【图生图形式参考】',
+      `${referenceToken} = 输入效果图参考图。请把 ${referenceToken} 中与当前立面标题、内容和风格锚点对应的透视墙面区域，转译为独立正投影展陈立面图。`,
+      `保留 ${referenceToken} 对应区域的形式语言：色彩、材质、灯光、工艺、图文层级、造型比例和展陈气质。`,
+      '去除室内透视、地面纵深、天花透视、斜角空间关系和镜头畸变，只输出当前立面的平面展开表达。',
+      '形式参考只用于当前立面的视觉语言和构成关系，不要直接复制效果图的透视角度，不要生成完整室内空间效果图。',
+    );
+  }
   if (styleAnchor) {
     lines.push('', '对应效果图风格锚点：', styleAnchor);
   }

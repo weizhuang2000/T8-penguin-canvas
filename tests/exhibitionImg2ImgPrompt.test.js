@@ -8,7 +8,20 @@ import {
 
 test('exhibition img2img node accepts document text input', () => {
   const ports = readFileSync(new URL('../src/config/portTypes.ts', import.meta.url), 'utf8');
-  assert.match(ports, /'exhibition-img2img':\s*\{\s*inputs:\s*\['text', 'image'\],\s*outputs:\s*\['image'\]\s*\}/);
+  assert.match(ports, /'exhibition-img2img':\s*\{\s*inputs:\s*\['text', 'image'\],\s*outputs:\s*\['image', 'text'\]\s*\}/);
+});
+
+test('exhibition img2img node exposes final prompt as text output', () => {
+  const node = readFileSync(new URL('../src/components/nodes/ExhibitionImg2ImgNode.tsx', import.meta.url), 'utf8');
+  const upstream = readFileSync(new URL('../src/components/nodes/useUpstreamMaterials.ts', import.meta.url), 'utf8');
+  const output = readFileSync(new URL('../src/components/nodes/OutputNode.tsx', import.meta.url), 'utf8');
+  assert.match(node, /id="prompt"[\s\S]*type="source"[\s\S]*PORT_COLOR\.text/);
+  assert.match(node, /title="输出：最终提示词文本"/);
+  assert.match(node, /prompt:\s*promptForRun[\s\S]*outputText:\s*promptForRun[\s\S]*text:\s*promptForRun/);
+  assert.match(upstream, /n\.type === 'exhibition-img2img'/);
+  assert.match(upstream, /handles\.has\('prompt'\) \|\| handles\.has\(null\)/);
+  assert.match(output, /\(n as any\)\?\.type === 'exhibition-img2img'/);
+  assert.match(output, /handles\.has\('prompt'\) \|\| handles\.has\(null\)/);
 });
 
 test('exhibition img2img node exposes mutually exclusive plan layout input', () => {

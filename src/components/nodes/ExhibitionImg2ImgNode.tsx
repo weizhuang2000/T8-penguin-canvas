@@ -2667,6 +2667,12 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       const plan = await planWallContent(undefined, true, runtimeCrafts);
       if (plan) promptForRun = buildPromptWithWallPlan(plan, runtimeCrafts);
     }
+    update({
+      prompt: promptForRun,
+      outputText: promptForRun,
+      text: promptForRun,
+      lastPrompt: promptForRun,
+    });
     const runtimeReferenceImages = await buildRuntimeReferenceImages();
     const src = `exhibition-img2img:${id.slice(0, 6)}`;
     const generatedUrls: string[] = [];
@@ -2691,6 +2697,9 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         imageUrls: generatedUrls.slice(),
         imageNames: generatedNames.slice(),
         remoteImageUrls: generatedRemoteUrls.slice(),
+        prompt: promptForRun,
+        outputText: promptForRun,
+        text: promptForRun,
         lastPrompt: promptForRun,
         lastSeed: runSeed,
         taskId: latestTaskId,
@@ -2701,7 +2710,19 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     };
     taskCompletionSound.primeAudio();
     pollAbortRef.current = false;
-    update({ status: 'generating', progress: `0/${generationCount}`, error: '', imageUrl: '', imageUrls: [], lastSeed: latestSeed, usedI2I: true });
+    update({
+      status: 'generating',
+      progress: `0/${generationCount}`,
+      error: '',
+      imageUrl: '',
+      imageUrls: [],
+      prompt: promptForRun,
+      outputText: promptForRun,
+      text: promptForRun,
+      lastPrompt: promptForRun,
+      lastSeed: latestSeed,
+      usedI2I: true,
+    });
     try {
       for (let roundIndex = 1; roundIndex <= generationCount; roundIndex += 1) {
         if (pollAbortRef.current) throw new Error('任务已取消');
@@ -2827,6 +2848,9 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         imageUrls: generatedUrls,
         imageNames: generatedNames,
         remoteImageUrls: generatedRemoteUrls,
+        prompt: promptForRun,
+        outputText: promptForRun,
+        text: promptForRun,
         lastPrompt: promptForRun,
         lastSeed: latestSeed,
         taskId: latestTaskId,
@@ -2855,7 +2879,15 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       }`}
       style={{ background: 'rgba(17,24,39,.96)', backdropFilter: 'blur(8px)' }}
     >
-      <Handle type="source" position={Position.Right} className="!border-0" style={{ background: PORT_COLOR.image }} title="输出：展陈图生图结果（图像）" />
+      <Handle id="image" type="source" position={Position.Right} className="!border-0" style={{ background: PORT_COLOR.image }} title="输出：展陈图生图结果（图像）" />
+      <Handle
+        id="prompt"
+        type="source"
+        position={Position.Right}
+        className="!h-3 !w-3 !border-0"
+        style={{ top: '41%', background: PORT_COLOR.text }}
+        title="输出：最终提示词文本"
+      />
       <Handle
         id="document-text"
         type="target"

@@ -265,8 +265,13 @@ export function useUpstreamMaterials(nodeId: string): UpstreamMaterials {
       const handles = handleMap.get(sid) || new Set<string | null>([null]);
       const textMeta = textMetaFromData(ud);
       const isTextImageLoop = n.type === 'exhibition-text-image-loop';
-      const wantsTextOutput = !isTextImageLoop || handles.has('text') || handles.has(null);
-      const wantsImageOutput = !isTextImageLoop || handles.has('image') || handles.has(null);
+      const isExhibitionImg2Img = n.type === 'exhibition-img2img';
+      const wantsTextOutput = isExhibitionImg2Img
+        ? handles.has('prompt') || handles.has(null)
+        : !isTextImageLoop || handles.has('text') || handles.has(null);
+      const wantsImageOutput = isExhibitionImg2Img
+        ? handles.has('image') || handles.has(null)
+        : !isTextImageLoop || handles.has('image') || handles.has(null);
 
       // 显式素材集: 保留素材集内部顺序，并用序号 key 避免相同 URL 被全局去重误删。
       // 同时跳过下面的旧字段读取，避免 imageUrls/textSegments 双写后重复出现。

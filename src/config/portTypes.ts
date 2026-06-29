@@ -152,7 +152,7 @@ export const NODE_PORTS: Record<string, NodePorts> = {
   cinematic: { inputs: [], outputs: ['text'] },
   'video-motion': { inputs: [], outputs: ['text'] },
   'elevation-prompt': { inputs: [], outputs: ['text'] },
-  'exhibition-img2img': { inputs: ['text', 'image'], outputs: ['image'] },
+  'exhibition-img2img': { inputs: ['text', 'image'], outputs: ['image', 'text'] },
   'exhibition-style-transfer': { inputs: ['image'], outputs: ['image'] },
   'exhibition-recolor': { inputs: ['image'], outputs: ['image'] },
   'exhibition-lighting-heatmap': { inputs: ['image'], outputs: ['image'] },

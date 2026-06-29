@@ -601,6 +601,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     providerId: '',
     providerModel: '',
     providerParams: {},
+    img2imgModeEnabled: true,
     llmKeyId: '',
     llmModel: '',
     sourceText: '',

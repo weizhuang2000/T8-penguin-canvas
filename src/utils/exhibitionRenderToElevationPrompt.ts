@@ -16,6 +16,8 @@ export interface RenderToElevationSection {
 
 export interface RenderToElevationPromptValues extends Partial<RenderToElevationSection> {
   supplement?: string;
+  img2imgModeEnabled?: boolean;
+  referenceToken?: string;
 }
 
 export {

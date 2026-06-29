@@ -195,6 +195,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
   const parsedElevations = normalizeElevationSections(d.parsedElevations);
   const status = String(d.status || 'idle');
   const isGenerating = status === 'generating' || status === 'analyzing';
+  const img2imgModeEnabled = d.img2imgModeEnabled !== false;
 
   const analyzeElevations = useCallback(async (): Promise<RenderToElevationSection[]> => {
     if (!sourceText) throw new Error('请接入或填写包含“立面1：...”的文本');
@@ -251,6 +252,8 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
         const prompt = buildRenderToElevationImagePrompt({
           ...section,
           supplement: d.supplement,
+          img2imgModeEnabled,
+          referenceToken: '@img1',
         });
         const historyContext = {
           canvasId: activeCanvasId,
@@ -398,6 +401,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
     id,
     isExternalSelected,
     isGenerating,
+    img2imgModeEnabled,
     modelDef.id,
     modelDef.paramKind,
     outputFormat,
@@ -567,6 +571,21 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
               disabled={isReadonly || isGenerating}
               onChange={(event) => update({ seed: clampNumber(event.target.value, 0, MAX_IMAGE_SEED, 0) })}
             />
+          </label>
+          <label className="col-span-2 flex cursor-pointer items-start gap-2 rounded border border-white/10 bg-black/15 p-2 text-[11px] text-white/75">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={img2imgModeEnabled}
+              disabled={isReadonly || isGenerating}
+              onChange={(event) => update({ img2imgModeEnabled: event.target.checked })}
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block font-medium text-white">图生图模式</span>
+              <span className="mt-0.5 block text-[10px] text-white/45">
+                开启后将输入效果图作为 @img1 形式参考，按当前立面内容还原正投影立面图
+              </span>
+            </span>
           </label>
         </div>
 

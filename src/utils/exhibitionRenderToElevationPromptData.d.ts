@@ -13,6 +13,8 @@ export interface RenderToElevationAnalysisValues {
 
 export interface RenderToElevationImagePromptValues extends Partial<RenderToElevationSection> {
   supplement?: string;
+  img2imgModeEnabled?: boolean;
+  referenceToken?: string;
 }
 
 export function parseElevationSectionsFromText(value: unknown): RenderToElevationSection[];

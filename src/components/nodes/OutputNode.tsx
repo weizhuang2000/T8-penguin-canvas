@@ -261,8 +261,13 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
         const sid = (n as any)?.id || '';
         const handles = handleMap.get(sid) || new Set<string | null>([null]);
         const isTextImageLoop = (n as any)?.type === 'exhibition-text-image-loop';
-        const wantsTextOutput = !isTextImageLoop || handles.has('text') || handles.has(null);
-        const wantsImageOutput = !isTextImageLoop || handles.has('image') || handles.has(null);
+        const isExhibitionImg2Img = (n as any)?.type === 'exhibition-img2img';
+        const wantsTextOutput = isExhibitionImg2Img
+          ? handles.has('prompt') || handles.has(null)
+          : !isTextImageLoop || handles.has('text') || handles.has(null);
+        const wantsImageOutput = isExhibitionImg2Img
+          ? handles.has('image') || handles.has(null)
+          : !isTextImageLoop || handles.has('image') || handles.has(null);
 
         // 显式素材集: 按内部顺序透传；跳过旧字段读取，避免素材集同步字段造成重复。
         if ((n as any)?.type === 'material-set' && Array.isArray(ud.materialSetItems)) {
