@@ -94,6 +94,7 @@ const NodeActionBar = () => {
   const isEligibleCompactNodeType = useExhibitionCompactFormStore((s) => s.isEligibleNodeType);
   const isCompactNodeActive = useExhibitionCompactFormStore((s) => s.isNodeActive);
   const toggleCompactNode = useExhibitionCompactFormStore((s) => s.toggleNode);
+  const compactActiveNodeIds = useExhibitionCompactFormStore((s) => s.activeNodeIds);
   const holdTimerRef = useRef<number | null>(null);
   const suppressClickRef = useRef(false);
   const [holdArmed, setHoldArmed] = useState(false);
@@ -140,7 +141,7 @@ const NodeActionBar = () => {
       ? 'yyh-portrait'
       : undefined;
   const compactEligible = isEligibleCompactNodeType(selectedExe?.type);
-  const compactActive = compactEligible && isCompactNodeActive(selectedExe?.id);
+  const compactActive = compactEligible && compactActiveNodeIds.includes(String(selectedExe?.id || '')) && isCompactNodeActive(selectedExe?.id);
 
   const clearHoldTimer = () => {
     if (holdTimerRef.current) {

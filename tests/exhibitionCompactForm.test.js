@@ -26,6 +26,13 @@ test('exhibition compact form only enables configured exhibition node types', ()
   assert.doesNotMatch(source, /nodeType: 'import-cam-project'/);
 });
 
+test('compact controller writes true active attribute expected by CSS', () => {
+  const canvas = read('src/components/Canvas.tsx');
+  const css = read('src/styles/index.css');
+  assert.match(canvas, /setAttribute\('data-exhibition-compact-active', 'true'\)/);
+  assert.match(css, /\[data-exhibition-compact-active="true"\]/);
+});
+
 test('exhibition nodes carry compact section markers', () => {
   const files = [
     'src/components/nodes/ElevationPromptNode.tsx',

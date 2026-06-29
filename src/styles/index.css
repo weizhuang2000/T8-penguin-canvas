@@ -2421,8 +2421,10 @@ html[data-theme-visual="tech"][data-theme-mode="light"] .react-flow__node:not(.r
 .resource-card-image-hover-preview {
   position: fixed;
   z-index: 80;
-  width: min(320px, calc(100vw - 24px));
-  max-height: min(380px, calc(100vh - 24px));
+  width: calc(100vw - 48px);
+  height: calc(100vh - 48px);
+  max-width: 1680px;
+  max-height: 1080px;
   overflow: hidden;
   padding: 8px;
   border: 1px solid var(--t8-border-strong, rgba(255, 255, 255, 0.18));
@@ -2436,10 +2438,17 @@ html[data-theme-visual="tech"][data-theme-mode="light"] .react-flow__node:not(.r
 .resource-card-image-hover-preview img {
   display: block;
   width: 100%;
-  max-height: 324px;
+  height: calc(100% - 27px);
   object-fit: contain;
   border-radius: 8px;
   background: #050505;
+}
+
+@media (max-width: 719px), (max-height: 559px) {
+  .resource-card-image-hover-preview {
+    width: calc(100vw - 24px);
+    height: calc(100vh - 24px);
+  }
 }
 
 .resource-card-image-hover-preview__title {

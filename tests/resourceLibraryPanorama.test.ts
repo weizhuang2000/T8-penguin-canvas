@@ -271,3 +271,15 @@ test('resource library drawer exposes persisted grid column controls', () => {
   assert.match(drawer, /setGridColumns\(count\)/);
   assert.match(drawer, /gridTemplateColumns:\s*`repeat\(\$\{gridColumns\}, minmax\(0, 1fr\)\)`/);
 });
+
+test('resource library image hover preview is near viewport sized', () => {
+  const drawer = readFileSync(new URL('../src/components/ResourceLibraryDrawer.tsx', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../src/styles/index.css', import.meta.url), 'utf8');
+
+  assert.match(drawer, /const margin = viewportWidth < 720 \|\| viewportHeight < 560 \? 12 : 24/);
+  assert.match(drawer, /left:\s*margin/);
+  assert.match(drawer, /top:\s*margin/);
+  assert.match(css, /\.resource-card-image-hover-preview \{[\s\S]*width:\s*calc\(100vw - 48px\)/);
+  assert.match(css, /\.resource-card-image-hover-preview \{[\s\S]*height:\s*calc\(100vh - 48px\)/);
+  assert.match(css, /\.resource-card-image-hover-preview img \{[\s\S]*height:\s*calc\(100% - 27px\)/);
+});

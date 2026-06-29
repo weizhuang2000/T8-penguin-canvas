@@ -371,8 +371,8 @@ function ExhibitionCompactFormController({ config }: { config?: ExhibitionCompac
         if (!contentEl) return;
         const nodeType = contentEl.dataset.exhibitionCompactNodeType || '';
         const active = activeIds.has(nodeId);
-        contentEl.toggleAttribute('data-exhibition-compact-active', active);
         if (active) {
+          contentEl.setAttribute('data-exhibition-compact-active', 'true');
           const allowedSections = new Set(getAllowedSections(nodeType));
           contentEl.dataset.exhibitionCompactVisibleSections = Array.from(allowedSections).join(' ');
           contentEl.querySelectorAll<HTMLElement>('[data-exhibition-compact-section]').forEach((sectionEl) => {
@@ -380,6 +380,7 @@ function ExhibitionCompactFormController({ config }: { config?: ExhibitionCompac
             sectionEl.dataset.exhibitionCompactVisible = allowedSections.has(sectionId) ? 'true' : 'false';
           });
         } else {
+          contentEl.removeAttribute('data-exhibition-compact-active');
           delete contentEl.dataset.exhibitionCompactVisibleSections;
           contentEl.querySelectorAll<HTMLElement>('[data-exhibition-compact-section]').forEach((sectionEl) => {
             delete sectionEl.dataset.exhibitionCompactVisible;

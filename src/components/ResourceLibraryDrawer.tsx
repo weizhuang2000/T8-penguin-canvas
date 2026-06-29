@@ -449,28 +449,17 @@ export default function ResourceLibraryDrawer({ open, onClose, onInsertMaterial 
     await api.updateResourceItem(item.id, { touch: true });
   };
 
-  const showImagePreview = useCallback((target: HTMLButtonElement, item: ResourceItem) => {
+  const showImagePreview = useCallback((_target: HTMLButtonElement, item: ResourceItem) => {
     const src = item.fileUrl || item.thumbUrl;
     if (!src) return;
-    const rect = target.getBoundingClientRect();
     const viewportWidth = window.innerWidth || 1200;
     const viewportHeight = window.innerHeight || 800;
-    const previewWidth = Math.min(320, Math.max(240, viewportWidth - 24));
-    const previewHeight = 380;
-    const gap = 10;
-    let left = rect.left - previewWidth - gap;
-    if (left < 12) {
-      left = Math.min(rect.right + gap, viewportWidth - previewWidth - 12);
-    }
-    let top = rect.top - 4;
-    if (top + previewHeight > viewportHeight - 12) {
-      top = Math.max(12, viewportHeight - previewHeight - 12);
-    }
+    const margin = viewportWidth < 720 || viewportHeight < 560 ? 12 : 24;
     setHoverPreview({
       src,
       title: item.title || '图像预览',
-      left,
-      top,
+      left: margin,
+      top: margin,
     });
   }, []);
 
