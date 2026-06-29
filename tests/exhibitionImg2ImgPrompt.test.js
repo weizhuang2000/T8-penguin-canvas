@@ -405,6 +405,24 @@ test('exhibition img2img prompt includes craft and layout values when present', 
   assert.match(prompt, /入口处保持开阔/);
 });
 
+test('exhibition img2img prompt separates decoration and ceiling crafts before common crafts', () => {
+  const prompt = buildExhibitionImg2ImgPrompt({
+    selectedCrafts: ['decor', 'ceiling', 'panel'],
+    craftPresets: [
+      { id: 'decor', category: '装饰', label: '墙面肌理', prompt: '墙面肌理工艺：使用微水泥肌理墙面' },
+      { id: 'ceiling', category: '顶部', label: '灯膜吊顶', prompt: '灯膜吊顶工艺：使用软膜灯箱顶部' },
+      { id: 'panel', category: '展陈', label: '图文展板', prompt: '图文展板工艺：用于重点内容展示' },
+    ],
+  });
+  const decorationIndex = prompt.indexOf('整体空间装修采用工艺：');
+  const commonIndex = prompt.indexOf('通用展陈工艺：');
+  assert.ok(decorationIndex >= 0 && commonIndex > decorationIndex);
+  assert.match(prompt, /整体空间装修采用工艺：墙面肌理工艺：使用微水泥肌理墙面。灯膜吊顶工艺：使用软膜灯箱顶部。/);
+  const commonCraftBlock = prompt.slice(commonIndex, prompt.indexOf('版式密度：', commonIndex));
+  assert.match(commonCraftBlock, /图文展板工艺：用于重点内容展示。/);
+  assert.doesNotMatch(commonCraftBlock, /墙面肌理工艺|灯膜吊顶工艺/);
+});
+
 test('exhibition img2img prompt describes exhibit reference images', () => {
   const prompt = buildExhibitionImg2ImgPrompt({
     exhibitReferenceItems: [

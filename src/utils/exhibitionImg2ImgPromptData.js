@@ -33,6 +33,7 @@ const SPACE_LIGHTING_LEVELS = {
   bright: 'relatively bright overall space lighting, clear ambient illumination, readable exhibition surfaces, balanced highlights without overexposure',
   'very-bright': 'very bright overall space lighting, high overall illumination, clean luminous exhibition atmosphere, crisp visibility while preserving material detail',
 };
+const SPACE_DECORATION_CRAFT_CATEGORIES = new Set(['装饰', '顶部']);
 const BRIGHTNESS_PATTERN = /(?:非常暗|比较暗|较暗|偏暗|昏暗|暗色|深色|低亮度|明暗关系|明暗|比较亮|较亮|偏亮|非常亮|明亮|高亮度|亮色|dark|bright|brightness|low-key|high-key|shadowy|dim|moody)/gi;
 
 function cleanText(value, max = 12000) {
@@ -172,12 +173,13 @@ function craftItems(selectedIds, customCraft, craftPresets) {
   const values = source
     .filter((craft) => selected.has(craft.id))
     .map((craft) => ({
+      category: cleanText(craft.category, 40),
       label: cleanText(craft.label, 80),
       prompt: cleanText(craft.prompt, 800),
     }))
     .filter((craft) => craft.label || craft.prompt);
   const custom = cleanText(customCraft, 800);
-  if (custom) values.push({ label: '自定义工艺', prompt: custom });
+  if (custom) values.push({ category: '其它', label: '自定义工艺', prompt: custom });
   return values;
 }
 
@@ -187,16 +189,36 @@ function craftText(selectedIds, customCraft, craftPresets) {
     .filter(Boolean);
 }
 
-function craftBulletText(values) {
-  const crafts = craftItems(values.selectedCrafts, values.customCraft, values.craftPresets);
-  if (!crafts.length) return '按专业展陈常规工艺执行，图文展板、标题字、灯光、展柜与装饰面均需符合真实施工逻辑。';
+function craftItemText(craft) {
+  const prompt = craft.prompt || craft.label;
+  return craft.label && prompt && !prompt.includes(craft.label)
+    ? `${craft.label}：${prompt}`
+    : prompt;
+}
+
+function craftBulletText(values, options = {}) {
+  const excludeCategories = options.excludeCategories instanceof Set ? options.excludeCategories : new Set();
+  const allCrafts = craftItems(values.selectedCrafts, values.customCraft, values.craftPresets);
+  const crafts = allCrafts
+    .filter((craft) => !excludeCategories.has(craft.category));
+  if (!crafts.length) {
+    return excludeCategories.size > 0 && allCrafts.length > 0
+      ? '其余展陈工艺按专业展陈常规工艺执行，图文展板、标题字、灯光与展柜均需符合真实施工逻辑。'
+      : '按专业展陈常规工艺执行，图文展板、标题字、灯光、展柜与装饰面均需符合真实施工逻辑。';
+  }
   return crafts.map((craft) => {
-    const prompt = craft.prompt || craft.label;
-    const text = craft.label && prompt && !prompt.includes(craft.label)
-      ? `${craft.label}：${prompt}`
-      : prompt;
+    const text = craftItemText(craft);
     return `${text}。`;
   }).join('\n');
+}
+
+function spaceDecorationCraftText(values) {
+  const crafts = craftItems(values.selectedCrafts, values.customCraft, values.craftPresets)
+    .filter((craft) => SPACE_DECORATION_CRAFT_CATEGORIES.has(craft.category))
+    .map((craft) => craftItemText(craft))
+    .filter(Boolean);
+  if (!crafts.length) return '';
+  return `整体空间装修采用工艺：${crafts.map((craft) => `${craft}。`).join('')}`;
 }
 
 function colorMaterialSourceText(values) {
@@ -430,6 +452,7 @@ export function buildExhibitionImg2ImgPrompt(values = {}) {
     values.excludeItems,
     values.excludeItemOptions || EXHIBITION_IMG2IMG_EXCLUDE_ITEMS,
   );
+  const spaceDecorationCraft = spaceDecorationCraftText(values);
   const lines = [
     '1. 核心任务与最高约束',
     '',
@@ -453,9 +476,11 @@ export function buildExhibitionImg2ImgPrompt(values = {}) {
     '',
     '将以下展陈工艺和版式要求，应用到从“空间结构示意图”提取的骨架上。',
     '',
+    spaceDecorationCraft,
+    spaceDecorationCraft ? '' : '',
     '通用展陈工艺：',
     '',
-    craftBulletText(values),
+    craftBulletText(values, { excludeCategories: SPACE_DECORATION_CRAFT_CATEGORIES }),
     '',
     `版式密度：${cleanText(values.density || '适中，图文层级均衡') }。`,
     '',
