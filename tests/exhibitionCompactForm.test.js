@@ -45,6 +45,7 @@ test('compact controller writes true active attribute expected by CSS', () => {
   assert.match(css, /\[data-exhibition-compact-active="true"\]/);
   assert.match(css, /\[data-exhibition-compact-key\]\[data-exhibition-compact-visible="false"\]/);
   assert.match(css, /\[data-exhibition-compact-editing="true"\] \[data-exhibition-compact-hidden="true"\]/);
+  assert.match(css, /rgba\(248, 113, 113/);
 });
 
 test('NodeActionBar supports admin double-click visual editing without firing single-click immediately', () => {
