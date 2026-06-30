@@ -170,8 +170,10 @@ const NodeActionBar = ({ canEditExhibitionCompactForm = false }: { canEditExhibi
       window.clearTimeout(compactClickTimerRef.current);
       compactClickTimerRef.current = null;
     }
-    clearEditingNode();
-  }, [selectedExe?.id, isRhVisual, isYyhVisual]);
+    if (editingNodeId && selectedExe?.id && selectedExe.id !== editingNodeId) {
+      clearEditingNode();
+    }
+  }, [selectedExe?.id, isRhVisual, isYyhVisual, editingNodeId, clearEditingNode]);
 
   if (!selectedExe) return null;
 

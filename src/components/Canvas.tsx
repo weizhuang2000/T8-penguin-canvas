@@ -539,9 +539,24 @@ function ExhibitionCompactFormController({
       const next = toggleHiddenKey(nodeType, key);
       flushSave(next);
     };
+    const stopEditingEvent = (event: Event) => {
+      const nodeEl = (event.target as HTMLElement | null)?.closest?.('.react-flow__node[data-id]') as HTMLElement | null;
+      if (!nodeEl || nodeEl.getAttribute('data-id') !== editingNodeId) return;
+      const contentEl = nodeEl.querySelector<HTMLElement>('[data-exhibition-compact-node-type]');
+      const rawTarget = event.target as HTMLElement | null;
+      if (!contentEl || !rawTarget || rawTarget.closest(COMPACT_IGNORE_SELECTOR) || !contentEl.contains(rawTarget)) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
     document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('pointerup', stopEditingEvent, true);
+    document.addEventListener('mouseup', stopEditingEvent, true);
+    document.addEventListener('click', stopEditingEvent, true);
     return () => {
       document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('pointerup', stopEditingEvent, true);
+      document.removeEventListener('mouseup', stopEditingEvent, true);
+      document.removeEventListener('click', stopEditingEvent, true);
       if (saveTimerRef.current) {
         window.clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;

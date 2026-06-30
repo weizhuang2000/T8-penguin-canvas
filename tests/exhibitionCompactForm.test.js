@@ -37,6 +37,8 @@ test('compact controller writes true active attribute expected by CSS', () => {
   assert.match(canvas, /COMPACT_FINE_SELECTOR/);
   assert.match(canvas, /resolveCompactClickTarget/);
   assert.match(canvas, /'div'/);
+  assert.match(canvas, /stopEditingEvent/);
+  assert.match(canvas, /document\.addEventListener\('click', stopEditingEvent, true\)/);
   assert.match(canvas, /data-exhibition-compact-editing/);
   assert.match(canvas, /updateExhibitionCompactForm/);
   assert.match(canvas, /document\.addEventListener\('pointerdown', onPointerDown, true\)/);
@@ -51,6 +53,7 @@ test('NodeActionBar supports admin double-click visual editing without firing si
   assert.match(source, /window\.setTimeout\(\(\) => \{/);
   assert.match(source, /onDoubleClick=\{onEditCompact\}/);
   assert.match(source, /setEditingNode\(selectedExe\.id, selectedExe\.type\)/);
+  assert.match(source, /selectedExe\.id !== editingNodeId/);
   assert.match(source, /data-exhibition-compact-editing/);
 });
 
