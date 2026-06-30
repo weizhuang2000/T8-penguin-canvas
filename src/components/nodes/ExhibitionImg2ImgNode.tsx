@@ -2972,7 +2972,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         )}
 
         <div className="columns-2 gap-2 [&>section]:mb-2 [&>section]:break-inside-avoid">
-        <section data-exhibition-compact-section="references" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="references" data-exhibition-compact-item="plan-reference" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <ImageSlot handleId="plan-layout" title="平面布局图" subtitle="与空间结构示意图互斥；添加相机后决定渲染视角" url={planLayoutImage} top="31.5%" />
           {planLayoutImage && (
             <PlanCameraModalEditor
@@ -3002,7 +3002,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           />
         </section>
 
-        <section data-exhibition-compact-section="references" className="rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="references" data-exhibition-compact-item="priority-order" className="rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1.5 text-[11px] font-semibold text-cyan-100">优先级顺序</div>
           <div className="mb-1.5 text-[10px] leading-snug text-white/45">
             仅调整工艺、色彩材质与表现完成度取舍；空间结构始终完全按结构示意图。
@@ -3374,7 +3374,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           )}
         </section>
 
-        <section data-exhibition-compact-section="references" className="rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="references" data-exhibition-compact-item="exhibit-reference" className="rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1.5 flex items-center gap-2">
             <ImageIcon size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">展品参考图</span>

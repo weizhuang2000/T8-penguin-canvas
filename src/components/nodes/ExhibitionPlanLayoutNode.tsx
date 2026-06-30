@@ -549,7 +549,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
         {isReadonly && <div className="rounded border border-amber-300/30 bg-amber-300/10 px-2 py-1.5 text-[10px] text-amber-100">当前画布为只读，仅可查看结果。</div>}
         {d.error && <div className="rounded border border-red-300/25 bg-red-400/10 px-2 py-1.5 text-[10px] text-red-200">{d.error}</div>}
 
-        <section data-exhibition-compact-section="input" className="grid grid-cols-2 gap-2">
+        <section data-exhibition-compact-section="input" data-exhibition-compact-item="main" className="grid grid-cols-2 gap-2">
           <ImageSlot title="原始建筑平面图" subtitle="图1，唯一建筑结构依据，必须连接" url={planImage} />
           <div className="rounded border border-white/10 bg-black/15 p-2">
             <div className="mb-1 text-[11px] font-semibold text-cyan-100">平面图解析</div>
@@ -564,7 +564,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
           </div>
         </section>
 
-        <section data-exhibition-compact-section="layout" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="layout" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-1.5">
             <FileText size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">资料与大纲</span>
@@ -628,7 +628,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
           />
         </section>
 
-        <section data-exhibition-compact-section="model" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="model" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><Route size={13} /> 布局要求</div>
           <select className={FIELD} value={layoutPresetId} disabled={isReadonly || busy} onChange={(event) => update({ layoutPresetId: normalizeExhibitionPlanLayoutPresetId(event.target.value) })}>
             {EXHIBITION_PLAN_LAYOUT_PRESETS.map((preset: ExhibitionPlanLayoutPreset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
@@ -802,7 +802,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
           </div>
         </section>
 
-        <section data-exhibition-compact-section="result" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="result" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} /> 生图</div>
             <button type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy} onClick={() => void runGenerate()}><Play size={13} /> 生成平面布局</button>

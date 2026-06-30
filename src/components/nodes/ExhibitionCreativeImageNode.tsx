@@ -2950,7 +2950,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           </div>
         </section>
 
-        <section data-exhibition-compact-section="result" className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
+        <section data-exhibition-compact-section="result" data-exhibition-compact-item="prompt-output" className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
           <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100">
             <Clipboard size={13} />
             <span>当前生图 Prompt</span>

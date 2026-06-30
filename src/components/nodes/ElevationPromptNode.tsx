@@ -652,7 +652,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
           </div>
         )}
 
-        <section data-exhibition-compact-section="source" className="rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="source" data-exhibition-compact-item="main" className="rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1.5 flex items-center gap-2">
             <span className="text-[11px] font-semibold text-cyan-100">1. 导入文档</span>
             <button
@@ -688,7 +688,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
               />
         </section>
 
-        <section data-exhibition-compact-section="extract" className="rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="extract" data-exhibition-compact-item="main" className="rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1.5 flex items-center gap-2">
             <span className="text-[11px] font-semibold text-cyan-100">2. AI 提炼</span>
             <label className="ml-auto flex min-w-[150px] items-center gap-1.5 text-[10px] text-white/55" title="控制 AI 结构化提炼的目标字数">
@@ -789,7 +789,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
           </details>
         </section>
 
-        <section data-exhibition-compact-section="craft" className="rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="craft" data-exhibition-compact-item="main" className="rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1.5 flex items-center gap-2">
             <span className="text-[11px] font-semibold text-cyan-100">3. 立面组织</span>
             <button type="button" className={`${BUTTON} ml-auto`} disabled={isReadonly} onClick={rebuildWalls}>
@@ -876,7 +876,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
           </div>
         </section>
 
-        <section data-exhibition-compact-section="model" className="rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="model" data-exhibition-compact-item="main" className="rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="mb-1.5 flex items-center gap-2">
             <span className="text-[11px] font-semibold text-cyan-100">4. 工艺与版式</span>
             {canManageTeam && (
@@ -1088,7 +1088,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
           </div>
         </section>
 
-        <section data-exhibition-compact-section="result" className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
+        <section data-exhibition-compact-section="result" data-exhibition-compact-item="main" className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
           <div className="mb-1.5 flex items-center gap-2">
             <span className="text-[11px] font-semibold text-cyan-100">5. 下游输出</span>
             <select className={`${FIELD} ml-auto !w-auto`} disabled={isReadonly} value={d.downstreamContent || 'concept'} onChange={(event) => update({ downstreamContent: event.target.value })}>

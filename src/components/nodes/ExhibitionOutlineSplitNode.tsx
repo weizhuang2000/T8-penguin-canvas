@@ -500,7 +500,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
       </div>
 
       <div className="space-y-3 p-3 text-xs">
-        <section data-exhibition-compact-section="source" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="source" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-1.5">
             <FileText size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">创意资料文档</span>
@@ -637,7 +637,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
           </label>
         </section>
 
-        <section data-exhibition-compact-section="split" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="split" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-1.5">
             <Sparkles size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">拆分设置</span>
@@ -729,7 +729,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
           </div>
         </section>
 
-        <section data-exhibition-compact-section="output" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="output" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-1.5">
             <ImageIcon size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">输出单元</span>
@@ -777,7 +777,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
           </div>
         </section>
 
-        <section data-exhibition-compact-section="result" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="result" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-1.5">
             <Clipboard size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">分段输出</span>

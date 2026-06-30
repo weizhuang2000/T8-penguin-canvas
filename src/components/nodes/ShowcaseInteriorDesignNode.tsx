@@ -953,7 +953,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
       </div>
 
       <div className="nodrag nowheel max-h-[660px] space-y-2 overflow-y-auto p-3" onMouseDown={(event) => event.stopPropagation()}>
-        <section data-exhibition-compact-section="showcase" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="showcase" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><Settings2 size={13} /> 展柜样式</div>
           <div className="grid grid-cols-2 gap-2">
             {[
@@ -978,7 +978,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
           </label>
         </section>
 
-        <section data-exhibition-compact-section="exhibits" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="exhibits" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} /> 展品输入</div>
           <div className="grid grid-cols-2 gap-1 rounded bg-black/20 p-1">
             {([
@@ -1121,7 +1121,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
           )}
         </section>
 
-        <section data-exhibition-compact-section="material" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="material" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><Palette size={13} /> 柜内形式设计风格</div>
           <ColorMaterialPresetSelect
             presets={colorMaterialPresets}
@@ -1142,7 +1142,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
           )}
         </section>
 
-        <section data-exhibition-compact-section="model" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="model" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><Ruler size={13} /> 输出形式要求</div>
             <button type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy} onClick={() => void runGenerate()}><Play size={13} /> 生成</button>
@@ -1241,7 +1241,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
           {d.imageUrl && <img src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} />}
         </section>
 
-        <section data-exhibition-compact-section="result" className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
+        <section data-exhibition-compact-section="result" data-exhibition-compact-item="main" className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
           <div className="mb-1 text-[11px] font-semibold text-cyan-100">当前 Prompt</div>
           <div className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words text-[10px] leading-relaxed text-white/72">{previewPrompt}</div>
         </section>

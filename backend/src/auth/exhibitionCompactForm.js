@@ -2,14 +2,18 @@
 
 const EXHIBITION_COMPACT_FORM_DEFINITIONS = [
   { nodeType: 'elevation-prompt', label: '\u7acb\u9762\u63d0\u793a\u8bcd', sections: [
-    { id: 'source', label: '\u8d44\u6599\u8f93\u5165' },
-    { id: 'extract', label: 'AI \u63d0\u70bc' },
-    { id: 'craft', label: '\u5de5\u827a\u6e05\u5355' },
-    { id: 'model', label: '\u6a21\u578b\u53c2\u6570' },
-    { id: 'result', label: '\u7ed3\u679c\u9884\u89c8' },
+    { id: 'source', label: '\u8d44\u6599\u8f93\u5165', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'extract', label: 'AI \u63d0\u70bc', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'craft', label: '\u5de5\u827a\u6e05\u5355', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'model', label: '\u6a21\u578b\u53c2\u6570', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'result', label: '\u7ed3\u679c\u9884\u89c8', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
   ] },
   { nodeType: 'exhibition-img2img', label: '\u5c55\u9648\u56fe\u751f\u56fe', sections: [
-    { id: 'references', label: '\u53c2\u8003\u56fe' },
+    { id: 'references', label: '\u53c2\u8003\u56fe', items: [
+      { id: 'plan-reference', label: '\u5e73\u9762/\u7ed3\u6784\u53c2\u8003' },
+      { id: 'priority-order', label: '\u4f18\u5148\u7ea7\u987a\u5e8f' },
+      { id: 'exhibit-reference', label: '\u5c55\u54c1\u53c2\u8003' },
+    ] },
     { id: 'craft', label: '\u5de5\u827a\u7248\u5f0f', items: [
       { id: 'preset-options', label: '\u9884\u8bbe\u9009\u9879' },
       { id: 'density', label: '\u5bc6\u5ea6/\u7248\u5f0f' },
@@ -37,9 +41,9 @@ const EXHIBITION_COMPACT_FORM_DEFINITIONS = [
     ] },
   ] },
   { nodeType: 'exhibition-style-transfer', label: '\u98ce\u683c\u8fc1\u79fb', sections: [
-    { id: 'input', label: '\u8f93\u5165\u56fe\u50cf' },
-    { id: 'style', label: '\u98ce\u683c\u8bbe\u5b9a' },
-    { id: 'model', label: '\u6a21\u578b\u53c2\u6570' },
+    { id: 'input', label: '\u8f93\u5165\u56fe\u50cf', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'style', label: '\u98ce\u683c\u8bbe\u5b9a', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'model', label: '\u6a21\u578b\u53c2\u6570', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
   ] },
   { nodeType: 'exhibition-recolor', label: '\u4e3b\u8272\u8c03\u66f4\u6362', sections: [
     { id: 'input', label: '\u8272\u8c03', items: [
@@ -110,6 +114,7 @@ const EXHIBITION_COMPACT_FORM_DEFINITIONS = [
     ] },
     { id: 'result', label: '\u7ed3\u679c\u9884\u89c8', items: [
       { id: 'preview', label: '\u7ed3\u679c\u9884\u89c8' },
+      { id: 'prompt-output', label: '\u5f53\u524d\u63d0\u793a\u8bcd' },
     ] },
   ] },
   { nodeType: 'exhibition-render-to-elevation', label: '\u6548\u679c\u56fe\u8f6c\u7acb\u9762', sections: [
@@ -132,22 +137,22 @@ const EXHIBITION_COMPACT_FORM_DEFINITIONS = [
     ] },
   ] },
   { nodeType: 'exhibition-text-image-loop', label: '\u56fe\u6587\u5faa\u73af\u5668', sections: [
-    { id: 'run', label: '\u8fd0\u884c\u8bbe\u7f6e' },
-    { id: 'pairing', label: '\u914d\u5bf9\u6a21\u5f0f' },
-    { id: 'input', label: '\u8f93\u5165\u7d20\u6750' },
-    { id: 'status', label: '\u6267\u884c\u72b6\u6001' },
+    { id: 'run', label: '\u8fd0\u884c\u8bbe\u7f6e', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'pairing', label: '\u914d\u5bf9\u6a21\u5f0f', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'input', label: '\u8f93\u5165\u7d20\u6750', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'status', label: '\u6267\u884c\u72b6\u6001', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
   ] },
   { nodeType: 'exhibition-outline-split', label: '\u5c55\u9648\u5927\u7eb2\u62c6\u5206', sections: [
-    { id: 'source', label: '\u8d44\u6599\u8f93\u5165' },
-    { id: 'split', label: '\u62c6\u5206\u8bbe\u7f6e' },
-    { id: 'output', label: '\u8f93\u51fa\u683c\u5f0f' },
-    { id: 'result', label: '\u62c6\u5206\u7ed3\u679c' },
+    { id: 'source', label: '\u8d44\u6599\u8f93\u5165', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'split', label: '\u62c6\u5206\u8bbe\u7f6e', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'output', label: '\u8f93\u51fa\u683c\u5f0f', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'result', label: '\u62c6\u5206\u7ed3\u679c', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
   ] },
   { nodeType: 'exhibition-plan-layout', label: '\u5e73\u9762\u81ea\u52a8\u5e03\u5c40', sections: [
-    { id: 'input', label: '\u8f93\u5165\u7d20\u6750' },
-    { id: 'layout', label: '\u5e03\u5c40\u7b56\u7565' },
-    { id: 'model', label: '\u6a21\u578b\u53c2\u6570' },
-    { id: 'result', label: '\u7ed3\u679c\u9884\u89c8' },
+    { id: 'input', label: '\u8f93\u5165\u7d20\u6750', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'layout', label: '\u5e03\u5c40\u7b56\u7565', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'model', label: '\u6a21\u578b\u53c2\u6570', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'result', label: '\u7ed3\u679c\u9884\u89c8', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
   ] },
   { nodeType: 'unit-panel-design', label: '\u5355\u5143\u677f\u8bbe\u8ba1', sections: [
     { id: 'source', label: '\u6587\u672c\u8d44\u6599', items: [
@@ -181,11 +186,11 @@ const EXHIBITION_COMPACT_FORM_DEFINITIONS = [
     ] },
   ] },
   { nodeType: 'showcase-interior-design', label: '\u67dc\u5185\u8bbe\u8ba1', sections: [
-    { id: 'showcase', label: '\u5c55\u67dc\u5c3a\u5bf8' },
-    { id: 'exhibits', label: '\u5c55\u54c1\u7d20\u6750' },
-    { id: 'material', label: '\u8272\u5f69\u6750\u8d28' },
-    { id: 'model', label: '\u6a21\u578b\u53c2\u6570' },
-    { id: 'result', label: '\u7ed3\u679c\u9884\u89c8' },
+    { id: 'showcase', label: '\u5c55\u67dc\u5c3a\u5bf8', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'exhibits', label: '\u5c55\u54c1\u7d20\u6750', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'material', label: '\u8272\u5f69\u6750\u8d28', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'model', label: '\u6a21\u578b\u53c2\u6570', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'result', label: '\u7ed3\u679c\u9884\u89c8', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
   ] },
 ];
 
