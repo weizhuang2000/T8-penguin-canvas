@@ -29,6 +29,7 @@ import { useCanvasStore } from '../../stores/canvas';
 import { logBus } from '../../stores/logs';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
+import PromptTextarea from '../PromptTextarea';
 import { useUpdateNodeData } from './useUpdateNodeData';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
@@ -598,12 +599,13 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
 
         <label className="nodrag nopan block space-y-1" data-exhibition-compact-section="model">
           <span className="text-[10px] text-white/45">补充要求</span>
-          <textarea
+          <PromptTextarea
+            title="扩大编辑"
             className={`${FIELD} min-h-[54px] resize-y`}
             value={String(d.supplement || '')}
             disabled={isReadonly || isGenerating}
             placeholder="可选：指定图纸风格、材质、文字密度、汇报深度..."
-            onChange={(event) => update({ supplement: event.target.value })}
+            onValueChange={(value) => update({ supplement: value })}
           />
         </label>
 

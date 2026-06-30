@@ -83,11 +83,9 @@ function normalizeExhibitReferenceItems(value) {
   return list
     .map((item, index) => {
       const url = cleanText(item?.url || '', 1000);
-      const description = cleanText(item?.description || item?.label || '', 120);
-      if (!url && !description) return null;
+      if (!url) return null;
       return {
         index: index + 1,
-        description,
       };
     })
     .filter(Boolean);
@@ -100,11 +98,7 @@ function exhibitReferenceText(value) {
     '【展品参考图】',
     '展品参考图只用于提取展品外观、内容主题、体量关系、材质细节和展示重点，不作为空间结构、布局比例或整体色彩材质体系依据。',
   ];
-  for (const item of items) {
-    if (item.description) {
-      lines.push(`图中${item.description}参考图作为主要展品参考素材。`);
-    }
-  }
+  lines.push(`已接入 ${items.length} 张展品参考图，按输入顺序作为展品外观、主题和展示重点参考。`);
   lines.push('如画面中需要呈现展品，应让展品符合真实博物馆陈列尺度，带必要托座、低反射保护和重点照明；不要生成可读展品标签文字。');
   return lines.join('\n');
 }

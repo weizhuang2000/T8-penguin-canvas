@@ -171,11 +171,6 @@ interface ExhibitReferenceInputImage {
   label: string;
 }
 
-interface ExhibitReferenceItem extends ExhibitReferenceInputImage {
-  description: string;
-  descriptionMentions?: MediaMention[];
-}
-
 interface ExhibitionReferenceMaterialRole {
   id: string;
   kind: 'image';
@@ -1712,15 +1707,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const exhibitReferenceInputImages = useHandleImages(id, 'exhibit-reference', 'exhibits');
   const inputDocumentText = useInputDocumentText(id);
   const exhibitReferenceImageUrls = useMemo(() => exhibitReferenceInputImages.map((item) => item.url), [exhibitReferenceInputImages]);
-  const exhibitReferenceItems = useMemo(() => {
-    const saved: ExhibitReferenceItem[] = Array.isArray(d.exhibitReferenceItems) ? d.exhibitReferenceItems : [];
-    return exhibitReferenceInputImages.map((image) => {
-      const existing = saved.find((item) => item.url === image.url);
-      return existing
-        ? { ...existing, id: image.id, label: image.label, descriptionMentions: mediaMentions(existing.descriptionMentions) }
-        : { ...image, description: '', descriptionMentions: [] };
-    });
-  }, [d.exhibitReferenceItems, exhibitReferenceInputImages]);
+  const exhibitReferenceItems = exhibitReferenceInputImages;
   const priorityOrder = normalizeExhibitionImg2ImgPriority(d.priorityOrder);
   const selectedCrafts: string[] = Array.isArray(d.selectedCrafts) ? d.selectedCrafts : DEFAULT_CRAFTS;
   const craftRandomCounts = useMemo(() => normalizeCraftRandomCounts(d.craftRandomCounts), [d.craftRandomCounts]);
@@ -1988,10 +1975,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       colorMaterialPalette: resolveText(promptColorMaterialPalette, colorMaterialPaletteMentions),
       colorMaterialTextures: resolveText(promptColorMaterialTextures, colorMaterialTexturesMentions),
       colorMaterialReferenceTone: resolveText(colorMaterialReferenceTone, colorMaterialReferenceToneMentions),
-      exhibitReferenceItems: exhibitReferenceItems.map((item) => ({
-        ...item,
-        description: resolveText(item.description, mediaMentions(item.descriptionMentions)),
-      })),
+      exhibitReferenceItems,
     };
   }, [
     colorMaterialReferenceTone,
@@ -2002,12 +1986,12 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     d.customCraft,
     d.supplement,
     d.visualStyle,
-    exhibitReferenceItems,
     mentionMaterials,
     promptColorMaterialPalette,
     promptColorMaterialTextures,
     supplementMentions,
     visualStyleMentions,
+    exhibitReferenceItems,
   ]);
 
   const buildPromptWithWallPlan = useCallback((plan: ElevationContentPlan, effectiveCrafts = selectedCrafts) => {
@@ -2345,13 +2329,6 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   }, [contentEnabled, inputDocumentText, isReadonly, sourceText, update]);
 
   useEffect(() => {
-    const saved: ExhibitReferenceItem[] = Array.isArray(d.exhibitReferenceItems) ? d.exhibitReferenceItems : [];
-    const isSame = saved.length === exhibitReferenceItems.length
-      && saved.every((item, index) => item.url === exhibitReferenceItems[index].url && item.description === exhibitReferenceItems[index].description);
-    if (!isSame) update({ exhibitReferenceItems });
-  }, [d.exhibitReferenceItems, exhibitReferenceItems, update]);
-
-  useEffect(() => {
     if (Number(d.colorMaterialMarkDefaultsVersion) >= COLOR_MATERIAL_MARK_DEFAULTS_VERSION) return;
     const patch: Record<string, any> = {};
     if (String(d.colorMaterialMarkText || '').trim() === LEGACY_COLOR_MATERIAL_MARK_TEXT) {
@@ -2588,14 +2565,6 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     if (isReadonly || busy) return;
     update({ excludeItems: allExcludeSelected ? [] : excludeOptions.map((item) => item.id) });
   };
-
-  const patchExhibitReferenceItem = useCallback((url: string, patch: Partial<Pick<ExhibitReferenceItem, 'description' | 'descriptionMentions'>>) => {
-    if (isReadonly) return;
-    const next = exhibitReferenceItems.map((item) => (
-      item.url === url ? { ...item, ...patch } : item
-    ));
-    update({ exhibitReferenceItems: next });
-  }, [exhibitReferenceItems, isReadonly, update]);
 
   const planWallContent = useCallback(async (textOverride?: string, rethrow = false, effectiveCrafts = selectedCrafts) => {
     if (isReadonly || !contentEnabled) return;
@@ -3411,31 +3380,19 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
             <span className="text-[11px] font-semibold text-cyan-100">展品参考图</span>
           </div>
           <div className="text-[10px] leading-snug text-white/45">
-            接入展品外观与主题参考图；描述只用于说明展品特征和展示重点，不改变空间结构或色彩材质体系。
+            接入展品外观与主题参考图，不改变空间结构或色彩材质体系。
           </div>
           {exhibitReferenceItems.length === 0 ? (
             <div className="mt-2 rounded border border-dashed border-white/15 px-2 py-3 text-[10px] text-white/35">
               暂无展品参考图。可从上传节点、素材集或输出节点连接多张图片到展品参考图入口。
             </div>
           ) : (
-            <div className="mt-2 max-h-64 space-y-1.5 overflow-y-auto">
+            <div className="mt-2 grid max-h-64 grid-cols-3 gap-1.5 overflow-y-auto">
               {exhibitReferenceItems.map((item, index) => (
-                <div key={item.url} className="grid grid-cols-[54px_minmax(0,1fr)] items-start gap-1.5 rounded border border-white/10 bg-black/15 p-1.5">
-                  <img src={item.url} alt="" className="h-12 w-12 rounded border border-white/10 object-cover" draggable={false} />
-                  <div className="min-w-0">
-                    <MentionPromptInput
-                      title="扩大编辑"
-                      className={FIELD}
-                      value={item.description}
-                      mentions={mediaMentions(item.descriptionMentions)}
-                      materials={mentionMaterials}
-                      isDark
-                      isPixel={false}
-                      promptTemplateKind="image"
-                      placeholder={`展品 ${index + 1} 特征描述，如"红色的茶壶"`}
-                      onChange={(value, mentions) => patchExhibitReferenceItem(item.url, { description: value, descriptionMentions: mentions })}
-                    />
-                    <div className="mt-0.5 truncate text-[9px] text-white/35" title={item.url}>{item.label}</div>
+                <div key={item.url} className="min-w-0 rounded border border-white/10 bg-black/15 p-1.5">
+                  <img src={item.url} alt="" className="h-16 w-full rounded border border-white/10 object-cover" draggable={false} />
+                  <div className="mt-1 truncate text-[9px] text-white/45" title={item.url}>
+                    {item.label || `展品参考图 ${index + 1}`}
                   </div>
                 </div>
               ))}

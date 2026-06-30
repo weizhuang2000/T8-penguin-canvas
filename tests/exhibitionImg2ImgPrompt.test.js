@@ -88,14 +88,16 @@ test('exhibition img2img node supports @ image mentions for prompt image referen
   assert.match(node, /mentions=\{colorMaterialPaletteMentions\}/);
   assert.match(node, /mentions=\{colorMaterialTexturesMentions\}/);
   assert.match(node, /mentions=\{colorMaterialReferenceToneMentions\}/);
-  assert.match(node, /descriptionMentions: mentions/);
   assert.match(node, /resolveText\(d\.customCraft, customCraftMentions\)/);
   assert.match(node, /resolveText\(d\.visualStyle, visualStyleMentions\)/);
   assert.match(node, /resolveText\(d\.supplement, supplementMentions\)/);
   assert.match(node, /resolveText\(promptColorMaterialPalette, colorMaterialPaletteMentions\)/);
   assert.match(node, /resolveText\(promptColorMaterialTextures, colorMaterialTexturesMentions\)/);
   assert.match(node, /resolveText\(colorMaterialReferenceTone, colorMaterialReferenceToneMentions\)/);
-  assert.match(node, /description: resolveText\(item\.description, mediaMentions\(item\.descriptionMentions\)\)/);
+  assert.doesNotMatch(node, /descriptionMentions/);
+  assert.doesNotMatch(node, /patchExhibitReferenceItem/);
+  assert.doesNotMatch(node, /value=\{item\.description\}/);
+  assert.doesNotMatch(node, /特征描述/);
   assert.match(canvas, /customCraftMentions: \[\]/);
   assert.match(canvas, /colorMaterialReferenceToneMentions: \[\]/);
 });
@@ -436,9 +438,9 @@ test('exhibition img2img prompt describes exhibit reference images', () => {
     ],
   });
   assert.match(prompt, /展品参考图/);
-  const first = prompt.indexOf('图中红色陶器参考图作为主要展品参考素材。');
-  const second = prompt.indexOf('图中青铜鼎参考图作为主要展品参考素材。');
-  assert.ok(first >= 0 && second > first);
+  assert.match(prompt, /已接入 2 张展品参考图，按输入顺序作为展品外观、主题和展示重点参考。/);
+  assert.doesNotMatch(prompt, /红色陶器/);
+  assert.doesNotMatch(prompt, /青铜鼎/);
   assert.match(prompt, /展品参考图只用于提取展品外观、内容主题、体量关系、材质细节和展示重点/);
   assert.match(prompt, /不作为空间结构、布局比例或整体色彩材质体系依据/);
 });

@@ -54,6 +54,12 @@ test('render to elevation component exposes text and image handles', () => {
   assert.match(node, /generateExternalImage/);
 });
 
+test('render to elevation supplement uses stable prompt textarea for IME input', () => {
+  const node = readFileSync(new URL('../src/components/nodes/ExhibitionRenderToElevationNode.tsx', import.meta.url), 'utf8');
+  assert.match(node, /import PromptTextarea from '\.\.\/PromptTextarea'/);
+  assert.match(node, /<PromptTextarea[\s\S]*value=\{String\(d\.supplement \|\| ''\)\}[\s\S]*onValueChange=\{\(value\) => update\(\{ supplement: value \}\)\}/);
+});
+
 test('render to elevation node supports action bar, compact form and canvas dragging', () => {
   const node = readFileSync(new URL('../src/components/nodes/ExhibitionRenderToElevationNode.tsx', import.meta.url), 'utf8');
   const actionBar = readFileSync(new URL('../src/components/NodeActionBar.tsx', import.meta.url), 'utf8');
