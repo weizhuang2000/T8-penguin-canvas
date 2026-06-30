@@ -2,8 +2,10 @@ import {
   buildRenderToElevationAnalysisMessages,
   buildRenderToElevationImagePrompt,
   normalizeElevationSections,
+  parseElevationLengthMeters,
   parseElevationSectionsFromLlmResponse,
   parseElevationSectionsFromText,
+  splitLongElevationSections,
 } from './exhibitionRenderToElevationPromptData.js';
 
 export interface RenderToElevationSection {
@@ -24,6 +26,8 @@ export {
   buildRenderToElevationAnalysisMessages,
   buildRenderToElevationImagePrompt,
   normalizeElevationSections,
+  parseElevationLengthMeters,
   parseElevationSectionsFromLlmResponse,
   parseElevationSectionsFromText,
+  splitLongElevationSections,
 };

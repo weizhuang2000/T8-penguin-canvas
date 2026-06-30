@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildRenderToElevationAnalysisMessages,
   buildRenderToElevationImagePrompt,
+  parseElevationLengthMeters,
   parseElevationSectionsFromLlmResponse,
   parseElevationSectionsFromText,
 } from '../src/utils/exhibitionRenderToElevationPromptData.js';
@@ -49,6 +50,47 @@ test('render to elevation image prompt defaults to img2img reference mode and ca
   assert.doesNotMatch(disabled, /透视墙面区域/);
 });
 
+test('render to elevation parser marks long elevations for LLM craft-boundary split', () => {
+  assert.equal(parseElevationLengthMeters('立面长度：12米，含主标题和展柜'), 12);
+  const sections = parseElevationSectionsFromText([
+    '立面1：序厅主形象墙',
+    '长度：9米',
+    '品牌大标题、序言、灯箱展板',
+    '',
+    '立面2：发展历程墙',
+    '总长17米',
+    '时间轴、图文展板、灯箱',
+  ].join('\n'));
+  assert.equal(sections.length, 2);
+  assert.equal(sections[0].needsIntelligentSplit, true);
+  assert.equal(sections[0].recommendedSplitCount, 2);
+  assert.equal(sections[1].needsIntelligentSplit, true);
+  assert.equal(sections[1].recommendedSplitCount, 3);
+  assert.match(sections[0].craftBoundaryNotes, /工艺落位/);
+  assert.match(sections[0].craftBoundaryNotes, /不要将同一工艺拆到两段立面图里/);
+});
+
+test('render to elevation prompt keeps intelligent split output visually unified', () => {
+  const prompt = buildRenderToElevationImagePrompt({
+    index: 2,
+    title: '发展历程墙 2/3',
+    content: '时间轴、图文展板、灯箱',
+    splitIndex: 2,
+    splitCount: 3,
+    splitLengthMeters: 5.7,
+    craftBoundaryNotes: '按时间轴节点和灯箱展柜落位拆分，灯箱组保持完整',
+  });
+  assert.match(prompt, /统一包装形式/);
+  assert.match(prompt, /标题字/);
+  assert.match(prompt, /不得使用白底留白画布/);
+  assert.match(prompt, /第 2\/3 段/);
+  assert.match(prompt, /工艺落位智能拆分/);
+  assert.match(prompt, /不是机械均分切片/);
+  assert.match(prompt, /不得把同一工艺模块拆到两个立面图里/);
+  assert.match(prompt, /灯箱组保持完整/);
+  assert.doesNotMatch(prompt, /长度均分拆分/);
+});
+
 test('render to elevation llm fallback prompt includes strict JSON schema and image part', () => {
   const messages = buildRenderToElevationAnalysisMessages({
     sourceText: '序厅做品牌墙，尾厅做荣誉墙',
@@ -57,6 +99,10 @@ test('render to elevation llm fallback prompt includes strict JSON schema and im
   assert.equal(messages[0].role, 'system');
   assert.match(messages[1].content[0].text, /"elevations"/);
   assert.match(messages[1].content[0].text, /自动判断可拆分的立面/);
+  assert.match(messages[1].content[0].text, /超过 8 米/);
+  assert.match(messages[1].content[0].text, /工艺落位/);
+  assert.match(messages[1].content[0].text, /不要将一个工艺拆到两段立面图里/);
+  assert.match(messages[1].content[0].text, /多个 elevations/);
   assert.equal(messages[1].content[1].type, 'image_url');
   assert.equal(messages[1].content[1].image_url.url, '/files/output/demo.png');
 });

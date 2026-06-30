@@ -389,6 +389,7 @@ function formatWallContentPrompt(value) {
     const summary = lineValue(block, '内容摘要');
     const exactText = lineValue(block, '准确文案');
     const craftConfig = lineValue(block, '工艺配置');
+    const wallLength = lineValue(block, '立面长度');
     const elements = splitSentences(summary).slice(0, 8);
     const crafts = splitSentences(craftConfig).slice(0, 10);
     const wallLines = [
@@ -406,6 +407,7 @@ function formatWallContentPrompt(value) {
       wallLines.push('', '工艺落位：');
       crafts.forEach((item) => wallLines.push(`${item}。`));
     }
+    if (wallLength) wallLines.push('', `立面长度：${wallLength}`);
     out.push(wallLines.join('\n'));
   });
   out.push('✧ 重要说明：以上立面组织结果仅用于设计效果图中各展墙的主题、图文层级、内容分区、重点文案占位和工艺落位；必须贴合结构示意图中的展墙/隔断位置，不得改变空间结构。');

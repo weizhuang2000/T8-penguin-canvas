@@ -252,12 +252,14 @@ test('exhibition img2img wall content planning should use schedule instead of co
       '核心信息：品牌发展脉络',
       '',
       '立面 1｜序厅',
+      '立面长度：约 6.5m',
       '内容摘要：品牌起源',
       '准确文案：初心 / 创新',
       '工艺配置：展板、立体字',
     ].join('\n'),
   });
   assert.match(prompt, /重点文案占位：初心 \/ 创新/);
+  assert.match(prompt, /工艺落位：\n展板、立体字。\n\n立面长度：约 6\.5m/);
   assert.doesNotMatch(prompt, /生成一张专业展陈彩立面平面设计概念图/);
   assert.doesNotMatch(prompt, /整套展陈彩立面设计/);
 });

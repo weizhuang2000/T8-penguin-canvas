@@ -4,6 +4,14 @@ export interface RenderToElevationSection {
   content: string;
   styleAnchor?: string;
   prompt?: string;
+  lengthMeters?: number;
+  originalIndex?: number;
+  splitLengthMeters?: number;
+  splitIndex?: number;
+  splitCount?: number;
+  needsIntelligentSplit?: boolean;
+  recommendedSplitCount?: number;
+  craftBoundaryNotes?: string;
 }
 
 export interface RenderToElevationAnalysisValues {
@@ -20,5 +28,7 @@ export interface RenderToElevationImagePromptValues extends Partial<RenderToElev
 export function parseElevationSectionsFromText(value: unknown): RenderToElevationSection[];
 export function normalizeElevationSections(value: unknown): RenderToElevationSection[];
 export function parseElevationSectionsFromLlmResponse(value: unknown): RenderToElevationSection[];
+export function parseElevationLengthMeters(value: unknown): number;
+export function splitLongElevationSections(value: unknown): RenderToElevationSection[];
 export function buildRenderToElevationAnalysisMessages(values?: RenderToElevationAnalysisValues): Array<Record<string, unknown>>;
 export function buildRenderToElevationImagePrompt(values?: RenderToElevationImagePromptValues): string;

@@ -201,7 +201,8 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
     if (!sourceText) throw new Error('请接入或填写包含“立面1：...”的文本');
     const ruleSections = parseElevationSectionsFromText(sourceText);
     const messages = buildRenderToElevationAnalysisMessages({ sourceText, referenceImage });
-    const shouldUseLlm = ruleSections.length === 0 || referenceImage;
+    const hasLongElevation = ruleSections.some((section) => section.needsIntelligentSplit);
+    const shouldUseLlm = ruleSections.length === 0 || referenceImage || hasLongElevation;
     if (!shouldUseLlm) return ruleSections;
     update({ status: 'analyzing', progress: 'LLM 正在识别立面', error: '' });
     const res = await generateLlm({
@@ -212,8 +213,14 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
       max_tokens: 3000,
     });
     const llmSections = parseElevationSectionsFromLlmResponse(res.content);
+    if (!llmSections.length && hasLongElevation) {
+      throw new Error('检测到超过 8 米的立面，但 LLM 未能按工艺落位拆分；请补充工艺落位、展项模块或版式块边界后重试');
+    }
     const sections = llmSections.length ? llmSections : ruleSections;
     if (!sections.length) throw new Error('未识别到立面内容，请补充“立面1：...”格式后重试');
+    if (sections.some((section) => section.needsIntelligentSplit)) {
+      throw new Error('检测到超过 8 米的立面仍未拆分完成，请让文本明确各工艺模块位置，避免一个工艺被拆到两段立面图里');
+    }
     update({ parsedElevations: sections, analysisText: res.content, progress: `识别到 ${sections.length} 个立面` });
     return sections;
   }, [activeLlmConfig?.id, llmModel, referenceImage, sourceText, update]);
