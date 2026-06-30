@@ -346,11 +346,15 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
                                   <span className="truncate text-[10px] opacity-45">{section.id}</span>
                                   <span className="text-[10px] opacity-60">{selectedItems.size}/{items.length}</span>
                                 </label>
-                                <button className={btnCls} type="button" onClick={() => patchCompactSectionItems(definition.nodeType, section.id, items.map((item) => item.id))}>{'\u672c\u533a\u5168\u9009'}</button>
-                                <button className={btnCls} type="button" onClick={() => patchCompactSectionItems(definition.nodeType, section.id, [])}>{'\u672c\u533a\u5168\u4e0d\u9009'}</button>
-                                <button className={btnCls} type="button" onClick={() => patchCompactSectionItems(definition.nodeType, section.id, defaultExhibitionCompactForm().itemsByNodeType[definition.nodeType]?.[section.id] || [])}>{'\u672c\u533a\u9ed8\u8ba4'}</button>
+                                {items.length > 0 && (
+                                  <>
+                                    <button className={btnCls} type="button" onClick={() => patchCompactSectionItems(definition.nodeType, section.id, items.map((item) => item.id))}>{'\u672c\u533a\u5168\u9009'}</button>
+                                    <button className={btnCls} type="button" onClick={() => patchCompactSectionItems(definition.nodeType, section.id, [])}>{'\u672c\u533a\u5168\u4e0d\u9009'}</button>
+                                    <button className={btnCls} type="button" onClick={() => patchCompactSectionItems(definition.nodeType, section.id, defaultExhibitionCompactForm().itemsByNodeType[definition.nodeType]?.[section.id] || [])}>{'\u672c\u533a\u9ed8\u8ba4'}</button>
+                                  </>
+                                )}
                               </div>
-                              <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-4">
+                              {items.length > 0 && <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-4">
                                 {items.map((item) => {
                                   const itemChecked = selectedItems.has(item.id);
                                   return (
@@ -365,7 +369,7 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
                                     </label>
                                   );
                                 })}
-                              </div>
+                              </div>}
                             </div>
                           );
                         })}

@@ -176,98 +176,191 @@ const DEFAULT_ITEMS_BY_SECTION_ID: Record<string, ExhibitionCompactItemDefinitio
 };
 
 export const EXHIBITION_COMPACT_FORM_DEFINITIONS: ExhibitionCompactNodeDefinition[] = [
-  { nodeType: 'elevation-prompt', label: '立面提示词', sections: [
-    { id: 'source', label: '资料输入' },
-    { id: 'extract', label: 'AI 提炼' },
-    { id: 'craft', label: '工艺清单' },
-    { id: 'model', label: '模型参数' },
-    { id: 'result', label: '结果预览' },
+  { nodeType: 'elevation-prompt', label: '\u7acb\u9762\u63d0\u793a\u8bcd', sections: [
+    { id: 'source', label: '\u8d44\u6599\u8f93\u5165' },
+    { id: 'extract', label: 'AI \u63d0\u70bc' },
+    { id: 'craft', label: '\u5de5\u827a\u6e05\u5355' },
+    { id: 'model', label: '\u6a21\u578b\u53c2\u6570' },
+    { id: 'result', label: '\u7ed3\u679c\u9884\u89c8' },
   ] },
-  { nodeType: 'exhibition-img2img', label: '展陈图生图', sections: [
-    { id: 'references', label: '参考图' },
-    { id: 'craft', label: '工艺版式' },
-    { id: 'exclusions', label: '排除项' },
-    { id: 'color-material', label: '色彩材质' },
-    { id: 'content', label: '图文内容' },
-    { id: 'model', label: '模型参数' },
-    { id: 'prompt', label: '提示词' },
-    { id: 'result', label: '结果预览' },
+  { nodeType: 'exhibition-img2img', label: '\u5c55\u9648\u56fe\u751f\u56fe', sections: [
+    { id: 'references', label: '\u53c2\u8003\u56fe' },
+    { id: 'craft', label: '\u5de5\u827a\u7248\u5f0f', items: [
+      { id: 'preset-options', label: '\u9884\u8bbe\u9009\u9879' },
+      { id: 'density', label: '\u5bc6\u5ea6/\u7248\u5f0f' },
+    ] },
+    { id: 'exclusions', label: '\u6392\u9664\u9879', items: [
+      { id: 'protected-options', label: '\u4fdd\u62a4\u9009\u9879' },
+    ] },
+    { id: 'color-material', label: '\u8272\u5f69\u6750\u8d28', items: [
+      { id: 'priority-mode', label: '\u4f18\u5148\u7ea7' },
+      { id: 'manual-input', label: '\u624b\u52a8\u8865\u5145' },
+    ] },
+    { id: 'content', label: '\u56fe\u6587\u5185\u5bb9', items: [
+      { id: 'enable-toggle', label: '\u542f\u7528\u5f00\u5173' },
+      { id: 'llm-settings', label: '\u6a21\u578b\u8bbe\u7f6e' },
+      { id: 'text-fields', label: '\u6587\u672c\u5b57\u6bb5' },
+    ] },
+    { id: 'model', label: '\u6a21\u578b\u53c2\u6570', items: [
+      { id: 'aspect-size', label: '\u6bd4\u4f8b/\u5c3a\u5bf8' },
+    ] },
+    { id: 'prompt', label: '\u63d0\u793a\u8bcd', items: [
+      { id: 'prompt-preview', label: '\u63d0\u793a\u8bcd\u9884\u89c8' },
+    ] },
+    { id: 'result', label: '\u7ed3\u679c\u9884\u89c8', items: [
+      { id: 'preview', label: '\u7ed3\u679c\u9884\u89c8' },
+    ] },
   ] },
-  { nodeType: 'exhibition-style-transfer', label: '风格迁移', sections: [
-    { id: 'input', label: '输入图像' },
-    { id: 'style', label: '风格设定' },
-    { id: 'material', label: '材质选择' },
-    { id: 'model', label: '模型参数' },
-    { id: 'result', label: '结果预览' },
+  { nodeType: 'exhibition-style-transfer', label: '\u98ce\u683c\u8fc1\u79fb', sections: [
+    { id: 'input', label: '\u8f93\u5165\u56fe\u50cf' },
+    { id: 'style', label: '\u98ce\u683c\u8bbe\u5b9a' },
+    { id: 'model', label: '\u6a21\u578b\u53c2\u6570' },
   ] },
-  { nodeType: 'exhibition-recolor', label: '主色调更换', sections: [
+  { nodeType: 'exhibition-recolor', label: '\u4e3b\u8272\u8c03\u66f4\u6362', sections: [
     { id: 'input', label: '\u8272\u8c03', items: [
-      { id: 'preset-options', label: '预设方案' },
-      { id: 'color-controls', label: '颜色控件' },
-      { id: 'brightness', label: '明暗控制' },
+      { id: 'preset-options', label: '\u9884\u8bbe\u65b9\u6848' },
+      { id: 'color-controls', label: '\u989c\u8272\u63a7\u4ef6' },
+      { id: 'brightness', label: '\u660e\u6697\u63a7\u5236' },
     ] },
-        { id: 'protection', label: '保护对象' },
-    { id: 'palette', label: '地面顶面', items: [
-      { id: 'floor', label: '地面设置' },
-      { id: 'ceiling', label: '顶面设置' },
+    { id: 'palette', label: '\u5730\u9762\u9876\u9762', items: [
+      { id: 'floor', label: '\u5730\u9762\u8bbe\u7f6e' },
+      { id: 'ceiling', label: '\u9876\u9762\u8bbe\u7f6e' },
     ] },
-    { id: 'model', label: '模型参数' },
-    { id: 'result', label: '结果预览' },
+    { id: 'protection', label: '\u4fdd\u62a4\u5bf9\u8c61', items: [
+      { id: 'protected-options', label: '\u4fdd\u62a4\u9009\u9879' },
+      { id: 'manual-exclusions', label: '\u624b\u52a8\u6392\u9664' },
+    ] },
+    { id: 'model', label: '\u6a21\u578b\u53c2\u6570', items: [
+      { id: 'actions', label: '\u751f\u6210\u64cd\u4f5c' },
+      { id: 'provider', label: '\u5e73\u53f0' },
+      { id: 'model', label: '\u6a21\u578b' },
+      { id: 'aspect-size', label: '\u6bd4\u4f8b/\u5c3a\u5bf8' },
+      { id: 'output-format', label: '\u8f93\u51fa\u683c\u5f0f' },
+      { id: 'seed-name', label: 'Seed' },
+      { id: 'progress', label: '\u8fdb\u5ea6\u72b6\u6001' },
+      { id: 'preview', label: '\u7ed3\u679c\u9884\u89c8' },
+    ] },
   ] },
-  { nodeType: 'exhibition-lighting-heatmap', label: '灯光热力图', sections: [
-    { id: 'analysis', label: '分析设置' },
-    { id: 'model', label: '模型参数' },
-    { id: 'result', label: '结果预览' },
+  { nodeType: 'exhibition-lighting-heatmap', label: '\u706f\u5149\u70ed\u529b\u56fe', sections: [
+    { id: 'analysis', label: '\u5206\u6790\u8bbe\u7f6e', items: [
+      { id: 'mode', label: '\u5206\u6790\u6a21\u5f0f' },
+      { id: 'focus', label: '\u5173\u6ce8\u9879' },
+      { id: 'supplement', label: '\u8865\u5145\u8981\u6c42' },
+    ] },
+    { id: 'model', label: '\u6a21\u578b\u53c2\u6570', items: [
+      { id: 'actions', label: '\u751f\u6210\u64cd\u4f5c' },
+      { id: 'provider', label: '\u5e73\u53f0' },
+      { id: 'model', label: '\u6a21\u578b' },
+      { id: 'aspect-size', label: '\u6bd4\u4f8b/\u5c3a\u5bf8' },
+      { id: 'output-format', label: '\u8f93\u51fa\u683c\u5f0f' },
+      { id: 'seed-name', label: 'Seed' },
+      { id: 'progress', label: '\u8fdb\u5ea6\u72b6\u6001' },
+      { id: 'preview', label: '\u7ed3\u679c\u9884\u89c8' },
+    ] },
   ] },
-  { nodeType: 'exhibition-creative-image', label: '展陈创意生图', sections: [
-    { id: 'source', label: '项目资料' },
-    { id: 'creative', label: '创意方向' },
-    { id: 'insert', label: '展项元素' },
-    { id: 'color-material', label: '色彩材质' },
-    { id: 'content', label: '文本内容' },
-    { id: 'model', label: '模型参数' },
-    { id: 'prompt', label: '提示词' },
-    { id: 'result', label: '结果预览' },
+  { nodeType: 'exhibition-creative-image', label: '\u5c55\u9648\u521b\u610f\u751f\u56fe', sections: [
+    { id: 'source', label: '\u9879\u76ee\u8d44\u6599', items: [
+      { id: 'reference-settings', label: '\u53c2\u8003\u8bbe\u7f6e' },
+      { id: 'space-reference', label: '\u7a7a\u95f4\u53c2\u8003' },
+      { id: 'material-reference', label: '\u6750\u8d28\u53c2\u8003' },
+    ] },
+    { id: 'creative', label: '\u521b\u610f\u65b9\u5411', items: [
+      { id: 'direction', label: '\u521b\u610f\u65b9\u5411' },
+    ] },
+    { id: 'insert', label: '\u5c55\u9879\u5143\u7d20', items: [
+      { id: 'insert-options', label: '\u5c55\u9879\u5143\u7d20' },
+      { id: 'random-count', label: '\u968f\u673a\u6570\u91cf' },
+    ] },
+    { id: 'color-material', label: '\u8272\u5f69\u6750\u8d28', items: [
+      { id: 'preset-options', label: '\u9884\u8bbe\u8272\u5f69\u65b9\u6848' },
+    ] },
+    { id: 'content', label: '\u6587\u672c\u5185\u5bb9', items: [
+      { id: 'text-fields', label: '\u6587\u672c\u5b57\u6bb5' },
+    ] },
+    { id: 'model', label: '\u6a21\u578b\u53c2\u6570', items: [
+      { id: 'actions', label: '\u751f\u6210\u64cd\u4f5c' },
+    ] },
+    { id: 'prompt', label: '\u63d0\u793a\u8bcd', items: [
+      { id: 'prompt-preview', label: '\u63d0\u793a\u8bcd\u9884\u89c8' },
+    ] },
+    { id: 'result', label: '\u7ed3\u679c\u9884\u89c8', items: [
+      { id: 'preview', label: '\u7ed3\u679c\u9884\u89c8' },
+    ] },
   ] },
-  { nodeType: 'exhibition-render-to-elevation', label: '效果图转立面', sections: [
-    { id: 'input', label: '输入素材' },
-    { id: 'model', label: '模型参数' },
-    { id: 'result', label: '立面结果' },
+  { nodeType: 'exhibition-render-to-elevation', label: '\u6548\u679c\u56fe\u8f6c\u7acb\u9762', sections: [
+    { id: 'input', label: '\u8f93\u5165\u7d20\u6750', items: [
+      { id: 'material-input', label: '\u8f93\u5165\u7d20\u6750' },
+    ] },
+    { id: 'model', label: '\u6a21\u578b\u53c2\u6570', items: [
+      { id: 'provider', label: '\u5e73\u53f0' },
+      { id: 'model', label: '\u6a21\u578b' },
+      { id: 'aspect-size', label: '\u6bd4\u4f8b/\u5c3a\u5bf8' },
+      { id: 'output-format', label: '\u8f93\u51fa\u683c\u5f0f' },
+      { id: 'seed-name', label: 'Seed' },
+      { id: 'manual-input', label: '\u624b\u52a8\u8865\u5145' },
+    ] },
+    { id: 'result', label: '\u7acb\u9762\u7ed3\u679c', items: [
+      { id: 'outputs', label: '\u8f93\u51fa\u5217\u8868' },
+      { id: 'preview', label: '\u7ed3\u679c\u9884\u89c8' },
+      { id: 'progress', label: '\u8fdb\u5ea6\u72b6\u6001' },
+      { id: 'actions', label: '\u7ed3\u679c\u64cd\u4f5c' },
+    ] },
   ] },
-  { nodeType: 'exhibition-text-image-loop', label: '图文循环器', sections: [
-    { id: 'input', label: '输入素材' },
-    { id: 'pairing', label: '配对模式' },
-    { id: 'run', label: '运行设置' },
-    { id: 'status', label: '执行状态' },
+  { nodeType: 'exhibition-text-image-loop', label: '\u56fe\u6587\u5faa\u73af\u5668', sections: [
+    { id: 'run', label: '\u8fd0\u884c\u8bbe\u7f6e' },
+    { id: 'pairing', label: '\u914d\u5bf9\u6a21\u5f0f' },
+    { id: 'input', label: '\u8f93\u5165\u7d20\u6750' },
+    { id: 'status', label: '\u6267\u884c\u72b6\u6001' },
   ] },
-  { nodeType: 'exhibition-outline-split', label: '展陈大纲拆分', sections: [
-    { id: 'source', label: '资料输入' },
-    { id: 'split', label: '拆分设置' },
-    { id: 'output', label: '输出格式' },
-    { id: 'result', label: '拆分结果' },
+  { nodeType: 'exhibition-outline-split', label: '\u5c55\u9648\u5927\u7eb2\u62c6\u5206', sections: [
+    { id: 'source', label: '\u8d44\u6599\u8f93\u5165' },
+    { id: 'split', label: '\u62c6\u5206\u8bbe\u7f6e' },
+    { id: 'output', label: '\u8f93\u51fa\u683c\u5f0f' },
+    { id: 'result', label: '\u62c6\u5206\u7ed3\u679c' },
   ] },
-  { nodeType: 'exhibition-plan-layout', label: '平面自动布局', sections: [
-    { id: 'input', label: '输入素材' },
-    { id: 'layout', label: '布局策略' },
-    { id: 'elements', label: '展项元素' },
-    { id: 'model', label: '模型参数' },
-    { id: 'result', label: '结果预览' },
+  { nodeType: 'exhibition-plan-layout', label: '\u5e73\u9762\u81ea\u52a8\u5e03\u5c40', sections: [
+    { id: 'input', label: '\u8f93\u5165\u7d20\u6750' },
+    { id: 'layout', label: '\u5e03\u5c40\u7b56\u7565' },
+    { id: 'model', label: '\u6a21\u578b\u53c2\u6570' },
+    { id: 'result', label: '\u7ed3\u679c\u9884\u89c8' },
   ] },
-  { nodeType: 'unit-panel-design', label: '单元板设计', sections: [
-    { id: 'source', label: '文本资料' },
-    { id: 'language', label: '多语言' },
-    { id: 'material', label: '材质设置' },
-    { id: 'layout', label: '版式尺寸' },
-    { id: 'model', label: '模型参数' },
-    { id: 'result', label: '结果预览' },
+  { nodeType: 'unit-panel-design', label: '\u5355\u5143\u677f\u8bbe\u8ba1', sections: [
+    { id: 'source', label: '\u6587\u672c\u8d44\u6599', items: [
+      { id: 'parameter-input', label: '\u53c2\u6570\u8f93\u5165' },
+      { id: 'toggles', label: '\u5f00\u5173\u9009\u9879' },
+    ] },
+    { id: 'language', label: '\u591a\u8bed\u8a00', items: [
+      { id: 'document', label: '\u6587\u6863\u5bfc\u5165' },
+      { id: 'text-fields', label: '\u6587\u672c\u5b57\u6bb5' },
+      { id: 'actions', label: '\u6587\u672c\u64cd\u4f5c' },
+    ] },
+    { id: 'material', label: '\u6750\u8d28\u8bbe\u7f6e', items: [
+      { id: 'languages', label: '\u591a\u8bed\u79cd' },
+    ] },
+    { id: 'layout', label: '\u7248\u5f0f\u5c3a\u5bf8', items: [
+      { id: 'size', label: '\u5c3a\u5bf8\u8bbe\u7f6e' },
+      { id: 'text-bounds', label: '\u6587\u5b57\u533a\u57df' },
+    ] },
+    { id: 'model', label: '\u6a21\u578b\u53c2\u6570', items: [
+      { id: 'actions', label: '\u751f\u6210\u64cd\u4f5c' },
+      { id: 'material-select', label: '\u6750\u8d28\u9009\u62e9' },
+      { id: 'font-select', label: '\u5b57\u4f53\u9009\u62e9' },
+      { id: 'manual-input', label: '\u624b\u52a8\u8865\u5145' },
+      { id: 'reference', label: '\u53c2\u8003\u56fe' },
+    ] },
+    { id: 'result', label: '\u7ed3\u679c\u9884\u89c8', items: [
+      { id: 'actions', label: '\u7ed3\u679c\u64cd\u4f5c' },
+      { id: 'model', label: '\u6a21\u578b\u53c2\u6570' },
+      { id: 'progress', label: '\u8fdb\u5ea6\u72b6\u6001' },
+      { id: 'preview', label: '\u7ed3\u679c\u9884\u89c8' },
+    ] },
   ] },
-  { nodeType: 'showcase-interior-design', label: '柜内设计', sections: [
-    { id: 'showcase', label: '展柜尺寸' },
-    { id: 'exhibits', label: '展品素材' },
-    { id: 'layout', label: '陈列布局' },
-    { id: 'material', label: '色彩材质' },
-    { id: 'model', label: '模型参数' },
-    { id: 'result', label: '结果预览' },
+  { nodeType: 'showcase-interior-design', label: '\u67dc\u5185\u8bbe\u8ba1', sections: [
+    { id: 'showcase', label: '\u5c55\u67dc\u5c3a\u5bf8' },
+    { id: 'exhibits', label: '\u5c55\u54c1\u7d20\u6750' },
+    { id: 'material', label: '\u8272\u5f69\u6750\u8d28' },
+    { id: 'model', label: '\u6a21\u578b\u53c2\u6570' },
+    { id: 'result', label: '\u7ed3\u679c\u9884\u89c8' },
   ] },
 ];
 
@@ -277,9 +370,7 @@ export const EXHIBITION_COMPACT_NODE_TYPES = new Set(
 
 function itemsForSection(section: ExhibitionCompactSectionDefinition): ExhibitionCompactItemDefinition[] {
   if (Array.isArray(section.items)) return section.items;
-  return DEFAULT_ITEMS_BY_SECTION_ID[section.id] || [
-    { id: 'main', label: section.label },
-  ];
+  return [];
 }
 
 export function getExhibitionCompactSectionItems(section: ExhibitionCompactSectionDefinition): ExhibitionCompactItemDefinition[] {
