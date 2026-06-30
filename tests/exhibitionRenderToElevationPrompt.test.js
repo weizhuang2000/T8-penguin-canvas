@@ -81,7 +81,10 @@ test('render to elevation prompt keeps intelligent split output visually unified
     craftBoundaryNotes: '按时间轴节点和灯箱展柜落位拆分，灯箱组保持完整',
   });
   assert.match(prompt, /统一包装形式/);
-  assert.match(prompt, /标题字/);
+  assert.match(prompt, /浅灰色背景/);
+  assert.match(prompt, /顶部左侧用24号浅黄色黑体字显示标题/);
+  assert.match(prompt, /不要尺寸标注和工艺材质解读/);
+  assert.match(prompt, /立面图下面用地面做延伸/);
   assert.match(prompt, /不得使用白底留白画布/);
   assert.match(prompt, /第 2\/3 段/);
   assert.match(prompt, /工艺落位智能拆分/);
