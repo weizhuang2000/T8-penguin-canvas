@@ -352,16 +352,44 @@ function withNodeSerialBadge(Component: ComponentType<any>): ComponentType<any> 
   return WrappedNode;
 }
 
-const COMPACT_CONTROL_SELECTOR = [
+const COMPACT_GROUP_SELECTOR = [
   '[data-exhibition-compact-item]',
   '[data-exhibition-compact-section]',
   'label',
   'button',
+  '[role="button"]',
+  '[role="switch"]',
+  '[role="checkbox"]',
+  '[role="tab"]',
+  'fieldset',
+  'figure',
+].join(',');
+
+const COMPACT_FINE_SELECTOR = [
+  COMPACT_GROUP_SELECTOR,
   'input',
   'select',
   'textarea',
-  '[role="button"]',
+  '[role="textbox"]',
+  '[contenteditable="true"]',
+  'a',
   'img',
+  'video',
+  'canvas',
+  'pre',
+  'p',
+  'ul',
+  'ol',
+  'li',
+  'table',
+  'thead',
+  'tbody',
+  'tr',
+  'td',
+  'th',
+  'output',
+  'div',
+  'span',
 ].join(',');
 
 const COMPACT_IGNORE_SELECTOR = [
@@ -371,16 +399,39 @@ const COMPACT_IGNORE_SELECTOR = [
   '[data-canvas-floating-ui]',
 ].join(',');
 
+function compactElementPath(el: HTMLElement): string {
+  const boundary = el.closest<HTMLElement>('[data-exhibition-compact-section]')
+    || el.closest<HTMLElement>('[data-exhibition-compact-node-type]');
+  const parts: string[] = [];
+  let current: HTMLElement | null = el;
+  while (current && current !== boundary && parts.length < 8) {
+    const parent: HTMLElement | null = current.parentElement;
+    if (!parent) break;
+    const tag = current.tagName.toLowerCase();
+    const sameTagSiblings: HTMLElement[] = [];
+    for (let i = 0; i < parent.children.length; i += 1) {
+      const child = parent.children.item(i);
+      if (child instanceof HTMLElement && child.tagName === current.tagName) sameTagSiblings.push(child);
+    }
+    const index = Math.max(0, sameTagSiblings.indexOf(current));
+    parts.unshift(`${tag}${index ? `-${index}` : ''}`);
+    current = parent;
+  }
+  return parts.join('.');
+}
+
 function compactDomKey(el: HTMLElement, nodeType: string): string {
   const section = el.closest<HTMLElement>('[data-exhibition-compact-section]')?.dataset.exhibitionCompactSection || 'root';
   const item = el.dataset.exhibitionCompactItem || '';
   if (item) return `${section}:${item}`;
   if (el.dataset.exhibitionCompactSection) return `${section}:main`;
   const tag = el.tagName.toLowerCase();
-  const name = el.getAttribute('name') || el.getAttribute('aria-label') || el.getAttribute('title') || '';
-  const text = (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 32);
+  const name = el.getAttribute('name') || el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.getAttribute('type') || '';
+  const path = compactElementPath(el);
+  const text = (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 24);
   const index = Array.from((el.parentElement || el).children).indexOf(el);
-  return `${section}:${tag}:${String(name || text || index).replace(/[^\w\u4e00-\u9fa5.-]+/g, '-').slice(0, 48) || index}`;
+  const identity = String(path || name || text || index).replace(/[^\w\u4e00-\u9fa5.-]+/g, '-').slice(0, 72) || String(index);
+  return `${section}:${tag}:${identity}`;
 }
 
 function collectCompactTargets(contentEl: HTMLElement, nodeType: string): HTMLElement[] {
@@ -391,7 +442,7 @@ function collectCompactTargets(contentEl: HTMLElement, nodeType: string): HTMLEl
     sectionEl.dataset.exhibitionCompactKey = key;
     if (!targets.has(key)) targets.set(key, sectionEl);
   });
-  contentEl.querySelectorAll<HTMLElement>(COMPACT_CONTROL_SELECTOR).forEach((el) => {
+  contentEl.querySelectorAll<HTMLElement>(COMPACT_FINE_SELECTOR).forEach((el) => {
     if (el.closest(COMPACT_IGNORE_SELECTOR)) return;
     if (!contentEl.contains(el)) return;
     const key = compactDomKey(el, nodeType);
@@ -399,6 +450,17 @@ function collectCompactTargets(contentEl: HTMLElement, nodeType: string): HTMLEl
     if (!targets.has(key)) targets.set(key, el);
   });
   return Array.from(targets.values());
+}
+
+function resolveCompactClickTarget(rawTarget: HTMLElement, contentEl: HTMLElement, exact: boolean): HTMLElement | null {
+  if (exact) {
+    const direct = rawTarget.closest<HTMLElement>(COMPACT_FINE_SELECTOR);
+    return direct && contentEl.contains(direct) ? direct : null;
+  }
+  const grouped = rawTarget.closest<HTMLElement>(COMPACT_GROUP_SELECTOR);
+  if (grouped && contentEl.contains(grouped)) return grouped;
+  const fallback = rawTarget.closest<HTMLElement>('div, section, article, aside, p, pre, span');
+  return fallback && contentEl.contains(fallback) ? fallback : null;
 }
 
 function ExhibitionCompactFormController({
@@ -468,9 +530,7 @@ function ExhibitionCompactFormController({
       const rawTarget = event.target as HTMLElement | null;
       if (!rawTarget || rawTarget.closest(COMPACT_IGNORE_SELECTOR)) return;
       const exact = event.altKey || event.ctrlKey || event.metaKey;
-      const target = exact
-        ? rawTarget.closest<HTMLElement>(COMPACT_CONTROL_SELECTOR)
-        : rawTarget.closest<HTMLElement>('[data-exhibition-compact-item], [data-exhibition-compact-section], label, button, [role="button"]');
+      const target = resolveCompactClickTarget(rawTarget, contentEl, exact);
       if (!target || !contentEl.contains(target)) return;
       event.preventDefault();
       event.stopPropagation();

@@ -34,6 +34,9 @@ test('compact controller writes true active attribute expected by CSS', () => {
   assert.match(canvas, /setAttribute\('data-exhibition-compact-active', 'true'\)/);
   assert.match(canvas, /hiddenKeysByNodeType/);
   assert.match(canvas, /exhibitionCompactKey/);
+  assert.match(canvas, /COMPACT_FINE_SELECTOR/);
+  assert.match(canvas, /resolveCompactClickTarget/);
+  assert.match(canvas, /'div'/);
   assert.match(canvas, /data-exhibition-compact-editing/);
   assert.match(canvas, /updateExhibitionCompactForm/);
   assert.match(canvas, /document\.addEventListener\('pointerdown', onPointerDown, true\)/);
