@@ -173,11 +173,12 @@ test('exhibition img2img prompt defaults to structure priority', () => {
   const prompt = buildExhibitionImg2ImgPrompt();
   assert.match(prompt, /^1\. 核心任务与最高约束/);
   assert.match(prompt, /2\. 执行优先级（除空间结构外）/);
-  assert.match(prompt, /3\. 工艺与版式深化/);
-  assert.match(prompt, /4\. 展墙内容与设计（分立面执行）/);
-  assert.match(prompt, /5\. 色彩与材质体系/);
-  assert.match(prompt, /6\. 展品呈现/);
-  assert.match(prompt, /7\. 最终输出约束（必读）/);
+  assert.match(prompt, /3\. 整体空间装修采用工艺/);
+  assert.match(prompt, /4\. 工艺与版式深化/);
+  assert.match(prompt, /5\. 展墙内容与设计（分立面执行）/);
+  assert.match(prompt, /6\. 色彩与材质体系/);
+  assert.match(prompt, /7\. 展品呈现/);
+  assert.match(prompt, /8\. 最终输出约束（必读）/);
   assert.match(prompt, /任务：生成一张专业展陈空间效果图，要求真实室内建筑摄影级渲染/);
   assert.match(prompt, /第一优先级：工艺与版式/);
   assert.doesNotMatch(prompt, /^优先级顺序：/m);
@@ -236,7 +237,7 @@ test('exhibition img2img prompt can include wall content planning', () => {
   const prompt = buildExhibitionImg2ImgPrompt({
     wallContentPrompt: '立面 1｜序厅\n内容摘要：品牌发展脉络\n准确文案：初心 / 创新',
   });
-  assert.match(prompt, /4\. 展墙内容与设计（分立面执行）/);
+  assert.match(prompt, /5\. 展墙内容与设计（分立面执行）/);
   assert.match(prompt, /（1）立面 1：序厅/);
   assert.match(prompt, /品牌发展脉络/);
   assert.match(prompt, /仅用于设计效果图中各展墙的主题、图文层级、内容分区、重点文案占位和工艺落位/);
@@ -417,6 +418,7 @@ test('exhibition img2img prompt separates decoration and ceiling crafts before c
   const decorationIndex = prompt.indexOf('整体空间装修采用工艺：');
   const commonIndex = prompt.indexOf('通用展陈工艺：');
   assert.ok(decorationIndex >= 0 && commonIndex > decorationIndex);
+  assert.ok(prompt.indexOf('3. 整体空间装修采用工艺') < prompt.indexOf('4. 工艺与版式深化'));
   assert.match(prompt, /整体空间装修采用工艺：墙面肌理工艺：使用微水泥肌理墙面。灯膜吊顶工艺：使用软膜灯箱顶部。/);
   const commonCraftBlock = prompt.slice(commonIndex, prompt.indexOf('版式密度：', commonIndex));
   assert.match(commonCraftBlock, /图文展板工艺：用于重点内容展示。/);

@@ -217,7 +217,7 @@ function spaceDecorationCraftText(values) {
     .filter((craft) => SPACE_DECORATION_CRAFT_CATEGORIES.has(craft.category))
     .map((craft) => craftItemText(craft))
     .filter(Boolean);
-  if (!crafts.length) return '';
+  if (!crafts.length) return '按专业展陈空间装修常规工艺执行，墙面、地面、顶面、收边与隐藏灯槽均需符合真实施工逻辑。';
   return `整体空间装修采用工艺：${crafts.map((craft) => `${craft}。`).join('')}`;
 }
 
@@ -472,12 +472,14 @@ export function buildExhibitionImg2ImgPrompt(values = {}) {
     referenceRoleHints ? '' : '',
     executionPriorityText(priorityOrder, values),
     '',
-    '3. 工艺与版式深化',
+    '3. 整体空间装修采用工艺',
+    '',
+    spaceDecorationCraft,
+    '',
+    '4. 工艺与版式深化',
     '',
     '将以下展陈工艺和版式要求，应用到从“空间结构示意图”提取的骨架上。',
     '',
-    spaceDecorationCraft,
-    spaceDecorationCraft ? '' : '',
     '通用展陈工艺：',
     '',
     craftBulletText(values, { excludeCategories: SPACE_DECORATION_CRAFT_CATEGORIES }),
@@ -486,15 +488,15 @@ export function buildExhibitionImg2ImgPrompt(values = {}) {
     '',
     '绝对禁止：效果图中不得出现“展陈工艺”、“版式密度”等字段名或任何具体的设计说明文字。',
     '',
-    '4. 展墙内容与设计（分立面执行）',
+    '5. 展墙内容与设计（分立面执行）',
     '',
     formatWallContentPrompt(values.wallContentPrompt),
     '',
-    '5. 色彩与材质体系',
+    '6. 色彩与材质体系',
     '',
     colorMaterialSystemText(values),
     '',
-    '6. 展品呈现',
+    '7. 展品呈现',
     '',
     exhibitReference || [
       '参考素材：未接入展品参考图时，按展墙内容需要生成抽象展品占位或真实尺度的通用陈列体块。',
@@ -517,7 +519,7 @@ export function buildExhibitionImg2ImgPrompt(values = {}) {
     lines.push('');
   }
   lines.push(
-    '7. 最终输出约束（必读）',
+    '8. 最终输出约束（必读）',
     '',
     '画面干净：画面中不得出现结构示意图上的标注文字、箭头、尺寸线或任何乱码文本。',
     '',
