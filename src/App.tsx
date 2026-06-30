@@ -680,6 +680,8 @@ function App() {
               onInsertWorkflowRef={insertWorkflowRef}
               allowedNodeTypes={allowedNodeTypes}
               exhibitionCompactForm={exhibitionCompactForm}
+              canEditExhibitionCompactForm={canManageSettings}
+              onExhibitionCompactFormChanged={refreshAuthUser}
             />
           </Suspense>
         </ErrorBoundary>

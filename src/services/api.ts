@@ -204,6 +204,14 @@ export async function updateToolPermissions(payload: Partial<ToolPermissionsConf
 }
 
 // ========== 状态 ==========
+export async function updateExhibitionCompactForm(payload: ExhibitionCompactFormConfig): Promise<ExhibitionCompactFormConfig> {
+  const res = await request<{ success: boolean; data: ExhibitionCompactFormConfig }>(`${BASE}/admin/exhibition-compact-form`, {
+    method: 'PATCH',
+    body: JSON.stringify({ exhibitionCompactForm: payload }),
+  });
+  return res.data;
+}
+
 export async function checkBackendStatus(): Promise<boolean> {
   try {
     const res = await fetch(`${BASE}/status`);

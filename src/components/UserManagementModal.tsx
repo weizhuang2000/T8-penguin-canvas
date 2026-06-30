@@ -251,7 +251,7 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
                 <div className={`rounded-md border px-2 py-2 ${isDark ? 'border-cyan-300/20 bg-cyan-300/10 text-cyan-100' : 'border-cyan-200 bg-cyan-50 text-cyan-800'}`}>
                   全局展陈精简窗体
                 </div>
-                <button className={`${btnCls} w-full justify-start text-left`} type="button" onClick={() => setConfig(config ? { ...config, exhibitionCompactForm: defaultExhibitionCompactForm() } : config)}>
+                <button className={`${btnCls} w-full justify-start text-left`} type="button" onClick={() => setConfig(config ? { ...config, exhibitionCompactForm: { ...defaultExhibitionCompactForm(), hiddenKeysByNodeType: {} } } : config)}>
                   恢复全部默认
                 </button>
               </div>
@@ -314,69 +314,25 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
 
             {activeMode === 'compact' && (
               <div className="space-y-3">
-                {EXHIBITION_COMPACT_FORM_DEFINITIONS.map((definition) => {
-                  const selected = new Set(compactConfig.sectionsByNodeType[definition.nodeType] || []);
-                  const itemCount = definition.sections.reduce((sum, section) => sum + getExhibitionCompactSectionItems(section).length, 0);
-                  const selectedItemCount = definition.sections.reduce((sum, section) => (
-                    sum + (compactConfig.itemsByNodeType[definition.nodeType]?.[section.id] || []).length
-                  ), 0);
-                  return (
-                    <section key={definition.nodeType} className={`rounded-md border p-3 ${isDark ? 'border-white/10 bg-white/[0.03]' : 'border-black/10 bg-black/[0.02]'}`}>
-                      <div className="mb-2 flex items-center gap-2">
-                        <div className="flex-1 text-xs font-semibold">{definition.label} {' / '} {selected.size}/{definition.sections.length} {' / '} {selectedItemCount}/{itemCount}</div>
-                        <button className={btnCls} type="button" onClick={() => patchCompactNodeAll(definition.nodeType, true)}>{'\u5168\u9009'}</button>
-                        <button className={btnCls} type="button" onClick={() => patchCompactNodeAll(definition.nodeType, false)}>{'\u5168\u4e0d\u9009'}</button>
-                        <button className={btnCls} type="button" onClick={() => resetCompactNode(definition.nodeType)}>{'\u6062\u590d\u9ed8\u8ba4'}</button>
-                      </div>
-                      <div className="space-y-2">
-                        {definition.sections.map((section) => {
-                          const checked = selected.has(section.id);
-                          const items = getExhibitionCompactSectionItems(section);
-                          const selectedItems = new Set(compactConfig.itemsByNodeType[definition.nodeType]?.[section.id] || []);
-                          return (
-                            <div key={section.id} className={`rounded-md border p-2 text-xs ${checked ? 'border-cyan-300/50 bg-cyan-400/10' : isDark ? 'border-white/10 bg-black/10' : 'border-black/10 bg-white'}`}>
-                              <div className="mb-2 flex min-w-0 items-center gap-2">
-                                <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={() => toggleCompactSection(definition.nodeType, section.id)}
-                                  />
-                                  <span className="min-w-0 flex-1 truncate font-semibold">{section.label}</span>
-                                  <span className="truncate text-[10px] opacity-45">{section.id}</span>
-                                  <span className="text-[10px] opacity-60">{selectedItems.size}/{items.length}</span>
-                                </label>
-                                {items.length > 0 && (
-                                  <>
-                                    <button className={btnCls} type="button" onClick={() => patchCompactSectionItems(definition.nodeType, section.id, items.map((item) => item.id))}>{'\u672c\u533a\u5168\u9009'}</button>
-                                    <button className={btnCls} type="button" onClick={() => patchCompactSectionItems(definition.nodeType, section.id, [])}>{'\u672c\u533a\u5168\u4e0d\u9009'}</button>
-                                    <button className={btnCls} type="button" onClick={() => patchCompactSectionItems(definition.nodeType, section.id, defaultExhibitionCompactForm().itemsByNodeType[definition.nodeType]?.[section.id] || [])}>{'\u672c\u533a\u9ed8\u8ba4'}</button>
-                                  </>
-                                )}
-                              </div>
-                              {items.length > 0 && <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-4">
-                                {items.map((item) => {
-                                  const itemChecked = selectedItems.has(item.id);
-                                  return (
-                                    <label key={item.id} className={`flex min-w-0 cursor-pointer items-center gap-2 rounded border px-2 py-1.5 ${itemChecked ? 'border-emerald-300/40 bg-emerald-400/10' : isDark ? 'border-white/10 bg-black/10' : 'border-black/10 bg-white'}`}>
-                                      <input
-                                        type="checkbox"
-                                        checked={itemChecked}
-                                        onChange={() => toggleCompactItem(definition.nodeType, section.id, item.id)}
-                                      />
-                                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                                      <span className="truncate text-[10px] opacity-45">{item.id}</span>
-                                    </label>
-                                  );
-                                })}
-                              </div>}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </section>
-                  );
-                })}
+                <section className={`rounded-md border p-4 text-sm ${isDark ? 'border-cyan-300/20 bg-cyan-300/10 text-cyan-50' : 'border-cyan-200 bg-cyan-50 text-cyan-900'}`}>
+                  <div className="mb-2 font-semibold">{'\u753b\u5e03\u5185\u53ef\u89c6\u5316\u7f16\u8f91'}</div>
+                  <div className="space-y-1 text-xs leading-5 opacity-80">
+                    <div>{'\u5728\u753b\u5e03\u4e2d\u9009\u4e2d\u5c55\u9648\u5de5\u5177\u8282\u70b9\uff0c\u53cc\u51fb\u8282\u70b9\u6d6e\u52a8\u64cd\u4f5c\u680f\u7684\u201c\u7cbe\u7b80\u7a97\u4f53\u201d\u6309\u94ae\u8fdb\u5165\u8bbe\u7f6e\u72b6\u6001\u3002'}</div>
+                    <div>{'\u8bbe\u7f6e\u72b6\u6001\u4e0b\u8282\u70b9\u5185\u6240\u6709\u7ec4\u4ef6\u90fd\u4f1a\u663e\u793a\uff0c\u7070\u8272\u7ec4\u4ef6\u8868\u793a\u7cbe\u7b80\u6a21\u5f0f\u4e0b\u4f1a\u9690\u85cf\u3002\u70b9\u51fb\u7ec4\u4ef6\u53ef\u5207\u6362\u663e\u793a\u6216\u9690\u85cf\u3002'}</div>
+                    <div>{'\u9ed8\u8ba4\u70b9\u51fb\u5207\u6362\u6700\u8fd1\u7684\u63a7\u4ef6\u7ec4\uff1b\u6309 Alt / Ctrl / Meta \u70b9\u51fb\u53ef\u5c1d\u8bd5\u9009\u62e9\u66f4\u7ec6\u7684 DOM \u63a7\u4ef6\u3002'}</div>
+                    <div>{'\u6309 Esc\u3001\u518d\u6b21\u53cc\u51fb\u7cbe\u7b80\u6309\u94ae\u6216\u5207\u6362\u8282\u70b9\u4f1a\u9000\u51fa\u8bbe\u7f6e\u72b6\u6001\u3002\u914d\u7f6e\u6309\u8282\u70b9\u7c7b\u578b\u5168\u5c40\u5171\u4eab\u3002'}</div>
+                  </div>
+                </section>
+                <section className={`rounded-md border p-4 ${isDark ? 'border-white/10 bg-white/[0.03]' : 'border-black/10 bg-black/[0.02]'}`}>
+                  <div className="mb-3 text-xs opacity-70">{'\u6062\u590d\u5168\u90e8\u9ed8\u8ba4\u4f1a\u6e05\u7a7a\u753b\u5e03\u5185\u7f16\u8f91\u4ea7\u751f\u7684\u9690\u85cf\u9879\uff0c\u6240\u6709\u5c55\u9648\u8282\u70b9\u5728\u7cbe\u7b80\u6a21\u5f0f\u4e0b\u90fd\u5c06\u663e\u793a\u5168\u90e8\u7ec4\u4ef6\u3002'}</div>
+                  <button
+                    className={btnCls}
+                    type="button"
+                    onClick={() => setConfig(config ? { ...config, exhibitionCompactForm: { ...defaultExhibitionCompactForm(), hiddenKeysByNodeType: {} } } : config)}
+                  >
+                    {'\u6062\u590d\u5168\u90e8\u9ed8\u8ba4'}
+                  </button>
+                </section>
               </div>
             )}
 

@@ -18,6 +18,7 @@ export interface ExhibitionCompactNodeDefinition {
 export interface ExhibitionCompactFormConfig {
   sectionsByNodeType: Record<string, string[]>;
   itemsByNodeType: Record<string, Record<string, string[]>>;
+  hiddenKeysByNodeType: Record<string, string[]>;
 }
 
 const DEFAULT_ITEMS_BY_SECTION_ID: Record<string, ExhibitionCompactItemDefinition[]> = {
@@ -405,6 +406,7 @@ export function defaultExhibitionCompactForm(): ExhibitionCompactFormConfig {
       ]),
     ),
     itemsByNodeType: getDefaultCompactItemsByNodeType(),
+    hiddenKeysByNodeType: {},
   };
 }
 
@@ -412,6 +414,7 @@ export function normalizeExhibitionCompactFormConfig(value?: Partial<ExhibitionC
   const defaults = defaultExhibitionCompactForm();
   const incomingSections = value?.sectionsByNodeType || {};
   const incomingItems = value?.itemsByNodeType || {};
+  const incomingHiddenKeys = value?.hiddenKeysByNodeType || {};
   return {
     sectionsByNodeType: Object.fromEntries(
       EXHIBITION_COMPACT_FORM_DEFINITIONS.map((definition) => {
@@ -455,6 +458,19 @@ export function normalizeExhibitionCompactFormConfig(value?: Partial<ExhibitionC
           }),
         ),
       ]),
+    ),
+    hiddenKeysByNodeType: Object.fromEntries(
+      EXHIBITION_COMPACT_FORM_DEFINITIONS.map((definition) => {
+        const seen = new Set<string>();
+        const keys = (Array.isArray(incomingHiddenKeys[definition.nodeType]) ? incomingHiddenKeys[definition.nodeType] : [])
+          .map((id) => String(id || '').trim())
+          .filter((id) => {
+            if (!id || id.length > 240 || seen.has(id)) return false;
+            seen.add(id);
+            return true;
+          });
+        return [definition.nodeType, keys];
+      }).filter(([, keys]) => (keys as string[]).length > 0),
     ),
   };
 }

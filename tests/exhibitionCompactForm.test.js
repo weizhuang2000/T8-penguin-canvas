@@ -32,11 +32,23 @@ test('compact controller writes true active attribute expected by CSS', () => {
   const canvas = read('src/components/Canvas.tsx');
   const css = read('src/styles/index.css');
   assert.match(canvas, /setAttribute\('data-exhibition-compact-active', 'true'\)/);
-  assert.match(canvas, /getAllowedItems/);
-  assert.match(canvas, /data-exhibition-compact-item/);
-  assert.match(canvas, /sectionEl\.dataset\.exhibitionCompactItem/);
+  assert.match(canvas, /hiddenKeysByNodeType/);
+  assert.match(canvas, /exhibitionCompactKey/);
+  assert.match(canvas, /data-exhibition-compact-editing/);
+  assert.match(canvas, /updateExhibitionCompactForm/);
+  assert.match(canvas, /document\.addEventListener\('pointerdown', onPointerDown, true\)/);
   assert.match(css, /\[data-exhibition-compact-active="true"\]/);
-  assert.match(css, /\[data-exhibition-compact-item\]\[data-exhibition-compact-visible="false"\]/);
+  assert.match(css, /\[data-exhibition-compact-key\]\[data-exhibition-compact-visible="false"\]/);
+  assert.match(css, /\[data-exhibition-compact-editing="true"\] \[data-exhibition-compact-hidden="true"\]/);
+});
+
+test('NodeActionBar supports admin double-click visual editing without firing single-click immediately', () => {
+  const source = read('src/components/NodeActionBar.tsx');
+  assert.match(source, /compactClickTimerRef/);
+  assert.match(source, /window\.setTimeout\(\(\) => \{/);
+  assert.match(source, /onDoubleClick=\{onEditCompact\}/);
+  assert.match(source, /setEditingNode\(selectedExe\.id, selectedExe\.type\)/);
+  assert.match(source, /data-exhibition-compact-editing/);
 });
 
 test('exhibition compact form supports field-level item config', () => {
@@ -54,6 +66,7 @@ test('exhibition nodes carry compact section markers', () => {
     'src/components/nodes/ExhibitionRecolorNode.tsx',
     'src/components/nodes/ExhibitionLightingHeatmapNode.tsx',
     'src/components/nodes/ExhibitionCreativeImageNode.tsx',
+    'src/components/nodes/ExhibitionRenderToElevationNode.tsx',
     'src/components/nodes/ExhibitionTextImageLoopNode.tsx',
     'src/components/nodes/ExhibitionOutlineSplitNode.tsx',
     'src/components/nodes/ExhibitionPlanLayoutNode.tsx',
@@ -81,56 +94,12 @@ test('representative exhibition nodes carry compact item markers', () => {
   }
 });
 
-test('compact form definitions only expose sections and items present in node markup', () => {
+test('legacy compact form definitions remain available while DOM keys drive the new editor', () => {
   const { EXHIBITION_COMPACT_FORM_DEFINITIONS } = require('../backend/src/auth/exhibitionCompactForm.js');
-  const filesByNodeType = new Map([
-    ['elevation-prompt', 'src/components/nodes/ElevationPromptNode.tsx'],
-    ['exhibition-img2img', 'src/components/nodes/ExhibitionImg2ImgNode.tsx'],
-    ['exhibition-style-transfer', 'src/components/nodes/ExhibitionStyleTransferNode.tsx'],
-    ['exhibition-recolor', 'src/components/nodes/ExhibitionRecolorNode.tsx'],
-    ['exhibition-lighting-heatmap', 'src/components/nodes/ExhibitionLightingHeatmapNode.tsx'],
-    ['exhibition-creative-image', 'src/components/nodes/ExhibitionCreativeImageNode.tsx'],
-    ['exhibition-render-to-elevation', 'src/components/nodes/ExhibitionRenderToElevationNode.tsx'],
-    ['exhibition-text-image-loop', 'src/components/nodes/ExhibitionTextImageLoopNode.tsx'],
-    ['exhibition-outline-split', 'src/components/nodes/ExhibitionOutlineSplitNode.tsx'],
-    ['exhibition-plan-layout', 'src/components/nodes/ExhibitionPlanLayoutNode.tsx'],
-    ['unit-panel-design', 'src/components/nodes/UnitPanelDesignNode.tsx'],
-    ['showcase-interior-design', 'src/components/nodes/ShowcaseInteriorDesignNode.tsx'],
-  ]);
-
-  for (const definition of EXHIBITION_COMPACT_FORM_DEFINITIONS) {
-    const file = filesByNodeType.get(definition.nodeType);
-    assert.ok(file, `missing node file map for ${definition.nodeType}`);
-    const source = read(file);
-    const sectionIds = new Set([...source.matchAll(/data-exhibition-compact-section="([^"]+)"/g)].map((match) => match[1]));
-    for (const section of definition.sections) {
-      assert.ok(sectionIds.has(section.id), `${definition.nodeType}.${section.id} is not marked in ${file}`);
-      if (!section.items?.length) continue;
-      const itemIds = new Set();
-      let searchFrom = 0;
-      while (true) {
-        const sectionStart = source.indexOf(`data-exhibition-compact-section="${section.id}"`, searchFrom);
-        if (sectionStart < 0) break;
-        const nextSection = source.slice(sectionStart + 1).search(/data-exhibition-compact-section="/);
-        const chunk = nextSection >= 0
-          ? source.slice(sectionStart, sectionStart + 1 + nextSection)
-          : source.slice(sectionStart);
-        for (const match of chunk.matchAll(/data-exhibition-compact-item="([^"]+)"/g)) {
-          itemIds.add(match[1]);
-        }
-        const sectionTagStart = source.lastIndexOf('<', sectionStart);
-        const sectionTagEnd = source.indexOf('>', sectionStart);
-        if (sectionTagStart >= 0 && sectionTagEnd > sectionTagStart) {
-          const sectionTag = source.slice(sectionTagStart, sectionTagEnd + 1);
-          for (const match of sectionTag.matchAll(/data-exhibition-compact-item="([^"]+)"/g)) {
-            itemIds.add(match[1]);
-          }
-        }
-        searchFrom = sectionStart + 1;
-      }
-      for (const item of section.items) {
-        assert.ok(itemIds.has(item.id), `${definition.nodeType}.${section.id}.${item.id} is not marked in ${file}`);
-      }
-    }
-  }
+  const backendSource = read('backend/src/auth/exhibitionCompactForm.js');
+  const frontendSource = read('src/config/exhibitionCompactForm.ts');
+  assert.ok(EXHIBITION_COMPACT_FORM_DEFINITIONS.some((definition) => definition.nodeType === 'exhibition-img2img'));
+  assert.match(backendSource, /hiddenKeysByNodeType/);
+  assert.match(frontendSource, /hiddenKeysByNodeType/);
+  assert.match(read('src/components/UserManagementModal.tsx'), /hiddenKeysByNodeType: \{\}/);
 });

@@ -352,16 +352,145 @@ function withNodeSerialBadge(Component: ComponentType<any>): ComponentType<any> 
   return WrappedNode;
 }
 
-function ExhibitionCompactFormController({ config }: { config?: ExhibitionCompactFormConfig }) {
+const COMPACT_CONTROL_SELECTOR = [
+  '[data-exhibition-compact-item]',
+  '[data-exhibition-compact-section]',
+  'label',
+  'button',
+  'input',
+  'select',
+  'textarea',
+  '[role="button"]',
+  'img',
+].join(',');
+
+const COMPACT_IGNORE_SELECTOR = [
+  '.react-flow__handle',
+  '.t8-node-header',
+  '[data-node-action-bar]',
+  '[data-canvas-floating-ui]',
+].join(',');
+
+function compactDomKey(el: HTMLElement, nodeType: string): string {
+  const section = el.closest<HTMLElement>('[data-exhibition-compact-section]')?.dataset.exhibitionCompactSection || 'root';
+  const item = el.dataset.exhibitionCompactItem || '';
+  if (item) return `${section}:${item}`;
+  if (el.dataset.exhibitionCompactSection) return `${section}:main`;
+  const tag = el.tagName.toLowerCase();
+  const name = el.getAttribute('name') || el.getAttribute('aria-label') || el.getAttribute('title') || '';
+  const text = (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 32);
+  const index = Array.from((el.parentElement || el).children).indexOf(el);
+  return `${section}:${tag}:${String(name || text || index).replace(/[^\w\u4e00-\u9fa5.-]+/g, '-').slice(0, 48) || index}`;
+}
+
+function collectCompactTargets(contentEl: HTMLElement, nodeType: string): HTMLElement[] {
+  const targets = new Map<string, HTMLElement>();
+  contentEl.querySelectorAll<HTMLElement>('[data-exhibition-compact-section]').forEach((sectionEl) => {
+    if (sectionEl.closest(COMPACT_IGNORE_SELECTOR)) return;
+    const key = compactDomKey(sectionEl, nodeType);
+    sectionEl.dataset.exhibitionCompactKey = key;
+    if (!targets.has(key)) targets.set(key, sectionEl);
+  });
+  contentEl.querySelectorAll<HTMLElement>(COMPACT_CONTROL_SELECTOR).forEach((el) => {
+    if (el.closest(COMPACT_IGNORE_SELECTOR)) return;
+    if (!contentEl.contains(el)) return;
+    const key = compactDomKey(el, nodeType);
+    el.dataset.exhibitionCompactKey = key;
+    if (!targets.has(key)) targets.set(key, el);
+  });
+  return Array.from(targets.values());
+}
+
+function ExhibitionCompactFormController({
+  config,
+  canEdit = false,
+  onSaved,
+}: {
+  config?: ExhibitionCompactFormConfig;
+  canEdit?: boolean;
+  onSaved?: () => Promise<void> | void;
+}) {
   const setConfig = useExhibitionCompactFormStore((s) => s.setConfig);
   const compactConfig = useExhibitionCompactFormStore((s) => s.config);
   const activeNodeIds = useExhibitionCompactFormStore((s) => s.activeNodeIds);
-  const getAllowedSections = useExhibitionCompactFormStore((s) => s.getAllowedSections);
-  const getAllowedItems = useExhibitionCompactFormStore((s) => s.getAllowedItems);
+  const editingNodeId = useExhibitionCompactFormStore((s) => s.editingNodeId);
+  const editingNodeType = useExhibitionCompactFormStore((s) => s.editingNodeType);
+  const clearEditingNode = useExhibitionCompactFormStore((s) => s.clearEditingNode);
+  const toggleHiddenKey = useExhibitionCompactFormStore((s) => s.toggleHiddenKey);
+  const saveTimerRef = useRef<number | null>(null);
+  const pendingConfigRef = useRef<ExhibitionCompactFormConfig | null>(null);
+  const lastServerConfigRef = useRef<ExhibitionCompactFormConfig | undefined>(config);
 
   useEffect(() => {
+    lastServerConfigRef.current = config;
     setConfig(config);
   }, [config, setConfig]);
+
+  useEffect(() => {
+    if (!editingNodeId) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') clearEditingNode();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [clearEditingNode, editingNodeId]);
+
+  useEffect(() => {
+    if (!canEdit || !editingNodeId) return undefined;
+    const saveConfig = (payload: ExhibitionCompactFormConfig) => {
+      api.updateExhibitionCompactForm(payload)
+        .then((saved) => {
+          lastServerConfigRef.current = saved;
+          setConfig(saved);
+          void onSaved?.();
+        })
+        .catch((error) => {
+          logBus.error(error?.message || '绮剧畝绐椾綋璁剧疆淇濆瓨澶辫触', '绮剧畝绐椾綋');
+          if (lastServerConfigRef.current) setConfig(lastServerConfigRef.current);
+        });
+    };
+    const flushSave = (nextConfig: ExhibitionCompactFormConfig) => {
+      pendingConfigRef.current = nextConfig;
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = window.setTimeout(() => {
+        const payload = pendingConfigRef.current;
+        pendingConfigRef.current = null;
+        if (!payload) return;
+        saveConfig(payload);
+      }, 450);
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      const nodeEl = (event.target as HTMLElement | null)?.closest?.('.react-flow__node[data-id]') as HTMLElement | null;
+      if (!nodeEl || nodeEl.getAttribute('data-id') !== editingNodeId) return;
+      const contentEl = nodeEl.querySelector<HTMLElement>('[data-exhibition-compact-node-type]');
+      if (!contentEl) return;
+      const nodeType = contentEl.dataset.exhibitionCompactNodeType || editingNodeType || '';
+      const rawTarget = event.target as HTMLElement | null;
+      if (!rawTarget || rawTarget.closest(COMPACT_IGNORE_SELECTOR)) return;
+      const exact = event.altKey || event.ctrlKey || event.metaKey;
+      const target = exact
+        ? rawTarget.closest<HTMLElement>(COMPACT_CONTROL_SELECTOR)
+        : rawTarget.closest<HTMLElement>('[data-exhibition-compact-item], [data-exhibition-compact-section], label, button, [role="button"]');
+      if (!target || !contentEl.contains(target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const key = compactDomKey(target, nodeType);
+      target.dataset.exhibitionCompactKey = key;
+      const next = toggleHiddenKey(nodeType, key);
+      flushSave(next);
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      const payload = pendingConfigRef.current;
+      pendingConfigRef.current = null;
+      if (payload) saveConfig(payload);
+    };
+  }, [canEdit, clearEditingNode, editingNodeId, editingNodeType, onSaved, setConfig, toggleHiddenKey]);
 
   useEffect(() => {
     let frame = 0;
@@ -374,36 +503,32 @@ function ExhibitionCompactFormController({ config }: { config?: ExhibitionCompac
         if (!contentEl) return;
         const nodeType = contentEl.dataset.exhibitionCompactNodeType || '';
         const active = activeIds.has(nodeId);
-        if (active) {
+        const editing = canEdit && editingNodeId === nodeId;
+        const hiddenKeys = new Set(compactConfig.hiddenKeysByNodeType[nodeType] || []);
+        const targets = collectCompactTargets(contentEl, nodeType);
+        if (editing) {
+          contentEl.setAttribute('data-exhibition-compact-editing', 'true');
+          contentEl.removeAttribute('data-exhibition-compact-active');
+          targets.forEach((itemEl) => {
+            const key = itemEl.dataset.exhibitionCompactKey || compactDomKey(itemEl, nodeType);
+            itemEl.dataset.exhibitionCompactHidden = hiddenKeys.has(key) ? 'true' : 'false';
+            delete itemEl.dataset.exhibitionCompactVisible;
+          });
+        } else if (active) {
+          contentEl.removeAttribute('data-exhibition-compact-editing');
           contentEl.setAttribute('data-exhibition-compact-active', 'true');
-          const allowedSections = new Set(getAllowedSections(nodeType));
-          contentEl.dataset.exhibitionCompactVisibleSections = Array.from(allowedSections).join(' ');
-          contentEl.querySelectorAll<HTMLElement>('[data-exhibition-compact-section]').forEach((sectionEl) => {
-            const sectionId = sectionEl.dataset.exhibitionCompactSection || '';
-            const sectionVisible = allowedSections.has(sectionId);
-            const allowedItems = new Set(getAllowedItems(nodeType, sectionId));
-            sectionEl.dataset.exhibitionCompactVisible = sectionVisible ? 'true' : 'false';
-            const itemEls = [
-              ...(sectionEl.dataset.exhibitionCompactItem ? [sectionEl] : []),
-              ...Array.from(sectionEl.querySelectorAll<HTMLElement>('[data-exhibition-compact-item]')),
-            ];
-            itemEls.forEach((itemEl) => {
-              const itemId = itemEl.dataset.exhibitionCompactItem || '';
-              itemEl.dataset.exhibitionCompactVisible = sectionVisible && allowedItems.has(itemId) ? 'true' : 'false';
-            });
+          targets.forEach((itemEl) => {
+            const key = itemEl.dataset.exhibitionCompactKey || compactDomKey(itemEl, nodeType);
+            itemEl.dataset.exhibitionCompactVisible = hiddenKeys.has(key) ? 'false' : 'true';
+            delete itemEl.dataset.exhibitionCompactHidden;
           });
         } else {
+          contentEl.removeAttribute('data-exhibition-compact-editing');
           contentEl.removeAttribute('data-exhibition-compact-active');
           delete contentEl.dataset.exhibitionCompactVisibleSections;
-          contentEl.querySelectorAll<HTMLElement>('[data-exhibition-compact-section]').forEach((sectionEl) => {
-            delete sectionEl.dataset.exhibitionCompactVisible;
-            const itemEls = [
-              ...(sectionEl.dataset.exhibitionCompactItem ? [sectionEl] : []),
-              ...Array.from(sectionEl.querySelectorAll<HTMLElement>('[data-exhibition-compact-item]')),
-            ];
-            itemEls.forEach((itemEl) => {
-              delete itemEl.dataset.exhibitionCompactVisible;
-            });
+          targets.forEach((itemEl) => {
+            delete itemEl.dataset.exhibitionCompactVisible;
+            delete itemEl.dataset.exhibitionCompactHidden;
           });
         }
       });
@@ -420,7 +545,7 @@ function ExhibitionCompactFormController({ config }: { config?: ExhibitionCompac
       if (frame) window.cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, [activeNodeIds, compactConfig, getAllowedItems, getAllowedSections]);
+  }, [activeNodeIds, canEdit, compactConfig, editingNodeId]);
 
   return null;
 }
@@ -1608,9 +1733,18 @@ interface CanvasInnerProps {
   onInsertWorkflowRef?: React.MutableRefObject<InsertWorkflowFn | null>;
   allowedNodeTypes?: string[];
   exhibitionCompactForm?: ExhibitionCompactFormConfig;
+  canEditExhibitionCompactForm?: boolean;
+  onExhibitionCompactFormChanged?: () => Promise<void> | void;
 }
 
-function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes, exhibitionCompactForm }: CanvasInnerProps) {
+function CanvasInner({
+  onAddNodeRef,
+  onInsertWorkflowRef,
+  allowedNodeTypes,
+  exhibitionCompactForm,
+  canEditExhibitionCompactForm,
+  onExhibitionCompactFormChanged,
+}: CanvasInnerProps) {
   const { activeId, canvases, loadCanvases, setActive } = useCanvasStore();
   const { theme, style, templateId, customTemplates } = useThemeStore();
   const shortcuts = useShortcutStore((s) => s.shortcuts);
@@ -5638,8 +5772,12 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef, allowedNodeTypes, exhi
           nodeColor={() => (isOp ? themeTokens.secondary : isNaruto ? themeTokens.accent : isEva ? themeTokens.danger : isYyh ? themeTokens.success : isSlamdunk ? themeTokens.accent : isDark ? '#a1a1aa' : '#52525b')}
         />
         {/* 选中可执行节点时的浮动操作栏 (执行 / 中止 / 关闭) */}
-        <ExhibitionCompactFormController config={exhibitionCompactForm} />
-        <NodeActionBar />
+        <ExhibitionCompactFormController
+          config={exhibitionCompactForm}
+          canEdit={Boolean(canEditExhibitionCompactForm)}
+          onSaved={onExhibitionCompactFormChanged}
+        />
+        <NodeActionBar canEditExhibitionCompactForm={Boolean(canEditExhibitionCompactForm)} />
       </ReactFlow>
       </CanvasRuntimeProvider>
 
@@ -6049,6 +6187,8 @@ interface CanvasProps {
   onInsertWorkflowRef?: React.MutableRefObject<InsertWorkflowFn | null>;
   allowedNodeTypes?: string[];
   exhibitionCompactForm?: ExhibitionCompactFormConfig;
+  canEditExhibitionCompactForm?: boolean;
+  onExhibitionCompactFormChanged?: () => Promise<void> | void;
 }
 
 export default function Canvas(props: CanvasProps) {

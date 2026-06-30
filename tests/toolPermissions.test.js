@@ -134,9 +134,10 @@ test('tool permissions default exhibition compact form for old configs', () => w
   assert.ok(db.exhibitionCompactForm.sectionsByNodeType['exhibition-img2img'].includes('craft'));
   assert.ok(db.exhibitionCompactForm.itemsByNodeType['exhibition-img2img'].craft.includes('preset-options'));
   assert.ok(db.exhibitionCompactForm.sectionsByNodeType['showcase-interior-design'].includes('showcase'));
+  assert.deepEqual(db.exhibitionCompactForm.hiddenKeysByNodeType, {});
 }));
 
-test('tool permissions filters unknown compact form node types, sections, and items', () => withTempData(() => {
+test('tool permissions filters unknown compact form node types, sections, and items but keeps DOM keys', () => withTempData(() => {
   permissions.writeDb({
     defaultVisibleNodeTypes: ['text'],
     roleRules: {},
@@ -155,6 +156,10 @@ test('tool permissions filters unknown compact form node types, sections, and it
           craft: ['preset-options'],
         },
       },
+      hiddenKeysByNodeType: {
+        'exhibition-img2img': ['references:plan-reference', 'references:plan-reference', ' custom-dom-key '],
+        'unknown-node': ['references:plan-reference'],
+      },
     },
   });
 
@@ -164,6 +169,8 @@ test('tool permissions filters unknown compact form node types, sections, and it
   assert.equal(Object.hasOwn(db.exhibitionCompactForm.itemsByNodeType['exhibition-img2img'], 'unknown-section'), false);
   assert.equal(Object.hasOwn(db.exhibitionCompactForm.sectionsByNodeType, 'unknown-node'), false);
   assert.equal(Object.hasOwn(db.exhibitionCompactForm.itemsByNodeType, 'unknown-node'), false);
+  assert.deepEqual(db.exhibitionCompactForm.hiddenKeysByNodeType['exhibition-img2img'], ['references:plan-reference', 'custom-dom-key']);
+  assert.equal(Object.hasOwn(db.exhibitionCompactForm.hiddenKeysByNodeType, 'unknown-node'), false);
 }));
 
 test('resolved permissions expose exhibition compact form to normal users', () => withTempData(() => {
@@ -180,12 +187,59 @@ test('resolved permissions expose exhibition compact form to normal users', () =
           analysis: ['mode'],
         },
       },
+      hiddenKeysByNodeType: {
+        'exhibition-lighting-heatmap': ['analysis:mode'],
+      },
     },
   });
 
   const resolved = permissions.resolveToolPermissions({ id: 'u2', role: 'designer' }, db);
   assert.deepEqual(resolved.exhibitionCompactForm.sectionsByNodeType['exhibition-lighting-heatmap'], ['analysis']);
   assert.deepEqual(resolved.exhibitionCompactForm.itemsByNodeType['exhibition-lighting-heatmap'].analysis, ['mode']);
+  assert.deepEqual(resolved.exhibitionCompactForm.hiddenKeysByNodeType['exhibition-lighting-heatmap'], ['analysis:mode']);
+}));
+
+test('admin exhibition compact form patch is admin-only and stores DOM keys', async (t) => withTempData(async () => {
+  const adminRouter = require('../backend/src/routes/admin.js');
+  permissions.writeDb({
+    defaultVisibleNodeTypes: ['text'],
+    roleRules: {},
+    userRules: {},
+  });
+  const app = express();
+  app.use((req, _res, next) => {
+    req.user = { id: 'u1', role: req.get('x-role') || 'designer' };
+    next();
+  });
+  app.use('/api/admin', adminRouter);
+  const server = app.listen(0);
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const body = JSON.stringify({
+    exhibitionCompactForm: {
+      hiddenKeysByNodeType: {
+        'exhibition-img2img': ['references:plan-reference'],
+        'unknown-node': ['x'],
+      },
+    },
+  });
+
+  const denied = await fetch(`${base}/api/admin/exhibition-compact-form`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+  });
+  assert.equal(denied.status, 403);
+
+  const allowed = await fetch(`${base}/api/admin/exhibition-compact-form`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'x-role': 'admin' },
+    body,
+  });
+  assert.equal(allowed.status, 200);
+  const json = await allowed.json();
+  assert.deepEqual(json.data.hiddenKeysByNodeType['exhibition-img2img'], ['references:plan-reference']);
+  assert.equal(Object.hasOwn(json.data.hiddenKeysByNodeType, 'unknown-node'), false);
 }));
 
 test('tool permissions migrates old recolor surface compact section to palette', () => withTempData(() => {

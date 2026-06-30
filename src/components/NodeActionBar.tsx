@@ -61,7 +61,7 @@ const ACTION_COLORS: Record<string, { run: string; stop: string; close: string }
   'saint-seiya': { run: '#f8c84a', stop: '#2dd4bf', close: '#b4232f' },
 };
 
-const NodeActionBar = () => {
+const NodeActionBar = ({ canEditExhibitionCompactForm = false }: { canEditExhibitionCompactForm?: boolean }) => {
   const nodes = useNodes();
   const { x: vx, y: vy, zoom } = useViewport();
   const { setNodes } = useReactFlow();
@@ -95,7 +95,11 @@ const NodeActionBar = () => {
   const isCompactNodeActive = useExhibitionCompactFormStore((s) => s.isNodeActive);
   const toggleCompactNode = useExhibitionCompactFormStore((s) => s.toggleNode);
   const compactActiveNodeIds = useExhibitionCompactFormStore((s) => s.activeNodeIds);
+  const editingNodeId = useExhibitionCompactFormStore((s) => s.editingNodeId);
+  const setEditingNode = useExhibitionCompactFormStore((s) => s.setEditingNode);
+  const clearEditingNode = useExhibitionCompactFormStore((s) => s.clearEditingNode);
   const holdTimerRef = useRef<number | null>(null);
+  const compactClickTimerRef = useRef<number | null>(null);
   const suppressClickRef = useRef(false);
   const [holdArmed, setHoldArmed] = useState(false);
 
@@ -142,6 +146,7 @@ const NodeActionBar = () => {
       : undefined;
   const compactEligible = isEligibleCompactNodeType(selectedExe?.type);
   const compactActive = compactEligible && compactActiveNodeIds.includes(String(selectedExe?.id || '')) && isCompactNodeActive(selectedExe?.id);
+  const compactEditing = compactEligible && editingNodeId === selectedExe?.id;
 
   const clearHoldTimer = () => {
     if (holdTimerRef.current) {
@@ -154,12 +159,18 @@ const NodeActionBar = () => {
   useEffect(
     () => () => {
       if (holdTimerRef.current) window.clearTimeout(holdTimerRef.current);
+      if (compactClickTimerRef.current) window.clearTimeout(compactClickTimerRef.current);
     },
     [],
   );
   useEffect(() => {
     clearHoldTimer();
     suppressClickRef.current = false;
+    if (compactClickTimerRef.current) {
+      window.clearTimeout(compactClickTimerRef.current);
+      compactClickTimerRef.current = null;
+    }
+    clearEditingNode();
   }, [selectedExe?.id, isRhVisual, isYyhVisual]);
 
   if (!selectedExe) return null;
@@ -266,7 +277,22 @@ const NodeActionBar = () => {
   const onToggleCompact = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!selectedExe || !compactEligible) return;
-    toggleCompactNode(selectedExe.id);
+    if (compactClickTimerRef.current) window.clearTimeout(compactClickTimerRef.current);
+    compactClickTimerRef.current = window.setTimeout(() => {
+      toggleCompactNode(selectedExe.id);
+      compactClickTimerRef.current = null;
+    }, 220);
+  };
+  const onEditCompact = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!selectedExe || !compactEligible || !canEditExhibitionCompactForm) return;
+    if (compactClickTimerRef.current) {
+      window.clearTimeout(compactClickTimerRef.current);
+      compactClickTimerRef.current = null;
+    }
+    if (compactEditing) clearEditingNode();
+    else setEditingNode(selectedExe.id, selectedExe.type);
   };
 
   const runColor = rhDuckMode
@@ -298,8 +324,8 @@ const NodeActionBar = () => {
         gap: 6,
         padding: kind === 'run' ? '4px 10px' : '4px 6px',
         height: 28,
-        background: kind === 'run' || (kind === 'compact' && compactActive) ? color : '#FFFFFF',
-        color: kind === 'run' || (kind === 'compact' && compactActive) ? '#FFFFFF' : color,
+        background: kind === 'run' || (kind === 'compact' && (compactActive || compactEditing)) ? color : '#FFFFFF',
+        color: kind === 'run' || (kind === 'compact' && (compactActive || compactEditing)) ? '#FFFFFF' : color,
         border: `2px solid ${kind === 'run' ? '#1A1410' : color}`,
         borderRadius: 6,
         cursor: 'pointer',
@@ -315,7 +341,7 @@ const NodeActionBar = () => {
       gap: 6,
       padding: kind === 'run' ? '4px 10px' : '4px 6px',
       height: 26,
-      background: kind === 'run' || (kind === 'compact' && compactActive)
+      background: kind === 'run' || (kind === 'compact' && (compactActive || compactEditing))
         ? `${color}22`
         : isDark
           ? 'rgba(255,255,255,0.05)'
@@ -344,7 +370,7 @@ const NodeActionBar = () => {
       kind === 'run' ? runColor : kind === 'stop' ? actionColors.stop : kind === 'compact' ? (isDark ? '#22d3ee' : '#0891b2') : kind === 'fullscreen' ? (isDark ? '#a78bfa' : '#7c3aed') : actionColors.close;
     if (isPixel) return;
     (e.currentTarget as HTMLElement).style.background =
-      kind === 'run' || (kind === 'compact' && compactActive)
+      kind === 'run' || (kind === 'compact' && (compactActive || compactEditing))
         ? `${color}22`
         : isDark
           ? 'rgba(255,255,255,0.05)'
@@ -428,10 +454,12 @@ const NodeActionBar = () => {
             type="button"
             data-exhibition-compact-toggle
             data-exhibition-compact-active={compactActive ? 'true' : 'false'}
+            data-exhibition-compact-editing={compactEditing ? 'true' : 'false'}
             onClick={onToggleCompact}
+            onDoubleClick={onEditCompact}
             onMouseEnter={(e) => onEnter(e, 'compact')}
             onMouseLeave={(e) => onLeave(e, 'compact')}
-            title={compactActive ? '退出精简窗体' : '精简窗体'}
+            title={compactEditing ? '退出精简设置' : compactActive ? '退出精简窗体' : '精简窗体'}
             style={mkBtn('compact')}
           >
             {compactActive ? <PanelTopClose size={12} /> : <PanelTop size={12} />}

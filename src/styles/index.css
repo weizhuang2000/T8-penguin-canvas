@@ -6626,6 +6626,27 @@ html[data-theme-visual] .anime-tag-master-lightbox-backdrop {
   display: none !important;
 }
 
+[data-exhibition-compact-active="true"] [data-exhibition-compact-key][data-exhibition-compact-visible="false"],
 [data-exhibition-compact-active="true"] [data-exhibition-compact-item][data-exhibition-compact-visible="false"] {
   display: none !important;
+}
+
+[data-exhibition-compact-editing="true"] {
+  outline: 2px dashed rgba(34, 211, 238, 0.65);
+  outline-offset: 4px;
+}
+
+[data-exhibition-compact-editing="true"] [data-exhibition-compact-key] {
+  cursor: pointer !important;
+  transition: opacity 120ms ease, filter 120ms ease, box-shadow 120ms ease;
+}
+
+[data-exhibition-compact-editing="true"] [data-exhibition-compact-hidden="true"] {
+  opacity: 0.38 !important;
+  filter: grayscale(1);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.8), 0 0 0 1px rgba(15, 23, 42, 0.35) !important;
+}
+
+[data-exhibition-compact-editing="true"] [data-exhibition-compact-hidden="false"]:hover {
+  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.75) !important;
 }

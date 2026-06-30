@@ -373,6 +373,21 @@ const ITEM_IDS_BY_NODE_TYPE = Object.fromEntries(
   ]),
 );
 
+const NODE_TYPES = new Set(EXHIBITION_COMPACT_FORM_DEFINITIONS.map((definition) => definition.nodeType));
+
+function normalizeCompactDomKeys(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const keys = [];
+  for (const raw of value) {
+    const key = String(raw || '').trim();
+    if (!key || key.length > 240 || seen.has(key)) continue;
+    seen.add(key);
+    keys.push(key);
+  }
+  return keys;
+}
+
 function defaultExhibitionCompactForm() {
   return {
     sectionsByNodeType: Object.fromEntries(
@@ -392,6 +407,7 @@ function defaultExhibitionCompactForm() {
         ),
       ]),
     ),
+    hiddenKeysByNodeType: {},
   };
 }
 
@@ -399,8 +415,10 @@ function normalizeExhibitionCompactForm(raw = {}) {
   const fallback = defaultExhibitionCompactForm();
   const incomingSections = raw && typeof raw === 'object' ? raw.sectionsByNodeType || {} : {};
   const incomingItems = raw && typeof raw === 'object' ? raw.itemsByNodeType || {} : {};
+  const incomingHiddenKeys = raw && typeof raw === 'object' ? raw.hiddenKeysByNodeType || {} : {};
   const sectionsByNodeType = {};
   const itemsByNodeType = {};
+  const hiddenKeysByNodeType = {};
   for (const definition of EXHIBITION_COMPACT_FORM_DEFINITIONS) {
     const knownIds = SECTION_IDS_BY_NODE_TYPE[definition.nodeType];
     const seen = new Set();
@@ -430,12 +448,15 @@ function normalizeExhibitionCompactForm(raw = {}) {
       }
       itemsByNodeType[definition.nodeType][section.id] = normalizedItems;
     }
+    const hiddenKeys = normalizeCompactDomKeys(incomingHiddenKeys[definition.nodeType]);
+    if (hiddenKeys.length > 0) hiddenKeysByNodeType[definition.nodeType] = hiddenKeys;
   }
-  return { sectionsByNodeType, itemsByNodeType };
+  return { sectionsByNodeType, itemsByNodeType, hiddenKeysByNodeType };
 }
 
 module.exports = {
   EXHIBITION_COMPACT_FORM_DEFINITIONS,
+  NODE_TYPES,
   defaultExhibitionCompactForm,
   normalizeExhibitionCompactForm,
 };

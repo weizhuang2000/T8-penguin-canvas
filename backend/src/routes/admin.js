@@ -11,6 +11,7 @@ const {
   resolveToolPermissions,
   writeDb,
 } = require('../auth/toolPermissions');
+const { normalizeExhibitionCompactForm } = require('../auth/exhibitionCompactForm');
 const {
   listHistoryUsers,
 } = require('../utils/generationHistory');
@@ -44,6 +45,17 @@ router.put('/tool-permissions', express.json({ limit: '2mb' }), async (req, res)
   try {
     const next = writeDb(normalizeDb(req.body || {}));
     res.json({ success: true, data: next });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e?.message || String(e) });
+  }
+});
+
+router.patch('/exhibition-compact-form', express.json({ limit: '1mb' }), async (req, res) => {
+  try {
+    const db = readDb();
+    const exhibitionCompactForm = normalizeExhibitionCompactForm(req.body?.exhibitionCompactForm || req.body || {});
+    const next = writeDb(normalizeDb({ ...db, exhibitionCompactForm }));
+    res.json({ success: true, data: next.exhibitionCompactForm });
   } catch (e) {
     res.status(500).json({ success: false, error: e?.message || String(e) });
   }
