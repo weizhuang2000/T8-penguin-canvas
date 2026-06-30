@@ -219,6 +219,7 @@ test('exhibition img2img prompt treats structure image as layout source', () => 
   const prompt = buildExhibitionImg2ImgPrompt();
   assert.match(prompt, /空间结构示意图是最终画面的唯一空间骨架和布局蓝本/);
   assert.match(prompt, /必须精确提取并遵循示意图中的平面\/轴测结构、墙体位置、展陈体块比例/);
+  assert.match(prompt, /必须按照整体空间装修采用工艺的要求来生成基础墙顶地的色彩与材质/);
   assert.match(prompt, /输出画面必须与示意图具有可被一眼识别的相同空间关系/);
   assert.match(prompt, /任何部分都不能被改变或重新设计/);
 });
