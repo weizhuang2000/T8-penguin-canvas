@@ -82,9 +82,9 @@ test('exhibition img2img node supports @ image mentions for prompt image referen
   assert.match(node, /role: 'color-material-reference'/);
   assert.match(node, /role: 'exhibit-reference'/);
   assert.match(node, /for \(const item of orderedReferenceMaterials\)[\s\S]*item\.role === 'color-material-reference'/);
-  assert.match(node, /<MentionPromptInput[\s\S]*mentions=\{customCraftMentions\}[\s\S]*materials=\{mentionMaterials\}[\s\S]*customCraftMentions: mentions/);
-  assert.match(node, /<MentionPromptInput[\s\S]*mentions=\{visualStyleMentions\}[\s\S]*materials=\{mentionMaterials\}[\s\S]*visualStyleMentions: mentions/);
-  assert.match(node, /<MentionPromptInput[\s\S]*mentions=\{supplementMentions\}[\s\S]*materials=\{mentionMaterials\}[\s\S]*supplementMentions: mentions/);
+  assert.match(node, /<PromptTextarea[\s\S]*value=\{d\.customCraft \|\| ''\}[\s\S]*customCraftMentions: \[\]/);
+  assert.match(node, /<PromptTextarea[\s\S]*value=\{d\.visualStyle \|\| ''\}[\s\S]*visualStyleMentions: \[\]/);
+  assert.match(node, /<PromptTextarea[\s\S]*value=\{d\.supplement \|\| ''\}[\s\S]*supplementMentions: \[\]/);
   assert.match(node, /mentions=\{colorMaterialPaletteMentions\}/);
   assert.match(node, /mentions=\{colorMaterialTexturesMentions\}/);
   assert.match(node, /mentions=\{colorMaterialReferenceToneMentions\}/);

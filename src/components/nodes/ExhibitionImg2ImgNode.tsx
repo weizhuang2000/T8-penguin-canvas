@@ -3110,17 +3110,15 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               </div>
             </div>
           )}
-          <MentionPromptInput
+          <PromptTextarea
             title="扩大编辑"
             className={`${FIELD} mt-1.5`}
             value={d.customCraft || ''}
-            mentions={customCraftMentions}
-            materials={mentionMaterials}
             isDark
             isPixel={false}
             promptTemplateKind="image"
             placeholder="自定义工艺"
-            onChange={(value, mentions) => update({ customCraft: value, customCraftMentions: mentions })}
+            onValueChange={(value) => update({ customCraft: value, customCraftMentions: [] })}
           />
           <div className="mt-1 grid grid-cols-2 gap-1">
             <select className={FIELD} value={d.density || '适中，图文层级均衡'} disabled={isReadonly} onChange={(event) => update({ density: event.target.value })}>
@@ -3138,30 +3136,26 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               placeholder="空间高度"
               onChange={(event) => update({ dimensions: event.target.value })}
             />
-            <MentionPromptInput
+            <PromptTextarea
               title="扩大编辑"
               className={FIELD}
               value={d.visualStyle || ''}
-              mentions={visualStyleMentions}
-              materials={mentionMaterials}
               isDark
               isPixel={false}
               promptTemplateKind="image"
               placeholder="视觉风格"
-              onChange={(value, mentions) => update({ visualStyle: value, visualStyleMentions: mentions })}
+              onValueChange={(value) => update({ visualStyle: value, visualStyleMentions: [] })}
             />
           </div>
-          <MentionPromptInput
+          <PromptTextarea
             title="扩大编辑"
             className={`${FIELD} mt-1 min-h-[48px] resize-y`}
             value={d.supplement || ''}
-            mentions={supplementMentions}
-            materials={mentionMaterials}
             isDark
             isPixel={false}
             promptTemplateKind="image"
             placeholder="补充要求"
-            onChange={(value, mentions) => update({ supplement: value, supplementMentions: mentions })}
+            onValueChange={(value) => update({ supplement: value, supplementMentions: [] })}
           />
         </section>
 

@@ -660,8 +660,8 @@ const ExhibitionTextImageLoopNode = ({ id, data, selected }: NodeProps) => {
         <div data-exhibition-compact-section="input" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
           <div style={{ border: panelBorder, borderRadius: 6, padding: 6, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: subColor, fontSize: 10, marginBottom: 5 }}><Type size={11} />文本</div>
-            <div style={{ maxHeight: 92, overflow: 'hidden', color: textColor, fontSize: 10, lineHeight: 1.35 }}>
-              {texts.length === 0 ? <span style={{ color: subColor }}>等待文本素材集</span> : texts.slice(0, 3).map((item) => <div key={item.id} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.url}</div>)}
+            <div style={{ maxHeight: 92, overflowY: 'auto', overflowX: 'hidden', color: textColor, fontSize: 10, lineHeight: 1.35, paddingRight: 2 }}>
+              {texts.length === 0 ? <span style={{ color: subColor }}>等待文本素材集</span> : texts.map((item) => <div key={item.id} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.url}</div>)}
             </div>
           </div>
           <div style={{ border: panelBorder, borderRadius: 6, padding: 6, minWidth: 0 }}>
