@@ -225,6 +225,13 @@ const DEFAULT_ITEMS_BY_SECTION_ID = {
     { id: 'aspect-size', label: '比例/尺寸' },
     { id: 'output-format', label: '输出格式' },
     { id: 'seed-name', label: 'Seed/名称' },
+    { id: 'manual-input', label: '手动补充' },
+    { id: 'material-select', label: '材质选择' },
+    { id: 'font-select', label: '字体选择' },
+    { id: 'reference', label: '参考图' },
+    { id: 'progress', label: '进度状态' },
+    { id: 'preview', label: '结果预览' },
+    { id: 'outputs', label: '输出列表' },
     { id: 'actions', label: '生成操作' },
   ],
   prompt: [
@@ -351,7 +358,8 @@ function normalizeExhibitionCompactForm(raw = {}) {
     const seen = new Set();
     const normalized = [];
     for (const rawId of Array.isArray(incomingSections[definition.nodeType]) ? incomingSections[definition.nodeType] : fallback.sectionsByNodeType[definition.nodeType]) {
-      const id = String(rawId || '').trim();
+      const rawSectionId = String(rawId || '').trim();
+      const id = definition.nodeType === 'exhibition-recolor' && rawSectionId === 'surface' ? 'palette' : rawSectionId;
       if (!knownIds.has(id) || seen.has(id)) continue;
       seen.add(id);
       normalized.push(id);
@@ -362,7 +370,10 @@ function normalizeExhibitionCompactForm(raw = {}) {
       const itemIds = ITEM_IDS_BY_NODE_TYPE[definition.nodeType][section.id];
       const seenItems = new Set();
       const normalizedItems = [];
-      const rawItems = incomingItems[definition.nodeType]?.[section.id];
+      const rawItems = incomingItems[definition.nodeType]?.[section.id]
+        || (definition.nodeType === 'exhibition-recolor' && section.id === 'palette'
+          ? incomingItems[definition.nodeType]?.surface
+          : undefined);
       for (const rawItemId of Array.isArray(rawItems) ? rawItems : fallback.itemsByNodeType[definition.nodeType][section.id]) {
         const itemId = String(rawItemId || '').trim();
         if (!itemIds.has(itemId) || seenItems.has(itemId)) continue;

@@ -101,6 +101,13 @@ const DEFAULT_ITEMS_BY_SECTION_ID: Record<string, ExhibitionCompactItemDefinitio
     { id: 'aspect-size', label: '比例/尺寸' },
     { id: 'output-format', label: '输出格式' },
     { id: 'seed-name', label: 'Seed/名称' },
+    { id: 'manual-input', label: '手动补充' },
+    { id: 'material-select', label: '材质选择' },
+    { id: 'font-select', label: '字体选择' },
+    { id: 'reference', label: '参考图' },
+    { id: 'progress', label: '进度状态' },
+    { id: 'preview', label: '结果预览' },
+    { id: 'outputs', label: '输出列表' },
     { id: 'actions', label: '生成操作' },
   ],
   prompt: [
@@ -314,10 +321,12 @@ export function normalizeExhibitionCompactFormConfig(value?: Partial<ExhibitionC
       EXHIBITION_COMPACT_FORM_DEFINITIONS.map((definition) => {
         const known = new Set(definition.sections.map((section) => section.id));
         const seen = new Set<string>();
-        const sections = (Array.isArray(incomingSections[definition.nodeType])
+        const rawSectionValues = Array.isArray(incomingSections[definition.nodeType])
           ? incomingSections[definition.nodeType]
-          : defaults.sectionsByNodeType[definition.nodeType])
-          .map((id) => String(id || '').trim())
+          : defaults.sectionsByNodeType[definition.nodeType];
+        const rawSections = rawSectionValues.map((id) => String(id || '').trim());
+        const sections = rawSections
+          .map((id) => (definition.nodeType === 'exhibition-recolor' && id === 'surface' ? 'palette' : id))
           .filter((id) => {
             if (!known.has(id) || seen.has(id)) return false;
             seen.add(id);
@@ -333,7 +342,10 @@ export function normalizeExhibitionCompactFormConfig(value?: Partial<ExhibitionC
           definition.sections.map((section) => {
             const known = new Set(itemsForSection(section).map((item) => item.id));
             const seen = new Set<string>();
-            const sectionItems = incomingItems[definition.nodeType]?.[section.id];
+            const sectionItems = incomingItems[definition.nodeType]?.[section.id]
+              || (definition.nodeType === 'exhibition-recolor' && section.id === 'palette'
+                ? incomingItems[definition.nodeType]?.surface
+                : undefined);
             const items = (Array.isArray(sectionItems)
               ? sectionItems
               : defaults.itemsByNodeType[definition.nodeType][section.id])

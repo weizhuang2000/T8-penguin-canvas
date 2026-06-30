@@ -32,6 +32,7 @@ test('compact controller writes true active attribute expected by CSS', () => {
   assert.match(canvas, /setAttribute\('data-exhibition-compact-active', 'true'\)/);
   assert.match(canvas, /getAllowedItems/);
   assert.match(canvas, /data-exhibition-compact-item/);
+  assert.match(canvas, /sectionEl\.dataset\.exhibitionCompactItem/);
   assert.match(css, /\[data-exhibition-compact-active="true"\]/);
   assert.match(css, /\[data-exhibition-compact-item\]\[data-exhibition-compact-visible="false"\]/);
 });

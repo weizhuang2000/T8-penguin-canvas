@@ -188,6 +188,27 @@ test('resolved permissions expose exhibition compact form to normal users', () =
   assert.deepEqual(resolved.exhibitionCompactForm.itemsByNodeType['exhibition-lighting-heatmap'].analysis, ['mode']);
 }));
 
+test('tool permissions migrates old recolor surface compact section to palette', () => withTempData(() => {
+  const db = permissions.normalizeDb({
+    defaultVisibleNodeTypes: ['text'],
+    roleRules: {},
+    userRules: {},
+    exhibitionCompactForm: {
+      sectionsByNodeType: {
+        'exhibition-recolor': ['surface'],
+      },
+      itemsByNodeType: {
+        'exhibition-recolor': {
+          surface: ['floor'],
+        },
+      },
+    },
+  });
+
+  assert.deepEqual(db.exhibitionCompactForm.sectionsByNodeType['exhibition-recolor'], ['palette']);
+  assert.deepEqual(db.exhibitionCompactForm.itemsByNodeType['exhibition-recolor'].palette, ['floor']);
+}));
+
 test('findUnauthorizedNewNodes allows existing blocked nodes but rejects new ones', () => withTempData(() => {
   permissions.writeDb({
     defaultVisibleNodeTypes: ['text'],

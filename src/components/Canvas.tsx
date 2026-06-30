@@ -383,7 +383,11 @@ function ExhibitionCompactFormController({ config }: { config?: ExhibitionCompac
             const sectionVisible = allowedSections.has(sectionId);
             const allowedItems = new Set(getAllowedItems(nodeType, sectionId));
             sectionEl.dataset.exhibitionCompactVisible = sectionVisible ? 'true' : 'false';
-            sectionEl.querySelectorAll<HTMLElement>('[data-exhibition-compact-item]').forEach((itemEl) => {
+            const itemEls = [
+              ...(sectionEl.dataset.exhibitionCompactItem ? [sectionEl] : []),
+              ...Array.from(sectionEl.querySelectorAll<HTMLElement>('[data-exhibition-compact-item]')),
+            ];
+            itemEls.forEach((itemEl) => {
               const itemId = itemEl.dataset.exhibitionCompactItem || '';
               itemEl.dataset.exhibitionCompactVisible = sectionVisible && allowedItems.has(itemId) ? 'true' : 'false';
             });
@@ -393,7 +397,11 @@ function ExhibitionCompactFormController({ config }: { config?: ExhibitionCompac
           delete contentEl.dataset.exhibitionCompactVisibleSections;
           contentEl.querySelectorAll<HTMLElement>('[data-exhibition-compact-section]').forEach((sectionEl) => {
             delete sectionEl.dataset.exhibitionCompactVisible;
-            sectionEl.querySelectorAll<HTMLElement>('[data-exhibition-compact-item]').forEach((itemEl) => {
+            const itemEls = [
+              ...(sectionEl.dataset.exhibitionCompactItem ? [sectionEl] : []),
+              ...Array.from(sectionEl.querySelectorAll<HTMLElement>('[data-exhibition-compact-item]')),
+            ];
+            itemEls.forEach((itemEl) => {
               delete itemEl.dataset.exhibitionCompactVisible;
             });
           });
