@@ -86,6 +86,11 @@ test('render to elevation prompt keeps intelligent split output visually unified
   assert.match(prompt, /不要尺寸标注和工艺材质解读/);
   assert.match(prompt, /立面图下面用地面做延伸/);
   assert.match(prompt, /不得使用白底留白画布/);
+  assert.match(prompt, /宽度适配/);
+  assert.match(prompt, /画幅左右安全边距/);
+  assert.match(prompt, /自适应缩放/);
+  assert.match(prompt, /不要让任何内容在宽度方向超出画面/);
+  assert.match(prompt, /被裁切或贴边/);
   assert.match(prompt, /第 2\/3 段/);
   assert.match(prompt, /工艺落位智能拆分/);
   assert.match(prompt, /不是机械均分切片/);
