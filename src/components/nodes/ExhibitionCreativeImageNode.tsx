@@ -2088,7 +2088,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             <ImageIcon size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">室内建筑空间输入</span>
             {spaceImage && (
-              <label className="ml-auto flex items-center gap-1 text-[10px] text-white/60">
+              <label data-exhibition-compact-item="reference-settings" className="ml-auto flex items-center gap-1 text-[10px] text-white/60">
                 <input
                   type="checkbox"
                   className="h-3 w-3 accent-cyan-300"
@@ -2110,7 +2110,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               <div className="py-6 text-center text-[10px] text-white/35">
                 连接一张图像作为室内空间骨架，或填写下方尺寸进行无图生图
               </div>
-              <div className="grid grid-cols-3 gap-1">
+              <div data-exhibition-compact-item="space-reference" className="grid grid-cols-3 gap-1">
                 <input
                   className={FIELD}
                   type="number"
@@ -2147,7 +2147,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               </div>
             </div>
           )}
-          <div className="grid grid-cols-2 gap-2">
+          <div data-exhibition-compact-item="material-reference" className="grid grid-cols-2 gap-2">
             <div className="rounded border border-white/10 bg-black/15 p-2">
               <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold text-rose-100">
                 <ImageIcon size={12} />
@@ -2451,7 +2451,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           {Array.isArray(d.documentMeta?.warnings) && d.documentMeta.warnings.length > 0 && (
             <div className="text-[10px] text-amber-200/80">{d.documentMeta.warnings.join('；')}</div>
           )}
-          <div className="grid grid-cols-2 gap-1">
+          <div data-exhibition-compact-item="direction" className="grid grid-cols-2 gap-1">
             <select
               className={FIELD}
               disabled={isReadonly || busy}
@@ -2516,7 +2516,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               生成创意
             </button>
           </div>
-          <div className="grid grid-cols-2 gap-1">
+          <div data-exhibition-compact-item="insert-options" className="grid grid-cols-2 gap-1">
             <select
               className={FIELD}
               disabled={isReadonly || busy}
@@ -2543,7 +2543,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             placeholder="点击生成创意，或在这里手动微调 LLM 创意描述"
             onChange={(value, mentions) => update({ creativeBrief: value, creativeBriefMentions: mentions })}
           />
-          <label className="flex items-center gap-1.5 text-[10px] text-white/60">
+          <label data-exhibition-compact-item="random-count" className="flex items-center gap-1.5 text-[10px] text-white/60">
             <input
               type="checkbox"
               className="h-3 w-3 accent-cyan-300"
@@ -2555,7 +2555,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           </label>
         </section>
 
-        <section data-exhibition-compact-section="color-material" className="space-y-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
+        <section data-exhibition-compact-section="color-material" data-exhibition-compact-item="preset-options" className="space-y-1.5 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="text-[11px] font-semibold text-cyan-100">图像名称</div>
           <PromptExpandableInput
             title="扩大编辑"
@@ -2569,7 +2569,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           <div className="text-[9px] leading-snug text-white/35">为空时，LLM 提炼文本后自动生成；批量输出会追加 -1、-2。</div>
         </section>
 
-        <section data-exhibition-compact-section="content" className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2">
+        <section data-exhibition-compact-section="content" className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2" data-exhibition-compact-item="text-fields">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-semibold text-cyan-100">植入项</span>
               <span className="min-w-0 flex-1 truncate text-[9px] text-white/40">
@@ -2661,7 +2661,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             )}
         </section>
 
-        <section data-exhibition-compact-section="model" className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2">
+        <section data-exhibition-compact-section="model" className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2" data-exhibition-compact-item="actions">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-semibold text-cyan-100">视角控制</span>
               <span className="min-w-0 flex-1 truncate text-[9px] text-white/40">
@@ -2741,7 +2741,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             )}
         </section>
 
-        <section data-exhibition-compact-section="prompt" className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2">
+        <section data-exhibition-compact-section="prompt" className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2" data-exhibition-compact-item="prompt-preview">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-semibold text-cyan-100">排除项</span>
               <span className="min-w-0 flex-1 truncate text-[9px] text-white/40">
@@ -2818,7 +2818,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             )}
         </section>
 
-        <section data-exhibition-compact-section="result" className="rounded border border-white/10 bg-white/[0.035] p-2 space-y-2">
+        <section data-exhibition-compact-section="result" className="rounded border border-white/10 bg-white/[0.035] p-2 space-y-2" data-exhibition-compact-item="preview">
           <div className="text-[11px] font-semibold text-cyan-100">模型与输出</div>
           {imageAdvancedProviders.length > 0 && (
             <div className="rounded border border-white/10 bg-white/[0.03] p-2 space-y-2">

@@ -357,6 +357,7 @@ function ExhibitionCompactFormController({ config }: { config?: ExhibitionCompac
   const compactConfig = useExhibitionCompactFormStore((s) => s.config);
   const activeNodeIds = useExhibitionCompactFormStore((s) => s.activeNodeIds);
   const getAllowedSections = useExhibitionCompactFormStore((s) => s.getAllowedSections);
+  const getAllowedItems = useExhibitionCompactFormStore((s) => s.getAllowedItems);
 
   useEffect(() => {
     setConfig(config);
@@ -379,13 +380,22 @@ function ExhibitionCompactFormController({ config }: { config?: ExhibitionCompac
           contentEl.dataset.exhibitionCompactVisibleSections = Array.from(allowedSections).join(' ');
           contentEl.querySelectorAll<HTMLElement>('[data-exhibition-compact-section]').forEach((sectionEl) => {
             const sectionId = sectionEl.dataset.exhibitionCompactSection || '';
-            sectionEl.dataset.exhibitionCompactVisible = allowedSections.has(sectionId) ? 'true' : 'false';
+            const sectionVisible = allowedSections.has(sectionId);
+            const allowedItems = new Set(getAllowedItems(nodeType, sectionId));
+            sectionEl.dataset.exhibitionCompactVisible = sectionVisible ? 'true' : 'false';
+            sectionEl.querySelectorAll<HTMLElement>('[data-exhibition-compact-item]').forEach((itemEl) => {
+              const itemId = itemEl.dataset.exhibitionCompactItem || '';
+              itemEl.dataset.exhibitionCompactVisible = sectionVisible && allowedItems.has(itemId) ? 'true' : 'false';
+            });
           });
         } else {
           contentEl.removeAttribute('data-exhibition-compact-active');
           delete contentEl.dataset.exhibitionCompactVisibleSections;
           contentEl.querySelectorAll<HTMLElement>('[data-exhibition-compact-section]').forEach((sectionEl) => {
             delete sectionEl.dataset.exhibitionCompactVisible;
+            sectionEl.querySelectorAll<HTMLElement>('[data-exhibition-compact-item]').forEach((itemEl) => {
+              delete itemEl.dataset.exhibitionCompactVisible;
+            });
           });
         }
       });
@@ -402,7 +412,7 @@ function ExhibitionCompactFormController({ config }: { config?: ExhibitionCompac
       if (frame) window.cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, [activeNodeIds, compactConfig, getAllowedSections]);
+  }, [activeNodeIds, compactConfig, getAllowedItems, getAllowedSections]);
 
   return null;
 }

@@ -2213,7 +2213,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           自动字号
         </label>
       </div>
-      <div className="grid grid-cols-4 gap-1">
+      <div data-exhibition-compact-item="preset-options" className="grid grid-cols-4 gap-1">
         <PromptExpandableInput
           title="扩大编辑"
           className={FIELD}
@@ -3043,7 +3043,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                     />
                   </label>
                 </div>
-                <div className="grid grid-cols-4 gap-1">
+                <div data-exhibition-compact-item="preset-options" className="grid grid-cols-4 gap-1">
                   {group.crafts.map((craft) => {
                     const active = selectedCrafts.includes(craft.id);
                     return (
@@ -3089,7 +3089,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
             placeholder="自定义工艺"
             onValueChange={(value) => update({ customCraft: value, customCraftMentions: [] })}
           />
-          <div className="mt-1 grid grid-cols-2 gap-1">
+          <div data-exhibition-compact-item="density" className="mt-1 grid grid-cols-2 gap-1">
             <select className={FIELD} value={d.density || '适中，图文层级均衡'} disabled={isReadonly} onChange={(event) => update({ density: event.target.value })}>
               <option value="疏朗，强调大图与留白">疏朗</option>
               <option value="适中，图文层级均衡">适中</option>
@@ -3151,7 +3151,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               </button>
             )}
           </div>
-          <div className="flex flex-wrap gap-1">
+          <div data-exhibition-compact-item="protected-options" className="flex flex-wrap gap-1">
             {excludeOptions.map((item) => {
               const active = selectedExcludeIds.includes(item.id);
               return (
@@ -3275,7 +3275,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                 {hasSelectedColorMaterialPreset && hasColorMaterialReference && <span className="truncate text-[8px] text-white/35">参考图接管</span>}
                 {hasColorMaterialPreset && <span className="truncate text-[8px] text-white/35">预设接管</span>}
               </div>
-              <div className="mt-1 grid grid-cols-2 rounded border border-white/10 bg-black/20 p-0.5">
+              <div data-exhibition-compact-item="priority-mode" className="mt-1 grid grid-cols-2 rounded border border-white/10 bg-black/20 p-0.5">
                 {[
                   { value: 'frontend', label: '前端识别' },
                   { value: 'llm', label: '大模型识别' },
@@ -3331,7 +3331,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               onSave={saveColorMaterialPresetItems}
             />
           )}
-          <div className="grid grid-cols-2 gap-1">
+          <div data-exhibition-compact-item="manual-input" className="grid grid-cols-2 gap-1">
             <MentionPromptInput
               title="扩大编辑"
               className={`${FIELD} min-h-[54px] resize-y text-[10px] leading-snug`}
@@ -3404,7 +3404,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           <div className="mb-1.5 flex items-center gap-2">
             <FileText size={13} className="text-cyan-200" />
             <span className="text-[11px] font-semibold text-cyan-100">展墙内容设计</span>
-            <label className="ml-auto inline-flex items-center gap-1.5 text-[10px] text-white/60">
+            <label data-exhibition-compact-item="enable-toggle" className="ml-auto inline-flex items-center gap-1.5 text-[10px] text-white/60">
               <input
                 type="checkbox"
                 className="h-3 w-3 accent-cyan-300"
@@ -3479,7 +3479,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                     生成展示内容
                   </button>
                 </div>
-                <div className="mb-1.5 grid grid-cols-2 gap-1">
+                <div data-exhibition-compact-item="llm-settings" className="mb-1.5 grid grid-cols-2 gap-1">
                   <select
                     className={FIELD}
                     disabled={isReadonly || contentBusy}
@@ -3495,7 +3495,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                   </select>
                   <PromptExpandableInput title="扩大编辑" className={FIELD} disabled value={contentModel} />
                 </div>
-                <div className="grid grid-cols-3 gap-1">
+                <div data-exhibition-compact-item="text-fields" className="grid grid-cols-3 gap-1">
                   <select
                     className={FIELD}
                     disabled={isReadonly || contentBusy}
@@ -3773,7 +3773,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-2">
+          <div data-exhibition-compact-item="aspect-size" className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-[10px] text-white/50 block mb-1">比例</label>
               <select
@@ -3884,7 +3884,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           </div>
         </section>
 
-        <section data-exhibition-compact-section="prompt" className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
+        <section data-exhibition-compact-section="prompt" data-exhibition-compact-item="prompt-preview" className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
           <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100">
             <Clipboard size={13} />
             <span>当前生图 Prompt</span>
@@ -3896,7 +3896,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         </section>
 
         {outputImageUrls.length > 0 && (
-          <section data-exhibition-compact-section="result" className="rounded border border-white/10 bg-black/20 p-2">
+          <section data-exhibition-compact-section="result" data-exhibition-compact-item="preview" className="rounded border border-white/10 bg-black/20 p-2">
             <div className={outputImageUrls.length > 1 ? 'grid grid-cols-2 gap-2' : ''}>
               {outputImageUrls.map((url: string, index: number) => (
                 <div key={`${url}-${index}`} className="min-w-0">

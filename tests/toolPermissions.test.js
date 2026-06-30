@@ -132,10 +132,11 @@ test('tool permissions default exhibition compact form for old configs', () => w
 
   const db = permissions.readDb();
   assert.ok(db.exhibitionCompactForm.sectionsByNodeType['exhibition-img2img'].includes('craft'));
+  assert.ok(db.exhibitionCompactForm.itemsByNodeType['exhibition-img2img'].craft.includes('preset-options'));
   assert.ok(db.exhibitionCompactForm.sectionsByNodeType['showcase-interior-design'].includes('showcase'));
 }));
 
-test('tool permissions filters unknown compact form node types and sections', () => withTempData(() => {
+test('tool permissions filters unknown compact form node types, sections, and items', () => withTempData(() => {
   permissions.writeDb({
     defaultVisibleNodeTypes: ['text'],
     roleRules: {},
@@ -145,12 +146,24 @@ test('tool permissions filters unknown compact form node types and sections', ()
         'exhibition-img2img': ['craft', 'unknown-section', 'craft'],
         'unknown-node': ['craft'],
       },
+      itemsByNodeType: {
+        'exhibition-img2img': {
+          craft: ['preset-options', 'unknown-item', 'preset-options'],
+          'unknown-section': ['preset-options'],
+        },
+        'unknown-node': {
+          craft: ['preset-options'],
+        },
+      },
     },
   });
 
   const db = permissions.readDb();
   assert.deepEqual(db.exhibitionCompactForm.sectionsByNodeType['exhibition-img2img'], ['craft']);
+  assert.deepEqual(db.exhibitionCompactForm.itemsByNodeType['exhibition-img2img'].craft, ['preset-options']);
+  assert.equal(Object.hasOwn(db.exhibitionCompactForm.itemsByNodeType['exhibition-img2img'], 'unknown-section'), false);
   assert.equal(Object.hasOwn(db.exhibitionCompactForm.sectionsByNodeType, 'unknown-node'), false);
+  assert.equal(Object.hasOwn(db.exhibitionCompactForm.itemsByNodeType, 'unknown-node'), false);
 }));
 
 test('resolved permissions expose exhibition compact form to normal users', () => withTempData(() => {
@@ -162,11 +175,17 @@ test('resolved permissions expose exhibition compact form to normal users', () =
       sectionsByNodeType: {
         'exhibition-lighting-heatmap': ['analysis'],
       },
+      itemsByNodeType: {
+        'exhibition-lighting-heatmap': {
+          analysis: ['mode'],
+        },
+      },
     },
   });
 
   const resolved = permissions.resolveToolPermissions({ id: 'u2', role: 'designer' }, db);
   assert.deepEqual(resolved.exhibitionCompactForm.sectionsByNodeType['exhibition-lighting-heatmap'], ['analysis']);
+  assert.deepEqual(resolved.exhibitionCompactForm.itemsByNodeType['exhibition-lighting-heatmap'].analysis, ['mode']);
 }));
 
 test('findUnauthorizedNewNodes allows existing blocked nodes but rejects new ones', () => withTempData(() => {

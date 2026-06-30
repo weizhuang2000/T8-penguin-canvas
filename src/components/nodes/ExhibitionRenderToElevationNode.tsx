@@ -449,7 +449,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
           <div className="rounded bg-white/[0.06] px-2 py-1 text-[10px] text-white/60">{status}</div>
         </div>
 
-        <div className="nodrag nopan grid grid-cols-[112px_1fr] gap-2 text-[11px]" data-exhibition-compact-section="input">
+        <div data-exhibition-compact-item="material-input" className="nodrag nopan grid grid-cols-[112px_1fr] gap-2 text-[11px]" data-exhibition-compact-section="input">
           <div className="rounded border border-white/10 bg-black/15 p-2">
             <div className="mb-1 text-white/50">立面文本</div>
             <div className="line-clamp-4 text-white/75">{sourceText || '接入文本素材'}</div>
@@ -467,7 +467,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
         </div>
 
         <div className="nodrag nopan grid grid-cols-2 gap-2" data-exhibition-compact-section="model">
-          <label className="space-y-1">
+          <label data-exhibition-compact-item="provider" className="space-y-1">
             <span className="text-[10px] text-white/45">LLM Key</span>
             <select
               className={FIELD}
@@ -483,7 +483,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
               ))}
             </select>
           </label>
-          <label className="space-y-1">
+          <label data-exhibition-compact-item="model" className="space-y-1">
             <span className="text-[10px] text-white/45">LLM 模型</span>
             <input
               className={FIELD}
@@ -492,7 +492,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
               onChange={(event) => update({ llmModel: event.target.value })}
             />
           </label>
-          <label className="space-y-1">
+          <label data-exhibition-compact-item="provider" className="space-y-1">
             <span className="text-[10px] text-white/45">生图平台</span>
             <select
               className={FIELD}
@@ -519,7 +519,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
               ))}
             </select>
           </label>
-          <label className="space-y-1">
+          <label data-exhibition-compact-item="model" className="space-y-1">
             <span className="text-[10px] text-white/45">图像模型</span>
             {isExternalSelected ? (
               <select
@@ -549,26 +549,26 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
               </select>
             )}
           </label>
-          <label className="space-y-1">
+          <label data-exhibition-compact-item="aspect-size" className="space-y-1">
             <span className="text-[10px] text-white/45">比例</span>
             <select className={FIELD} value={aspectRatio} disabled={isReadonly || isGenerating} onChange={(event) => update({ aspectRatio: event.target.value })}>
               {['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9'].map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </label>
-          <label className="space-y-1">
+          <label data-exhibition-compact-item="aspect-size" className="space-y-1">
             <span className="text-[10px] text-white/45">尺寸</span>
             <select className={FIELD} value={sizeLevel} disabled={isReadonly || isGenerating} onChange={(event) => update({ sizeLevel: event.target.value })}>
               {['1K', '2K', '4K'].map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </label>
-          <label className="space-y-1">
+          <label data-exhibition-compact-item="output-format" className="space-y-1">
             <span className="text-[10px] text-white/45">格式</span>
             <select className={FIELD} value={outputFormat} disabled={isReadonly || isGenerating} onChange={(event) => update({ outputFormat: event.target.value })}>
               <option value="jpg">JPG</option>
               <option value="png">PNG</option>
             </select>
           </label>
-          <label className="space-y-1">
+          <label data-exhibition-compact-item="seed-name" className="space-y-1">
             <span className="text-[10px] text-white/45">Seed</span>
             <input
               className={FIELD}
@@ -580,7 +580,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
               onChange={(event) => update({ seed: clampNumber(event.target.value, 0, MAX_IMAGE_SEED, 0) })}
             />
           </label>
-          <label className="col-span-2 flex cursor-pointer items-start gap-2 rounded border border-white/10 bg-black/15 p-2 text-[11px] text-white/75">
+          <label data-exhibition-compact-item="manual-input" className="col-span-2 flex cursor-pointer items-start gap-2 rounded border border-white/10 bg-black/15 p-2 text-[11px] text-white/75">
             <input
               type="checkbox"
               className="mt-0.5"
@@ -597,7 +597,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
           </label>
         </div>
 
-        <label className="nodrag nopan block space-y-1" data-exhibition-compact-section="model">
+        <label data-exhibition-compact-item="manual-input" className="nodrag nopan block space-y-1" data-exhibition-compact-section="model">
           <span className="text-[10px] text-white/45">补充要求</span>
           <PromptTextarea
             title="扩大编辑"
@@ -610,7 +610,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
         </label>
 
         {parsedElevations.length > 0 && (
-          <div className="nodrag nopan rounded border border-white/10 bg-black/15 p-2" data-exhibition-compact-section="result">
+          <div data-exhibition-compact-item="outputs" className="nodrag nopan rounded border border-white/10 bg-black/15 p-2" data-exhibition-compact-section="result">
             <div className="mb-1 text-[10px] text-white/45">已识别立面</div>
             <div className="flex flex-wrap gap-1">
               {parsedElevations.map((item: RenderToElevationSection) => (
@@ -623,7 +623,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
         )}
 
         {outputImageUrls.length > 0 && (
-          <div className="nodrag nopan grid grid-cols-3 gap-2" data-exhibition-compact-section="result">
+          <div data-exhibition-compact-item="preview" className="nodrag nopan grid grid-cols-3 gap-2" data-exhibition-compact-section="result">
             {outputImageUrls.map((url: string, index: number) => (
               <div key={`${url}-${index}`} className="overflow-hidden rounded border border-white/10 bg-black/20">
                 <img src={url} alt={outputImageNames[index] || `立面${index + 1}`} className="h-24 w-full object-cover" draggable={false} />
@@ -634,12 +634,12 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
         )}
 
         {(d.progress || d.error) && (
-          <div className={`nodrag nopan rounded px-2 py-1 text-[10px] ${d.error ? 'bg-red-500/10 text-red-200' : 'bg-cyan-400/10 text-cyan-100'}`} data-exhibition-compact-section="result">
+          <div data-exhibition-compact-item="progress" className={`nodrag nopan rounded px-2 py-1 text-[10px] ${d.error ? 'bg-red-500/10 text-red-200' : 'bg-cyan-400/10 text-cyan-100'}`} data-exhibition-compact-section="result">
             {d.error || d.progress}
           </div>
         )}
 
-        <div className="nodrag nopan flex items-center justify-between gap-2" data-exhibition-compact-section="result">
+        <div data-exhibition-compact-item="actions" className="nodrag nopan flex items-center justify-between gap-2" data-exhibition-compact-section="result">
           <button
             type="button"
             className={BUTTON}

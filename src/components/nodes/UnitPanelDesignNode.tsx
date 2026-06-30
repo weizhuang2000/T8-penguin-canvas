@@ -621,14 +621,14 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
         {d.error && <div className="rounded border border-red-300/25 bg-red-400/10 px-2 py-1.5 text-[10px] text-red-200">{d.error}</div>}
 
         <section data-exhibition-compact-section="source" className="grid grid-cols-2 gap-2 rounded border border-white/10 bg-white/[0.035] p-2">
-          <label className="space-y-1">
+          <label data-exhibition-compact-item="parameter-input" className="space-y-1">
             <span className="text-[10px] text-white/55">输出形态</span>
             <select className={FIELD} value={outputMode} disabled={isReadonly || busy} onChange={(e) => update({ outputMode: normalizeUnitPanelOutputMode(e.target.value) })}>
               <option value="set">整套板式图</option>
               <option value="single">单块单元板</option>
             </select>
           </label>
-          <label className="space-y-1">
+          <label data-exhibition-compact-item="parameter-input" className="space-y-1">
             <span className="text-[10px] text-white/55">LLM 配置模型</span>
             <select
               className={FIELD}
@@ -646,27 +646,27 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
               ))}
             </select>
           </label>
-          <label className="flex items-center gap-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[11px] text-white/70">
+          <label data-exhibition-compact-item="toggles" className="flex items-center gap-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[11px] text-white/70">
             <input type="checkbox" className="accent-cyan-300" checked={d.splitDesignEnabled !== false} disabled={isReadonly || busy} onChange={(e) => update({ splitDesignEnabled: e.target.checked })} />
             是否分体设计
           </label>
-          <label className="flex items-center gap-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[11px] text-white/70">
+          <label data-exhibition-compact-item="toggles" className="flex items-center gap-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[11px] text-white/70">
             <input type="checkbox" className="accent-cyan-300" checked={d.dimensionMarksEnabled === true} disabled={isReadonly || busy} onChange={(e) => update({ dimensionMarksEnabled: e.target.checked })} />
             是否标注尺寸
           </label>
-          <label className="flex items-center gap-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[11px] text-white/70">
+          <label data-exhibition-compact-item="toggles" className="flex items-center gap-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[11px] text-white/70">
             <input type="checkbox" className="accent-cyan-300" checked={d.imageDisplayEnabled !== false} disabled={isReadonly || busy} onChange={(e) => update({ imageDisplayEnabled: e.target.checked })} />
             图片显示
           </label>
-          <label className="flex items-center gap-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[11px] text-white/70">
+          <label data-exhibition-compact-item="toggles" className="flex items-center gap-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[11px] text-white/70">
             <input type="checkbox" className="accent-cyan-300" checked={d.specialShapeEnabled === true} disabled={isReadonly || busy} onChange={(e) => update({ specialShapeEnabled: e.target.checked })} />
             特殊造型
           </label>
-          <label className="flex items-center gap-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[11px] text-white/70">
+          <label data-exhibition-compact-item="toggles" className="flex items-center gap-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[11px] text-white/70">
             <input type="checkbox" className="accent-cyan-300" checked={d.mixedLanguageLayoutEnabled === true} disabled={isReadonly || busy} onChange={(e) => update({ mixedLanguageLayoutEnabled: e.target.checked })} />
             混排
           </label>
-          <label className="space-y-1">
+          <label data-exhibition-compact-item="parameter-input" className="space-y-1">
             <span className="text-[10px] text-white/55">背景</span>
             <select className={FIELD} value={d.backgroundMode === 'white' ? 'white' : 'black'} disabled={isReadonly || busy} onChange={(e) => update({ backgroundMode: e.target.value })}>
               <option value="black">黑背景</option>
@@ -679,12 +679,12 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><FileText size={13} /> 文本导入与提炼</div>
             <input ref={fileRef} type="file" className="hidden" accept=".txt,.md,.pdf,.docx" onChange={(e) => void pickDocument(e.target.files?.[0] || undefined)} />
-            <button type="button" className={BUTTON} disabled={isReadonly || busy} onClick={() => fileRef.current?.click()}><Upload size={13} /> 上传文档</button>
+            <button data-exhibition-compact-item="document" type="button" className={BUTTON} disabled={isReadonly || busy} onClick={() => fileRef.current?.click()}><Upload size={13} /> 上传文档</button>
           </div>
-          <div className="text-[10px] text-white/40">{documentLabel(d.documentMeta)}</div>
-          <textarea className={`${FIELD} min-h-[74px] resize-y`} value={sourceText} disabled={isReadonly || busy} placeholder="粘贴单元板资料，或连接上游文本/上传文档" onChange={(e) => update({ sourceText: e.target.value })} />
+          <div data-exhibition-compact-item="document" className="text-[10px] text-white/40">{documentLabel(d.documentMeta)}</div>
+          <textarea data-exhibition-compact-item="document" className={`${FIELD} min-h-[74px] resize-y`} value={sourceText} disabled={isReadonly || busy} placeholder="粘贴单元板资料，或连接上游文本/上传文档" onChange={(e) => update({ sourceText: e.target.value })} />
           {upstream.texts.length > 0 && <div className="text-[10px] text-sky-200/75">已连接 {upstream.texts.length} 条上游文本，运行提炼时会合并使用。</div>}
-          <div className="grid grid-cols-2 gap-2">
+          <div data-exhibition-compact-item="text-fields" className="grid grid-cols-2 gap-2">
             <label className="space-y-1">
               <span className="text-[10px] text-white/55">标题字</span>
               <input className={FIELD} value={titleText} disabled={isReadonly || busy} onChange={(e) => update({ titleText: e.target.value })} />
@@ -700,11 +700,11 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
               <input className={FIELD} value={subtitleText} disabled={isReadonly || busy} onChange={(e) => update({ projectTheme: e.target.value, subtitleText: e.target.value })} />
             </label>
           </div>
-          <label className="space-y-1 block">
+          <label data-exhibition-compact-item="text-fields" className="space-y-1 block">
             <span className="text-[10px] text-white/55">说明文字</span>
             <textarea className={`${FIELD} min-h-[74px] resize-y`} value={bodyText} disabled={isReadonly || busy} onChange={(e) => update({ bodyText: e.target.value })} />
           </label>
-          <div className="flex gap-2">
+          <div data-exhibition-compact-item="actions" className="flex gap-2">
             <button type="button" className={BUTTON} disabled={isReadonly || busy} onClick={() => void runExtract()}><Brain size={13} /> 提炼文本</button>
             <button type="button" className={BUTTON} disabled={isReadonly || busy} onClick={() => void runTranslate()}><Brain size={13} /> 自动翻译</button>
           </div>
@@ -712,7 +712,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
 
         <section data-exhibition-compact-section="material" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="text-[11px] font-semibold text-cyan-100">多语言排序</div>
-          <div className="space-y-1">
+          <div data-exhibition-compact-item="languages" className="space-y-1">
             {languages.map((lang: string, index: number) => {
               const meta = languageMeta(lang);
               return (
@@ -736,14 +736,14 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
               );
             })}
           </div>
-          <select className={FIELD} disabled={isReadonly || busy} value="" onChange={(e) => e.target.value && update({ languages: [...languages, e.target.value] })}>
+          <select data-exhibition-compact-item="languages" className={FIELD} disabled={isReadonly || busy} value="" onChange={(e) => e.target.value && update({ languages: [...languages, e.target.value] })}>
             <option value="">新增语言...</option>
             {UNIT_PANEL_LANGUAGES.filter((item: UnitPanelLanguage) => !languages.includes(item.id)).map((item: UnitPanelLanguage) => <option key={item.id} value={item.id}>{item.label}</option>)}
           </select>
         </section>
 
         <section data-exhibition-compact-section="layout" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
-          <div className="flex items-center justify-between gap-2 rounded border border-cyan-300/20 bg-cyan-300/10 px-2 py-2">
+          <div data-exhibition-compact-item="size" className="flex items-center justify-between gap-2 rounded border border-cyan-300/20 bg-cyan-300/10 px-2 py-2">
             <div>
               <div className="text-[11px] font-semibold text-cyan-100">单元板数量</div>
               <div className="text-[10px] text-white/45">设置本次生成几块单元板</div>
@@ -754,7 +754,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
               <button type="button" className={`${BUTTON} h-8 w-8 px-0 text-sm`} disabled={isReadonly || busy || dimensions.panelCount >= 99} onClick={() => updatePanelCount((dimensions.panelCount || 1) + 1)}>+</button>
             </div>
           </div>
-          <div className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
+          <div data-exhibition-compact-item="text-bounds" className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
             <div className="mb-2 flex items-center justify-between gap-2">
               <div>
                 <div className="text-[11px] font-semibold text-cyan-100">文字控制区</div>
@@ -773,7 +773,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
               </label>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div data-exhibition-compact-item="size" className="grid grid-cols-2 gap-2">
           {[
             ['panelWidth', '单板宽 mm'], ['panelHeight', '单板高 mm'], ['gap', '间距 mm'], ['thickness', '厚度 mm'],
           ].map(([key, label]) => (
@@ -797,7 +797,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
         <section data-exhibition-compact-section="model" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center justify-between gap-2">
             <div className="text-[11px] font-semibold text-cyan-100">材质与字体</div>
-            {canManageMaterials && <button type="button" className={BUTTON} onClick={() => setMaterialsOpen(true)}>编辑材质</button>}
+            {canManageMaterials && <button data-exhibition-compact-item="actions" type="button" className={BUTTON} onClick={() => setMaterialsOpen(true)}>编辑材质</button>}
           </div>
           {referenceOverridesMaterialAndFont && (
             <div className="rounded border border-amber-300/25 bg-amber-300/10 px-2 py-1.5 text-[10px] leading-relaxed text-amber-100">
@@ -805,50 +805,50 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
             </div>
           )}
           <div className="grid grid-cols-2 gap-2">
-            <label className="space-y-1">
+            <label data-exhibition-compact-item="material-select" className="space-y-1">
               <span className="text-[10px] text-white/55">主材质</span>
               <UnitPanelMaterialSelect materials={materials} value={d.primaryMaterialId || ''} disabled={isReadonly || busy || referenceOverridesMaterialAndFont} className={FIELD} placeholder="选择主材质" onChange={(next) => update({ primaryMaterialId: next })} />
             </label>
-            <label className="space-y-1">
+            <label data-exhibition-compact-item="material-select" className="space-y-1">
               <span className="text-[10px] text-white/55">辅助材质</span>
               <UnitPanelMaterialSelect materials={materials} multiple values={Array.isArray(d.secondaryMaterialIds) ? d.secondaryMaterialIds : []} disabled={isReadonly || busy || referenceOverridesMaterialAndFont} className={FIELD} placeholder="选择辅助材质" onChange={(next) => update({ secondaryMaterialIds: next })} />
             </label>
-            <label className="space-y-1">
+            <label data-exhibition-compact-item="font-select" className="space-y-1">
               <span className="text-[10px] text-white/55">标题字体</span>
               <select className={FIELD} value={titleFont} disabled={isReadonly || busy || referenceOverridesMaterialAndFont} onChange={(e) => update({ titleFont: normalizeUnitPanelTitleFont(e.target.value) })}>
                 {UNIT_PANEL_TITLE_FONTS.map((item: UnitPanelFontOption) => <option key={item.id} value={item.id}>{item.label}</option>)}
               </select>
             </label>
-            <label className="space-y-1">
+            <label data-exhibition-compact-item="font-select" className="space-y-1">
               <span className="text-[10px] text-white/55">说明字体</span>
               <select className={FIELD} value={bodyFont} disabled={isReadonly || busy || referenceOverridesMaterialAndFont} onChange={(e) => update({ bodyFont: normalizeUnitPanelBodyFont(e.target.value) })}>
                 {UNIT_PANEL_BODY_FONTS.map((item: UnitPanelFontOption) => <option key={item.id} value={item.id}>{item.label}</option>)}
               </select>
             </label>
           </div>
-          <ColorMaterialPresetSelect
+          <div data-exhibition-compact-item="material-select"><ColorMaterialPresetSelect
             presets={colorMaterialPresets}
             value={d.colorMaterialPreset || ''}
             disabled={isReadonly || busy || referenceOverridesMaterialAndFont}
             className={FIELD}
             placeholder="不使用共享色彩与材质预设"
             onChange={(presetId, preset) => update({ colorMaterialPreset: presetId, colorMaterial: colorMaterialTextFromPreset(preset) })}
-          />
-          <textarea className={`${FIELD} min-h-[50px] resize-y`} value={d.colorMaterial || ''} disabled={isReadonly || busy || referenceOverridesMaterialAndFont} placeholder="手动色彩与材质补充（优先级最低）" onChange={(e) => update({ colorMaterial: e.target.value, colorMaterialPreset: '' })} />
+          /></div>
+          <textarea data-exhibition-compact-item="manual-input" className={`${FIELD} min-h-[50px] resize-y`} value={d.colorMaterial || ''} disabled={isReadonly || busy || referenceOverridesMaterialAndFont} placeholder="手动色彩与材质补充（优先级最低）" onChange={(e) => update({ colorMaterial: e.target.value, colorMaterialPreset: '' })} />
           {colorMaterialReferenceImage ? (
-            <div className="rounded border border-white/10 bg-black/15 p-2">
+            <div data-exhibition-compact-item="reference" className="rounded border border-white/10 bg-black/15 p-2">
               <img src={colorMaterialReferenceImage} alt="" className="h-24 w-full rounded border border-white/10 object-contain" draggable={false} />
               <textarea className={`${FIELD} mt-1 min-h-[42px] resize-y`} value={colorMaterialReferenceTone} disabled={isReadonly || busy} onChange={(e) => update({ colorMaterialReferenceTone: e.target.value, colorMaterialReferenceToneSource: colorMaterialReferenceImage, colorMaterialReferenceToneStatus: '' })} />
             </div>
-          ) : <div className="rounded border border-dashed border-white/15 p-2 text-center text-[10px] text-white/35">可连接色彩与材质参考图，自动读取主色调</div>}
+          ) : <div data-exhibition-compact-item="reference" className="rounded border border-dashed border-white/15 p-2 text-center text-[10px] text-white/35">可连接色彩与材质参考图，自动读取主色调</div>}
         </section>
 
         <section data-exhibition-compact-section="result" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} /> 生图</div>
-            <button type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy} onClick={() => void runGenerate()}><Play size={13} /> 生成单元板</button>
+            <button data-exhibition-compact-item="actions" type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy} onClick={() => void runGenerate()}><Play size={13} /> 生成单元板</button>
           </div>
-          <div className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
+          <div data-exhibition-compact-item="model" className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
             <div className="mb-2 text-[11px] font-semibold text-cyan-100">生图平台与模型</div>
             <div className="grid grid-cols-2 gap-2">
               <label className="space-y-1">
@@ -917,8 +917,8 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
               </label>
             </div>
           </div>
-          {d.progress && <div className="text-[10px] text-cyan-100">{d.progress}</div>}
-          {d.imageUrl && <img src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} />}
+          {d.progress && <div data-exhibition-compact-item="progress" className="text-[10px] text-cyan-100">{d.progress}</div>}
+          {d.imageUrl && <img data-exhibition-compact-item="preview" src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} />}
         </section>
       </div>
 

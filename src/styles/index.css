@@ -6625,3 +6625,7 @@ html[data-theme-visual] .anime-tag-master-lightbox-backdrop {
 [data-exhibition-compact-active="true"] [data-exhibition-compact-section][data-exhibition-compact-visible="false"] {
   display: none !important;
 }
+
+[data-exhibition-compact-active="true"] [data-exhibition-compact-item][data-exhibition-compact-visible="false"] {
+  display: none !important;
+}

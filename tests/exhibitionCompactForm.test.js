@@ -30,7 +30,17 @@ test('compact controller writes true active attribute expected by CSS', () => {
   const canvas = read('src/components/Canvas.tsx');
   const css = read('src/styles/index.css');
   assert.match(canvas, /setAttribute\('data-exhibition-compact-active', 'true'\)/);
+  assert.match(canvas, /getAllowedItems/);
+  assert.match(canvas, /data-exhibition-compact-item/);
   assert.match(css, /\[data-exhibition-compact-active="true"\]/);
+  assert.match(css, /\[data-exhibition-compact-item\]\[data-exhibition-compact-visible="false"\]/);
+});
+
+test('exhibition compact form supports field-level item config', () => {
+  const source = read('src/config/exhibitionCompactForm.ts');
+  assert.match(source, /itemsByNodeType/);
+  assert.match(source, /getExhibitionCompactSectionItems/);
+  assert.match(source, /preset-options/);
 });
 
 test('exhibition nodes carry compact section markers', () => {
@@ -51,5 +61,19 @@ test('exhibition nodes carry compact section markers', () => {
     const source = read(file);
     assert.match(source, /data-exhibition-compact-node-type=/, file);
     assert.match(source, /data-exhibition-compact-section=/, file);
+  }
+});
+
+test('representative exhibition nodes carry compact item markers', () => {
+  const files = [
+    'src/components/nodes/ExhibitionImg2ImgNode.tsx',
+    'src/components/nodes/ExhibitionRecolorNode.tsx',
+    'src/components/nodes/ExhibitionLightingHeatmapNode.tsx',
+    'src/components/nodes/ExhibitionRenderToElevationNode.tsx',
+    'src/components/nodes/UnitPanelDesignNode.tsx',
+  ];
+  for (const file of files) {
+    const source = read(file);
+    assert.match(source, /data-exhibition-compact-item=/, file);
   }
 });

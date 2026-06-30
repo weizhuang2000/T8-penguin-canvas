@@ -421,7 +421,7 @@ const ExhibitionLightingHeatmapNode = ({ id, data, selected }: NodeProps) => {
           <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100">
             <SunMedium size={13} /> 热力分析
           </div>
-          <div className="grid grid-cols-2 gap-1">
+          <div data-exhibition-compact-item="mode" className="grid grid-cols-2 gap-1">
             {MODE_OPTIONS.map((item) => {
               const active = mode === item.id;
               return (
@@ -441,7 +441,7 @@ const ExhibitionLightingHeatmapNode = ({ id, data, selected }: NodeProps) => {
             })}
           </div>
 
-          <div className="grid grid-cols-4 gap-1">
+          <div data-exhibition-compact-item="focus" className="grid grid-cols-4 gap-1">
             {EXHIBITION_LIGHTING_HEATMAP_FOCUS_ITEMS.map((item) => {
               const active = focusItems.includes(item.id);
               return (
@@ -461,6 +461,7 @@ const ExhibitionLightingHeatmapNode = ({ id, data, selected }: NodeProps) => {
           </div>
 
           <textarea
+            data-exhibition-compact-item="supplement"
             className={`${FIELD} min-h-[56px] resize-y`}
             value={d.supplement || ''}
             disabled={isReadonly || busy}
@@ -472,11 +473,11 @@ const ExhibitionLightingHeatmapNode = ({ id, data, selected }: NodeProps) => {
         <section data-exhibition-compact-section="model" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} /> 生成</div>
-            <button type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy} onClick={() => void runGenerate()}><Play size={13} /> 生成灯光热力图</button>
+            <button data-exhibition-compact-item="actions" type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy} onClick={() => void runGenerate()}><Play size={13} /> 生成灯光热力图</button>
           </div>
 
           <div className="grid grid-cols-2 gap-2 rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
-            <label className="space-y-1">
+            <label data-exhibition-compact-item="provider" className="space-y-1">
               <span className="text-[10px] text-white/55">生图平台</span>
               <select
                 className={FIELD}
@@ -498,7 +499,7 @@ const ExhibitionLightingHeatmapNode = ({ id, data, selected }: NodeProps) => {
                 {imageAdvancedProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label || provider.id}</option>)}
               </select>
             </label>
-            <label className="space-y-1">
+            <label data-exhibition-compact-item="model" className="space-y-1">
               <span className="text-[10px] text-white/55">生图模型</span>
               {isExternalSelected ? (
                 <select className={FIELD} value={externalProviderModel} disabled={isReadonly || busy || externalModelOptions.length === 0} onChange={(event) => update({ providerModel: event.target.value })}>
@@ -510,7 +511,7 @@ const ExhibitionLightingHeatmapNode = ({ id, data, selected }: NodeProps) => {
                 </select>
               )}
             </label>
-            <label className="space-y-1">
+            <label data-exhibition-compact-item="model" className="space-y-1">
               <span className="text-[10px] text-white/55">基础模型</span>
               <select className={FIELD} value={modelDef.id} disabled={isReadonly || busy || isExternalSelected} onChange={(event) => {
                 const next = availableModelDefs.find((item) => item.id === event.target.value) || modelDef;
@@ -519,13 +520,13 @@ const ExhibitionLightingHeatmapNode = ({ id, data, selected }: NodeProps) => {
                 {availableModelDefs.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
               </select>
             </label>
-            <label className="space-y-1">
+            <label data-exhibition-compact-item="aspect-size" className="space-y-1">
               <span className="text-[10px] text-white/55">画面比例</span>
               <select className={FIELD} value={aspectRatio} disabled={isReadonly || busy} onChange={(event) => update({ aspectRatio: event.target.value })}>
                 {modelDef.aspectRatios.map((ratio) => <option key={ratio} value={ratio}>{ratio}</option>)}
               </select>
             </label>
-            <label className="space-y-1">
+            <label data-exhibition-compact-item="aspect-size" className="space-y-1">
               <span className="text-[10px] text-white/55">分辨率</span>
               <select className={FIELD} value={sizeLevel} disabled={isReadonly || busy} onChange={(event) => update({ sizeLevel: event.target.value })}>
                 <option value="1K">1K</option>
@@ -533,7 +534,7 @@ const ExhibitionLightingHeatmapNode = ({ id, data, selected }: NodeProps) => {
                 <option value="4K">4K</option>
               </select>
             </label>
-            <label className="space-y-1">
+            <label data-exhibition-compact-item="output-format" className="space-y-1">
               <span className="text-[10px] text-white/55">输出格式</span>
               <div className="grid grid-cols-2 gap-0.5 rounded bg-white/5 p-0.5">
                 {(['jpg', 'png'] as const).map((fmt) => {
@@ -552,13 +553,13 @@ const ExhibitionLightingHeatmapNode = ({ id, data, selected }: NodeProps) => {
                 })}
               </div>
             </label>
-            <label className="space-y-1">
+            <label data-exhibition-compact-item="seed-name" className="space-y-1">
               <span className="text-[10px] text-white/55">Seed</span>
               <input className={FIELD} type="number" min={0} value={seed || ''} disabled={isReadonly || busy} placeholder="随机" onChange={(event) => update({ seed: event.target.value })} />
             </label>
           </div>
-          {d.progress && <div className="text-[10px] text-cyan-100">{d.progress}</div>}
-          {d.imageUrl && <img src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} />}
+          {d.progress && <div data-exhibition-compact-item="progress" className="text-[10px] text-cyan-100">{d.progress}</div>}
+          {d.imageUrl && <img data-exhibition-compact-item="preview" src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} />}
         </section>
       </div>
     </div>

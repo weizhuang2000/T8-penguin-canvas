@@ -4,6 +4,7 @@ import { NODE_GROUPS, NODE_REGISTRY } from '../config/nodeRegistry';
 import {
   defaultExhibitionCompactForm,
   EXHIBITION_COMPACT_FORM_DEFINITIONS,
+  getExhibitionCompactSectionItems,
   normalizeExhibitionCompactFormConfig,
 } from '../config/exhibitionCompactForm';
 import * as api from '../services/api';
@@ -159,6 +160,25 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
         ...compactConfig.sectionsByNodeType,
         [nodeType]: sections,
       },
+      itemsByNodeType: compactConfig.itemsByNodeType,
+    });
+    setConfig({ ...config, exhibitionCompactForm: normalized });
+  };
+
+  const patchCompactNode = (nodeType: string, sections: string[], sectionItems: Record<string, string[]>) => {
+    if (!config) return;
+    const normalized = normalizeExhibitionCompactFormConfig({
+      sectionsByNodeType: {
+        ...compactConfig.sectionsByNodeType,
+        [nodeType]: sections,
+      },
+      itemsByNodeType: {
+        ...compactConfig.itemsByNodeType,
+        [nodeType]: {
+          ...compactConfig.itemsByNodeType[nodeType],
+          ...sectionItems,
+        },
+      },
     });
     setConfig({ ...config, exhibitionCompactForm: normalized });
   };
@@ -168,6 +188,39 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
     if (current.has(sectionId)) current.delete(sectionId);
     else current.add(sectionId);
     patchCompactNodeSections(nodeType, Array.from(current));
+  };
+
+  const patchCompactSectionItems = (nodeType: string, sectionId: string, items: string[]) => {
+    patchCompactNode(nodeType, compactConfig.sectionsByNodeType[nodeType] || [], { [sectionId]: items });
+  };
+
+  const toggleCompactItem = (nodeType: string, sectionId: string, itemId: string) => {
+    const current = new Set(compactConfig.itemsByNodeType[nodeType]?.[sectionId] || []);
+    if (current.has(itemId)) current.delete(itemId);
+    else current.add(itemId);
+    patchCompactSectionItems(nodeType, sectionId, Array.from(current));
+  };
+
+  const patchCompactNodeAll = (nodeType: string, checked: boolean) => {
+    const definition = EXHIBITION_COMPACT_FORM_DEFINITIONS.find((item) => item.nodeType === nodeType);
+    if (!definition) return;
+    patchCompactNode(
+      nodeType,
+      checked ? definition.sections.map((section) => section.id) : [],
+      Object.fromEntries(definition.sections.map((section) => [
+        section.id,
+        checked ? getExhibitionCompactSectionItems(section).map((item) => item.id) : [],
+      ])),
+    );
+  };
+
+  const resetCompactNode = (nodeType: string) => {
+    const defaults = defaultExhibitionCompactForm();
+    patchCompactNode(
+      nodeType,
+      defaults.sectionsByNodeType[nodeType] || [],
+      defaults.itemsByNodeType[nodeType] || {},
+    );
   };
 
   return (
@@ -263,26 +316,57 @@ export default function UserManagementModal({ open, onClose, onPermissionsChange
               <div className="space-y-3">
                 {EXHIBITION_COMPACT_FORM_DEFINITIONS.map((definition) => {
                   const selected = new Set(compactConfig.sectionsByNodeType[definition.nodeType] || []);
+                  const itemCount = definition.sections.reduce((sum, section) => sum + getExhibitionCompactSectionItems(section).length, 0);
+                  const selectedItemCount = definition.sections.reduce((sum, section) => (
+                    sum + (compactConfig.itemsByNodeType[definition.nodeType]?.[section.id] || []).length
+                  ), 0);
                   return (
                     <section key={definition.nodeType} className={`rounded-md border p-3 ${isDark ? 'border-white/10 bg-white/[0.03]' : 'border-black/10 bg-black/[0.02]'}`}>
                       <div className="mb-2 flex items-center gap-2">
-                        <div className="flex-1 text-xs font-semibold">{definition.label} · {selected.size}/{definition.sections.length}</div>
-                        <button className={btnCls} type="button" onClick={() => patchCompactNodeSections(definition.nodeType, definition.sections.map((section) => section.id))}>全选</button>
-                        <button className={btnCls} type="button" onClick={() => patchCompactNodeSections(definition.nodeType, [])}>全不选</button>
+                        <div className="flex-1 text-xs font-semibold">{definition.label} {' / '} {selected.size}/{definition.sections.length} {' / '} {selectedItemCount}/{itemCount}</div>
+                        <button className={btnCls} type="button" onClick={() => patchCompactNodeAll(definition.nodeType, true)}>{'\u5168\u9009'}</button>
+                        <button className={btnCls} type="button" onClick={() => patchCompactNodeAll(definition.nodeType, false)}>{'\u5168\u4e0d\u9009'}</button>
+                        <button className={btnCls} type="button" onClick={() => resetCompactNode(definition.nodeType)}>{'\u6062\u590d\u9ed8\u8ba4'}</button>
                       </div>
-                      <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-4">
+                      <div className="space-y-2">
                         {definition.sections.map((section) => {
                           const checked = selected.has(section.id);
+                          const items = getExhibitionCompactSectionItems(section);
+                          const selectedItems = new Set(compactConfig.itemsByNodeType[definition.nodeType]?.[section.id] || []);
                           return (
-                            <label key={section.id} className={`flex min-w-0 cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 text-xs ${checked ? 'border-cyan-300/50 bg-cyan-400/10' : isDark ? 'border-white/10 bg-black/10' : 'border-black/10 bg-white'}`}>
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => toggleCompactSection(definition.nodeType, section.id)}
-                              />
-                              <span className="min-w-0 flex-1 truncate">{section.label}</span>
-                              <span className="truncate text-[10px] opacity-45">{section.id}</span>
-                            </label>
+                            <div key={section.id} className={`rounded-md border p-2 text-xs ${checked ? 'border-cyan-300/50 bg-cyan-400/10' : isDark ? 'border-white/10 bg-black/10' : 'border-black/10 bg-white'}`}>
+                              <div className="mb-2 flex min-w-0 items-center gap-2">
+                                <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => toggleCompactSection(definition.nodeType, section.id)}
+                                  />
+                                  <span className="min-w-0 flex-1 truncate font-semibold">{section.label}</span>
+                                  <span className="truncate text-[10px] opacity-45">{section.id}</span>
+                                  <span className="text-[10px] opacity-60">{selectedItems.size}/{items.length}</span>
+                                </label>
+                                <button className={btnCls} type="button" onClick={() => patchCompactSectionItems(definition.nodeType, section.id, items.map((item) => item.id))}>{'\u672c\u533a\u5168\u9009'}</button>
+                                <button className={btnCls} type="button" onClick={() => patchCompactSectionItems(definition.nodeType, section.id, [])}>{'\u672c\u533a\u5168\u4e0d\u9009'}</button>
+                                <button className={btnCls} type="button" onClick={() => patchCompactSectionItems(definition.nodeType, section.id, defaultExhibitionCompactForm().itemsByNodeType[definition.nodeType]?.[section.id] || [])}>{'\u672c\u533a\u9ed8\u8ba4'}</button>
+                              </div>
+                              <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-4">
+                                {items.map((item) => {
+                                  const itemChecked = selectedItems.has(item.id);
+                                  return (
+                                    <label key={item.id} className={`flex min-w-0 cursor-pointer items-center gap-2 rounded border px-2 py-1.5 ${itemChecked ? 'border-emerald-300/40 bg-emerald-400/10' : isDark ? 'border-white/10 bg-black/10' : 'border-black/10 bg-white'}`}>
+                                      <input
+                                        type="checkbox"
+                                        checked={itemChecked}
+                                        onChange={() => toggleCompactItem(definition.nodeType, section.id, item.id)}
+                                      />
+                                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                                      <span className="truncate text-[10px] opacity-45">{item.id}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
                           );
                         })}
                       </div>

@@ -3,6 +3,7 @@ import {
   defaultExhibitionCompactForm,
   EXHIBITION_COMPACT_FORM_DEFINITIONS,
   EXHIBITION_COMPACT_NODE_TYPES,
+  getExhibitionCompactSectionItems,
   normalizeExhibitionCompactFormConfig,
   type ExhibitionCompactFormConfig,
 } from '../config/exhibitionCompactForm';
@@ -16,6 +17,7 @@ interface ExhibitionCompactFormState {
   toggleNode: (nodeId: string) => void;
   setNodeActive: (nodeId: string, active: boolean) => void;
   getAllowedSections: (nodeType?: string | null) => string[];
+  getAllowedItems: (nodeType?: string | null, sectionId?: string | null) => string[];
 }
 
 const DEFAULT_CONFIG = defaultExhibitionCompactForm();
@@ -23,6 +25,15 @@ const DEFAULT_SECTIONS_BY_NODE_TYPE = new Map(
   EXHIBITION_COMPACT_FORM_DEFINITIONS.map((definition) => [
     definition.nodeType,
     definition.sections.map((section) => section.id),
+  ]),
+);
+const DEFAULT_ITEMS_BY_NODE_TYPE = new Map(
+  EXHIBITION_COMPACT_FORM_DEFINITIONS.map((definition) => [
+    definition.nodeType,
+    new Map(definition.sections.map((section) => [
+      section.id,
+      getExhibitionCompactSectionItems(section).map((item) => item.id),
+    ])),
   ]),
 );
 
@@ -58,5 +69,12 @@ export const useExhibitionCompactFormStore = create<ExhibitionCompactFormState>(
     const configured = get().config.sectionsByNodeType[type];
     if (Array.isArray(configured)) return configured;
     return DEFAULT_SECTIONS_BY_NODE_TYPE.get(type) || [];
+  },
+  getAllowedItems: (nodeType, sectionId) => {
+    const type = String(nodeType || '');
+    const section = String(sectionId || '');
+    const configured = get().config.itemsByNodeType[type]?.[section];
+    if (Array.isArray(configured)) return configured;
+    return DEFAULT_ITEMS_BY_NODE_TYPE.get(type)?.get(section) || [];
   },
 }));

@@ -1034,7 +1034,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
         <section data-exhibition-compact-section="input" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><Palette size={13} /> 色调</div>
-            <label className="ml-auto inline-flex items-center gap-1.5 text-[10px] text-white/65">
+            <label data-exhibition-compact-item="preset-options" className="ml-auto inline-flex items-center gap-1.5 text-[10px] text-white/65">
               <input
                 type="checkbox"
                 className="h-3 w-3 accent-emerald-300"
@@ -1050,7 +1050,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
               </button>
             )}
           </div>
-          <select className={FIELD} value={d.palettePresetId || ''} disabled={isReadonly || busy || !toneEnabled} onChange={(event) => applyPalette(event.target.value)}>
+          <select data-exhibition-compact-item="preset-options" className={FIELD} value={d.palettePresetId || ''} disabled={isReadonly || busy || !toneEnabled} onChange={(event) => applyPalette(event.target.value)}>
             <option value="">自定义当前色块</option>
             {paletteGroups.map((group) => (
               <optgroup key={group.category} label={group.category}>
@@ -1059,13 +1059,13 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
             ))}
           </select>
           {selectedPalette?.description && <div className="rounded border border-cyan-300/15 bg-cyan-300/5 px-2 py-1 text-[10px] leading-snug text-cyan-50/70">{selectedPalette.description}</div>}
-          <div className="grid grid-cols-4 gap-2">
+          <div data-exhibition-compact-item="color-controls" className="grid grid-cols-4 gap-2">
             <ColorControl label="主色调" value={primaryColor} disabled={isReadonly || busy || !toneEnabled} onChange={(value) => update({ primaryColor: value, palettePresetId: '' })} />
             <ColorControl label="辅助色调" value={secondaryColor} disabled={isReadonly || busy || !toneEnabled} onChange={(value) => update({ secondaryColor: value, palettePresetId: '' })} />
             <ColorControl label="调和色" value={harmonyColor} disabled={isReadonly || busy || !toneEnabled} onChange={(value) => update({ harmonyColor: value, palettePresetId: '' })} />
             <ColorControl label="点缀色" value={accentColor} disabled={isReadonly || busy || !toneEnabled} onChange={(value) => update({ accentColor: value, palettePresetId: '' })} />
           </div>
-          <label className="block rounded border border-white/10 bg-black/15 p-2">
+          <label data-exhibition-compact-item="brightness" className="block rounded border border-white/10 bg-black/15 p-2">
             <div className="mb-1 flex items-center justify-between text-[10px] text-white/55">
               <span>明暗度</span>
               <span className="font-mono text-cyan-100">{brightness > 0 ? `+${brightness}` : brightness}</span>
@@ -1087,7 +1087,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><SlidersHorizontal size={13} /> 地面与天花板</div>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <label className="space-y-1 rounded border border-white/10 bg-black/15 p-2">
+            <label data-exhibition-compact-item="floor" className="space-y-1 rounded border border-white/10 bg-black/15 p-2">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-white/55">地面调整</span>
                 {canManageTeam && (
@@ -1102,7 +1102,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
               </select>
               {selectedFloor?.prompt && <div className="line-clamp-3 text-[10px] leading-snug text-white/45">{selectedFloor.prompt}</div>}
             </label>
-            <label className="space-y-1 rounded border border-white/10 bg-black/15 p-2">
+            <label data-exhibition-compact-item="ceiling" className="space-y-1 rounded border border-white/10 bg-black/15 p-2">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-white/55">天花板调整</span>
                 {canManageTeam && (
@@ -1129,7 +1129,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
               </button>
             )}
           </div>
-          <div className="flex flex-wrap gap-1.5">
+          <div data-exhibition-compact-item="protected-options" className="flex flex-wrap gap-1.5">
             {exclusions.map((item) => {
               const active = selectedExcludeItems.includes(item.id);
               return (
@@ -1148,6 +1148,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
             })}
           </div>
           <textarea
+            data-exhibition-compact-item="manual-exclusions"
             className={`${FIELD} min-h-[54px] resize-y`}
             value={d.manualExclusions || ''}
             disabled={isReadonly || busy}
@@ -1159,10 +1160,10 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
         <section data-exhibition-compact-section="model" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} /> 生成</div>
-            <button type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy || !originalImage} onClick={() => void runGenerate()}><Play size={13} /> 生成换色图</button>
+            <button data-exhibition-compact-item="actions" type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy || !originalImage} onClick={() => void runGenerate()}><Play size={13} /> 生成换色图</button>
           </div>
           <div className="grid grid-cols-2 gap-2 rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
-            <label className="space-y-1">
+            <label data-exhibition-compact-item="provider" className="space-y-1">
               <span className="text-[10px] text-white/55">生图平台</span>
               <select
                 className={FIELD}
@@ -1184,7 +1185,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
                 {imageAdvancedProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label || provider.id}</option>)}
               </select>
             </label>
-            <label className="space-y-1">
+            <label data-exhibition-compact-item="model" className="space-y-1">
               <span className="text-[10px] text-white/55">生图模型</span>
               {isExternalSelected ? (
                 <select className={FIELD} value={externalProviderModel} disabled={isReadonly || busy || externalModelOptions.length === 0} onChange={(event) => update({ providerModel: event.target.value })}>
@@ -1196,19 +1197,19 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
                 </select>
               )}
             </label>
-            <label className="space-y-1">
+            <label data-exhibition-compact-item="model" className="space-y-1">
               <span className="text-[10px] text-white/55">基础模型</span>
               <select className={FIELD} value={modelDef.id} disabled={isReadonly || busy || isExternalSelected} onChange={(event) => update({ model: event.target.value, apiModel: (availableModelDefs.find((item) => item.id === event.target.value) || modelDef).apiModel })}>
                 {availableModelDefs.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
               </select>
             </label>
-            <label className="space-y-1">
+            <label data-exhibition-compact-item="aspect-size" className="space-y-1">
               <span className="text-[10px] text-white/55">画面比例</span>
               <select className={FIELD} value={aspectRatio} disabled={isReadonly || busy} onChange={(event) => update({ aspectRatio: event.target.value })}>
                 {modelDef.aspectRatios.map((ratio) => <option key={ratio} value={ratio}>{ratio}</option>)}
               </select>
             </label>
-            <label className="space-y-1">
+            <label data-exhibition-compact-item="aspect-size" className="space-y-1">
               <span className="text-[10px] text-white/55">分辨率</span>
               <select className={FIELD} value={sizeLevel} disabled={isReadonly || busy} onChange={(event) => update({ sizeLevel: event.target.value })}>
                 <option value="1K">1K</option>
@@ -1216,7 +1217,7 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
                 <option value="4K">4K</option>
               </select>
             </label>
-            <label className="space-y-1">
+            <label data-exhibition-compact-item="output-format" className="space-y-1">
               <span className="text-[10px] text-white/55">输出格式</span>
               <div className="grid grid-cols-2 gap-0.5 rounded bg-white/5 p-0.5">
                 {(['jpg', 'png'] as const).map((fmt) => {
@@ -1235,13 +1236,13 @@ const ExhibitionRecolorNode = ({ id, data, selected }: NodeProps) => {
                 })}
               </div>
             </label>
-            <label className="space-y-1">
+            <label data-exhibition-compact-item="seed-name" className="space-y-1">
               <span className="text-[10px] text-white/55">Seed</span>
               <input className={FIELD} type="number" min={0} value={seed || ''} disabled={isReadonly || busy} placeholder="随机" onChange={(event) => update({ seed: event.target.value })} />
             </label>
           </div>
-          {d.progress && <div className="text-[10px] text-cyan-100">{d.progress}</div>}
-          {d.imageUrl && <img src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} />}
+          {d.progress && <div data-exhibition-compact-item="progress" className="text-[10px] text-cyan-100">{d.progress}</div>}
+          {d.imageUrl && <img data-exhibition-compact-item="preview" src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} />}
         </section>
       </div>
 

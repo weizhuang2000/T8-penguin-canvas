@@ -377,7 +377,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   const [eagleApiBaseInput, setEagleApiBaseInput] = useState<string>('');
   // 分类独立 Key 区块折叠状态（新手友好：默认折叠，点击展开）
   const [classifiedOpen, setClassifiedOpen] = useState(false);
-  const [llmConfigsOpen, setLlmConfigsOpen] = useState(true);
+  const [llmConfigsOpen, setLlmConfigsOpen] = useState(false);
   const [llmConfigsInput, setLlmConfigsInput] = useState<LlmConfig[]>([]);
   const [llmConfigsDirty, setLlmConfigsDirty] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -416,7 +416,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       setSaved(false);
       setBackupMessage('');
       setClassifiedOpen(false);
-      setLlmConfigsOpen(true);
+      setLlmConfigsOpen(false);
       setLlmConfigsInput(normalizeLlmConfigForms(getLlmConfigSource(settings), settings));
       setLlmConfigsDirty(false);
       setAdvancedOpen(false);
