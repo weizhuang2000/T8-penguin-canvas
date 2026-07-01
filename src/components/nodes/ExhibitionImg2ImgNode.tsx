@@ -1689,10 +1689,20 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
   const generationCount = clampNumber(d.generationCount, MIN_IMAGE_COUNT, MAX_IMAGE_COUNT, 1);
   const renderElevationTogether = d.renderElevationTogether === true;
+  const effectiveAspectRatio = renderElevationTogether ? '1:1' : aspectRatio;
+  const effectiveSizeLevel = renderElevationTogether ? '4K' : sizeLevel;
   const outputImageUrls = Array.isArray(d.imageUrls) && d.imageUrls.length ? d.imageUrls.filter(Boolean) : (d.imageUrl ? [d.imageUrl] : []);
   const outputImageNames = Array.isArray(d.imageNames) ? d.imageNames.map((item: unknown) => String(item || '').trim()) : [];
   const imageName = normalizeExhibitionImageName(d.imageName);
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
+  const aspectRatioOptions = useMemo(() => {
+    const options = modelDef.aspectRatios.length ? modelDef.aspectRatios : ['1:1', '16:9', '9:16'];
+    return options.includes(effectiveAspectRatio) ? options : [effectiveAspectRatio, ...options];
+  }, [effectiveAspectRatio, modelDef.aspectRatios]);
+  const sizeLevelOptions = useMemo(() => {
+    const options = isExternalSelected ? EXTERNAL_SIZE_LEVELS : (modelDef.sizes.length ? modelDef.sizes : EXTERNAL_SIZE_LEVELS);
+    return options.includes(effectiveSizeLevel) ? options : [effectiveSizeLevel, ...options];
+  }, [effectiveSizeLevel, isExternalSelected, modelDef.sizes]);
   const customCraftMentions = mediaMentions(d.customCraftMentions);
   const visualStyleMentions = mediaMentions(d.visualStyleMentions);
   const supplementMentions = mediaMentions(d.supplementMentions);
@@ -2795,23 +2805,23 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         update({ progress: `提交生图 ${roundIndex}/${generationCount}`, lastSeed: runSeed, lastPrompt: promptForRun });
       if (isExternalSelected && providerSelection.provider) {
         if (!externalProviderModel) throw new Error('扩展平台未配置可用图像模型');
-        const size = externalImageSizeFor(aspectRatio, sizeLevel);
+        const size = externalImageSizeFor(effectiveAspectRatio, effectiveSizeLevel);
         const providerParams = {
           ...(d.providerParams || {}),
-          aspect_ratio: aspectRatio,
-          aspectRatio,
-          image_size: sizeLevel,
-          imageSize: sizeLevel,
+          aspect_ratio: effectiveAspectRatio,
+          aspectRatio: effectiveAspectRatio,
+          image_size: effectiveSizeLevel,
+          imageSize: effectiveSizeLevel,
         };
-        logBus.info(`展陈图生图提交: ${providerSelection.provider.label || providerSelection.provider.id} · ${externalProviderModel} · refs=${runtimeReferenceImages.length}`, src);
+        logBus.info(`展陈图生图提交: ${providerSelection.provider.label || providerSelection.provider.id} · ${externalProviderModel} · ratio=${effectiveAspectRatio} size=${effectiveSizeLevel} refs=${runtimeReferenceImages.length}`, src);
         let res = await generateExternalImage({
           providerId: providerSelection.provider.id,
           providerModel: externalProviderModel,
           model: externalProviderModel,
           prompt: promptForRun,
           size,
-          aspect_ratio: aspectRatio,
-          image_size: sizeLevel,
+          aspect_ratio: effectiveAspectRatio,
+          image_size: effectiveSizeLevel,
           images: runtimeReferenceImages,
           outputFormat,
           seed: runSeed,
@@ -2855,14 +2865,14 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         continue;
       }
 
-      logBus.info(`展陈图生图提交: model=${apiModel} ratio=${aspectRatio} size=${sizeLevel} refs=${runtimeReferenceImages.length}`, src);
+      logBus.info(`展陈图生图提交: model=${apiModel} ratio=${effectiveAspectRatio} size=${effectiveSizeLevel} refs=${runtimeReferenceImages.length}`, src);
       const submit = await submitImageAsync({
         model: modelDef.id,
         apiModel,
         paramKind: modelDef.paramKind,
         prompt: promptForRun,
-        aspect_ratio: aspectRatio,
-        image_size: sizeLevel,
+        aspect_ratio: effectiveAspectRatio,
+        image_size: effectiveSizeLevel,
         images: runtimeReferenceImages,
         n: 1,
         outputFormat,
@@ -3783,11 +3793,12 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               <select
                 className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
                 style={{ background: '#18181b', color: '#ffffff' }}
-                value={aspectRatio}
-                disabled={isReadonly || busy}
+                value={effectiveAspectRatio}
+                disabled={isReadonly || busy || renderElevationTogether}
                 onChange={(event) => update({ aspectRatio: event.target.value })}
+                title={renderElevationTogether ? '同时出立面开启时固定使用 1:1 方图' : undefined}
               >
-                {(modelDef.aspectRatios.length ? modelDef.aspectRatios : ['1:1', '16:9', '9:16']).map((item) => <option key={item} value={item} style={{ background: '#18181b', color: '#ffffff' }}>{item}</option>)}
+                {aspectRatioOptions.map((item) => <option key={item} value={item} style={{ background: '#18181b', color: '#ffffff' }}>{item}</option>)}
               </select>
             </div>
             <div>
@@ -3795,11 +3806,12 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               <select
                 className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
                 style={{ background: '#18181b', color: '#ffffff' }}
-                value={sizeLevel}
-                disabled={isReadonly || busy}
+                value={effectiveSizeLevel}
+                disabled={isReadonly || busy || renderElevationTogether}
                 onChange={(event) => update({ sizeLevel: event.target.value })}
+                title={renderElevationTogether ? '同时出立面开启时固定使用 4K' : undefined}
               >
-                {(isExternalSelected ? EXTERNAL_SIZE_LEVELS : (modelDef.sizes.length ? modelDef.sizes : EXTERNAL_SIZE_LEVELS)).map((item) => <option key={item} value={item} style={{ background: '#18181b', color: '#ffffff' }}>{item}</option>)}
+                {sizeLevelOptions.map((item) => <option key={item} value={item} style={{ background: '#18181b', color: '#ffffff' }}>{item}</option>)}
               </select>
             </div>
           </div>

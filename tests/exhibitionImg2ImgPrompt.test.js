@@ -120,6 +120,10 @@ test('exhibition img2img craft presets are grouped by category', () => {
   assert.match(canvas, /imageName: ''/);
   assert.match(canvas, /imageNames: \[\]/);
   assert.match(node, /const generationCount = clampNumber\(d\.generationCount, MIN_IMAGE_COUNT, MAX_IMAGE_COUNT, 1\)/);
+  assert.match(node, /const effectiveAspectRatio = renderElevationTogether \? '1:1' : aspectRatio/);
+  assert.match(node, /const effectiveSizeLevel = renderElevationTogether \? '4K' : sizeLevel/);
+  assert.match(node, /aspect_ratio: effectiveAspectRatio/);
+  assert.match(node, /image_size: effectiveSizeLevel/);
   assert.match(node, /同时出立面/);
   assert.match(node, /for \(let roundIndex = 1; roundIndex <= generationCount; roundIndex \+= 1\)/);
   assert.match(node, /completeRound\(roundIndex/);
@@ -151,7 +155,11 @@ test('exhibition img2img can render an elevation together in the same image', ()
     wallContentPrompt: '立面 1｜序厅\n内容摘要：品牌发展脉络\n工艺配置：展板、立体字',
   });
   assert.match(enabled, /最终输出仍然只能是一张图/);
+  assert.match(enabled, /总画布为 1:1 方图、4K 输出/);
   assert.match(enabled, /同一张画面内必须同时包含“室内透视效果图”和“对应正投影\/平面立面图”/);
+  assert.match(enabled, /固定采用上下分区拼版：上半部分是室内透视效果图，下半部分是对应正投影\/平面立面图/);
+  assert.match(enabled, /效果图分区按 16:9 横向画面构图/);
+  assert.match(enabled, /立面图分区也按 16:9 横向画面构图/);
   assert.match(enabled, /参考“立面提示词”节点的彩立面与工艺排版逻辑/);
   assert.match(enabled, /只表达当前效果图中对应的可见或指定立面范围/);
   assert.match(enabled, /不得把立面拆成第二个文件或第二张输出/);
