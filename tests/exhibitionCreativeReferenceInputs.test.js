@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const nodeSource = fs.readFileSync(path.join(root, 'src/components/nodes/ExhibitionCreativeImageNode.tsx'), 'utf8');
+const canvasSource = fs.readFileSync(path.join(root, 'src/components/Canvas.tsx'), 'utf8');
 const presetModalSource = fs.readFileSync(path.join(root, 'src/components/nodes/ColorMaterialPresetEditorModal.tsx'), 'utf8');
 const presetSelectSource = fs.readFileSync(path.join(root, 'src/components/nodes/ColorMaterialPresetSelect.tsx'), 'utf8');
 
@@ -14,8 +15,16 @@ test('exhibition creative node exposes color/material and exhibit reference hand
   assert.match(nodeSource, /id="space"/);
   assert.match(nodeSource, /id="color-material-reference"/);
   assert.match(nodeSource, /id="exhibit-reference"/);
+  assert.match(nodeSource, /EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR/);
   assert.match(nodeSource, /useInputImageByHandle\(id, 'color-material-reference'\)/);
   assert.match(nodeSource, /useInputImagesByHandle\(id, 'exhibit-reference'\)/);
+});
+
+test('exhibition creative space and color material image handles replace previous links', () => {
+  assert.match(canvasSource, /targetType === 'exhibition-creative-image'/);
+  assert.match(canvasSource, /handle === 'space' \|\| handle === 'color-material-reference'/);
+  assert.match(canvasSource, /return \[handle\]/);
+  assert.match(canvasSource, /filterExclusiveTargetEdges\(eds, params\.target, exclusiveTargetHandles\)/);
 });
 
 test('exhibition creative node supports @ mentions for reference image prompt fields', () => {

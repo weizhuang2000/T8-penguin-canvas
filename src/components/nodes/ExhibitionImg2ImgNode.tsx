@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Handle, Position, useNodeConnections, useNodesData, useReactFlow, type NodeProps } from '@xyflow/react';
-import { PORT_COLOR } from '../../config/portTypes';
+import { EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR, PORT_COLOR } from '../../config/portTypes';
 import {
   ArrowDown,
   ArrowUp,
@@ -1003,7 +1003,7 @@ function ImageSlot({
         type="target"
         position={Position.Left}
         className="!h-3 !w-3 !border-0"
-        style={{ top, background: PORT_COLOR.image }}
+        style={{ top, background: handleId === 'color-material-reference' ? EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR : PORT_COLOR.image }}
         title={`输入：${title} — ${subtitle}`}
       />
       <div className="rounded border border-white/10 bg-black/15 p-2">

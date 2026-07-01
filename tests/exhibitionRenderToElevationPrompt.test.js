@@ -58,12 +58,14 @@ test('render to elevation image prompt can use elevation form reference image to
     formReferenceToken: '@img2',
   });
   assert.match(prompt, /@img2 = 立面形式参考图/);
-  assert.match(prompt, /优先参照 @img2 的包装形式/);
-  assert.match(prompt, /标题栏位置/);
+  assert.match(prompt, /只影响立面主体以外的包装层/);
+  assert.match(prompt, /标题字所在背景\/标题栏/);
   assert.match(prompt, /地面延伸方式/);
-  assert.match(prompt, /只把 @img2 当作立面图包装形式参考/);
-  assert.match(prompt, /当前立面的内容仍以/);
-  assert.match(prompt, /以 @img2 的包装形式为优先/);
+  assert.match(prompt, /不要让 @img2 影响立面主体本身/);
+  assert.match(prompt, /墙面主体、图文内容、展板\/灯箱\/展柜\/时间轴\/装置落位/);
+  assert.match(prompt, /仍必须遵从“当前立面内容”、LLM 提示、@img1 效果图参考和节点内其它约束/);
+  assert.match(prompt, /只把 @img2 当作主体外包装形式参考/);
+  assert.match(prompt, /只允许在主体外包装层优先参考 @img2/);
 
   const withoutReference = buildRenderToElevationImagePrompt({
     index: 1,

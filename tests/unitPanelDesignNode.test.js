@@ -11,6 +11,7 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 test('unit panel design node exposes reference handle and shared controls', () => {
   const source = read('src/components/nodes/UnitPanelDesignNode.tsx');
   assert.match(source, /id="color-material-reference"/);
+  assert.match(source, /EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR/);
   assert.match(source, /UnitPanelMaterialSelect/);
   assert.match(source, /UnitPanelMaterialEditorModal/);
   assert.match(source, /ColorMaterialPresetSelect/);

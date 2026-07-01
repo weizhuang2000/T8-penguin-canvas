@@ -1251,6 +1251,31 @@ function initialDataForNodeType(
   };
 }
 
+function exclusiveTargetHandlesForConnection(
+  targetType: string | undefined,
+  targetHandle: string | null | undefined,
+): string[] {
+  const handle = targetHandle || '';
+  if (targetType === 'exhibition-img2img') {
+    if (handle === 'structure' || handle === 'plan-layout') return ['structure', 'plan-layout'];
+    if (handle === 'color-material-reference' || handle === 'style') return ['color-material-reference', 'style'];
+  }
+  if (targetType === 'exhibition-creative-image') {
+    if (handle === 'space' || handle === 'color-material-reference') return [handle];
+  }
+  return [];
+}
+
+function filterExclusiveTargetEdges(
+  edges: Edge[],
+  targetId: string | null | undefined,
+  handles: string[],
+): Edge[] {
+  if (!targetId || handles.length === 0) return edges;
+  const handleSet = new Set(handles);
+  return edges.filter((edge) => edge.target !== targetId || !handleSet.has(String(edge.targetHandle || '')));
+}
+
 // 可被“批量运行”调起的节点类型集合
 // upload 亦被纳入: 点击 RUN 后会根据已上传素材创建下游 OutputNode (見 UploadNode.handleRun)
 const EXECUTABLE_NODE_TYPES = new Set<string>([
@@ -4014,10 +4039,10 @@ function CanvasInner({
       const ins = tgt ? getNodeInputs(tgt) : [];
       const matched = outs.find((o) => ins.includes(o) || o === 'any' || ins.includes('any'));
       const color = matched && matched !== 'any' ? PORT_COLOR[matched] : undefined;
-      const exclusiveExhibitionImg2ImgHandle = tgt?.type === 'exhibition-img2img'
-        && (params.targetHandle === 'structure' || params.targetHandle === 'plan-layout')
-        ? (params.targetHandle === 'structure' ? 'plan-layout' : 'structure')
-        : '';
+      const exclusiveTargetHandles = exclusiveTargetHandlesForConnection(
+        tgt?.type,
+        params.targetHandle,
+      );
       setEdges((eds) =>
         addEdge(
           {
@@ -4025,9 +4050,7 @@ function CanvasInner({
             ...(color ? { style: { stroke: color, strokeWidth: 2 } } : {}),
             data: { portType: matched ?? 'any' },
           },
-          exclusiveExhibitionImg2ImgHandle
-            ? eds.filter((edge) => edge.target !== params.target || edge.targetHandle !== exclusiveExhibitionImg2ImgHandle)
-            : eds
+          filterExclusiveTargetEdges(eds, params.target, exclusiveTargetHandles)
         )
       );
     },
@@ -4825,6 +4848,10 @@ function CanvasInner({
       const ins = tgt ? getNodeInputs(tgt) : [];
       const matched = outs.find((o) => ins.includes(o) || o === 'any' || ins.includes('any'));
       const color = matched && matched !== 'any' ? PORT_COLOR[matched] : undefined;
+      const exclusiveTargetHandles = exclusiveTargetHandlesForConnection(
+        tgt?.type,
+        params.targetHandle,
+      );
 
       setEdges((eds) =>
         addEdge(
@@ -4833,7 +4860,7 @@ function CanvasInner({
             ...(color ? { style: { stroke: color, strokeWidth: 2 } } : {}),
             data: { portType: matched ?? 'any' },
           },
-          eds
+          filterExclusiveTargetEdges(eds, params.target, exclusiveTargetHandles)
         )
       );
       setPicker(null);

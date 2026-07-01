@@ -38,6 +38,7 @@ test('showcase interior design node is registered in frontend and permissions', 
 test('showcase interior design component wires shared controls and generation services', () => {
   const source = read('src/components/nodes/ShowcaseInteriorDesignNode.tsx');
   assert.match(source, /id="color-material-reference"/);
+  assert.match(source, /EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR/);
   assert.match(source, /ColorMaterialPresetSelect/);
   assert.match(source, /MentionPromptInput/);
   assert.match(source, /resolveMediaMentions/);

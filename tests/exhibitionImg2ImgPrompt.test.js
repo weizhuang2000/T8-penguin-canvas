@@ -59,12 +59,17 @@ test('exhibition img2img content planning exposes wall length mode and totals', 
 test('exhibition img2img node exposes mutually exclusive plan layout input', () => {
   const node = readFileSync(new URL('../src/components/nodes/ExhibitionImg2ImgNode.tsx', import.meta.url), 'utf8');
   const canvas = readFileSync(new URL('../src/components/Canvas.tsx', import.meta.url), 'utf8');
+  const ports = readFileSync(new URL('../src/config/portTypes.ts', import.meta.url), 'utf8');
   assert.match(node, /handleId="plan-layout"/);
+  assert.match(node, /EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR/);
+  assert.match(ports, /EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR\s*=\s*'#f472b6'/);
   assert.match(node, /PlanCameraModalEditor/);
   assert.match(node, /createPortal/);
   assert.match(node, /text-red-300/);
-  assert.match(canvas, /params\.targetHandle === 'structure' \|\| params\.targetHandle === 'plan-layout'/);
-  assert.match(canvas, /exclusiveExhibitionImg2ImgHandle/);
+  assert.match(canvas, /exclusiveTargetHandlesForConnection/);
+  assert.match(canvas, /handle === 'structure' \|\| handle === 'plan-layout'[\s\S]*return \['structure', 'plan-layout'\]/);
+  assert.match(canvas, /handle === 'color-material-reference' \|\| handle === 'style'[\s\S]*return \['color-material-reference', 'style'\]/);
+  assert.match(canvas, /filterExclusiveTargetEdges\(eds, params\.target, exclusiveTargetHandles\)/);
 });
 
 test('exhibition img2img node supports @ image mentions for prompt image references', () => {

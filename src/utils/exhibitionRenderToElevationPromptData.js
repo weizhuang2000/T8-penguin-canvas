@@ -278,9 +278,9 @@ export function buildRenderToElevationImagePrompt(values = {}) {
     lines.push(
       '',
       '【立面形式参考图】',
-      `${formReferenceToken} = 立面形式参考图。生成时必须优先参照 ${formReferenceToken} 的包装形式、画布背景、标题栏位置、标题字体与字号、边界留法、地面延伸方式、图面比例和版式秩序。`,
-      `只把 ${formReferenceToken} 当作立面图包装形式参考，不复制其中的项目内容、展品、文案和具体主题；当前立面的内容仍以“当前立面内容”和 LLM 提示为准。`,
-      `如果 ${formReferenceToken} 与默认浅灰背景/24号浅黄色黑体标题/地面延伸规则不一致，以 ${formReferenceToken} 的包装形式为优先，但仍不得加入尺寸标注、工艺材质解读、白底留白或宽度裁切。`,
+      `${formReferenceToken} = 立面形式参考图。它只影响立面主体以外的包装层：画布背景、标题字、标题字所在背景/标题栏、外框边界留法、页眉页脚和地面延伸方式。`,
+      `不要让 ${formReferenceToken} 影响立面主体本身；墙面主体、图文内容、展板/灯箱/展柜/时间轴/装置落位、材质风格、灯光色彩和正投影立面表达，仍必须遵从“当前立面内容”、LLM 提示、${referenceToken} 效果图参考和节点内其它约束。`,
+      `只把 ${formReferenceToken} 当作主体外包装形式参考，不复制其中的项目内容、展品、文案和具体主题；如果 ${formReferenceToken} 与默认浅灰背景/24号浅黄色黑体标题/地面延伸规则不一致，只允许在主体外包装层优先参考 ${formReferenceToken}，仍不得加入尺寸标注、工艺材质解读、白底留白或宽度裁切。`,
     );
   }
   if (splitCount > 1) {

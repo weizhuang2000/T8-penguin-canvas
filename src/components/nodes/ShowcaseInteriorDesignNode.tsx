@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
-import { PORT_COLOR } from '../../config/portTypes';
+import { EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR, PORT_COLOR } from '../../config/portTypes';
 import { Boxes, Image as ImageIcon, Layers, Loader2, MoveDiagonal2, Palette, Play, Ruler, Settings2, Trash2, X } from 'lucide-react';
 import { IMAGE_MODELS } from '../../providers/models';
 import { getElevationPromptPresets, type ElevationColorMaterialPresetItem } from '../../services/api';
@@ -940,7 +940,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
   return (
     <div data-exhibition-compact-node-type="showcase-interior-design" className={`relative w-[520px] rounded-xl border bg-zinc-950 text-white shadow-2xl ${selected ? 'border-cyan-300/70' : 'border-white/10'}`}>
       <Handle type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '32%', background: PORT_COLOR.image }} title="输入：展品图" />
-      <Handle id="color-material-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '52%', background: PORT_COLOR.image }} title="输入：色彩与材质参考图" />
+      <Handle id="color-material-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '52%', background: EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR }} title="输入：色彩与材质参考图" />
       <Handle type="source" position={Position.Right} className="!h-3 !w-3 !border-0" style={{ background: PORT_COLOR.image }} />
 
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">

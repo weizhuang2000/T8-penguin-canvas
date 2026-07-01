@@ -298,6 +298,8 @@ export const PORT_COLOR: Record<PortType, string> = {
   any: '#cbd5e1',      // slate-300
 };
 
+export const EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR = '#f472b6'; // pink-400
+
 /**
  * 端口类型中文标签
  */
