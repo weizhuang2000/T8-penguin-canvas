@@ -23,6 +23,7 @@ export interface RenderToElevationImagePromptValues extends Partial<RenderToElev
   supplement?: string;
   img2imgModeEnabled?: boolean;
   referenceToken?: string;
+  formReferenceToken?: string;
 }
 
 export function parseElevationSectionsFromText(value: unknown): RenderToElevationSection[];

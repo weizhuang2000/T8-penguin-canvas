@@ -50,6 +50,29 @@ test('render to elevation image prompt defaults to img2img reference mode and ca
   assert.doesNotMatch(disabled, /透视墙面区域/);
 });
 
+test('render to elevation image prompt can use elevation form reference image token', () => {
+  const prompt = buildRenderToElevationImagePrompt({
+    index: 1,
+    title: '序厅主形象墙',
+    content: '品牌大标题、序言、灯箱展板',
+    formReferenceToken: '@img2',
+  });
+  assert.match(prompt, /@img2 = 立面形式参考图/);
+  assert.match(prompt, /优先参照 @img2 的包装形式/);
+  assert.match(prompt, /标题栏位置/);
+  assert.match(prompt, /地面延伸方式/);
+  assert.match(prompt, /只把 @img2 当作立面图包装形式参考/);
+  assert.match(prompt, /当前立面的内容仍以/);
+  assert.match(prompt, /以 @img2 的包装形式为优先/);
+
+  const withoutReference = buildRenderToElevationImagePrompt({
+    index: 1,
+    title: '序厅主形象墙',
+    content: '品牌大标题、序言、灯箱展板',
+  });
+  assert.doesNotMatch(withoutReference, /@img2 = 立面形式参考图/);
+});
+
 test('render to elevation parser marks long elevations for LLM craft-boundary split', () => {
   assert.equal(parseElevationLengthMeters('立面长度：12米，含主标题和展柜'), 12);
   const sections = parseElevationSectionsFromText([

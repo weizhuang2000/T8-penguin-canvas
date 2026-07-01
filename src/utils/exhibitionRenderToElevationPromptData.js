@@ -252,6 +252,7 @@ export function buildRenderToElevationImagePrompt(values = {}) {
   const supplement = cleanText(values.supplement, 2000);
   const img2imgModeEnabled = values.img2imgModeEnabled !== false;
   const referenceToken = cleanText(values.referenceToken || '@img1', 32) || '@img1';
+  const formReferenceToken = cleanText(values.formReferenceToken || '', 32);
   const splitCount = Math.max(1, Math.floor(Number(values.splitCount) || 1));
   const splitIndex = Math.max(1, Math.min(splitCount, Math.floor(Number(values.splitIndex) || 1)));
   const splitLengthMeters = roundMeters(Number(values.splitLengthMeters) || 0);
@@ -273,6 +274,15 @@ export function buildRenderToElevationImagePrompt(values = {}) {
     '当前立面内容：',
     content || title,
   ];
+  if (formReferenceToken) {
+    lines.push(
+      '',
+      '【立面形式参考图】',
+      `${formReferenceToken} = 立面形式参考图。生成时必须优先参照 ${formReferenceToken} 的包装形式、画布背景、标题栏位置、标题字体与字号、边界留法、地面延伸方式、图面比例和版式秩序。`,
+      `只把 ${formReferenceToken} 当作立面图包装形式参考，不复制其中的项目内容、展品、文案和具体主题；当前立面的内容仍以“当前立面内容”和 LLM 提示为准。`,
+      `如果 ${formReferenceToken} 与默认浅灰背景/24号浅黄色黑体标题/地面延伸规则不一致，以 ${formReferenceToken} 的包装形式为优先，但仍不得加入尺寸标注、工艺材质解读、白底留白或宽度裁切。`,
+    );
+  }
   if (splitCount > 1) {
     lines.push(
       '',

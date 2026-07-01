@@ -157,6 +157,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
 
   const upstreamText = useInputTextByHandle(id, 'document-text');
   const referenceImage = useInputImageByHandle(id, 'reference-image');
+  const formReferenceImage = useInputImageByHandle(id, 'elevation-form-reference');
   const sourceText = upstreamText || String(d.sourceText || '').trim();
   const imageAdvancedProviders = useMemo(() => advancedProvidersForNode(advancedProviders, 'image'), [advancedProviders]);
   const llmConfigOptions = useMemo(() => {
@@ -245,7 +246,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
       imageUrls: [],
       imageNames: [],
       elevationResults: [],
-      referenceImages: [referenceImage],
+      referenceImages: [referenceImage, formReferenceImage].filter(Boolean),
       lastSeed: latestSeed,
     });
     try {
@@ -262,7 +263,9 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
           supplement: d.supplement,
           img2imgModeEnabled,
           referenceToken: '@img1',
+          formReferenceToken: formReferenceImage ? '@img2' : '',
         });
+        const generationImages = [referenceImage, formReferenceImage].filter(Boolean);
         const historyContext = {
           canvasId: activeCanvasId,
           sourceNodeId: id,
@@ -286,7 +289,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
             size,
             aspect_ratio: aspectRatio,
             image_size: sizeLevel,
-            images: [referenceImage],
+            images: generationImages,
             outputFormat,
             seed: runSeed,
             n: 1,
@@ -328,7 +331,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
             prompt,
             aspect_ratio: aspectRatio,
             image_size: sizeLevel,
-            images: [referenceImage],
+            images: generationImages,
             n: 1,
             outputFormat,
             seed: runSeed,
@@ -382,7 +385,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
           imageNames: generatedNames.slice(),
           elevationResults: elevationResults.slice(),
           parsedElevations: sections,
-          referenceImages: [referenceImage],
+          referenceImages: generationImages,
           lastPrompt: prompt,
           lastSeed: runSeed,
           taskId: latestTaskId,
@@ -414,6 +417,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
     modelDef.paramKind,
     outputFormat,
     providerSelection.provider,
+    formReferenceImage,
     referenceImage,
     seed,
     sizeLevel,
@@ -432,8 +436,9 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
       style={{ background: 'rgba(17,24,39,.96)', backdropFilter: 'blur(8px)' }}
     >
       <Handle type="source" position={Position.Right} className="!border-0" style={{ background: PORT_COLOR.image }} title="输出：立面图" />
-      <Handle id="document-text" type="target" position={Position.Left} className="!border-0" style={{ top: '30%', background: PORT_COLOR.text }} title="输入：立面文本" />
-      <Handle id="reference-image" type="target" position={Position.Left} className="!border-0" style={{ top: '58%', background: PORT_COLOR.image }} title="输入：效果图参考" />
+      <Handle id="document-text" type="target" position={Position.Left} className="!border-0" style={{ top: '26%', background: PORT_COLOR.text }} title="输入：立面文本" />
+      <Handle id="reference-image" type="target" position={Position.Left} className="!border-0" style={{ top: '50%', background: PORT_COLOR.image }} title="输入：效果图参考" />
+      <Handle id="elevation-form-reference" type="target" position={Position.Left} className="!border-0" style={{ top: '72%', background: PORT_COLOR.image }} title="输入：立面形式参考图" />
 
       <div className="space-y-3 p-3 text-white">
         <div className="flex items-center justify-between gap-3">
@@ -449,7 +454,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
           <div className="rounded bg-white/[0.06] px-2 py-1 text-[10px] text-white/60">{status}</div>
         </div>
 
-        <div data-exhibition-compact-item="material-input" className="nodrag nopan grid grid-cols-[112px_1fr] gap-2 text-[11px]" data-exhibition-compact-section="input">
+        <div data-exhibition-compact-item="material-input" className="nodrag nopan grid grid-cols-3 gap-2 text-[11px]" data-exhibition-compact-section="input">
           <div className="rounded border border-white/10 bg-black/15 p-2">
             <div className="mb-1 text-white/50">立面文本</div>
             <div className="line-clamp-4 text-white/75">{sourceText || '接入文本素材'}</div>
@@ -458,6 +463,16 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
             <div className="mb-1 text-white/50">效果图参考</div>
             {referenceImage ? (
               <img src={referenceImage} alt="效果图参考" className="h-24 w-full rounded object-cover" draggable={false} />
+            ) : (
+              <div className="flex h-24 items-center justify-center rounded bg-white/[0.04] text-white/35">
+                <ImageIcon size={18} />
+              </div>
+            )}
+          </div>
+          <div className="rounded border border-white/10 bg-black/15 p-2">
+            <div className="mb-1 text-white/50">立面形式参考图</div>
+            {formReferenceImage ? (
+              <img src={formReferenceImage} alt="立面形式参考图" className="h-24 w-full rounded object-cover" draggable={false} />
             ) : (
               <div className="flex h-24 items-center justify-center rounded bg-white/[0.04] text-white/35">
                 <ImageIcon size={18} />
