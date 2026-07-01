@@ -82,21 +82,66 @@ export interface ToolPermissionsConfig {
 
 const canvasDataCache = new Map<string, CanvasData>();
 const pendingCanvasDataRequests = new Map<string, Promise<CanvasData>>();
+const CANVAS_DATA_CACHE_PREFIX = 't8pc:canvas-data:v1:';
 
 function cloneCanvasData(data: CanvasData): CanvasData {
   if (typeof structuredClone === 'function') return structuredClone(data);
   return JSON.parse(JSON.stringify(data));
 }
 
-function writeCanvasDataCache(id: string, data: CanvasData) {
-  const previous = canvasDataCache.get(id);
-  canvasDataCache.set(id, cloneCanvasData({
+function canvasDataStorage(): Storage | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage || null;
+  } catch {
+    return null;
+  }
+}
+
+function canvasDataCacheKey(id: string) {
+  return `${CANVAS_DATA_CACHE_PREFIX}${encodeURIComponent(id)}`;
+}
+
+function normalizeCanvasData(data: CanvasData, previous?: CanvasData): CanvasData {
+  return cloneCanvasData({
     ...(previous || {}),
     ...data,
     nodes: Array.isArray(data.nodes) ? data.nodes : [],
     edges: Array.isArray(data.edges) ? data.edges : [],
     viewport: data.viewport || previous?.viewport || { x: 0, y: 0, zoom: 1 },
-  }));
+  });
+}
+
+function readPersistedCanvasData(id: string): CanvasData | null {
+  const storage = canvasDataStorage();
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(canvasDataCacheKey(id));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const data = parsed?.data || parsed;
+    if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.edges)) return null;
+    return normalizeCanvasData(data);
+  } catch {
+    return null;
+  }
+}
+
+function persistCanvasData(id: string, data: CanvasData) {
+  const storage = canvasDataStorage();
+  if (!storage) return;
+  try {
+    storage.setItem(canvasDataCacheKey(id), JSON.stringify({ cachedAt: Date.now(), data }));
+  } catch {
+    // localStorage quota/security failures should never block canvas saving.
+  }
+}
+
+function writeCanvasDataCache(id: string, data: CanvasData) {
+  const previous = canvasDataCache.get(id) || readPersistedCanvasData(id) || undefined;
+  const normalized = normalizeCanvasData(data, previous);
+  canvasDataCache.set(id, normalized);
+  persistCanvasData(id, normalized);
 }
 
 export function primeCanvasDataCache(id: string, data: CanvasData): void {
@@ -104,13 +149,20 @@ export function primeCanvasDataCache(id: string, data: CanvasData): void {
 }
 
 export function getCachedCanvasData(id: string): CanvasData | null {
-  const cached = canvasDataCache.get(id);
-  return cached ? cloneCanvasData(cached) : null;
+  const cached = canvasDataCache.get(id) || readPersistedCanvasData(id);
+  if (!cached) return null;
+  if (!canvasDataCache.has(id)) canvasDataCache.set(id, cloneCanvasData(cached));
+  return cloneCanvasData(cached);
 }
 
 export function invalidateCanvasDataCache(id: string): void {
   canvasDataCache.delete(id);
   pendingCanvasDataRequests.delete(id);
+  try {
+    canvasDataStorage()?.removeItem(canvasDataCacheKey(id));
+  } catch {
+    /* ignore */
+  }
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {

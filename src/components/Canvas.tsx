@@ -356,6 +356,25 @@ function withNodeSerialBadge(Component: ComponentType<any>): ComponentType<any> 
   return WrappedNode;
 }
 
+function prepareCanvasSnapshot(data: { nodes?: any[]; edges?: any[]; nextNodeSerialId?: number }) {
+  const rawNodes = Array.isArray(data.nodes) ? data.nodes : [];
+  const rawEdges = Array.isArray(data.edges) ? data.edges : [];
+  const fixedNodesBeforeSerials = rawNodes.map((node: any) =>
+    node.type === 'groupBox' && node.connectable === false
+      ? { ...node, connectable: true }
+      : node,
+  );
+  const normalized = normalizeCanvasNodeSerials(fixedNodesBeforeSerials, data.nextNodeSerialId);
+  return {
+    nodesBeforeSerials: fixedNodesBeforeSerials,
+    nodes: normalized.nodes,
+    edges: rawEdges,
+    nextNodeSerialId: normalized.nextNodeSerialId,
+    serialsChanged: normalized.changed,
+    savedNextNodeSerialId: data.nextNodeSerialId,
+  };
+}
+
 const COMPACT_GROUP_SELECTOR = [
   '[data-exhibition-compact-item]',
   '[data-exhibition-compact-section]',
@@ -2151,9 +2170,17 @@ function CanvasInner({
     const requestedCanvasId = activeId;
     setLoaded(false);
     setLoadedCanvasId(null);
+    const cachedData = api.getCachedCanvasData(requestedCanvasId);
+    if (cachedData) {
+      const cached = prepareCanvasSnapshot(cachedData);
+      nextNodeSerialIdRef.current = cached.nextNodeSerialId;
+      setNodes(cached.nodes);
+      setEdges(cached.edges);
+      histReset({ nodes: cached.nodes, edges: cached.edges });
+    }
     let cancelled = false;
     api
-      .getCanvasData(requestedCanvasId)
+      .getCanvasData(requestedCanvasId, { force: true })
       .then((data) => {
         if (cancelled || useCanvasStore.getState().activeId !== requestedCanvasId) return;
         const pendingSave = pendingSaveByCanvasRef.current.get(requestedCanvasId);
