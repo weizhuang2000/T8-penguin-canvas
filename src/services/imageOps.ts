@@ -21,8 +21,80 @@ async function postOp<T = any>(path: string, body: any): Promise<T> {
   return data.data;
 }
 
-export const opResize = (imageUrl: string, width?: number, height?: number, fit?: string) =>
-  postOp<{ imageUrl: string }>('resize', { imageUrl, width, height, fit });
+export type ResizeMode = 'image' | 'canvas';
+export type ResizeUnit = 'px' | '%' | 'inch' | 'cm' | 'mm';
+export type ResizeKernel = 'auto' | 'nearest' | 'linear' | 'cubic' | 'mitchell' | 'lanczos2' | 'lanczos3';
+export type ResizeFit = 'cover' | 'contain' | 'inside' | 'outside' | 'fill';
+export type ResizeAnchor =
+  | 'top-left'
+  | 'top'
+  | 'top-right'
+  | 'left'
+  | 'center'
+  | 'right'
+  | 'bottom-left'
+  | 'bottom'
+  | 'bottom-right';
+export type ResizeOutputFormat = 'png' | 'jpg' | 'webp' | 'source';
+
+export interface ResizeOptions {
+  mode?: ResizeMode;
+  width?: number;
+  height?: number;
+  unit?: ResizeUnit;
+  imageSize?: {
+    width?: number;
+    height?: number;
+    unit?: ResizeUnit;
+    keepAspect?: boolean;
+    resample?: boolean;
+    density?: number;
+    fit?: ResizeFit;
+    kernel?: ResizeKernel;
+  };
+  canvasSize?: {
+    width?: number;
+    height?: number;
+    unit?: ResizeUnit;
+    relative?: boolean;
+    anchor?: ResizeAnchor;
+    background?: string;
+  };
+  keepAspect?: boolean;
+  resample?: boolean;
+  kernel?: ResizeKernel;
+  fit?: ResizeFit;
+  anchor?: ResizeAnchor;
+  background?: string;
+  density?: number;
+  format?: ResizeOutputFormat;
+  quality?: number;
+}
+
+export interface ResizeResult {
+  imageUrl: string;
+  width?: number;
+  height?: number;
+  requestedWidth?: number;
+  requestedHeight?: number;
+  originalWidth?: number;
+  originalHeight?: number;
+  mode?: ResizeMode;
+  density?: number;
+  format?: string;
+  fit?: string;
+  resample?: boolean;
+  anchor?: string;
+}
+
+export function opResize(imageUrl: string, options?: ResizeOptions): Promise<ResizeResult>;
+export function opResize(imageUrl: string, width?: number, height?: number, fit?: string): Promise<ResizeResult>;
+export function opResize(imageUrl: string, optionsOrWidth?: ResizeOptions | number, height?: number, fit?: string) {
+  const body = typeof optionsOrWidth === 'object' && optionsOrWidth !== null
+    ? { imageUrl, ...optionsOrWidth }
+    : { imageUrl, width: optionsOrWidth, height, fit };
+  return postOp<ResizeResult>('resize', body);
+}
 
 export const opUpscale = (imageUrl: string, scale: number) =>
   postOp<{ imageUrl: string; scale: number }>('upscale', { imageUrl, scale });

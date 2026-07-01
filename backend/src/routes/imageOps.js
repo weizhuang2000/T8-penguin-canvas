@@ -158,6 +158,146 @@ function clampNumber(v, min, max, fallback) {
   return Math.max(min, Math.min(max, n));
 }
 
+const RESIZE_MAX_DIMENSION = 32768;
+
+function intInRange(value, min, max, fallback) {
+  const n = Math.trunc(Number(value));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
+function positiveDimension(value, fallback) {
+  return intInRange(value, 1, RESIZE_MAX_DIMENSION, fallback);
+}
+
+function normalizeResizeMode(value) {
+  return String(value || 'image') === 'canvas' ? 'canvas' : 'image';
+}
+
+function normalizeResizeUnit(value) {
+  const unit = String(value || 'px').toLowerCase();
+  return ['px', '%', 'inch', 'cm', 'mm'].includes(unit) ? unit : 'px';
+}
+
+function normalizeResizeFit(value, fallback = 'inside') {
+  const fit = String(value || fallback);
+  return ['cover', 'contain', 'inside', 'outside', 'fill'].includes(fit) ? fit : fallback;
+}
+
+function normalizeResizeKernel(value) {
+  const kernel = String(value || 'lanczos3');
+  if (kernel === 'nearest') return sharp.kernel.nearest;
+  if (kernel === 'linear') return sharp.kernel.linear;
+  if (kernel === 'cubic') return sharp.kernel.cubic;
+  if (kernel === 'mitchell') return sharp.kernel.mitchell;
+  if (kernel === 'lanczos2') return sharp.kernel.lanczos2;
+  return sharp.kernel.lanczos3;
+}
+
+function normalizeResizeAnchor(value) {
+  const anchor = String(value || 'center');
+  return [
+    'top-left',
+    'top',
+    'top-right',
+    'left',
+    'center',
+    'right',
+    'bottom-left',
+    'bottom',
+    'bottom-right',
+  ].includes(anchor) ? anchor : 'center';
+}
+
+function normalizeResizeOutputFormat(value, metaFormat, forcePng = false) {
+  if (forcePng) return 'png';
+  const raw = String(value || 'png').toLowerCase().replace(/^\./, '');
+  if (raw === 'source' || raw === 'keep') return normalizeImageFormat(metaFormat, 'png');
+  return normalizeImageFormat(raw, 'png');
+}
+
+function dimensionFromUnit(value, unit, original, density) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  if (unit === '%') return Math.round(original * n / 100);
+  if (unit === 'inch') return Math.round(n * density);
+  if (unit === 'cm') return Math.round((n / 2.54) * density);
+  if (unit === 'mm') return Math.round((n / 25.4) * density);
+  return Math.round(n);
+}
+
+function resolveResizeDimensions({ body, originalWidth, originalHeight, density }) {
+  const imageSize = body.imageSize && typeof body.imageSize === 'object' ? body.imageSize : {};
+  const unit = normalizeResizeUnit(imageSize.unit || body.unit);
+  const rawWidth = imageSize.width ?? body.width;
+  const rawHeight = imageSize.height ?? body.height;
+  const widthInput = dimensionFromUnit(rawWidth, unit, originalWidth, density);
+  const heightInput = dimensionFromUnit(rawHeight, unit, originalHeight, density);
+  const keepAspect = imageSize.keepAspect ?? body.keepAspect;
+  const fallbackWidth = originalWidth || 1;
+  const fallbackHeight = originalHeight || 1;
+  let width = widthInput || fallbackWidth;
+  let height = heightInput || fallbackHeight;
+  if (keepAspect === true) {
+    if (widthInput && !heightInput) height = Math.round(widthInput * fallbackHeight / fallbackWidth);
+    if (!widthInput && heightInput) width = Math.round(heightInput * fallbackWidth / fallbackHeight);
+    if (widthInput && heightInput) {
+      const sourceRatio = fallbackWidth / fallbackHeight;
+      const targetRatio = widthInput / heightInput;
+      if (Math.abs(targetRatio - sourceRatio) > 0.001) {
+        height = Math.round(widthInput / sourceRatio);
+      }
+    }
+  }
+  return {
+    width: positiveDimension(width, fallbackWidth),
+    height: positiveDimension(height, fallbackHeight),
+    unit,
+    keepAspect: keepAspect === true,
+  };
+}
+
+function resolveCanvasDimensions({ body, originalWidth, originalHeight, density }) {
+  const canvasSize = body.canvasSize && typeof body.canvasSize === 'object' ? body.canvasSize : {};
+  const unit = normalizeResizeUnit(canvasSize.unit || body.unit);
+  const relative = canvasSize.relative ?? body.relative;
+  const rawWidth = canvasSize.width ?? body.width;
+  const rawHeight = canvasSize.height ?? body.height;
+  const deltaWidth = dimensionFromUnit(rawWidth, unit, originalWidth, density);
+  const deltaHeight = dimensionFromUnit(rawHeight, unit, originalHeight, density);
+  const width = relative === true ? originalWidth + deltaWidth : (deltaWidth || originalWidth);
+  const height = relative === true ? originalHeight + deltaHeight : (deltaHeight || originalHeight);
+  return {
+    width: positiveDimension(width, originalWidth),
+    height: positiveDimension(height, originalHeight),
+    unit,
+    relative: relative === true,
+  };
+}
+
+function anchorOffset(anchor, original, target) {
+  const diff = target - original;
+  if (diff <= 0) return 0;
+  if (anchor.endsWith('right') || anchor === 'right') return diff;
+  if (anchor.includes('left') || anchor === 'left') return 0;
+  return Math.floor(diff / 2);
+}
+
+function cropOffset(anchor, original, target) {
+  const diff = original - target;
+  if (diff <= 0) return 0;
+  if (anchor.endsWith('right') || anchor === 'right') return diff;
+  if (anchor.includes('left') || anchor === 'left') return 0;
+  return Math.floor(diff / 2);
+}
+
+async function encodeResizeOutput(pipe, format, quality, density) {
+  const enc = encoderForFormat(format, quality);
+  let out = enc.encode(pipe);
+  if (density) out = out.withMetadata({ density });
+  return { buffer: await out.toBuffer(), ext: enc.ext };
+}
+
 function normalizeTrimMode(value) {
   const s = String(value || 'black');
   return ['black', 'white', 'transparent', 'auto'].includes(s) ? s : 'black';
@@ -816,14 +956,102 @@ function makeFocus(rawA, rawB, threshold) {
 // body: { imageUrl, width, height, fit? }
 router.post('/resize', async (req, res) => {
   try {
-    const { imageUrl, width, height, fit } = req.body || {};
+    const body = req.body || {};
+    const { imageUrl } = body;
     if (!imageUrl) return res.status(400).json({ success: false, error: 'imageUrl 必填' });
     const buf = await fetchImageBuffer(imageUrl);
-    const out = await sharp(buf)
-      .resize(width || null, height || null, { fit: fit || 'inside' })
-      .png()
-      .toBuffer();
-    res.json({ success: true, data: { imageUrl: saveBuffer(out, 'png') } });
+    const meta = await sharp(buf).metadata();
+    const originalWidth = meta.width || 0;
+    const originalHeight = meta.height || 0;
+    if (!originalWidth || !originalHeight) throw new Error('无法读取图像尺寸');
+
+    const mode = normalizeResizeMode(body.mode);
+    const density = intInRange(body.density ?? body.imageSize?.density, 1, 2400, meta.density || 72);
+    const quality = intInRange(body.quality, 1, 100, 90);
+
+    if (mode === 'canvas') {
+      const target = resolveCanvasDimensions({ body, originalWidth, originalHeight, density });
+      const anchor = normalizeResizeAnchor(body.anchor || body.canvasSize?.anchor);
+      const background = normalizeHexColorForSharp(body.background || body.canvasSize?.background, '#00000000');
+      const transparent = /00$/i.test(background);
+      const format = normalizeResizeOutputFormat(body.format, meta.format, transparent);
+      const left = anchorOffset(anchor, originalWidth, target.width);
+      const top = anchorOffset(anchor, originalHeight, target.height);
+      const extractLeft = cropOffset(anchor, originalWidth, target.width);
+      const extractTop = cropOffset(anchor, originalHeight, target.height);
+      const workingWidth = Math.min(originalWidth, target.width);
+      const workingHeight = Math.min(originalHeight, target.height);
+      let pipe = sharp(buf).rotate();
+      if (workingWidth < originalWidth || workingHeight < originalHeight) {
+        pipe = pipe.extract({
+          left: extractLeft,
+          top: extractTop,
+          width: workingWidth,
+          height: workingHeight,
+        });
+      }
+      if (target.width > workingWidth || target.height > workingHeight) {
+        const extendLeft = target.width > workingWidth ? left : 0;
+        const extendTop = target.height > workingHeight ? top : 0;
+        pipe = pipe
+          .ensureAlpha()
+          .extend({
+            left: extendLeft,
+            right: target.width - workingWidth - extendLeft,
+            top: extendTop,
+            bottom: target.height - workingHeight - extendTop,
+            background,
+          });
+      }
+      const encoded = await encodeResizeOutput(pipe, format, quality, density);
+      const imageUrlOut = await saveBufferAsync(encoded.buffer, encoded.ext);
+      return res.json({
+        success: true,
+        data: {
+          imageUrl: imageUrlOut,
+          width: target.width,
+          height: target.height,
+          originalWidth,
+          originalHeight,
+          mode,
+          density,
+          format: encoded.ext,
+          anchor,
+        },
+      });
+    }
+
+    const target = resolveResizeDimensions({ body, originalWidth, originalHeight, density });
+    const resample = body.resample !== false && body.imageSize?.resample !== false;
+    const fit = normalizeResizeFit(body.fit || body.imageSize?.fit, 'inside');
+    const format = normalizeResizeOutputFormat(body.format, meta.format, false);
+    let pipe = sharp(buf).rotate();
+    if (resample) {
+      pipe = pipe.resize(target.width, target.height, {
+        fit,
+        kernel: normalizeResizeKernel(body.kernel || body.imageSize?.kernel),
+        background: normalizeHexColorForSharp(body.background, '#00000000'),
+      });
+    }
+    const encoded = await encodeResizeOutput(pipe, format, quality, density);
+    const imageUrlOut = await saveBufferAsync(encoded.buffer, encoded.ext);
+    res.json({
+      success: true,
+      data: {
+        imageUrl: imageUrlOut,
+        width: resample ? target.width : originalWidth,
+        height: resample ? target.height : originalHeight,
+        requestedWidth: target.width,
+        requestedHeight: target.height,
+        originalWidth,
+        originalHeight,
+        mode,
+        density,
+        format: encoded.ext,
+        fit,
+        resample,
+      },
+    });
   } catch (e) {
     console.error('resize 错误:', e);
     res.status(500).json({ success: false, error: e.message });

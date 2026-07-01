@@ -375,6 +375,113 @@ test('batch processor remove-bg has a visible local effect on simple solid backg
   }
 });
 
+test('resize route supports Photoshop-style image and canvas sizing', async () => {
+  const express = require('express');
+  const sharp = require('sharp');
+  const config = require('../backend/src/config.js');
+  const imageOpsRouter = require('../backend/src/routes/imageOps.js');
+
+  const oldConfig = {
+    INPUT_DIR: config.INPUT_DIR,
+    OUTPUT_DIR: config.OUTPUT_DIR,
+    THUMBNAILS_DIR: config.THUMBNAILS_DIR,
+  };
+  const root = mkdtempSync(join(tmpdir(), 't8-resize-'));
+  config.INPUT_DIR = join(root, 'input');
+  config.OUTPUT_DIR = join(root, 'output');
+  config.THUMBNAILS_DIR = join(root, 'thumbs');
+  mkdirSync(config.INPUT_DIR, { recursive: true });
+  mkdirSync(config.OUTPUT_DIR, { recursive: true });
+  mkdirSync(config.THUMBNAILS_DIR, { recursive: true });
+
+  const sourcePath = join(config.INPUT_DIR, 'resize-src.png');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="8"><rect width="12" height="8" fill="#111827"/><rect x="0" y="0" width="4" height="8" fill="#ff3355"/><rect x="8" y="0" width="4" height="8" fill="#22c55e"/></svg>`;
+  writeFileSync(sourcePath, await sharp(Buffer.from(svg)).png().toBuffer());
+
+  const app = express();
+  app.use(express.json({ limit: '4mb' }));
+  app.use('/api/image', imageOpsRouter);
+  const server = await new Promise<any>((resolve) => {
+    const s = app.listen(0, '127.0.0.1', () => resolve(s));
+  });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const post = async (body: any) => {
+    const res = await fetch(`${base}/api/image/resize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageUrl: '/files/input/resize-src.png', ...body }),
+    });
+    const json = await res.json();
+    assert.equal(res.ok, true, JSON.stringify(json));
+    assert.equal(json.success, true);
+    return json.data;
+  };
+  const outputBuffer = (url: string) => readFileSync(join(config.OUTPUT_DIR, decodeURIComponent(String(url).replace('/files/output/', ''))));
+  const outputMeta = async (url: string) => sharp(outputBuffer(url)).metadata();
+
+  try {
+    const fixed = await post({ mode: 'image', width: 24, height: 16, fit: 'fill', kernel: 'cubic', format: 'webp', quality: 82 });
+    assert.equal(fixed.width, 24);
+    assert.equal(fixed.height, 16);
+    assert.equal(fixed.format, 'webp');
+    assert.equal((await outputMeta(fixed.imageUrl)).width, 24);
+
+    const percent = await post({ mode: 'image', imageSize: { width: 50, unit: '%', keepAspect: true }, resample: true });
+    assert.equal(percent.width, 6);
+    assert.equal(percent.height, 4);
+
+    const dpiOnly = await post({ mode: 'image', width: 1200, height: 900, resample: false, density: 300 });
+    assert.equal(dpiOnly.width, 12);
+    assert.equal(dpiOnly.height, 8);
+    assert.equal(dpiOnly.density, 300);
+
+    const expanded = await post({ mode: 'canvas', width: 16, height: 12, anchor: 'top-left', background: '#00000000', format: 'jpg' });
+    assert.equal(expanded.width, 16);
+    assert.equal(expanded.height, 12);
+    assert.equal(expanded.format, 'png');
+    const expandedRaw = await sharp(outputBuffer(expanded.imageUrl))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const alphaAt = (x: number, y: number) => expandedRaw.data[(y * expandedRaw.info.width + x) * 4 + 3];
+    assert.ok(alphaAt(15, 11) < 10);
+
+    const cropped = await post({ mode: 'canvas', width: 4, height: 8, anchor: 'right', background: '#ffffff', format: 'png' });
+    assert.equal(cropped.width, 4);
+    assert.equal(cropped.height, 8);
+    const croppedRaw = await sharp(outputBuffer(cropped.imageUrl))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    assert.ok(croppedRaw.data[1] > 120, 'right anchor crop should keep the green side');
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    config.INPUT_DIR = oldConfig.INPUT_DIR;
+    config.OUTPUT_DIR = oldConfig.OUTPUT_DIR;
+    config.THUMBNAILS_DIR = oldConfig.THUMBNAILS_DIR;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resize node exposes Photoshop-style controls and keeps service compatibility', () => {
+  const node = read('src/components/nodes/ResizeNode.tsx');
+  const service = read('src/services/imageOps.ts');
+
+  assert.match(node, /图像大小/);
+  assert.match(node, /画布大小/);
+  assert.match(node, /完整设置/);
+  assert.match(node, /resizeKeepAspect/);
+  assert.match(node, /resizeAnchor/);
+  assert.match(node, /resizeDensity/);
+  assert.match(node, /resizeFormat/);
+  assert.match(node, /createPortal/);
+  assert.match(node, /ANCHORS/);
+  assert.match(service, /export function opResize\(imageUrl: string, options\?: ResizeOptions\)/);
+  assert.match(service, /export function opResize\(imageUrl: string, width\?: number, height\?: number, fit\?: string\)/);
+  assert.match(service, /imageSize/);
+  assert.match(service, /canvasSize/);
+});
+
 test('batch processor roadmap records no canvas output and common batch operations', () => {
   const roadmap = read('roadmap.md');
 
