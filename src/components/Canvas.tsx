@@ -26,6 +26,7 @@ import * as LucideIcons from 'lucide-react';
 import { useCanvasStore } from '../stores/canvas';
 import { MATERIAL_CANVAS_DROP_EVENT, type MaterialCanvasDropEventDetail, type MaterialPayload } from '../stores/dragMaterial';
 import { useThemeStore } from '../stores/theme';
+import { useApiKeysStore } from '../stores/apiKeys';
 import { useShortcutStore } from '../stores/shortcuts';
 import { getTemplateMode, resolveThemeTemplate } from '../theme/defaultTemplates';
 import { useRunBusStore } from '../stores/runBus';
@@ -71,6 +72,7 @@ import {
   parseNodeSerialInput,
 } from '../utils/nodeSerialIds';
 import { resolveConnectionByNodeSerialId } from '../utils/connectByNodeSerialId';
+import { advancedProviderModelOptions, advancedProvidersForNode } from '../utils/advancedProviders';
 import { formatShortcutList, matchesAnyShortcut } from '../utils/keyboardShortcuts';
 import { applyNodeAlignment, type NodeAlignAction } from '../utils/nodeAlign';
 import {
@@ -154,7 +156,7 @@ import CodexImageConjureNode from './nodes/CodexImageConjureNode';
 import GrokOAuthAgentNode from './nodes/GrokOAuthAgentNode';
 import DeletableEdge from './edges/DeletableEdge';
 import { NODE_REGISTRY } from '../config/nodeRegistry';
-import type { NodeType, NodeMeta } from '../types/canvas';
+import type { AdvancedProviderConfig, NodeType, NodeMeta } from '../types/canvas';
 import {
   isConnectionValid,
   getNodeOutputs,
@@ -1211,6 +1213,44 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
   },
 };
 
+const EXHIBITION_IMAGE_PROVIDER_NODE_TYPES = new Set<string>([
+  'exhibition-img2img',
+  'exhibition-style-transfer',
+  'exhibition-recolor',
+  'exhibition-lighting-heatmap',
+  'exhibition-creative-image',
+  'exhibition-render-to-elevation',
+  'exhibition-plan-layout',
+  'unit-panel-design',
+  'showcase-interior-design',
+]);
+
+function firstAdvancedImageProviderData(
+  providers: AdvancedProviderConfig[] | undefined,
+): Record<string, any> {
+  const provider = advancedProvidersForNode(providers, 'image')[0];
+  if (!provider) return {};
+  const models = advancedProviderModelOptions(provider, 'image');
+  return {
+    providerSource: provider.protocol,
+    providerId: provider.id,
+    providerModel: models[0] || '',
+    providerParams: {},
+  };
+}
+
+function initialDataForNodeType(
+  type: string,
+  advancedProviders: AdvancedProviderConfig[] | undefined,
+): Record<string, any> {
+  const base = { ...(INITIAL_DATA[type] || {}) };
+  if (!EXHIBITION_IMAGE_PROVIDER_NODE_TYPES.has(type)) return base;
+  return {
+    ...base,
+    ...firstAdvancedImageProviderData(advancedProviders),
+  };
+}
+
 // 可被“批量运行”调起的节点类型集合
 // upload 亦被纳入: 点击 RUN 后会根据已上传素材创建下游 OutputNode (見 UploadNode.handleRun)
 const EXECUTABLE_NODE_TYPES = new Set<string>([
@@ -1823,6 +1863,7 @@ function CanvasInner({
 }: CanvasInnerProps) {
   const { activeId, canvases, loadCanvases, setActive } = useCanvasStore();
   const { theme, style, templateId, customTemplates } = useThemeStore();
+  const advancedProviders = useApiKeysStore((state) => state.settings.advancedProviders);
   const shortcuts = useShortcutStore((s) => s.shortcuts);
   const shortcutText = useCallback((actionId: string) => formatShortcutList(shortcuts[actionId]), [shortcuts]);
   const currentTemplate = useMemo(
@@ -2270,11 +2311,11 @@ function CanvasInner({
         id,
         type,
         position: { x: finalPos.x, y: finalPos.y },
-        data: { ...(INITIAL_DATA[type] || {}), ...(options?.data || {}) },
+        data: { ...initialDataForNodeType(type, advancedProviders), ...(options?.data || {}) },
       };
       setNodes((prev) => [...prev, ...assignActiveNodeSerials([newNode], prev)]);
     },
-    [screenToFlowPosition, nodes, getViewport, setCenter, assignActiveNodeSerials, canEditActiveCanvas, canUseNodeType, warnBlockedNodes]
+    [screenToFlowPosition, nodes, getViewport, setCenter, assignActiveNodeSerials, canEditActiveCanvas, canUseNodeType, warnBlockedNodes, advancedProviders]
   );
 
   const createUploadNodesFromFiles = useCallback(
@@ -4764,7 +4805,7 @@ function CanvasInner({
         id,
         type: meta.type,
         position: picker.flowPos,
-        data: { ...(INITIAL_DATA[meta.type] || {}) },
+        data: initialDataForNodeType(meta.type, advancedProviders),
       };
       const [nodeWithSerial] = assignActiveNodeSerials([newNode], nodes);
       setNodes((prev) => [...prev, nodeWithSerial]);
@@ -4797,7 +4838,7 @@ function CanvasInner({
       );
       setPicker(null);
     },
-    [picker, nodes, assignActiveNodeSerials]
+    [picker, nodes, assignActiveNodeSerials, advancedProviders]
   );
 
   const handleConnectPickerToNodeId = useCallback(() => {

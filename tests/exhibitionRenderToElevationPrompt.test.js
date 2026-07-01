@@ -91,6 +91,10 @@ test('render to elevation prompt keeps intelligent split output visually unified
   assert.match(prompt, /自适应缩放/);
   assert.match(prompt, /不要让任何内容在宽度方向超出画面/);
   assert.match(prompt, /被裁切或贴边/);
+  assert.match(prompt, /高度落位硬性要求/);
+  assert.match(prompt, /主要图像、标题、正文、时间轴、展板信息、灯箱画面/);
+  assert.match(prompt, /不要放在立面图 80cm 以下的位置/);
+  assert.match(prompt, /80cm 以下只允许作为地面延伸/);
   assert.match(prompt, /第 2\/3 段/);
   assert.match(prompt, /工艺落位智能拆分/);
   assert.match(prompt, /不是机械均分切片/);
