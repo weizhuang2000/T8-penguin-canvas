@@ -395,7 +395,7 @@ test('resize route supports Photoshop-style image and canvas sizing', async () =
   mkdirSync(config.THUMBNAILS_DIR, { recursive: true });
 
   const sourcePath = join(config.INPUT_DIR, 'resize-src.png');
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="8"><rect width="12" height="8" fill="#111827"/><rect x="0" y="0" width="4" height="8" fill="#ff3355"/><rect x="8" y="0" width="4" height="8" fill="#22c55e"/></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="8"><rect width="12" height="8" fill="#111827"/><rect x="0" y="0" width="4" height="8" fill="#ff3355"/><rect x="8" y="0" width="4" height="8" fill="#22c55e"/><rect x="4" y="6" width="4" height="2" fill="#3b82f6"/></svg>`;
   writeFileSync(sourcePath, await sharp(Buffer.from(svg)).png().toBuffer());
 
   const app = express();
@@ -454,6 +454,14 @@ test('resize route supports Photoshop-style image and canvas sizing', async () =
       .raw()
       .toBuffer({ resolveWithObject: true });
     assert.ok(croppedRaw.data[1] > 120, 'right anchor crop should keep the green side');
+
+    const bottom = await post({ mode: 'canvas', width: 12, height: 2, anchor: 'bottom', background: '#ffffff', format: 'png' });
+    const bottomRaw = await sharp(outputBuffer(bottom.imageUrl))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const blueIndex = (0 * bottomRaw.info.width + 5) * 4;
+    assert.ok(bottomRaw.data[blueIndex + 2] > 180, 'bottom anchor crop should keep the blue bottom strip');
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     config.INPUT_DIR = oldConfig.INPUT_DIR;

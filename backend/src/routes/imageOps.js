@@ -275,19 +275,29 @@ function resolveCanvasDimensions({ body, originalWidth, originalHeight, density 
   };
 }
 
-function anchorOffset(anchor, original, target) {
+function anchorOffset(anchor, original, target, axis = 'x') {
   const diff = target - original;
   if (diff <= 0) return 0;
+  if (axis === 'y') {
+    if (anchor.startsWith('bottom') || anchor === 'bottom') return diff;
+    if (anchor.startsWith('top') || anchor === 'top') return 0;
+    return Math.floor(diff / 2);
+  }
   if (anchor.endsWith('right') || anchor === 'right') return diff;
-  if (anchor.includes('left') || anchor === 'left') return 0;
+  if (anchor.endsWith('left') || anchor === 'left') return 0;
   return Math.floor(diff / 2);
 }
 
-function cropOffset(anchor, original, target) {
+function cropOffset(anchor, original, target, axis = 'x') {
   const diff = original - target;
   if (diff <= 0) return 0;
+  if (axis === 'y') {
+    if (anchor.startsWith('bottom') || anchor === 'bottom') return diff;
+    if (anchor.startsWith('top') || anchor === 'top') return 0;
+    return Math.floor(diff / 2);
+  }
   if (anchor.endsWith('right') || anchor === 'right') return diff;
-  if (anchor.includes('left') || anchor === 'left') return 0;
+  if (anchor.endsWith('left') || anchor === 'left') return 0;
   return Math.floor(diff / 2);
 }
 
@@ -975,10 +985,10 @@ router.post('/resize', async (req, res) => {
       const background = normalizeHexColorForSharp(body.background || body.canvasSize?.background, '#00000000');
       const transparent = /00$/i.test(background);
       const format = normalizeResizeOutputFormat(body.format, meta.format, transparent);
-      const left = anchorOffset(anchor, originalWidth, target.width);
-      const top = anchorOffset(anchor, originalHeight, target.height);
-      const extractLeft = cropOffset(anchor, originalWidth, target.width);
-      const extractTop = cropOffset(anchor, originalHeight, target.height);
+      const left = anchorOffset(anchor, originalWidth, target.width, 'x');
+      const top = anchorOffset(anchor, originalHeight, target.height, 'y');
+      const extractLeft = cropOffset(anchor, originalWidth, target.width, 'x');
+      const extractTop = cropOffset(anchor, originalHeight, target.height, 'y');
       const workingWidth = Math.min(originalWidth, target.width);
       const workingHeight = Math.min(originalHeight, target.height);
       let pipe = sharp(buf).rotate();
