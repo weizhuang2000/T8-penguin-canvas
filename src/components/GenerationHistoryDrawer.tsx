@@ -27,6 +27,8 @@ import type { GenerationHistoryUserSummary } from '../services/api';
 import { AUDIO_MODELS, IMAGE_MODELS, LLM_MODELS, SUNO_VERSIONS, VIDEO_MODELS } from '../providers/models';
 import { advancedProviderModelOptions, advancedProvidersForNode } from '../utils/advancedProviders';
 import type { SendableMaterial } from '../utils/sendMaterials';
+import { readImageNaturalSize } from '../utils/imageNaturalSize';
+import { formatMediaResolution } from '../utils/mediaMetadata';
 import LoopingVideo from './LoopingVideo';
 
 interface GenerationHistoryDrawerProps {
@@ -330,6 +332,7 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
   const [msg, setMsg] = useState('');
   const [preview, setPreview] = useState<GenerationHistoryItem | null>(null);
   const [infoItem, setInfoItem] = useState<GenerationHistoryItem | null>(null);
+  const [infoResolution, setInfoResolution] = useState<string | null>(null);
   const [gridColumns, setGridColumns] = useState<HistoryGridColumnCount>(() => readHistoryGridColumns());
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectionAnchorId, setSelectionAnchorId] = useState('');
@@ -440,6 +443,28 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
       // Ignore private browsing or storage quota failures.
     }
   }, [gridColumns]);
+
+  useEffect(() => {
+    if (!infoItem || infoItem.kind !== 'image') {
+      setInfoResolution(null);
+      return;
+    }
+    const known = formatMediaResolution(infoItem.width, infoItem.height);
+    if (known) {
+      setInfoResolution(known);
+      return;
+    }
+
+    let cancelled = false;
+    setInfoResolution(null);
+    readImageNaturalSize(infoItem.url).then((size) => {
+      if (cancelled) return;
+      setInfoResolution(size ? formatMediaResolution(size.width, size.height) : '');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [infoItem]);
 
   const activeProject = useMemo(
     () => projects.find((project) => project.id === projectId) || null,
@@ -1017,6 +1042,12 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
                 <span className={`w-16 shrink-0 ${subtle}`}>生成用户</span>
                 <span className="min-w-0 flex-1 break-words">{infoItem.createdByUserName || infoItem.createdByUserId || '未知用户'}</span>
               </div>
+              {infoItem.kind === 'image' && (
+                <div className="flex items-start gap-3">
+                  <span className={`w-16 shrink-0 ${subtle}`}>分辨率</span>
+                  <span className="min-w-0 flex-1 break-words tabular-nums">{infoResolution === null ? '读取中...' : (infoResolution || '-')}</span>
+                </div>
+              )}
               <div className="flex items-start gap-3">
                 <span className={`w-16 shrink-0 ${subtle}`}>Seed</span>
                 <span className="min-w-0 flex-1 break-words">{validSeed(infoItem.seed) > 0 ? validSeed(infoItem.seed) : '-'}</span>

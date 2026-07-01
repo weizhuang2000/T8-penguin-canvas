@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import sharp from 'sharp';
 
 const require = createRequire(import.meta.url);
 const designTeamDbPath = require.resolve('../backend/src/auth/designTeamDb.js');
@@ -25,16 +26,23 @@ function withTempData(fn) {
     OUTPUT_DIR: config.OUTPUT_DIR,
     CANVAS_FILE: config.CANVAS_FILE,
   };
+  const cleanup = () => {
+    Object.assign(config, old);
+    fs.rmSync(tmp, { recursive: true, force: true });
+  };
   config.DATA_DIR = path.join(tmp, 'data');
   config.OUTPUT_DIR = path.join(tmp, 'output');
   config.CANVAS_FILE = path.join(config.DATA_DIR, 'canvas_list.json');
   fs.mkdirSync(config.DATA_DIR, { recursive: true });
   fs.mkdirSync(config.OUTPUT_DIR, { recursive: true });
   try {
-    return fn(tmp);
-  } finally {
-    Object.assign(config, old);
-    fs.rmSync(tmp, { recursive: true, force: true });
+    const result = fn(tmp);
+    if (result && typeof result.then === 'function') return result.finally(cleanup);
+    cleanup();
+    return result;
+  } catch (error) {
+    cleanup();
+    throw error;
   }
 }
 
@@ -106,6 +114,66 @@ test('history keeps full long prompts for copy actions', () => withTempData(() =
   const items = history.listVisibleItems({ id: 'u1', role: 'designer' });
   assert.equal(items[0].prompt, longPrompt);
   assert.ok(items[0].prompt.length > 500);
+}));
+
+test('image history stores and returns generated image resolution', async () => withTempData(async () => {
+  writeCanvases([{ id: 'c1', ownerUserId: 'u1' }]);
+  fs.writeFileSync(
+    path.join(config.OUTPUT_DIR, 'sized.png'),
+    await sharp({
+      create: {
+        width: 320,
+        height: 192,
+        channels: 3,
+        background: '#ffffff',
+      },
+    }).png().toBuffer(),
+  );
+
+  const [created] = history.addHistoryItems(
+    [{ url: '/files/output/sized.png', kind: 'image' }],
+    { canvasId: 'c1' },
+    { id: 'u1', role: 'designer' },
+  );
+  assert.equal(created.width, 320);
+  assert.equal(created.height, 192);
+
+  const [listed] = history.listVisibleItems({ id: 'u1', role: 'designer' });
+  assert.equal(listed.width, 320);
+  assert.equal(listed.height, 192);
+}));
+
+test('legacy image history without stored dimensions is enriched from output file', async () => withTempData(async () => {
+  writeCanvases([{ id: 'c1', ownerUserId: 'u1' }]);
+  fs.writeFileSync(
+    path.join(config.OUTPUT_DIR, 'legacy-sized.png'),
+    await sharp({
+      create: {
+        width: 111,
+        height: 222,
+        channels: 3,
+        background: '#ffffff',
+      },
+    }).png().toBuffer(),
+  );
+  const db = history.readDb();
+  db.items.push({
+    id: 'legacy_sized',
+    kind: 'image',
+    url: '/files/output/legacy-sized.png',
+    fileName: 'legacy-sized.png',
+    title: 'Legacy sized',
+    canvasId: 'c1',
+    createdAt: Date.now(),
+    hidden: false,
+    favorite: false,
+    tags: [],
+  });
+  history.writeDb(db);
+
+  const [listed] = history.listVisibleItems({ id: 'u1', role: 'designer' });
+  assert.equal(listed.width, 111);
+  assert.equal(listed.height, 222);
 }));
 
 test('history items persist, update, and search image seed', () => withTempData(() => {

@@ -1589,6 +1589,8 @@ export interface GenerationHistoryItem {
   model?: string;
   taskId?: string;
   seed?: number;
+  width?: number;
+  height?: number;
   createdAt: number;
   createdByUserId?: string;
   createdByUserName?: string;

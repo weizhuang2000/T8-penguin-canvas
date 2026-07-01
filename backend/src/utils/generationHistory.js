@@ -33,6 +33,11 @@ function normalizeSeed(value) {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 }
 
+function normalizePositiveInt(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+}
+
 function parsePositiveInt(value, fallback = 0, max = MAX_LIST_LIMIT) {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return fallback;
@@ -133,6 +138,8 @@ function normalizeItem(raw) {
     model: safeText(raw.model),
     taskId: safeText(raw.taskId),
     seed: normalizeSeed(raw.seed),
+    width: normalizePositiveInt(raw.width),
+    height: normalizePositiveInt(raw.height),
     createdAt,
     hidden: !!raw.hidden,
     favorite: !!raw.favorite,
@@ -234,6 +241,123 @@ function outputPathForItem(item) {
   return target;
 }
 
+function readPngSize(buffer) {
+  if (buffer.length < 24 || buffer.toString('ascii', 1, 4) !== 'PNG') return null;
+  return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+}
+
+function readGifSize(buffer) {
+  if (buffer.length < 10 || buffer.toString('ascii', 0, 3) !== 'GIF') return null;
+  return { width: buffer.readUInt16LE(6), height: buffer.readUInt16LE(8) };
+}
+
+function readBmpSize(buffer) {
+  if (buffer.length < 26 || buffer.toString('ascii', 0, 2) !== 'BM') return null;
+  return { width: buffer.readUInt32LE(18), height: Math.abs(buffer.readInt32LE(22)) };
+}
+
+function readJpegSize(buffer) {
+  if (buffer.length < 4 || buffer[0] !== 0xff || buffer[1] !== 0xd8) return null;
+  let offset = 2;
+  while (offset + 9 < buffer.length) {
+    if (buffer[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+    const marker = buffer[offset + 1];
+    offset += 2;
+    if (marker === 0xd8 || marker === 0xd9 || marker === 0x01) continue;
+    if (offset + 2 > buffer.length) break;
+    const length = buffer.readUInt16BE(offset);
+    if (length < 2 || offset + length > buffer.length) break;
+    const isSof = (
+      (marker >= 0xc0 && marker <= 0xc3) ||
+      (marker >= 0xc5 && marker <= 0xc7) ||
+      (marker >= 0xc9 && marker <= 0xcb) ||
+      (marker >= 0xcd && marker <= 0xcf)
+    );
+    if (isSof && length >= 7) {
+      return { height: buffer.readUInt16BE(offset + 3), width: buffer.readUInt16BE(offset + 5) };
+    }
+    offset += length;
+  }
+  return null;
+}
+
+function readWebpSize(buffer) {
+  if (buffer.length < 30 || buffer.toString('ascii', 0, 4) !== 'RIFF' || buffer.toString('ascii', 8, 12) !== 'WEBP') return null;
+  const type = buffer.toString('ascii', 12, 16);
+  if (type === 'VP8 ' && buffer.length >= 30) {
+    return {
+      width: buffer.readUInt16LE(26) & 0x3fff,
+      height: buffer.readUInt16LE(28) & 0x3fff,
+    };
+  }
+  if (type === 'VP8L' && buffer.length >= 25) {
+    const b0 = buffer[21];
+    const b1 = buffer[22];
+    const b2 = buffer[23];
+    const b3 = buffer[24];
+    return {
+      width: 1 + (((b1 & 0x3f) << 8) | b0),
+      height: 1 + ((b3 << 6) | ((b2 & 0x0f) << 2) | ((b1 & 0xc0) >> 6)),
+    };
+  }
+  if (type === 'VP8X' && buffer.length >= 30) {
+    return {
+      width: 1 + buffer.readUIntLE(24, 3),
+      height: 1 + buffer.readUIntLE(27, 3),
+    };
+  }
+  return null;
+}
+
+function readAvifSize(buffer) {
+  const text = buffer.subarray(0, Math.min(buffer.length, 2048)).toString('latin1');
+  if (!text.includes('ftyp') || !/(avif|avis|mif1|msf1)/.test(text)) return null;
+  const index = buffer.indexOf(Buffer.from('ispe'));
+  if (index < 4 || index + 20 > buffer.length) return null;
+  return { width: buffer.readUInt32BE(index + 12), height: buffer.readUInt32BE(index + 16) };
+}
+
+function readImageSizeFromBuffer(buffer) {
+  const size = readPngSize(buffer)
+    || readJpegSize(buffer)
+    || readWebpSize(buffer)
+    || readGifSize(buffer)
+    || readBmpSize(buffer)
+    || readAvifSize(buffer);
+  const width = normalizePositiveInt(size?.width);
+  const height = normalizePositiveInt(size?.height);
+  return width && height ? { width, height } : { width: 0, height: 0 };
+}
+
+function readLocalImageSize(item) {
+  if (!item || item.kind !== 'image') return { width: 0, height: 0 };
+  const target = outputPathForItem(item);
+  if (!target || !fs.existsSync(target)) return { width: 0, height: 0 };
+  let handle = null;
+  try {
+    const stat = fs.statSync(target);
+    const length = Math.min(Math.max(0, stat.size || 0), 1024 * 1024);
+    if (!length) return { width: 0, height: 0 };
+    const buffer = Buffer.alloc(length);
+    handle = fs.openSync(target, 'r');
+    const bytesRead = fs.readSync(handle, buffer, 0, length, 0);
+    return readImageSizeFromBuffer(bytesRead === length ? buffer : buffer.subarray(0, bytesRead));
+  } catch {
+    return { width: 0, height: 0 };
+  } finally {
+    if (handle != null) {
+      try {
+        fs.closeSync(handle);
+      } catch {
+        // Ignore cleanup errors.
+      }
+    }
+  }
+}
+
 function findOrMaterializeItem(db, id) {
   let item = db.items.find((entry) => entry.id === id);
   if (item) return item;
@@ -256,9 +380,18 @@ function decorateItem(item, user, canvases, seedReaderCache = null) {
     }
     fallbackSeed = seedReader(item.sourceNodeId);
   }
+  let width = item.width;
+  let height = item.height;
+  if (item.kind === 'image' && (!width || !height)) {
+    const size = readLocalImageSize(item);
+    width = size.width;
+    height = size.height;
+  }
   return {
     ...item,
     seed: fallbackSeed,
+    width,
+    height,
     access: {
       canView: true,
       canManage,
@@ -302,12 +435,17 @@ function addHistoryItems(items, context = {}, user = null) {
       model: safeText(raw?.model || context.model),
       taskId: safeText(raw?.taskId || context.taskId),
       seed: normalizeSeed(raw?.seed ?? context.seed),
+      width: normalizePositiveInt(raw?.width ?? context.width),
+      height: normalizePositiveInt(raw?.height ?? context.height),
       createdByUserId: user?.id != null ? String(user.id) : '',
       createdByUserName: safeText(user?.name || user?.realName || user?.username),
       createdByUserRole: safeText(user?.role),
     };
     if (existing) {
       Object.assign(existing, Object.fromEntries(Object.entries(patch).filter(([key, value]) => value !== '' && (key !== 'seed' || value > 0))));
+      if (existing.kind === 'image' && (!existing.width || !existing.height)) {
+        Object.assign(existing, readLocalImageSize(existing));
+      }
       existing.hidden = false;
       out.push(existing);
     } else {
@@ -317,6 +455,9 @@ function addHistoryItems(items, context = {}, user = null) {
         createdAt: now(),
       });
       if (!item) continue;
+      if (item.kind === 'image' && (!item.width || !item.height)) {
+        Object.assign(item, readLocalImageSize(item));
+      }
       db.items.push(item);
       byUrl.set(item.url, item);
       out.push(item);
@@ -344,7 +485,7 @@ function scanOutputItems() {
     else if (VIDEO_EXT.has(ext)) kind = 'video';
     else if (AUDIO_EXT.has(ext)) kind = 'audio';
     if (!kind) continue;
-    entries.push(normalizeItem({
+    const item = normalizeItem({
       id: `scan_${crypto.createHash('sha1').update(name).digest('hex').slice(0, 16)}`,
       kind,
       url: urlFromFilename(name),
@@ -352,7 +493,9 @@ function scanOutputItems() {
       title: name,
       canvasId: UNARCHIVED_PROJECT_ID,
       createdAt: stat.mtimeMs || stat.ctimeMs || now(),
-    }));
+    });
+    if (item?.kind === 'image') Object.assign(item, readLocalImageSize(item));
+    entries.push(item);
   }
   return entries.filter(Boolean);
 }

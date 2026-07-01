@@ -26,6 +26,10 @@ test('generation history drawer exposes bulk selection and actions', () => {
   assert.match(drawer, /deleteGenerationHistoryItem\(item\.id,\s*'delete-file'\)/);
   assert.match(drawer, /data-drag-materials/);
   assert.match(drawer, /bulkDragMaterialsForHistoryItems/);
+  assert.match(drawer, /readImageNaturalSize/);
+  assert.match(drawer, /formatMediaResolution/);
+  assert.match(drawer, /分辨率/);
+  assert.match(drawer, /infoResolution/);
 });
 
 test('bulk history drag payload is inserted into canvas as upload materials', () => {
