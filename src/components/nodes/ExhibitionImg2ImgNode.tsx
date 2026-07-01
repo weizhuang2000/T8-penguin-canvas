@@ -1688,6 +1688,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
   const sizeLevel = d.sizeLevel || modelDef.defaultSize || '2K';
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
   const generationCount = clampNumber(d.generationCount, MIN_IMAGE_COUNT, MAX_IMAGE_COUNT, 1);
+  const renderElevationTogether = d.renderElevationTogether === true;
   const outputImageUrls = Array.isArray(d.imageUrls) && d.imageUrls.length ? d.imageUrls.filter(Boolean) : (d.imageUrl ? [d.imageUrl] : []);
   const outputImageNames = Array.isArray(d.imageNames) ? d.imageNames.map((item: unknown) => String(item || '').trim()) : [];
   const imageName = normalizeExhibitionImageName(d.imageName);
@@ -2048,6 +2049,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       spatialInputMode,
       planCameraDescription: planCameraPromptDescription,
       referenceRoleHints,
+      renderElevationTogether,
     });
   }, [
     activeColorMaterialReferenceImage,
@@ -2069,6 +2071,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
     promptColorMaterial,
     referenceRoleHints,
     resolvedPromptInputs,
+    renderElevationTogether,
     selectedCrafts,
     selectedExcludeIds,
     spatialInputMode,
@@ -2109,8 +2112,9 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       spatialInputMode,
       planCameraDescription: planCameraPromptDescription,
       referenceRoleHints,
+      renderElevationTogether,
     }),
-    [activeColorMaterialReferenceImage, colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPriorityMode, colorMaterialReferenceMode, craftPresets, d.density, d.dimensions, excludeOptions, hasColorMaterialPreset, planCameraPromptDescription, priorityOrder, promptColorMaterial, referenceRoleHints, resolvedPromptInputs, selectedExcludeIds, spatialInputMode, spaceLightingEnabled, spaceLightingLevel, wallContentPrompt],
+    [activeColorMaterialReferenceImage, colorMaterialMarkSettings.position, colorMaterialMarkSettings.text, colorMaterialPriorityMode, colorMaterialReferenceMode, craftPresets, d.density, d.dimensions, excludeOptions, hasColorMaterialPreset, planCameraPromptDescription, priorityOrder, promptColorMaterial, referenceRoleHints, renderElevationTogether, resolvedPromptInputs, selectedExcludeIds, spatialInputMode, spaceLightingEnabled, spaceLightingLevel, wallContentPrompt],
   );
 
   const prompt = useMemo(
@@ -3843,16 +3847,38 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
                 onChange={(event) => update({ generationCount: clampNumber(event.target.value, MIN_IMAGE_COUNT, MAX_IMAGE_COUNT, 1) })}
               />
             </div>
-            <input
-              type="range"
-              min={MIN_IMAGE_COUNT}
-              max={MAX_IMAGE_COUNT}
-              step={1}
-              value={generationCount}
-              disabled={isReadonly || busy}
-              className="h-1 w-full accent-cyan-300"
-              onChange={(event) => update({ generationCount: clampNumber(event.target.value, MIN_IMAGE_COUNT, MAX_IMAGE_COUNT, 1) })}
-            />
+            <div className="flex items-center gap-2">
+              <label
+                className={`flex h-7 shrink-0 items-center gap-1.5 rounded border px-2 text-[10px] transition-all ${
+                  renderElevationTogether
+                    ? 'border-cyan-300/45 bg-cyan-300/15 text-cyan-100'
+                    : 'border-white/10 bg-black/20 text-white/55'
+                } ${isReadonly || busy ? 'cursor-not-allowed opacity-55' : 'cursor-pointer hover:bg-white/10'}`}
+                title="开启后，每次仍输出一张图，但图内同时包含效果图与对应正投影立面"
+              >
+                <input
+                  type="checkbox"
+                  className="sr-only"
+                  checked={renderElevationTogether}
+                  disabled={isReadonly || busy}
+                  onChange={(event) => update({ renderElevationTogether: event.target.checked })}
+                />
+                <span className={`relative h-3.5 w-6 rounded-full transition-colors ${renderElevationTogether ? 'bg-cyan-300/80' : 'bg-white/15'}`}>
+                  <span className={`absolute top-0.5 h-2.5 w-2.5 rounded-full bg-white transition-transform ${renderElevationTogether ? 'translate-x-3' : 'translate-x-0.5'}`} />
+                </span>
+                <span className="whitespace-nowrap">同时出立面</span>
+              </label>
+              <input
+                type="range"
+                min={MIN_IMAGE_COUNT}
+                max={MAX_IMAGE_COUNT}
+                step={1}
+                value={generationCount}
+                disabled={isReadonly || busy}
+                className="h-1 min-w-0 flex-1 accent-cyan-300"
+                onChange={(event) => update({ generationCount: clampNumber(event.target.value, MIN_IMAGE_COUNT, MAX_IMAGE_COUNT, 1) })}
+              />
+            </div>
           </div>
 
           <div>

@@ -661,6 +661,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     sizeLevel: '2K',
     outputFormat: 'jpg',
     generationCount: 1,
+    renderElevationTogether: false,
     priorityOrder: ['structureAnnotations', 'craftLayout', 'colorMaterialReference'],
     selectedCrafts: ['panel', 'dimensional-letters', 'soft-film-lightbox'],
     craftRandomCounts: {},

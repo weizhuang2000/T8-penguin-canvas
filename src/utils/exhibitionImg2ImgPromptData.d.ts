@@ -44,6 +44,7 @@ export interface ExhibitionImg2ImgPromptValues {
   referenceRoleHints?: Array<{ token?: string; role?: 'structure' | 'plan-layout' | 'color-material-reference' | 'exhibit-reference'; index?: number }>;
   spatialInputMode?: 'structure' | 'plan-camera';
   planCameraDescription?: string;
+  renderElevationTogether?: boolean;
 }
 
 export const EXHIBITION_IMG2IMG_PRIORITY: ExhibitionImg2ImgPriorityMeta[];

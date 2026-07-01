@@ -116,9 +116,11 @@ test('exhibition img2img craft presets are grouped by category', () => {
   assert.match(node, /min=\{-1\}/);
   assert.match(canvas, /craftRandomCounts: \{\}/);
   assert.match(canvas, /generationCount: 1/);
+  assert.match(canvas, /renderElevationTogether: false/);
   assert.match(canvas, /imageName: ''/);
   assert.match(canvas, /imageNames: \[\]/);
   assert.match(node, /const generationCount = clampNumber\(d\.generationCount, MIN_IMAGE_COUNT, MAX_IMAGE_COUNT, 1\)/);
+  assert.match(node, /同时出立面/);
   assert.match(node, /for \(let roundIndex = 1; roundIndex <= generationCount; roundIndex \+= 1\)/);
   assert.match(node, /completeRound\(roundIndex/);
   assert.match(node, /n: 1/);
@@ -135,6 +137,27 @@ test('exhibition img2img craft presets are grouped by category', () => {
   assert.match(proxy, /const body = \{ prompt, model: finalApiModel, aspect_ratio: isAuto \? '1:1' : ar, n: imageCount \}/);
   assert.match(backend, /ELEVATION_CRAFT_CATEGORIES/);
   assert.match(backend, /category: ELEVATION_CRAFT_CATEGORIES\.has\(category\) \? category : '其它'/);
+});
+
+test('exhibition img2img can render an elevation together in the same image', () => {
+  const disabled = buildExhibitionImg2ImgPrompt({
+    wallContentPrompt: '立面 1｜序厅\n内容摘要：品牌发展脉络\n工艺配置：展板、立体字',
+  });
+  assert.doesNotMatch(disabled, /同时出立面/);
+  assert.doesNotMatch(disabled, /同一张画面内必须同时包含/);
+
+  const enabled = buildExhibitionImg2ImgPrompt({
+    renderElevationTogether: true,
+    wallContentPrompt: '立面 1｜序厅\n内容摘要：品牌发展脉络\n工艺配置：展板、立体字',
+  });
+  assert.match(enabled, /最终输出仍然只能是一张图/);
+  assert.match(enabled, /同一张画面内必须同时包含“室内透视效果图”和“对应正投影\/平面立面图”/);
+  assert.match(enabled, /参考“立面提示词”节点的彩立面与工艺排版逻辑/);
+  assert.match(enabled, /只表达当前效果图中对应的可见或指定立面范围/);
+  assert.match(enabled, /不得把立面拆成第二个文件或第二张输出/);
+  assert.match(enabled, /不得把同一工艺模块拆到多个立面区块中/);
+  assert.doesNotMatch(enabled, /额外生成一张独立立面图/);
+  assert.doesNotMatch(enabled, /多张立面图/);
 });
 
 test('exhibition img2img prompt can use plan layout camera mode', () => {
