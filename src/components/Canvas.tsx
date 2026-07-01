@@ -107,6 +107,7 @@ import AudioNode from './nodes/AudioNode';
 import RunningHubNode from './nodes/RunningHubNode';
 import RhConfigNode from './nodes/RhConfigNode';
 import RHToolsNode from './nodes/RHToolsNode';
+import RHToolboxNode from './nodes/RHToolboxNode';
 import ResizeNode from './nodes/ResizeNode';
 import UpscaleNode from './nodes/UpscaleNode';
 import GridCropNode from './nodes/GridCropNode';
@@ -183,6 +184,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'rh-config': RhConfigNode,
   // RH 工具节点：内置启动器 + 应用运行面板（v1.2.10+）
   'rh-tools': RHToolsNode,
+  'rh-toolbox': RHToolboxNode,
   // Special (5)
   'multi-angle-3d': PresetImageNode,
   'panorama-720': PresetImageNode,
@@ -1178,6 +1180,33 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     audioUrl: '',
   },
   // 循环器: 默认串联 + image kind
+  'rh-toolbox': {
+    rhToolboxMajorCategoryId: 'all',
+    rhToolboxCategoryId: 'all',
+    rhToolboxSearchQuery: '',
+    rhToolboxActiveToolId: '',
+    rhToolboxUserParams: {},
+    rhToolboxUserParamMentions: {},
+    rhToolboxTextInputs: {},
+    rhToolboxTextMentions: {},
+    rhToolboxLocalInputs: {},
+    promptMentions: [],
+    instanceType: '',
+    status: 'idle',
+    taskId: '',
+    urls: [],
+    imageUrl: '',
+    imageUrls: [],
+    videoUrl: '',
+    videoUrls: [],
+    audioUrl: '',
+    audioUrls: [],
+    outputText: '',
+    text: '',
+    texts: [],
+    textSegments: [],
+    error: '',
+  },
   loop: { mode: 'serial', kind: 'image', outputs: [], progress: { done: 0, total: 0, ok: 0, fail: 0 } },
   // 从合集获取: 默认 image + 第 1 个
   'pick-from-set': { pickKind: 'image', pickIndex: 1 },
@@ -1283,7 +1312,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'multi-angle-3d', 'panorama-720', 'penguin-portrait',
   'video', 'seedance', 'audio', 'llm', 'runninghub', 'runninghub-wallet',
   // v1.2.10.1: rh-tools 与 RunningHub 同质，同样可被批量运行调起
-  'rh-tools',
+  'rh-tools', 'rh-toolbox',
   'resize', 'upscale', 'grid-crop', 'mark', 'remove-bg', 'combine', 'image-compare', 'drawing-board',
   'frame-extractor', 'frame-pair',
   'upload',
