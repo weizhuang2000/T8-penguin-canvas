@@ -66,6 +66,20 @@ test('render to elevation supplement uses stable prompt textarea for IME input',
   assert.match(node, /<PromptTextarea[\s\S]*value=\{String\(d\.supplement \|\| ''\)\}[\s\S]*onValueChange=\{\(value\) => update\(\{ supplement: value \}\)\}/);
 });
 
+test('render to elevation retries transient gateway errors between multi elevation generation', () => {
+  const node = readFileSync(new URL('../src/components/nodes/ExhibitionRenderToElevationNode.tsx', import.meta.url), 'utf8');
+  assert.match(node, /TRANSIENT_GENERATION_RETRIES = 3/);
+  assert.match(node, /INTER_ELEVATION_COOLDOWN_MS/);
+  assert.match(node, /function isTransientGenerationError/);
+  assert.match(node, /接口返回非 JSON\|HTTP\\s\*502\|502\\.3\|Bad Gateway/);
+  assert.match(node, /retryTransientGeneration\(\(\) => generateExternalImage/);
+  assert.match(node, /retryTransientGeneration\(\(\) => queryExternalImageStatus/);
+  assert.match(node, /retryTransientGeneration\(\(\) => submitImageAsync/);
+  assert.match(node, /retryTransientGeneration\(\(\) => queryImageStatus/);
+  assert.match(node, /等待上游缓冲/);
+  assert.match(node, /当前生图模型\/平台的上游网关临时错误/);
+});
+
 test('render to elevation node supports action bar, compact form and canvas dragging', () => {
   const node = readFileSync(new URL('../src/components/nodes/ExhibitionRenderToElevationNode.tsx', import.meta.url), 'utf8');
   const actionBar = readFileSync(new URL('../src/components/NodeActionBar.tsx', import.meta.url), 'utf8');

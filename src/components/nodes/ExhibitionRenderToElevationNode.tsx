@@ -38,6 +38,9 @@ const PRIMARY_BUTTON = 'inline-flex h-8 items-center justify-center gap-1 rounde
 const MAX_IMAGE_SEED = 2147483647;
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
+const TRANSIENT_GENERATION_RETRIES = 3;
+const TRANSIENT_GENERATION_RETRY_DELAYS = [2200, 5200, 9000];
+const INTER_ELEVATION_COOLDOWN_MS = 1800;
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
   const number = Number(value);
@@ -52,6 +55,34 @@ function randomImageSeed(): number {
     return (values[0] % MAX_IMAGE_SEED) + 1;
   }
   return Math.floor(Math.random() * MAX_IMAGE_SEED) + 1;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientGenerationError(error: unknown): boolean {
+  const message = String((error as any)?.message || error || '');
+  return /接口返回非 JSON|HTTP\s*502|502\.3|Bad Gateway|gateway|上游|代理临时错误|timeout|timed out|ECONNRESET|ECONNREFUSED|ETIMEDOUT/i.test(message);
+}
+
+async function retryTransientGeneration<T>(
+  action: () => Promise<T>,
+  onRetry?: (attempt: number, delayMs: number, error: unknown) => void,
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= TRANSIENT_GENERATION_RETRIES; attempt += 1) {
+    try {
+      return await action();
+    } catch (error) {
+      lastError = error;
+      if (attempt >= TRANSIENT_GENERATION_RETRIES || !isTransientGenerationError(error)) throw error;
+      const delayMs = TRANSIENT_GENERATION_RETRY_DELAYS[Math.min(attempt, TRANSIENT_GENERATION_RETRY_DELAYS.length - 1)];
+      onRetry?.(attempt + 1, delayMs, error);
+      await sleep(delayMs);
+    }
+  }
+  throw lastError;
 }
 
 function textValuesFromData(data: any): string[] {
@@ -254,6 +285,10 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
       update({ status: 'generating', progress: `0/${sections.length}` });
       for (let index = 0; index < sections.length; index += 1) {
         if (abortRef.current) throw new Error('任务已取消');
+        if (index > 0) {
+          update({ status: 'generating', progress: `等待上游缓冲 ${index + 1}/${sections.length}` });
+          await sleep(INTER_ELEVATION_COOLDOWN_MS);
+        }
         const section = sections[index];
         const runSeed = index === 0 ? latestSeed : randomImageSeed();
         latestSeed = runSeed;
@@ -278,11 +313,16 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
         let urls: string[] = [];
         let remoteUrls: string[] | undefined;
         let taskId = '';
+        const onTransientRetry = (attempt: number, delayMs: number, error: unknown) => {
+          const reason = String((error as any)?.message || error || '').replace(/\s+/g, ' ').slice(0, 90);
+          update({ progress: `${index + 1}/${sections.length} 上游临时错误，${Math.round(delayMs / 1000)} 秒后重试 ${attempt}/${TRANSIENT_GENERATION_RETRIES}`, error: reason });
+        };
         if (isExternalSelected && providerSelection.provider) {
+          const selectedProvider = providerSelection.provider;
           if (!externalProviderModel) throw new Error('扩展平台未配置可用图像模型');
           const size = externalImageSizeFor(aspectRatio, sizeLevel);
-          let res = await generateExternalImage({
-            providerId: providerSelection.provider.id,
+          let res = await retryTransientGeneration(() => generateExternalImage({
+            providerId: selectedProvider.id,
             providerModel: externalProviderModel,
             model: externalProviderModel,
             prompt,
@@ -302,19 +342,19 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
             },
             historyContext,
             async: true,
-          });
+          }), onTransientRetry);
           if ((!res.imageUrls?.length) && res.taskId && (res.code === 'running' || res.status === 'running')) {
             let pollingTaskId = res.taskId;
             for (let pollIndex = 0; pollIndex < EXTERNAL_IMAGE_MAX_POLLS; pollIndex += 1) {
               if (abortRef.current) throw new Error('任务已取消');
-              await new Promise((resolve) => setTimeout(resolve, EXTERNAL_IMAGE_POLL_INTERVAL_MS));
-              res = await queryExternalImageStatus({
-                providerId: providerSelection.provider.id,
+              await sleep(EXTERNAL_IMAGE_POLL_INTERVAL_MS);
+              res = await retryTransientGeneration(() => queryExternalImageStatus({
+                providerId: selectedProvider.id,
                 providerModel: externalProviderModel,
                 taskId: pollingTaskId,
                 outputFormat,
                 historyContext,
-              });
+              }), onTransientRetry);
               pollingTaskId = res.taskId || pollingTaskId;
               update({ progress: `${index + 1}/${sections.length} · ${Math.min(99, Math.round(((pollIndex + 1) / EXTERNAL_IMAGE_MAX_POLLS) * 100))}%`, taskId: pollingTaskId });
               if (res.imageUrls?.length || (res.code && res.code !== 'running')) break;
@@ -324,7 +364,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
           remoteUrls = res.remoteImageUrls;
           taskId = res.taskId || '';
         } else {
-          const submit = await submitImageAsync({
+          const submit = await retryTransientGeneration(() => submitImageAsync({
             model: modelDef.id,
             apiModel,
             paramKind: modelDef.paramKind,
@@ -336,18 +376,19 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
             outputFormat,
             seed: runSeed,
             historyContext,
-          });
+          }), onTransientRetry);
           if (submit.sync && submit.urls?.length) {
             urls = submit.urls;
           } else {
             if (!submit.taskId) throw new Error('未获取到任务 ID');
-            taskId = submit.taskId;
+            const pollingTaskId = submit.taskId;
+            taskId = pollingTaskId;
             let lastProgress = submit.progress || '5%';
             update({ progress: `${index + 1}/${sections.length} · ${lastProgress}`, taskId });
             for (let pollIndex = 0; pollIndex < 1800; pollIndex += 1) {
               if (abortRef.current) throw new Error('任务已取消');
-              await new Promise((resolve) => setTimeout(resolve, 2000));
-              const q = await queryImageStatus(submit.taskId, apiModel, outputFormat, historyContext);
+              await sleep(2000);
+              const q = await retryTransientGeneration(() => queryImageStatus(pollingTaskId, apiModel, outputFormat, historyContext), onTransientRetry);
               if (q.progress && q.progress !== lastProgress) {
                 lastProgress = q.progress;
                 update({ progress: `${index + 1}/${sections.length} · ${q.progress}` });
@@ -396,7 +437,10 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
       update({ status: 'success', progress: '100%', taskId: latestTaskId });
       taskCompletionSound.notifyComplete(id, 'image');
     } catch (error: any) {
-      const message = error?.message || '生成失败';
+      const rawMessage = error?.message || '生成失败';
+      const message = isTransientGenerationError(error)
+        ? `${rawMessage}。这通常是当前生图模型/平台的上游网关临时错误，节点已自动重试；仍失败时建议稍后重试、减少连续立面数量，或切换到其他可用模型。`
+        : rawMessage;
       logBus.error(`${src}失败：${message}`, src);
       update({ status: 'error', error: message });
       throw error;
