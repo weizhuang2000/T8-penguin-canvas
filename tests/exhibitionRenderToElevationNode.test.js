@@ -42,6 +42,8 @@ test('render to elevation component exposes text and image handles', () => {
   assert.match(node, /id="document-text"/);
   assert.match(node, /id="reference-image"/);
   assert.match(node, /id="elevation-form-reference"/);
+  assert.match(node, /FORM_REFERENCE_HANDLE_COLOR = '#f472b6'/);
+  assert.match(node, /id="elevation-form-reference"[\s\S]*background: FORM_REFERENCE_HANDLE_COLOR/);
   assert.match(node, /useInputTextByHandle\(id, 'document-text'\)/);
   assert.match(node, /useInputImageByHandle\(id, 'reference-image'\)/);
   assert.match(node, /useInputImageByHandle\(id, 'elevation-form-reference'\)/);
@@ -69,14 +71,21 @@ test('render to elevation supplement uses stable prompt textarea for IME input',
 test('render to elevation retries transient gateway errors between multi elevation generation', () => {
   const node = readFileSync(new URL('../src/components/nodes/ExhibitionRenderToElevationNode.tsx', import.meta.url), 'utf8');
   assert.match(node, /TRANSIENT_GENERATION_RETRIES = 3/);
-  assert.match(node, /INTER_ELEVATION_COOLDOWN_MS/);
+  assert.match(node, /NEXT_ELEVATION_SETTLE_MS = 6000/);
+  assert.match(node, /GENERATED_IMAGE_READY_RETRIES = 8/);
+  assert.match(node, /function waitForGeneratedImageReady/);
+  assert.match(node, /fetch\(url, \{ method: 'GET', cache: 'no-store' \}\)/);
+  assert.match(node, /generateOneElevation = async/);
   assert.match(node, /function isTransientGenerationError/);
   assert.match(node, /接口返回非 JSON\|HTTP\\s\*502\|502\\.3\|Bad Gateway/);
   assert.match(node, /retryTransientGeneration\(\(\) => generateExternalImage/);
   assert.match(node, /retryTransientGeneration\(\(\) => queryExternalImageStatus/);
   assert.match(node, /retryTransientGeneration\(\(\) => submitImageAsync/);
   assert.match(node, /retryTransientGeneration\(\(\) => queryImageStatus/);
-  assert.match(node, /等待上游缓冲/);
+  assert.match(node, /if \(res\.imageUrls\?\.length\) break/);
+  assert.match(node, /任务完成，等待图片 URL 返回/);
+  assert.match(node, /waitForGeneratedImageReady\(url/);
+  assert.match(node, /等待资源稳定后提交下一张/);
   assert.match(node, /当前生图模型\/平台的上游网关临时错误/);
 });
 

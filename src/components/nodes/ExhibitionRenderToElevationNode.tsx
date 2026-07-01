@@ -35,12 +35,16 @@ import { useUpdateNodeData } from './useUpdateNodeData';
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
 const PRIMARY_BUTTON = 'inline-flex h-8 items-center justify-center gap-1 rounded bg-cyan-400 px-3 text-[11px] font-medium text-slate-950 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50';
+const FORM_REFERENCE_HANDLE_COLOR = '#f472b6';
 const MAX_IMAGE_SEED = 2147483647;
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
 const TRANSIENT_GENERATION_RETRIES = 3;
 const TRANSIENT_GENERATION_RETRY_DELAYS = [2200, 5200, 9000];
 const INTER_ELEVATION_COOLDOWN_MS = 1800;
+const GENERATED_IMAGE_READY_RETRIES = 8;
+const GENERATED_IMAGE_READY_INTERVAL_MS = 1500;
+const NEXT_ELEVATION_SETTLE_MS = 6000;
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
   const number = Number(value);
@@ -83,6 +87,26 @@ async function retryTransientGeneration<T>(
     }
   }
   throw lastError;
+}
+
+async function waitForGeneratedImageReady(url: string, onWaiting?: (attempt: number) => void): Promise<void> {
+  if (!url) throw new Error('生成完成但未返回图片 URL');
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= GENERATED_IMAGE_READY_RETRIES; attempt += 1) {
+    try {
+      onWaiting?.(attempt);
+      const response = await fetch(url, { method: 'GET', cache: 'no-store' });
+      if (response.ok) return;
+      lastError = new Error(`HTTP ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+    if (attempt < GENERATED_IMAGE_READY_RETRIES) {
+      await sleep(GENERATED_IMAGE_READY_INTERVAL_MS);
+    }
+  }
+  const detail = String((lastError as any)?.message || lastError || 'unknown');
+  throw new Error(`生成图片已返回但暂不可访问：${detail}`);
 }
 
 function textValuesFromData(data: any): string[] {
@@ -283,13 +307,8 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
     try {
       const sections = await analyzeElevations();
       update({ status: 'generating', progress: `0/${sections.length}` });
-      for (let index = 0; index < sections.length; index += 1) {
-        if (abortRef.current) throw new Error('任务已取消');
-        if (index > 0) {
-          update({ status: 'generating', progress: `等待上游缓冲 ${index + 1}/${sections.length}` });
-          await sleep(INTER_ELEVATION_COOLDOWN_MS);
-        }
-        const section = sections[index];
+      const generationImages = [referenceImage, formReferenceImage].filter(Boolean);
+      const generateOneElevation = async (section: RenderToElevationSection, index: number, total: number) => {
         const runSeed = index === 0 ? latestSeed : randomImageSeed();
         latestSeed = runSeed;
         const name = outputName(section);
@@ -300,22 +319,21 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
           referenceToken: '@img1',
           formReferenceToken: formReferenceImage ? '@img2' : '',
         });
-        const generationImages = [referenceImage, formReferenceImage].filter(Boolean);
         const historyContext = {
           canvasId: activeCanvasId,
           sourceNodeId: id,
           sourceNodeType: 'exhibition-render-to-elevation',
           seed: runSeed,
-          nodeTitle: `效果图转立面 ${index + 1}/${sections.length}`,
+          nodeTitle: `效果图转立面 ${index + 1}/${total}`,
           outputTitle: name,
         };
-        update({ status: 'generating', progress: `提交 ${index + 1}/${sections.length}`, lastPrompt: prompt, lastSeed: runSeed });
+        update({ status: 'generating', progress: `提交 ${index + 1}/${total}`, lastPrompt: prompt, lastSeed: runSeed });
         let urls: string[] = [];
         let remoteUrls: string[] | undefined;
         let taskId = '';
         const onTransientRetry = (attempt: number, delayMs: number, error: unknown) => {
           const reason = String((error as any)?.message || error || '').replace(/\s+/g, ' ').slice(0, 90);
-          update({ progress: `${index + 1}/${sections.length} 上游临时错误，${Math.round(delayMs / 1000)} 秒后重试 ${attempt}/${TRANSIENT_GENERATION_RETRIES}`, error: reason });
+          update({ progress: `${index + 1}/${total} 上游临时错误，${Math.round(delayMs / 1000)} 秒后重试 ${attempt}/${TRANSIENT_GENERATION_RETRIES}`, error: reason });
         };
         if (isExternalSelected && providerSelection.provider) {
           const selectedProvider = providerSelection.provider;
@@ -356,8 +374,12 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
                 historyContext,
               }), onTransientRetry);
               pollingTaskId = res.taskId || pollingTaskId;
-              update({ progress: `${index + 1}/${sections.length} · ${Math.min(99, Math.round(((pollIndex + 1) / EXTERNAL_IMAGE_MAX_POLLS) * 100))}%`, taskId: pollingTaskId });
-              if (res.imageUrls?.length || (res.code && res.code !== 'running')) break;
+              update({ progress: `${index + 1}/${total} · ${Math.min(99, Math.round(((pollIndex + 1) / EXTERNAL_IMAGE_MAX_POLLS) * 100))}%`, taskId: pollingTaskId });
+              if (res.imageUrls?.length) break;
+              const externalStatus = String(res.code || res.status || '').toLowerCase();
+              if (externalStatus === 'failed' || externalStatus === 'failure' || externalStatus === 'error') {
+                throw new Error(res.error || '任务失败');
+              }
             }
           }
           urls = res.imageUrls || [];
@@ -384,19 +406,23 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
             const pollingTaskId = submit.taskId;
             taskId = pollingTaskId;
             let lastProgress = submit.progress || '5%';
-            update({ progress: `${index + 1}/${sections.length} · ${lastProgress}`, taskId });
+            update({ progress: `${index + 1}/${total} · ${lastProgress}`, taskId });
             for (let pollIndex = 0; pollIndex < 1800; pollIndex += 1) {
               if (abortRef.current) throw new Error('任务已取消');
               await sleep(2000);
               const q = await retryTransientGeneration(() => queryImageStatus(pollingTaskId, apiModel, outputFormat, historyContext), onTransientRetry);
               if (q.progress && q.progress !== lastProgress) {
                 lastProgress = q.progress;
-                update({ progress: `${index + 1}/${sections.length} · ${q.progress}` });
+                update({ progress: `${index + 1}/${total} · ${q.progress}` });
               }
               const qStatus = String(q.status || '').toLowerCase();
               if (qStatus === 'completed' || qStatus === 'success' || qStatus === 'done') {
-                urls = q.urls || [];
-                break;
+                if (q.urls?.length) {
+                  urls = q.urls;
+                  break;
+                }
+                update({ progress: `${index + 1}/${total} 任务完成，等待图片 URL 返回`, taskId: pollingTaskId });
+                continue;
               }
               if (qStatus === 'failed' || qStatus === 'failure' || qStatus === 'error') {
                 throw new Error(q.error || '任务失败');
@@ -406,10 +432,10 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
         }
         const url = urls.find(Boolean);
         if (!url) throw new Error(`${name} 生成完成但未返回图片`);
-        generatedUrls.push(url);
-        generatedNames.push(name);
-        if (taskId) latestTaskId = taskId;
-        elevationResults.push({
+        await waitForGeneratedImageReady(url, (attempt) => {
+          update({ progress: `${index + 1}/${total} 图片写入确认 ${attempt}/${GENERATED_IMAGE_READY_RETRIES}`, taskId });
+        });
+        return {
           ...section,
           name,
           imageUrl: url,
@@ -417,7 +443,17 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
           prompt,
           seed: runSeed,
           taskId,
-        });
+        };
+      };
+
+      for (let index = 0; index < sections.length; index += 1) {
+        if (abortRef.current) throw new Error('任务已取消');
+        const result = await generateOneElevation(sections[index], index, sections.length);
+        const url = result.imageUrl;
+        generatedUrls.push(url);
+        generatedNames.push(result.name);
+        if (result.taskId) latestTaskId = result.taskId;
+        elevationResults.push(result);
         update({
           status: index + 1 >= sections.length ? 'success' : 'generating',
           progress: `${index + 1}/${sections.length} 完成`,
@@ -427,12 +463,16 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
           elevationResults: elevationResults.slice(),
           parsedElevations: sections,
           referenceImages: generationImages,
-          lastPrompt: prompt,
-          lastSeed: runSeed,
+          lastPrompt: result.prompt,
+          lastSeed: result.seed,
           taskId: latestTaskId,
           error: '',
         });
-        logBus.success(`${src}完成 ${name} -> ${url}`, src);
+        logBus.success(`${src}完成 ${result.name} -> ${url}`, src);
+        if (index + 1 < sections.length) {
+          update({ status: 'generating', progress: `第 ${index + 1}/${sections.length} 张已完成，等待资源稳定后提交下一张` });
+          await sleep(NEXT_ELEVATION_SETTLE_MS);
+        }
       }
       update({ status: 'success', progress: '100%', taskId: latestTaskId });
       taskCompletionSound.notifyComplete(id, 'image');
@@ -482,7 +522,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
       <Handle type="source" position={Position.Right} className="!border-0" style={{ background: PORT_COLOR.image }} title="输出：立面图" />
       <Handle id="document-text" type="target" position={Position.Left} className="!border-0" style={{ top: '26%', background: PORT_COLOR.text }} title="输入：立面文本" />
       <Handle id="reference-image" type="target" position={Position.Left} className="!border-0" style={{ top: '50%', background: PORT_COLOR.image }} title="输入：效果图参考" />
-      <Handle id="elevation-form-reference" type="target" position={Position.Left} className="!border-0" style={{ top: '72%', background: PORT_COLOR.image }} title="输入：立面形式参考图" />
+      <Handle id="elevation-form-reference" type="target" position={Position.Left} className="!border-0" style={{ top: '72%', background: FORM_REFERENCE_HANDLE_COLOR }} title="输入：立面形式参考图" />
 
       <div className="space-y-3 p-3 text-white">
         <div className="flex items-center justify-between gap-3">

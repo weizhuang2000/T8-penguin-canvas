@@ -43,6 +43,7 @@ import UnitPanelMaterialSelect from './UnitPanelMaterialSelect';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
+const STYLE_REFERENCE_HANDLE_COLOR = '#f472b6';
 const MAX_IMAGE_SEED = 2147483647;
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
@@ -631,7 +632,7 @@ const ExhibitionStyleTransferNode = ({ id, data, selected }: NodeProps) => {
       style={{ background: 'rgba(17,24,39,.96)', backdropFilter: 'blur(8px)' }}
     >
       <Handle id="original-image" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '24%', background: PORT_COLOR.image }} title="输入：原始图像" />
-      <Handle id="style-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '39%', background: PORT_COLOR.image }} title="输入：设计风格参考图" />
+      <Handle id="style-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '39%', background: STYLE_REFERENCE_HANDLE_COLOR }} title="输入：设计风格参考图" />
       <Handle type="source" position={Position.Right} className="!border-0" style={{ background: PORT_COLOR.image }} title="输出：风格迁移结果（图像）" />
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex h-8 w-8 items-center justify-center rounded bg-cyan-300/15 text-cyan-200">
