@@ -1,7 +1,7 @@
 import { memo, useCallback, useMemo, useRef } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
 import { Image as ImageIcon, Loader2, Play, RefreshCw, Square, Wand2 } from 'lucide-react';
-import { PORT_COLOR } from '../../config/portTypes';
+import { EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
 import {
   generateExternalImage,
@@ -519,9 +519,9 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
       }`}
       style={{ background: 'rgba(17,24,39,.96)', backdropFilter: 'blur(8px)' }}
     >
-      <Handle type="source" position={Position.Right} className="!border-0" style={{ background: PORT_COLOR.image }} title="输出：立面图" />
-      <Handle id="document-text" type="target" position={Position.Left} className="!border-0" style={{ top: '26%', background: PORT_COLOR.text }} title="输入：立面文本" />
-      <Handle id="reference-image" type="target" position={Position.Left} className="!border-0" style={{ top: '50%', background: PORT_COLOR.image }} title="输入：效果图参考" />
+      <Handle type="source" position={Position.Right} className="!border-0" style={{ background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输出：立面图" />
+      <Handle id="document-text" type="target" position={Position.Left} className="!border-0" style={{ top: '26%', background: EXHIBITION_TEXT_HANDLE_COLOR }} title="输入：立面文本" />
+      <Handle id="reference-image" type="target" position={Position.Left} className="!border-0" style={{ top: '50%', background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输入：效果图参考" />
       <Handle id="elevation-form-reference" type="target" position={Position.Left} className="!border-0" style={{ top: '72%', background: FORM_REFERENCE_HANDLE_COLOR }} title="输入：立面形式参考图" />
 
       <div className="space-y-3 p-3 text-white">

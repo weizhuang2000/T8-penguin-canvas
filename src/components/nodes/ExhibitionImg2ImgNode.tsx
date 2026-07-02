@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Handle, Position, useNodeConnections, useNodesData, useReactFlow, type NodeProps } from '@xyflow/react';
-import { EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR, PORT_COLOR } from '../../config/portTypes';
+import { EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR, EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import {
   ArrowDown,
   ArrowUp,
@@ -1041,7 +1041,7 @@ function ImageSlot({
         type="target"
         position={Position.Left}
         className="!h-3 !w-3 !border-0"
-        style={{ top, background: handleId === 'color-material-reference' ? EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR : PORT_COLOR.image }}
+        style={{ top, background: handleId === 'color-material-reference' ? EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR : EXHIBITION_IMAGE_HANDLE_COLOR }}
         title={`输入：${title} — ${subtitle}`}
       />
       <div className="rounded border border-white/10 bg-black/15 p-2">
@@ -2993,13 +2993,13 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       }`}
       style={{ background: 'rgba(17,24,39,.96)', backdropFilter: 'blur(8px)' }}
     >
-      <Handle id="image" type="source" position={Position.Right} className="!border-0" style={{ background: PORT_COLOR.image }} title="输出：展陈图生图结果（图像）" />
+      <Handle id="image" type="source" position={Position.Right} className="!border-0" style={{ background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输出：展陈图生图结果（图像）" />
       <Handle
         id="prompt"
         type="source"
         position={Position.Right}
         className="!h-3 !w-3 !border-0"
-        style={{ top: '41%', background: PORT_COLOR.text }}
+        style={{ top: '41%', background: EXHIBITION_TEXT_HANDLE_COLOR }}
         title="输出：最终提示词文本"
       />
       <Handle
@@ -3007,7 +3007,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         type="target"
         position={Position.Left}
         className="!h-3 !w-3 !border-0"
-        style={{ top: '69%', background: PORT_COLOR.text }}
+        style={{ top: '69%', background: EXHIBITION_TEXT_HANDLE_COLOR }}
         title="输入：展墙内容文本（接入后自动启用展墙内容设计）"
       />
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">

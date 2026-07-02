@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
-import { EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR, PORT_COLOR } from '../../config/portTypes';
+import { EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR, EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import { ArrowDown, ArrowUp, Brain, FileText, Image as ImageIcon, Loader2, Palette, Play, Upload } from 'lucide-react';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
 import { extractDocument, getCurrentUser, getElevationPromptPresets, getUnitPanelMaterials, MAX_DOCUMENT_FILE_SIZE, MAX_DOCUMENT_FILE_SIZE_MB, updateUnitPanelMaterials, type AuthUser, type ElevationColorMaterialPresetItem, type ExtractedDocument, type UnitPanelMaterialItem } from '../../services/api';
@@ -604,8 +604,8 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
       className={`relative w-[720px] rounded-xl border-2 transition-all ${selected ? 'border-cyan-300 shadow-2xl shadow-cyan-500/15' : 'border-white/15 hover:border-white/30'}`}
       style={{ background: 'rgba(17,24,39,.96)', backdropFilter: 'blur(8px)' }}
     >
-      <Handle type="source" position={Position.Right} className="!border-0" style={{ background: PORT_COLOR.image }} title="输出：单元板设计图" />
-      <Handle id="text" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '35%', background: PORT_COLOR.text }} title="输入：上游文本资料" />
+      <Handle type="source" position={Position.Right} className="!border-0" style={{ background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输出：单元板设计图" />
+      <Handle id="text" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '35%', background: EXHIBITION_TEXT_HANDLE_COLOR }} title="输入：上游文本资料" />
       <Handle id="color-material-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '54%', background: EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR }} title="输入：色彩与材质参考图" />
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex h-8 w-8 items-center justify-center rounded bg-cyan-300/15 text-cyan-200"><Palette size={16} /></div>

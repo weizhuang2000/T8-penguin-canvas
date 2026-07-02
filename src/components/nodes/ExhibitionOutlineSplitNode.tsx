@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Handle, Position, useReactFlow, type Node, type NodeProps } from '@xyflow/react';
 import { Brain, Clipboard, FileText, Image as ImageIcon, Layers3, Loader2, Play, Sparkles, Upload } from 'lucide-react';
-import { PORT_COLOR } from '../../config/portTypes';
+import { EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import { DEFAULT_LLM_MODEL } from '../../providers/models';
 import { extractDocument, MAX_DOCUMENT_FILE_SIZE, MAX_DOCUMENT_FILE_SIZE_MB, type ExtractedDocument } from '../../services/api';
 import { generateLlm } from '../../services/generation';
@@ -480,9 +480,9 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
 
   return (
     <div data-exhibition-compact-node-type="exhibition-outline-split" className={`t8-node relative w-[620px] transition-all ${selected ? 'ring-2 ring-cyan-300' : ''}`}>
-      <Handle type="target" position={Position.Left} className="!border-0" style={{ background: PORT_COLOR.text }} title="输入：展陈资料文档文本（DOCX/PDF/TXT 或直接粘贴）" />
-      <Handle id={OUTLINE_TEXT_HANDLE} type="source" position={Position.Right} className="!border-0" style={{ top: '42%', background: PORT_COLOR.text }} title="输出：拆分后的大纲文本段（可连接多个下游节点）" />
-      <Handle id={OUTLINE_IMAGE_HANDLE} type="source" position={Position.Right} className="!border-0" style={{ top: '58%', background: PORT_COLOR.image }} title="输出：拆分过程中提取的配图（如有）" />
+      <Handle type="target" position={Position.Left} className="!border-0" style={{ background: EXHIBITION_TEXT_HANDLE_COLOR }} title="输入：展陈资料文档文本（DOCX/PDF/TXT 或直接粘贴）" />
+      <Handle id={OUTLINE_TEXT_HANDLE} type="source" position={Position.Right} className="!border-0" style={{ top: '42%', background: EXHIBITION_TEXT_HANDLE_COLOR }} title="输出：拆分后的大纲文本段（可连接多个下游节点）" />
+      <Handle id={OUTLINE_IMAGE_HANDLE} type="source" position={Position.Right} className="!border-0" style={{ top: '58%', background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输出：拆分过程中提取的配图（如有）" />
       <div className="pointer-events-none absolute right-2 top-[42%] z-10 -translate-y-1/2 text-[9px] font-semibold text-white/45">文本</div>
       <div className="pointer-events-none absolute right-2 top-[58%] z-10 -translate-y-1/2 text-[9px] font-semibold text-white/45">图片</div>
 

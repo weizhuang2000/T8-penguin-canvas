@@ -11,11 +11,18 @@ test('exhibition img2img node accepts document text input', () => {
   assert.match(ports, /'exhibition-img2img':\s*\{\s*inputs:\s*\['text', 'image'\],\s*outputs:\s*\['image', 'text'\]\s*\}/);
 });
 
+test('exhibition handle colors swap text and image while keeping color material pink', () => {
+  const ports = readFileSync(new URL('../src/config/portTypes.ts', import.meta.url), 'utf8');
+  assert.match(ports, /EXHIBITION_TEXT_HANDLE_COLOR\s*=\s*PORT_COLOR\.image/);
+  assert.match(ports, /EXHIBITION_IMAGE_HANDLE_COLOR\s*=\s*PORT_COLOR\.text/);
+  assert.match(ports, /EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR\s*=\s*'#f472b6'/);
+});
+
 test('exhibition img2img node exposes final prompt as text output', () => {
   const node = readFileSync(new URL('../src/components/nodes/ExhibitionImg2ImgNode.tsx', import.meta.url), 'utf8');
   const upstream = readFileSync(new URL('../src/components/nodes/useUpstreamMaterials.ts', import.meta.url), 'utf8');
   const output = readFileSync(new URL('../src/components/nodes/OutputNode.tsx', import.meta.url), 'utf8');
-  assert.match(node, /id="prompt"[\s\S]*type="source"[\s\S]*PORT_COLOR\.text/);
+  assert.match(node, /id="prompt"[\s\S]*type="source"[\s\S]*EXHIBITION_TEXT_HANDLE_COLOR/);
   assert.match(node, /title="输出：最终提示词文本"/);
   assert.match(node, /prompt:\s*basePromptForRun[\s\S]*outputText:\s*basePromptForRun[\s\S]*text:\s*basePromptForRun/);
   assert.match(upstream, /n\.type === 'exhibition-img2img'/);
