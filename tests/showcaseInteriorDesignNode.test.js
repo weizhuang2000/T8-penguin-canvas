@@ -26,6 +26,7 @@ test('showcase interior design node is registered in frontend and permissions', 
   assert.match(read('src/components/Canvas.tsx'), /arrangementRows: 1/);
   assert.match(read('src/components/Canvas.tsx'), /supplementMentions: \[\]/);
   assert.match(read('src/components/Canvas.tsx'), /manualLayoutItems: \[\]/);
+  assert.match(read('src/components/Canvas.tsx'), /targetType === 'showcase-interior-design'[\s\S]*handle === 'color-material-reference'/);
   assert.match(read('src/components/Canvas.tsx'), /manualLayoutReferenceImage: ''/);
   assert.match(read('src/components/Canvas.tsx'), /perspectiveEnabled: true/);
   assert.match(read('src/components/Canvas.tsx'), /explodedViewEnabled: false/);

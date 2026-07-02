@@ -16,6 +16,7 @@ test('exhibition style transfer node is registered in exhibition tools', () => {
 
 test('exhibition style transfer node exposes image ports and shared controls', () => {
   assert.match(read('src/config/portTypes.ts'), /'exhibition-style-transfer': \{ inputs: \['image'\], outputs: \['image'\] \}/);
+  assert.match(read('src/components/Canvas.tsx'), /targetType === 'exhibition-style-transfer' && handle === 'style-reference'/);
   const source = read('src/components/nodes/ExhibitionStyleTransferNode.tsx');
   assert.match(source, /<Handle id="original-image" type="target" position=\{Position\.Left\}/);
   assert.match(source, /<Handle id="style-reference" type="target" position=\{Position\.Left\}/);

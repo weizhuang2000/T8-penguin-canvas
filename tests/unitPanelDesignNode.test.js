@@ -60,6 +60,7 @@ test('unit panel design is registered in frontend and permissions', () => {
   assert.match(read('src/components/Canvas.tsx'), /subtitleText: ''/);
   assert.match(read('src/components/Canvas.tsx'), /subtitleEnabled: false/);
   assert.match(read('src/components/Canvas.tsx'), /mixedLanguageLayoutEnabled: false/);
+  assert.match(read('src/components/Canvas.tsx'), /targetType === 'unit-panel-design'[\s\S]*handle === 'color-material-reference'/);
   assert.match(read('src/components/Canvas.tsx'), /textLayoutBounds/);
   assert.match(read('src/components/Canvas.tsx'), /lowerMeters: 0\.8/);
   assert.match(read('src/components/Canvas.tsx'), /upperMeters: 2\.2/);

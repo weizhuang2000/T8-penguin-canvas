@@ -1222,6 +1222,18 @@ function exclusiveTargetHandlesForConnection(
   if (targetType === 'exhibition-creative-image') {
     if (handle === 'space' || handle === 'color-material-reference') return [handle];
   }
+  if (
+    (targetType === 'unit-panel-design' || targetType === 'showcase-interior-design')
+    && handle === 'color-material-reference'
+  ) {
+    return [handle];
+  }
+  if (targetType === 'exhibition-style-transfer' && handle === 'style-reference') {
+    return [handle];
+  }
+  if (targetType === 'exhibition-render-to-elevation' && handle === 'elevation-form-reference') {
+    return [handle];
+  }
   return [];
 }
 

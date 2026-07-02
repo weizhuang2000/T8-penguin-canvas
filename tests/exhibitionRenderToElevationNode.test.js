@@ -15,6 +15,7 @@ test('render to elevation node is registered in canvas, ports, types and sidebar
   assert.match(registry, /效果图转立面/);
   assert.match(canvas, /import ExhibitionRenderToElevationNode/);
   assert.match(canvas, /'exhibition-render-to-elevation': ExhibitionRenderToElevationNode/);
+  assert.match(canvas, /targetType === 'exhibition-render-to-elevation' && handle === 'elevation-form-reference'/);
   assert.match(permissions, /'exhibition-render-to-elevation'/);
   assert.match(proxy, /\/image\/submit[\s\S]*'exhibition-render-to-elevation'/);
   assert.match(proxy, /\/image\/status\/:tid[\s\S]*'exhibition-render-to-elevation'/);
