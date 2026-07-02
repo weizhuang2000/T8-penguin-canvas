@@ -604,9 +604,9 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
       className={`relative w-[720px] rounded-xl border-2 transition-all ${selected ? 'border-cyan-300 shadow-2xl shadow-cyan-500/15' : 'border-white/15 hover:border-white/30'}`}
       style={{ background: 'rgba(17,24,39,.96)', backdropFilter: 'blur(8px)' }}
     >
-      <Handle type="source" position={Position.Right} className="!border-0" style={{ background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输出：单元板设计图" />
-      <Handle id="text" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '35%', background: EXHIBITION_TEXT_HANDLE_COLOR }} title="输入：上游文本资料" />
-      <Handle id="color-material-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '54%', background: EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR }} title="输入：色彩与材质参考图" />
+      <Handle type="source" position={Position.Right} className="!border-0 t8-exhibition-handle--image" style={{ background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输出：单元板设计图" />
+      <Handle id="text" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 t8-exhibition-handle--text" style={{ top: '35%', background: EXHIBITION_TEXT_HANDLE_COLOR }} title="输入：上游文本资料" />
+      <Handle id="color-material-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 t8-exhibition-handle--pink" style={{ top: '54%', background: EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR }} title="输入：色彩与材质参考图" />
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex h-8 w-8 items-center justify-center rounded bg-cyan-300/15 text-cyan-200"><Palette size={16} /></div>
         <div className="min-w-0 flex-1">

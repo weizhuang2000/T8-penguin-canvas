@@ -399,8 +399,8 @@ const ExhibitionLightingHeatmapNode = ({ id, data, selected }: NodeProps) => {
       }`}
       style={{ background: 'rgba(17,24,39,.96)', backdropFilter: 'blur(8px)' }}
     >
-      <Handle id="source-image" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '30%', background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输入：展陈空间图像" />
-      <Handle type="source" position={Position.Right} className="!border-0" style={{ background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输出：灯光热力图（图像）" />
+      <Handle id="source-image" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 t8-exhibition-handle--image" style={{ top: '30%', background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输入：展陈空间图像" />
+      <Handle type="source" position={Position.Right} className="!border-0 t8-exhibition-handle--image" style={{ background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输出：灯光热力图（图像）" />
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex h-8 w-8 items-center justify-center rounded bg-cyan-300/15 text-cyan-200">
           <ThermometerSun size={16} />

@@ -519,10 +519,10 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
       }`}
       style={{ background: 'rgba(17,24,39,.96)', backdropFilter: 'blur(8px)' }}
     >
-      <Handle type="source" position={Position.Right} className="!border-0" style={{ background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输出：立面图" />
-      <Handle id="document-text" type="target" position={Position.Left} className="!border-0" style={{ top: '26%', background: EXHIBITION_TEXT_HANDLE_COLOR }} title="输入：立面文本" />
-      <Handle id="reference-image" type="target" position={Position.Left} className="!border-0" style={{ top: '50%', background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输入：效果图参考" />
-      <Handle id="elevation-form-reference" type="target" position={Position.Left} className="!border-0" style={{ top: '72%', background: FORM_REFERENCE_HANDLE_COLOR }} title="输入：立面形式参考图" />
+      <Handle type="source" position={Position.Right} className="!border-0 t8-exhibition-handle--image" style={{ background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输出：立面图" />
+      <Handle id="document-text" type="target" position={Position.Left} className="!border-0 t8-exhibition-handle--text" style={{ top: '26%', background: EXHIBITION_TEXT_HANDLE_COLOR }} title="输入：立面文本" />
+      <Handle id="reference-image" type="target" position={Position.Left} className="!border-0 t8-exhibition-handle--image" style={{ top: '50%', background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输入：效果图参考" />
+      <Handle id="elevation-form-reference" type="target" position={Position.Left} className="!border-0 t8-exhibition-handle--pink" style={{ top: '72%', background: FORM_REFERENCE_HANDLE_COLOR }} title="输入：立面形式参考图" />
 
       <div className="space-y-3 p-3 text-white">
         <div className="flex items-center justify-between gap-3">

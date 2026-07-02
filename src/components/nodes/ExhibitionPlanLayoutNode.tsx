@@ -1,12 +1,12 @@
-﻿import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
-import { EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import { Brain, FileText, Image as ImageIcon, Loader2, Map, Play, Route, Sparkles, Upload } from 'lucide-react';
+import { EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
 import {
   extractDocument,
-  getExhibitionAiPlanLayoutPromptPresets,
   getCurrentUser,
+  getExhibitionAiPlanLayoutPromptPresets,
   getExhibitionPlanLayoutPromptPresets,
   MAX_DOCUMENT_FILE_SIZE,
   MAX_DOCUMENT_FILE_SIZE_MB,
@@ -57,18 +57,16 @@ const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border
 const MAX_IMAGE_SEED = 2147483647;
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
+
 const OUTLINE_AND_LAYOUT_REQUIREMENT = [
-  '鍙傝€冨浘鏄竴寮犲缓绛戝钩闈㈠竷灞€鍥撅紝瀹?4绫冲乏鍙筹紝闀?8绫冲乏鍙筹紝钃濊壊绾挎槸澧欎綋锛屽疄蹇冩柟鍧楁槸鏌卞瓙锛岀敤鏂囧瓧鏍囨敞浜嗕竴涓叆鍙ｅ拰涓€涓嚭鍙ｃ€?,
-  '浣犳槸涓€浣嶅睍鍘呰璁″笀锛屽湪鍙傝€冨浘涓婅繘琛屽垎鍖哄竷灞€瑙勫垝鍙傝鍔ㄧ嚎锛屽厖鍒嗗埄鐢ㄦ煴瀛愬垝鍒嗙┖闂达紝鏃笉鎷ユ尋涔熶笉绌烘椃锛屽悇绌洪棿澶у皬鏈夊埆锛屽舰寮忓鏍枫€?,
-  '鍏蜂綋鏄湪鍙傝€冨浘娣诲姞鏂板缓澧欎綋銆傚己鍒惰姹傦細涓嶈兘绉诲姩鎴栧垹闄ゅ弬鑰冨浘涓婄殑鏌卞瓙銆?,
-  '棣栧厛鍥寸潃鍘熷缓绛戝鐨勫唴渚у缓涓€鍦堬紝鏂板缓澧欎綋鍜屽師澧欎綋涔嬮棿涓嶈鐣欒繃澶ц窛绂伙紝閬垮厤娴垂绌洪棿銆?,
-  '鐒跺悗鍦ㄥ睍鍘呭唴閮ㄧ敤鏂板缓鍙岄潰澧欎綋闅旀垚杩為€氱殑灏忕┖闂达紝灏忕┖闂翠箣闂翠笉瑕佹湁绌洪殭锛屾墍鏈夋煴瀛愯鍜屾柊寤哄浣撹繛鎺ュ湪涓€璧凤紝涓嶈瀛樺湪鍗曠嫭涓€鏍规煴瀛愮殑鎯呭喌銆?,
-  '鐢ㄤ竴鏉′粠鍏ュ彛寮€濮嬨€佹渶鍚庡埌鍑哄彛鐨勮繛缁笉闂存柇鐨勫弬瑙傚姩绾夸覆鑱旇捣姣忎釜绌洪棿锛涚┖闂翠笉鑳藉お灏忥紝涓嶈兘鏈夋瑙掞紝瓒呰繃10骞崇背鐨勫皬绌洪棿蹇呴』璁╁姩绾跨┛杩囥€?,
-  '鍔ㄧ嚎涓婄殑绠ご娌跨潃铏氱嚎濮嬬粓鎸囧悜鍑哄彛鏂瑰悜銆傚己鍒惰姹傦細鍔ㄧ嚎鍙湁涓€鏉′笖娌℃湁鍒嗗弶銆?,
-  '鏂板缓澧欎綋鏃舵敞鎰忎笉瑕佹湁闂悎鐨勫尯鍩燂紝鍐呴儴澧欎綋鍜岃竟娌垮浣撲箣闂存渶濂戒互鈥滀竵鈥濆瓧鍨嬬浉杩炪€?,
-  '鍦ㄥ叆鍙ｅ拰鍑哄彛澶勫浣撹鏂紑3绫冲乏鍙筹紝鍏ュ彛杩涙潵鐨勭┖闂磋澶т竴浜涳紝闄ゅ叆鍙ｅ鍙湁涓€涓彲浠ョ户缁繘鍏ュ睍鍘呯殑鍙ｃ€?,
-  '鎬荤粨鏂板缓澧欎綋鍘熷垯锛氱敤澧欎綋鍒嗛殧鍑轰竴涓糠瀹紝浠庡叆鍙ｈ蛋鍚戝嚭鍙ｏ紝姣忎釜绌洪棿鍙蛋涓€閬嶈€屼笖蹇呴』璧板埌锛岃矾绾垮彧鏈変竴鏉′笖涓嶈兘鍒嗗弶銆?,
-  '椤虹潃鏂板缓澧欎綋娣诲姞涓€浜涘睍闄堣鏂斤紝姣斿灞曟煖銆佽Е鎽稿睆銆佸睍鍙般€佸満鏅瓑鐨勪刊瑙嗗浘锛屽畬鎴愬睍闄堝钩闈㈠竷灞€鍥撅紱鍙樉绀哄睍闄堣鏂界殑淇鍥撅紝涓嶈绔嬮潰銆?,
+  '参考图是一张建筑平面布局图，墙体、柱子、入口和出口都必须作为不可移动的原始建筑结构。',
+  '总体宽30米，长40米，蓝色线条代表墙体，灰色方块代表柱子，都不可移动。',
+  '在原始建筑平面图上规划展陈分区、参观动线和展陈设施。',
+  '围着原建筑墙的内侧建一圈连续展陈空间，避免展陈设施穿墙或压住柱子。',
+  '不能移动或删除参考图中的墙体、柱子、外轮廓、门洞、入口、出口和既有房间边界。',
+  '用一条从入口开始、最后到出口的连续参观动线串联每个空间，动线只有一条且没有分叉。',
+  '所有柱子要与新建展墙、展柜、展台、展区边界或装置形成明确关系，不要孤零零漂浮。',
+  '只显示展陈设施的俯视图，不要生成室内透视、立面或鸟瞰效果图。',
 ].join('\n');
 
 function loadImageElement(src: string): Promise<HTMLImageElement> {
@@ -76,7 +74,7 @@ function loadImageElement(src: string): Promise<HTMLImageElement> {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('鍥剧墖鍔犺浇澶辫触'));
+    img.onerror = () => reject(new Error('图片加载失败'));
     img.src = src;
   });
 }
@@ -85,21 +83,21 @@ async function composeStructureLockedPlan(baseUrl: string, overlayUrl: string): 
   const [base, overlay] = await Promise.all([loadImageElement(baseUrl), loadImageElement(overlayUrl)]);
   const width = base.naturalWidth || base.width;
   const height = base.naturalHeight || base.height;
-  if (!width || !height) throw new Error('鍘熷骞抽潰鍥惧昂瀵告棤鏁?);
+  if (!width || !height) throw new Error('原始平面图尺寸无效');
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('鏃犳硶鍒涘缓骞抽潰甯冨眬鍚堟垚鐢诲竷');
+  if (!ctx) throw new Error('无法创建平面布局合成画布');
   ctx.drawImage(base, 0, 0, width, height);
   ctx.drawImage(overlay, 0, 0, width, height);
   return uploadDataUrl(canvas.toDataURL('image/png'), 'exhibition-plan-layout');
 }
 
 function documentLabel(meta?: Omit<ExtractedDocument, 'text'> | null) {
-  if (!meta) return '鏈€夋嫨鏂囨。';
-  const pages = meta.pageCount ? ` 路 ${meta.pageCount} 椤礰 : '';
-  return `${meta.name} 路 ${meta.charCount} 瀛?{pages}`;
+  if (!meta) return '未选择文档';
+  const pages = meta.pageCount ? ` / ${meta.pageCount} 页` : '';
+  return `${meta.name} / ${meta.charCount} 字${pages}`;
 }
 
 function randomImageSeed(): number {
@@ -148,11 +146,11 @@ function useInputImageByHandle(nodeId: string, handle: string): string {
 
 function llmErrorMessage(error: any) {
   const message = String(error?.message || error || '').trim();
-  if (/no available accounts/i.test(message)) return '褰撳墠 LLM 娌℃湁鍙敤璐﹀彿锛岃鍒囨崲鍙敤鐨?LLM 閰嶇疆鍚庨噸璇曘€?;
-  return message || 'LLM 璇锋眰澶辫触';
+  if (/no available accounts/i.test(message)) return '当前 LLM 没有可用账号，请切换可用的 LLM 配置后重试。';
+  return message || 'LLM 请求失败';
 }
 
-function presetEditorText(presets: ExhibitionPlanLayoutChoiceItem[]) {
+function labelPresetEditorText(presets: ExhibitionPlanLayoutChoiceItem[]) {
   return presets.map((preset) => preset.label).join('\n');
 }
 
@@ -172,7 +170,7 @@ function parseLabelPresetEditorText(text: string, fallbackId: string) {
 }
 
 function promptPresetEditorText(presets: ExhibitionAiPlanLayoutPresetItem[]) {
-  return presets.map((preset) => `${preset.label}锝?{preset.prompt}`).join('\n');
+  return presets.map((preset) => `${preset.label}｜${preset.prompt}`).join('\n');
 }
 
 function parsePromptPresetEditorText(text: string, fallbackId: string) {
@@ -181,9 +179,9 @@ function parsePromptPresetEditorText(text: string, fallbackId: string) {
     .map((line, index) => {
       const raw = line.trim();
       if (!raw) return null;
-      const parts = raw.split(/[|锝淽/);
+      const parts = raw.split(/[|｜]/);
       const label = (parts.shift() || '').trim();
-      const prompt = (parts.join('锝?) || label).trim();
+      const prompt = (parts.join('｜') || label).trim();
       if (!label || !prompt) return null;
       return {
         id: `${label.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || fallbackId}-${index + 1}`,
@@ -203,7 +201,7 @@ function ImageSlot({ title, subtitle, url }: { title: string; subtitle: string; 
       {url ? (
         <img src={url} alt="" className="h-32 w-full rounded border border-white/10 object-contain" draggable={false} />
       ) : (
-        <div className="flex h-32 items-center justify-center rounded border border-dashed border-white/15 text-[10px] text-white/35">杩炴帴鍥惧儚杈撳叆</div>
+        <div className="flex h-32 items-center justify-center rounded border border-dashed border-white/15 text-[10px] text-white/35">连接图像输入</div>
       )}
     </div>
   );
@@ -218,14 +216,14 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [insertPresets, setInsertPresets] = useState<ExhibitionPlanLayoutInsertPresetItem[]>([]);
   const [excludePresets, setExcludePresets] = useState<ExhibitionPlanLayoutExcludePresetItem[]>([]);
-  const [insertEditorOpen, setInsertEditorOpen] = useState(false);
-  const [excludeEditorOpen, setExcludeEditorOpen] = useState(false);
-  const [insertEditorValue, setInsertEditorValue] = useState('');
-  const [excludeEditorValue, setExcludeEditorValue] = useState('');
   const [stylePresets, setStylePresets] = useState<ExhibitionAiPlanLayoutPresetItem[]>([]);
   const [requirementPresets, setRequirementPresets] = useState<ExhibitionAiPlanLayoutPresetItem[]>([]);
+  const [insertEditorOpen, setInsertEditorOpen] = useState(false);
+  const [excludeEditorOpen, setExcludeEditorOpen] = useState(false);
   const [styleEditorOpen, setStyleEditorOpen] = useState(false);
   const [requirementEditorOpen, setRequirementEditorOpen] = useState(false);
+  const [insertEditorValue, setInsertEditorValue] = useState('');
+  const [excludeEditorValue, setExcludeEditorValue] = useState('');
   const [styleEditorValue, setStyleEditorValue] = useState('');
   const [requirementEditorValue, setRequirementEditorValue] = useState('');
   const [insertSaving, setInsertSaving] = useState(false);
@@ -236,6 +234,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
   const [excludeError, setExcludeError] = useState('');
   const [styleError, setStyleError] = useState('');
   const [requirementError, setRequirementError] = useState('');
+
   const planImage = useInputImageByHandle(id, 'plan-image');
   const upstream = useUpstreamMaterials(id);
   const activeCanvas = useCanvasStore((state) => state.canvases.find((canvas) => canvas.id === state.activeId) || null);
@@ -249,7 +248,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
 
   const llmConfigOptions = useMemo(() => {
     const saved = llmConfigs.filter((item) => item && (item.hasApiKey || item.apiKey || item.baseUrl || item.model));
-    return saved.length > 0 ? saved : [{ id: 'default', label: '榛樿 LLM', model: configuredLlmModel }];
+    return saved.length > 0 ? saved : [{ id: 'default', label: '默认 LLM', model: configuredLlmModel }];
   }, [configuredLlmModel, llmConfigs]);
   const selectedLlmKeyId = String(d.llmKeyId || '').trim();
   const activeLlmConfig = llmConfigOptions.find((item) => item.id === selectedLlmKeyId)
@@ -337,16 +336,16 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
   const pickDocument = useCallback(async (file?: File) => {
     if (!file || isReadonly || busy) return;
     if (file.size > MAX_DOCUMENT_FILE_SIZE) {
-      update({ status: 'error', error: `鏂囨。涓嶈兘瓒呰繃 ${MAX_DOCUMENT_FILE_SIZE_MB}MB`, progress: '' });
+      update({ status: 'error', error: `文档不能超过 ${MAX_DOCUMENT_FILE_SIZE_MB}MB`, progress: '' });
       return;
     }
-    update({ status: 'extracting', progress: '鏂囨。瑙ｆ瀽涓?..', error: '' });
+    update({ status: 'extracting', progress: '文档解析中...', error: '' });
     try {
       const extracted = await extractDocument(file);
       const { text, ...documentMeta } = extracted;
       update({ documentMeta, sourceText: text, status: 'idle', progress: '', error: '' });
     } catch (error: any) {
-      update({ status: 'error', error: error?.message || '鏂囨。瑙ｆ瀽澶辫触', progress: '' });
+      update({ status: 'error', error: error?.message || '文档解析失败', progress: '' });
     } finally {
       if (fileRef.current) fileRef.current.value = '';
     }
@@ -355,10 +354,10 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
   const runOutline = useCallback(async (): Promise<string> => {
     const text = effectiveSourceText.trim();
     if (!text) {
-      update({ status: 'error', error: '璇峰厛瀵煎叆銆佺矘璐存垨杩炴帴涓婃父璧勬枡鏂囨湰銆?, progress: '' });
-      throw new Error('璇峰厛鎻愪緵璧勬枡鏂囨湰');
+      update({ status: 'error', error: '请先导入、粘贴或连接上游资料文本。', progress: '' });
+      throw new Error('请先提供资料文本');
     }
-    update({ status: 'outlining', progress: 'LLM 鎻愮偧骞抽潰甯冨眬澶х翰涓?..', error: '' });
+    update({ status: 'outlining', progress: 'LLM 提炼平面布局大纲中...', error: '' });
     try {
       const response = await generateLlm({
         model: llmModel,
@@ -366,12 +365,12 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
         temperature: 0.25,
         max_tokens: 2400,
         messages: [
-          { role: 'system', content: '浣犳槸璧勬繁灞曢檲绛栧垝涓庣┖闂磋鍒掍笓瀹躲€備綘鍙緭鍑轰弗鏍?JSON銆? },
+          { role: 'system', content: '你是资深展陈策划与空间规划专家。你只输出严格 JSON。' },
           { role: 'user', content: buildExhibitionPlanOutlinePrompt({ sourceText: text, insertItems: selectedInsertIds, excludeItems: selectedExcludeIds, insertItemOptions: insertOptions, excludeItemOptions: excludeOptions }) },
         ],
       });
       const formatted = formatExhibitionPlanOutline(parseExhibitionPlanOutlineJson(response.content || ''));
-      if (!formatted) throw new Error('LLM 鏈繑鍥炴湁鏁堝ぇ绾?);
+      if (!formatted) throw new Error('LLM 未返回有效大纲');
       update({ layoutOutlineText: formatted, outputText: formatted, text: formatted, prompt: formatted, status: 'idle', progress: '', error: '' });
       return formatted;
     } catch (error: any) {
@@ -382,11 +381,11 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
 
   const runAnalyzePlan = useCallback(async (outlineText = ''): Promise<string> => {
     if (!planImage) {
-      update({ status: 'error', error: '璇峰厛杩炴帴鍘熷寤虹瓚骞抽潰鍥俱€?, progress: '' });
-      throw new Error('璇峰厛杩炴帴鍘熷寤虹瓚骞抽潰鍥?);
+      update({ status: 'error', error: '请先连接原始建筑平面图。', progress: '' });
+      throw new Error('请先连接原始建筑平面图');
     }
     const text = String(outlineText || layoutOutlineText || effectiveSourceText || '').trim();
-    update({ status: 'analyzing', progress: 'LLM 姝ｅ湪璇诲彇鍘熷寤虹瓚骞抽潰鍥?..', error: '' });
+    update({ status: 'analyzing', progress: 'LLM 正在读取原始建筑平面图...', error: '' });
     try {
       const response = await generateLlm({
         model: llmModel,
@@ -394,7 +393,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
         temperature: 0.15,
         max_tokens: 2200,
         messages: [
-          { role: 'system', content: '浣犳槸璧勬繁灞曢檲绌洪棿瑙勫垝甯堝拰寤虹瓚骞抽潰鍥捐瘑鍥句笓瀹躲€傚繀椤绘妸鍘熷缓绛戝浣撱€佹煴瀛愩€侀棬娲炪€佸杞粨鍜屽叆鍙ｅ嚭鍙ｈ涓轰笉鍙姩缁撴瀯銆? },
+          { role: 'system', content: '你是资深展陈空间规划师和建筑平面图识图专家。必须把原建筑墙体、柱子、门洞、外轮廓和入口出口视为不可动结构。' },
           {
             role: 'user',
             content: [
@@ -405,7 +404,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
         ],
       });
       const interpretation = String(response.content || '').trim();
-      if (!interpretation) throw new Error('LLM 鏈繑鍥炴湁鏁堝钩闈㈣В鏋?);
+      if (!interpretation) throw new Error('LLM 未返回有效平面解析');
       update({
         planAiInterpretation: interpretation,
         outputText: interpretation,
@@ -425,7 +424,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
   const runGenerateWithOptions = useCallback(async (options: { outlineText?: string; extraLayoutRequirement?: string; forceAnalyze?: boolean } = {}) => {
     if (isReadonly) return;
     if (!planImage) {
-      update({ status: 'error', error: '璇峰厛杩炴帴鍘熷寤虹瓚骞抽潰鍥俱€?, progress: '' });
+      update({ status: 'error', error: '请先连接原始建筑平面图。', progress: '' });
       return;
     }
     let outlineText = String(options.outlineText || layoutOutlineText || (isAiPlanLayout ? effectiveSourceText : '') || '').trim();
@@ -443,14 +442,14 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
     const runSeed = seed > 0 ? seed : randomImageSeed();
     const sourceNodeType = isAiPlanLayout ? 'exhibition-ai-plan-layout' : 'exhibition-plan-layout';
     const src = `${sourceNodeType}:${id.slice(0, 6)}`;
-    const historyContext = { canvasId: activeCanvasId, sourceNodeId: id, sourceNodeType, seed: runSeed, nodeTitle: isAiPlanLayout ? '骞抽潰AI甯冨眬' : '骞抽潰鑷姩甯冨眬' };
-    update({ status: 'generating', progress: isAiPlanLayout ? '鎻愪氦骞抽潰AI甯冨眬鐢熷浘...' : '鎻愪氦骞抽潰甯冨眬鐢熷浘...', error: '', imageUrls: [], lastPrompt: imagePrompt, lastSeed: runSeed, referenceImages: refs });
+    const historyContext = { canvasId: activeCanvasId, sourceNodeId: id, sourceNodeType, seed: runSeed, nodeTitle: isAiPlanLayout ? '平面AI布局' : '平面自动布局' };
+    update({ status: 'generating', progress: isAiPlanLayout ? '提交平面AI布局生图...' : '提交平面布局生图...', error: '', imageUrls: [], lastPrompt: imagePrompt, lastSeed: runSeed, referenceImages: refs });
     try {
-      logBus.info(`骞抽潰鑷姩甯冨眬鎻愪氦 seed=${runSeed}`, src);
+      logBus.info(`${historyContext.nodeTitle}提交 seed=${runSeed}`, src);
       const generationOutputFormat = structureLock ? 'png' : outputFormat;
       let urls: string[] = [];
       if (isExternalSelected && providerSelection.provider) {
-        if (!externalProviderModel) throw new Error('鎵╁睍骞冲彴鏈厤缃彲鐢ㄥ浘鍍忔ā鍨?);
+        if (!externalProviderModel) throw new Error('扩展平台未配置可用图像模型');
         const size = externalImageSizeFor(aspectRatio, sizeLevel);
         let res = await generateExternalImage({
           providerId: providerSelection.provider.id,
@@ -477,7 +476,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
         if ((!res.imageUrls?.length) && res.taskId && (res.code === 'running' || res.status === 'running')) {
           let pollingTaskId = res.taskId;
           for (let index = 0; index < EXTERNAL_IMAGE_MAX_POLLS; index += 1) {
-            if (pollAbortRef.current) throw new Error('浠诲姟宸插彇娑?);
+            if (pollAbortRef.current) throw new Error('任务已取消');
             await new Promise((resolve) => setTimeout(resolve, EXTERNAL_IMAGE_POLL_INTERVAL_MS));
             res = await queryExternalImageStatus({
               providerId: providerSelection.provider.id,
@@ -508,11 +507,11 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
         });
         urls = submit.urls || [];
         if (!submit.sync) {
-          if (!submit.taskId) throw new Error('鏈幏鍙栧埌浠诲姟 ID');
+          if (!submit.taskId) throw new Error('未获取到任务 ID');
           let lastProgress = submit.progress || '5%';
           update({ taskId: submit.taskId, progress: lastProgress });
           for (let index = 0; index < 1800; index += 1) {
-            if (pollAbortRef.current) throw new Error('浠诲姟宸插彇娑?);
+            if (pollAbortRef.current) throw new Error('任务已取消');
             await new Promise((resolve) => setTimeout(resolve, 2000));
             const q = await queryImageStatus(submit.taskId, apiModel, generationOutputFormat, historyContext);
             if (q.progress && q.progress !== lastProgress) {
@@ -525,15 +524,15 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
               break;
             }
             if (statusText === 'failed' || statusText === 'failure' || statusText === 'error') {
-              throw new Error(q.error || '浠诲姟澶辫触');
+              throw new Error(q.error || '任务失败');
             }
           }
         }
       }
-      if (!urls.length) throw new Error('浠诲姟瀹屾垚浣嗘湭杩斿洖鍥剧墖');
+      if (!urls.length) throw new Error('任务完成但未返回图片');
       const overlayUrls = urls;
       if (structureLock) {
-        update({ progress: '鍚堟垚缁撴瀯閿佸畾搴曞浘...' });
+        update({ progress: '合成结构锁定底图...' });
         const composedUrl = await composeStructureLockedPlan(planImage, overlayUrls[0]);
         urls = [composedUrl];
       }
@@ -553,12 +552,12 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
         referenceImages: refs,
         error: '',
       });
-      logBus.success(`骞抽潰鑷姩甯冨眬瀹屾垚 ${urls.length} 寮燻, src);
+      logBus.success(`${historyContext.nodeTitle}完成 ${urls.length} 张`, src);
       taskCompletionSound.notifyComplete(id, 'image');
     } catch (error: any) {
-      const msg = error?.message || '鐢熸垚澶辫触';
+      const msg = error?.message || '生成失败';
       update({ status: 'error', error: msg, progress: '' });
-      logBus.error(`骞抽潰鑷姩甯冨眬澶辫触: ${msg}`, src);
+      logBus.error(`${historyContext.nodeTitle}失败: ${msg}`, src);
       throw error;
     }
   }, [activeCanvasId, apiModel, aspectRatio, buildPrompt, d.planAiInterpretation, d.providerParams, effectiveSourceText, externalProviderModel, id, isAiPlanLayout, isExternalSelected, isReadonly, layoutOutlineText, modelDef.id, modelDef.paramKind, outputFormat, planImage, providerSelection.provider, runAnalyzePlan, runOutline, seed, sizeLevel, structureLock, update]);
@@ -570,7 +569,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
   const runOutlineAndLayout = useCallback(async () => {
     if (isReadonly || busy) return;
     if (!planImage) {
-      update({ status: 'error', error: '璇峰厛杩炴帴鍘熷寤虹瓚骞抽潰鍥俱€?, progress: '' });
+      update({ status: 'error', error: '请先连接原始建筑平面图。', progress: '' });
       return;
     }
     if (isAiPlanLayout) {
@@ -607,13 +606,13 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
 
   useEffect(() => {
     if (!insertEditorOpen) return;
-    setInsertEditorValue(presetEditorText(insertOptions));
+    setInsertEditorValue(labelPresetEditorText(insertOptions));
     setInsertError('');
   }, [insertEditorOpen, insertOptions]);
 
   useEffect(() => {
     if (!excludeEditorOpen) return;
-    setExcludeEditorValue(presetEditorText(excludeOptions));
+    setExcludeEditorValue(labelPresetEditorText(excludeOptions));
     setExcludeError('');
   }, [excludeEditorOpen, excludeOptions]);
 
@@ -633,7 +632,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
     if (!canManageTeam) return;
     const presets = parseLabelPresetEditorText(insertEditorValue, 'insert');
     if (presets.length === 0) {
-      setInsertError('璇疯嚦灏戜繚鐣欎竴椤规鍏ュ唴瀹广€?);
+      setInsertError('请至少保留一项植入内容。');
       return;
     }
     setInsertSaving(true);
@@ -644,7 +643,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
       update({ insertItems: normalizeExhibitionPlanLayoutInsertItems(selectedInsertIds, saved).map((item) => item.id) });
       setInsertEditorOpen(false);
     } catch (error: any) {
-      setInsertError(error?.message || '淇濆瓨妞嶅叆椤瑰け璐?);
+      setInsertError(error?.message || '保存植入项失败');
     } finally {
       setInsertSaving(false);
     }
@@ -654,7 +653,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
     if (!canManageTeam) return;
     const presets = parseLabelPresetEditorText(excludeEditorValue, 'exclude');
     if (presets.length === 0) {
-      setExcludeError('璇疯嚦灏戜繚鐣欎竴椤规帓闄ゅ唴瀹广€?);
+      setExcludeError('请至少保留一项排除内容。');
       return;
     }
     setExcludeSaving(true);
@@ -665,7 +664,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
       update({ excludeItems: normalizeExhibitionPlanLayoutExcludeItems(selectedExcludeIds, saved).map((item) => item.id) });
       setExcludeEditorOpen(false);
     } catch (error: any) {
-      setExcludeError(error?.message || '淇濆瓨鎺掗櫎椤瑰け璐?);
+      setExcludeError(error?.message || '保存排除项失败');
     } finally {
       setExcludeSaving(false);
     }
@@ -675,7 +674,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
     if (!canManageTeam) return;
     const presets = parsePromptPresetEditorText(styleEditorValue, 'style');
     if (presets.length === 0) {
-      setStyleError('璇疯嚦灏戜繚鐣欎竴椤归鏍奸璁俱€?);
+      setStyleError('请至少保留一项风格预设。');
       return;
     }
     setStyleSaving(true);
@@ -685,7 +684,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
       setStylePresets(saved);
       setStyleEditorOpen(false);
     } catch (error: any) {
-      setStyleError(error?.message || '淇濆瓨椋庢牸棰勮澶辫触');
+      setStyleError(error?.message || '保存风格预设失败');
     } finally {
       setStyleSaving(false);
     }
@@ -695,7 +694,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
     if (!canManageTeam) return;
     const presets = parsePromptPresetEditorText(requirementEditorValue, 'requirement');
     if (presets.length === 0) {
-      setRequirementError('璇疯嚦灏戜繚鐣欎竴椤圭壒娈婅姹傞璁俱€?);
+      setRequirementError('请至少保留一项特殊要求预设。');
       return;
     }
     setRequirementSaving(true);
@@ -705,7 +704,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
       setRequirementPresets(saved);
       setRequirementEditorOpen(false);
     } catch (error: any) {
-      setRequirementError(error?.message || '淇濆瓨鐗规畩瑕佹眰棰勮澶辫触');
+      setRequirementError(error?.message || '保存特殊要求预设失败');
     } finally {
       setRequirementSaving(false);
     }
@@ -719,33 +718,33 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
       className={`relative w-[720px] rounded-xl border-2 transition-all ${selected ? 'border-cyan-300 shadow-2xl shadow-cyan-500/15' : 'border-white/15 hover:border-white/30'}`}
       style={{ background: 'rgba(17,24,39,.96)', backdropFilter: 'blur(8px)' }}
     >
-      <Handle id="plan-image" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '22%', background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="杈撳叆锛氬師濮嬪缓绛戝钩闈㈠浘" />
-      <Handle id="outline-text" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '42%', background: EXHIBITION_TEXT_HANDLE_COLOR }} title="杈撳叆锛氬ぇ绾?璧勬枡鏂囨湰" />
-      <Handle type="source" position={Position.Right} className="!border-0" style={{ background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="杈撳嚭锛氬睍闄堝钩闈㈠竷灞€鍥? />
+      <Handle id="plan-image" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '22%', background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输入：原始建筑平面图" />
+      <Handle id="outline-text" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '42%', background: EXHIBITION_TEXT_HANDLE_COLOR }} title="输入：文本大纲" />
+      <Handle type="source" position={Position.Right} className="!border-0" style={{ background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输出：展陈平面布局图" />
 
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex h-8 w-8 items-center justify-center rounded bg-cyan-300/15 text-cyan-200">{isAiPlanLayout ? <Sparkles size={16} /> : <Map size={16} />}</div>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-white">{isAiPlanLayout ? '平面AI布局' : '平面自动布局'}</div>
-          <div className="truncate text-[10px] text-white/45">骞抽潰鍥剧害鏉?/ 澶х翰鎻愮偧 / 鍔ㄧ嚎涓庢爣娉ㄦ帶鍒?/div>
+          <div className="truncate text-[10px] text-white/45">{isAiPlanLayout ? 'AI读取建筑平面 / 结构锁定 / 展陈布局叠加' : '平面图约束 / 大纲提炼 / 动线与标注控制'}</div>
         </div>
         {busy && <Loader2 size={15} className="animate-spin text-cyan-200" />}
       </div>
 
       <div className="nodrag nopan max-h-[780px] space-y-2 overflow-y-auto p-2.5" onMouseDown={(event) => event.stopPropagation()}>
-        {isReadonly && <div className="rounded border border-amber-300/30 bg-amber-300/10 px-2 py-1.5 text-[10px] text-amber-100">褰撳墠鐢诲竷涓哄彧璇伙紝浠呭彲鏌ョ湅缁撴灉銆?/div>}
+        {isReadonly && <div className="rounded border border-amber-300/30 bg-amber-300/10 px-2 py-1.5 text-[10px] text-amber-100">当前画布为只读，仅可查看结果。</div>}
         {d.error && <div className="rounded border border-red-300/25 bg-red-400/10 px-2 py-1.5 text-[10px] text-red-200">{d.error}</div>}
 
         <section data-exhibition-compact-section="input" data-exhibition-compact-item="main" className="grid grid-cols-2 gap-2">
-          <ImageSlot title="鍘熷寤虹瓚骞抽潰鍥? subtitle="鍥?锛屽敮涓€寤虹瓚缁撴瀯渚濇嵁锛屽繀椤昏繛鎺? url={planImage} />
+          <ImageSlot title="原始建筑平面图" subtitle="图1，唯一建筑结构依据；墙体和柱子不可动" url={planImage} />
           <div className="rounded border border-white/10 bg-black/15 p-2">
-            <div className="mb-1 text-[11px] font-semibold text-cyan-100">骞抽潰鍥捐В鏋?/div>
-            <div className="mb-2 text-[10px] leading-snug text-white/45">瀹氫箟鍥?鐨勬瘮渚嬨€佸昂瀵搞€侀鑹层€佸浣撱€佹煴瀛愬拰涓嶅彲绉诲姩缁撴瀯</div>
+            <div className="mb-1 text-[11px] font-semibold text-cyan-100">平面图解析</div>
+            <div className="mb-2 text-[10px] leading-snug text-white/45">补充比例、颜色含义、入口出口、墙体、柱子和不可动结构</div>
             <textarea
               className={`${FIELD} h-32 resize-y`}
               value={d.planInterpretation || ''}
               disabled={isReadonly || busy}
-              placeholder="渚嬪锛氭€讳綋瀹?0绫筹紝闀?0绫筹紝钃濊壊绾挎潯浠ｈ〃澧欎綋锛岀伆鑹叉柟鍧椾唬琛ㄦ煴瀛愶紝閮戒笉鍙Щ鍔?
+              placeholder="例如：蓝色线条代表墙体，灰色方块代表柱子，红色箭头为入口/出口，均不可移动"
               onChange={(event) => update({ planInterpretation: event.target.value })}
             />
           </div>
@@ -754,9 +753,9 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
         <section data-exhibition-compact-section="layout" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-1.5">
             <FileText size={13} className="text-cyan-200" />
-            <span className="text-[11px] font-semibold text-cyan-100">璧勬枡涓庡ぇ绾?/span>
+            <span className="text-[11px] font-semibold text-cyan-100">资料与大纲</span>
             <button type="button" className={`${BUTTON} ml-auto`} disabled={isReadonly || busy} onClick={() => fileRef.current?.click()}>
-              <Upload size={12} /> 瀵煎叆
+              <Upload size={12} /> 导入
             </button>
             <input
               ref={fileRef}
@@ -773,7 +772,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
             className={`${FIELD} min-h-[72px] resize-y`}
             value={sourceText}
             disabled={isReadonly || busy}
-            placeholder="瀵煎叆 DOCX/PDF/TXT锛屾垨绮樿创灞曢檲璧勬枡鍘熸枃锛涗篃鍙粠宸︿晶杩炴帴涓婃父澶х翰鏂囨湰"
+            placeholder="导入 DOCX/PDF/TXT，或粘贴展陈资料/文本大纲；也可连接上游文本节点"
             onChange={(event) => update({ sourceText: event.target.value })}
           />
           <label className="flex items-center gap-1.5 text-[10px] text-white/60">
@@ -784,7 +783,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
               disabled={isReadonly || busy}
               onChange={(event) => update({ useUpstream: event.target.checked })}
             />
-            鍚堝苟宸︿晶涓婃父鏂囨湰浣滀负璧勬枡/澶х翰
+            合并左侧上游文本作为资料/大纲
           </label>
           <div className="grid grid-cols-2 gap-2">
             <select
@@ -797,32 +796,127 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
               }}
             >
               {llmConfigOptions.map((item) => (
-                <option key={item.id} value={`llm-key:${item.id}`}>{item.label || item.id}{item.model ? ` 路 ${item.model}` : ''}</option>
+                <option key={item.id} value={`llm-key:${item.id}`}>{item.label || item.id}{item.model ? ` / ${item.model}` : ''}</option>
               ))}
             </select>
-            <input className={FIELD} disabled value={llmModel} title="妯″瀷鐢辨墍閫?LLM 閰嶇疆鍐冲畾" />
+            <input className={FIELD} disabled value={llmModel} title="模型由所选 LLM 配置决定" />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <button type="button" className="t8-btn min-h-8 px-2 text-[11px]" disabled={isReadonly || busy} onClick={() => void runOutline()}>
               {status === 'outlining' ? <Loader2 size={14} className="animate-spin" /> : <Brain size={14} />}
-              鎻愮偧澶х翰
+              提炼大纲
             </button>
             <button type="button" className="t8-btn min-h-8 px-2 text-[11px]" disabled={isReadonly || busy} onClick={() => void runOutlineAndLayout()}>
               {busy ? <Loader2 size={14} className="animate-spin" /> : <Route size={14} />}
-              鎻愮偧鍔犲竷灞€
+              {isAiPlanLayout ? 'AI布局生成' : '提炼加布局'}
             </button>
           </div>
           <textarea
             className={`${FIELD} min-h-[112px] resize-y`}
             value={d.layoutOutlineText || ''}
             disabled={isReadonly || busy}
-            placeholder="杩欓噷浼氱敓鎴愭垨濉啓灞曞尯澶х翰鐩綍锛涚敓鎴愬钩闈㈠竷灞€鏃朵細浣滀负灞曞尯鍒掑垎渚濇嵁"
+            placeholder="这里会生成或填写展区大纲目录；生成平面布局时会作为展区划分依据"
             onChange={(event) => update({ layoutOutlineText: event.target.value })}
           />
         </section>
 
         <section data-exhibition-compact-section="model" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><Route size={13} /> 甯冨眬瑕佹眰</div>
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><Route size={13} /> 布局要求</div>
+          {isAiPlanLayout && (
+            <div className="space-y-2 rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
+              <div className="grid grid-cols-2 gap-2">
+                <label className="space-y-1">
+                  <span className="text-[10px] font-semibold text-cyan-100">风格预设</span>
+                  <select
+                    className={FIELD}
+                    value={d.stylePresetId || ''}
+                    disabled={isReadonly || busy}
+                    onChange={(event) => {
+                      const preset = stylePresets.find((item) => item.id === event.target.value);
+                      update({ stylePresetId: event.target.value, styleRequirement: preset?.prompt || d.styleRequirement || '' });
+                    }}
+                  >
+                    <option value="">手动填写风格</option>
+                    {stylePresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[10px] font-semibold text-cyan-100">特殊要求预设</span>
+                  <select
+                    className={FIELD}
+                    value={d.requirementPresetId || ''}
+                    disabled={isReadonly || busy}
+                    onChange={(event) => {
+                      const preset = requirementPresets.find((item) => item.id === event.target.value);
+                      update({ requirementPresetId: event.target.value, specialRequirement: preset?.prompt || d.specialRequirement || '' });
+                    }}
+                  >
+                    <option value="">手动填写要求</option>
+                    {requirementPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
+                  </select>
+                </label>
+              </div>
+              <textarea
+                className={`${FIELD} min-h-[58px] resize-y`}
+                value={d.styleRequirement || ''}
+                disabled={isReadonly || busy}
+                placeholder="风格要求，例如：科技馆蓝白线稿汇报风、极简博物馆风、儿童研学明亮风"
+                onChange={(event) => update({ styleRequirement: event.target.value, stylePresetId: '' })}
+              />
+              <textarea
+                className={`${FIELD} min-h-[72px] resize-y`}
+                value={d.specialRequirement || ''}
+                disabled={isReadonly || busy}
+                placeholder="特殊要求，例如：入口右侧设置接待区、保留消防通道、主展项靠近中庭、动线单向无分叉"
+                onChange={(event) => update({ specialRequirement: event.target.value, requirementPresetId: '' })}
+              />
+              <button type="button" className="t8-btn min-h-8 px-2 text-[11px]" disabled={isReadonly || busy || !planImage} onClick={() => void runAnalyzePlan()}>
+                {status === 'analyzing' ? <Loader2 size={14} className="animate-spin" /> : <Brain size={14} />}
+                AI读取平面
+              </button>
+              {d.planAiInterpretation && (
+                <textarea
+                  className={`${FIELD} min-h-[88px] resize-y`}
+                  value={d.planAiInterpretation || ''}
+                  disabled={isReadonly || busy}
+                  placeholder="AI平面解析会显示在这里"
+                  onChange={(event) => update({ planAiInterpretation: event.target.value })}
+                />
+              )}
+              {canManageTeam && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1 rounded border border-white/10 bg-black/15 p-2">
+                    <button type="button" className={`${BUTTON} h-6 px-1.5`} disabled={busy || styleSaving} onClick={() => setStyleEditorOpen((open) => !open)}>
+                      {styleEditorOpen ? '收起风格预设' : '编辑风格预设'}
+                    </button>
+                    {styleEditorOpen && (
+                      <>
+                        <textarea className={`${FIELD} min-h-[88px] resize-y`} value={styleEditorValue} disabled={styleSaving} placeholder="每行：名称｜提示词" onChange={(event) => setStyleEditorValue(event.target.value)} />
+                        {styleError && <div className="text-[9px] text-red-200">{styleError}</div>}
+                        <button type="button" className={`${BUTTON} h-6 border-cyan-300/30 bg-cyan-300/15 px-1.5 text-cyan-100`} disabled={styleSaving} onClick={() => void saveStylePresets()}>
+                          {styleSaving ? '保存中' : '保存'}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  <div className="space-y-1 rounded border border-white/10 bg-black/15 p-2">
+                    <button type="button" className={`${BUTTON} h-6 px-1.5`} disabled={busy || requirementSaving} onClick={() => setRequirementEditorOpen((open) => !open)}>
+                      {requirementEditorOpen ? '收起要求预设' : '编辑要求预设'}
+                    </button>
+                    {requirementEditorOpen && (
+                      <>
+                        <textarea className={`${FIELD} min-h-[88px] resize-y`} value={requirementEditorValue} disabled={requirementSaving} placeholder="每行：名称｜提示词" onChange={(event) => setRequirementEditorValue(event.target.value)} />
+                        {requirementError && <div className="text-[9px] text-red-200">{requirementError}</div>}
+                        <button type="button" className={`${BUTTON} h-6 border-cyan-300/30 bg-cyan-300/15 px-1.5 text-cyan-100`} disabled={requirementSaving} onClick={() => void saveRequirementPresets()}>
+                          {requirementSaving ? '保存中' : '保存'}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           <select className={FIELD} value={layoutPresetId} disabled={isReadonly || busy} onChange={(event) => update({ layoutPresetId: normalizeExhibitionPlanLayoutPresetId(event.target.value) })}>
             {EXHIBITION_PLAN_LAYOUT_PRESETS.map((preset: ExhibitionPlanLayoutPreset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
           </select>
@@ -830,7 +924,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
             className={`${FIELD} min-h-[64px] resize-y`}
             value={d.layoutRequirement || ''}
             disabled={isReadonly || busy}
-            placeholder="琛ュ厖甯冨眬瑕佹眰锛氫緥濡傚叆鍙ｆ柟鍚戙€佸繀椤讳繚鐣欑殑鎴块棿銆侀噸鐐瑰睍椤逛綅缃€佸洟闃熷弬瑙傘€佹秷闃查€氶亾绛?
+            placeholder="补充布局要求：入口方向、必须保留的房间、重点展项位置、团队参观、消防通道等"
             onChange={(event) => update({ layoutRequirement: event.target.value })}
           />
           <label className="flex items-center gap-1.5 rounded border border-cyan-300/20 bg-cyan-300/10 px-2 py-1.5 text-[10px] text-cyan-50">
@@ -841,13 +935,13 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
               disabled={isReadonly || busy}
               onChange={(event) => update({ structureLock: event.target.checked })}
             />
-            缁撴瀯閿佸畾妯″紡锛氬彧鐢熸垚閫忔槑灞曢檲鍙犲姞灞傦紝鏈€缁堜繚鐣欏浘1鍘熷澧欐煴搴曞浘鍚堟垚
+            结构锁定模式：只生成透明展陈叠加层，最终保留图1原始墙体和柱子底图合成
           </label>
           <div className="grid grid-cols-3 gap-1">
             {[
-              ['showRoute', '鏄剧ず鍔ㄧ嚎', showRoute],
-              ['showLabels', '鏄剧ず鏍囨敞鏂囧瓧', showLabels],
-              ['showDescriptions', '鏄剧ず璇存槑鏂囧瓧', showDescriptions],
+              ['showRoute', '显示动线', showRoute],
+              ['showLabels', '显示标注文字', showLabels],
+              ['showDescriptions', '显示说明文字', showDescriptions],
             ].map(([key, label, checked]) => (
               <label key={String(key)} className="flex min-h-8 items-center justify-center gap-1 rounded border border-white/10 bg-black/15 px-1 text-[10px] text-white/70">
                 <input
@@ -864,47 +958,27 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1 rounded border border-white/10 bg-black/15 p-2">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-semibold text-cyan-100">妞嶅叆椤?/span>
-                <button
-                  type="button"
-                  className={`${BUTTON} ml-auto h-6 px-1.5`}
-                  disabled={isReadonly || busy}
-                  onClick={() => update({ insertItems: insertOptions.map((item) => item.id) })}
-                >
-                  鍏ㄩ€?                </button>
+                <span className="text-[10px] font-semibold text-cyan-100">植入项</span>
+                <button type="button" className={`${BUTTON} ml-auto h-6 px-1.5`} disabled={isReadonly || busy} onClick={() => update({ insertItems: insertOptions.map((item) => item.id) })}>全选</button>
               </div>
               {canManageTeam && (
                 <div className="space-y-1 rounded border border-cyan-300/20 bg-cyan-300/10 p-1.5">
-                  <button
-                    type="button"
-                    className={`${BUTTON} h-6 px-1.5`}
-                    disabled={busy || insertSaving}
-                    onClick={() => setInsertEditorOpen((open) => !open)}
-                  >
-                    {insertEditorOpen ? '鏀惰捣缂栬緫' : '缂栬緫妞嶅叆椤?}
+                  <button type="button" className={`${BUTTON} h-6 px-1.5`} disabled={busy || insertSaving} onClick={() => setInsertEditorOpen((open) => !open)}>
+                    {insertEditorOpen ? '收起编辑' : '编辑植入项'}
                   </button>
                   {insertEditorOpen && (
                     <>
-                      <textarea
-                        className={`${FIELD} min-h-[88px] resize-y`}
-                        value={insertEditorValue}
-                        disabled={insertSaving}
-                        placeholder="姣忚涓€涓鍏ラ」"
-                        onChange={(event) => setInsertEditorValue(event.target.value)}
-                      />
+                      <textarea className={`${FIELD} min-h-[88px] resize-y`} value={insertEditorValue} disabled={insertSaving} placeholder="每行一个植入项" onChange={(event) => setInsertEditorValue(event.target.value)} />
                       {insertError && <div className="text-[9px] text-red-200">{insertError}</div>}
-                      <div className="flex justify-end gap-1">
-                        <button type="button" className={`${BUTTON} h-6 px-1.5`} disabled={insertSaving} onClick={() => setInsertEditorOpen(false)}>鍙栨秷</button>
-                        <button type="button" className={`${BUTTON} h-6 border-cyan-300/30 bg-cyan-300/15 px-1.5 text-cyan-100`} disabled={insertSaving} onClick={() => void saveInsertPresets()}>
-                          {insertSaving ? '淇濆瓨涓? : '淇濆瓨'}
-                        </button>
-                      </div>
+                      <button type="button" className={`${BUTTON} h-6 border-cyan-300/30 bg-cyan-300/15 px-1.5 text-cyan-100`} disabled={insertSaving} onClick={() => void saveInsertPresets()}>
+                        {insertSaving ? '保存中' : '保存'}
+                      </button>
                     </>
                   )}
                 </div>
               )}
               <div className="grid grid-cols-2 gap-1">
-                {insertOptions.map((item: ExhibitionPlanLayoutChoiceItem) => {
+                {insertOptions.map((item) => {
                   const checked = selectedInsertIds.includes(item.id);
                   return (
                     <label key={item.id} className="flex items-center gap-1 rounded bg-white/[0.04] px-1.5 py-1 text-[9px] text-white/65">
@@ -928,48 +1002,29 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
             </div>
             <div className="space-y-1 rounded border border-white/10 bg-black/15 p-2">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-semibold text-cyan-100">鎺掗櫎椤?/span>
-                <button
-                  type="button"
-                  className={`${BUTTON} ml-auto h-6 px-1.5`}
-                  disabled={isReadonly || busy}
-                  onClick={() => update({ excludeItems: allExcludeSelected ? [] : excludeOptions.map((item) => item.id) })}
-                >
-                  {allExcludeSelected ? '娓呯┖' : '鍏ㄩ€?}
+                <span className="text-[10px] font-semibold text-cyan-100">排除项</span>
+                <button type="button" className={`${BUTTON} ml-auto h-6 px-1.5`} disabled={isReadonly || busy} onClick={() => update({ excludeItems: allExcludeSelected ? [] : excludeOptions.map((item) => item.id) })}>
+                  {allExcludeSelected ? '清空' : '全选'}
                 </button>
               </div>
               {canManageTeam && (
                 <div className="space-y-1 rounded border border-cyan-300/20 bg-cyan-300/10 p-1.5">
-                  <button
-                    type="button"
-                    className={`${BUTTON} h-6 px-1.5`}
-                    disabled={busy || excludeSaving}
-                    onClick={() => setExcludeEditorOpen((open) => !open)}
-                  >
-                    {excludeEditorOpen ? '鏀惰捣缂栬緫' : '缂栬緫鎺掗櫎椤?}
+                  <button type="button" className={`${BUTTON} h-6 px-1.5`} disabled={busy || excludeSaving} onClick={() => setExcludeEditorOpen((open) => !open)}>
+                    {excludeEditorOpen ? '收起编辑' : '编辑排除项'}
                   </button>
                   {excludeEditorOpen && (
                     <>
-                      <textarea
-                        className={`${FIELD} min-h-[88px] resize-y`}
-                        value={excludeEditorValue}
-                        disabled={excludeSaving}
-                        placeholder="姣忚涓€涓帓闄ら」"
-                        onChange={(event) => setExcludeEditorValue(event.target.value)}
-                      />
+                      <textarea className={`${FIELD} min-h-[88px] resize-y`} value={excludeEditorValue} disabled={excludeSaving} placeholder="每行一个排除项" onChange={(event) => setExcludeEditorValue(event.target.value)} />
                       {excludeError && <div className="text-[9px] text-red-200">{excludeError}</div>}
-                      <div className="flex justify-end gap-1">
-                        <button type="button" className={`${BUTTON} h-6 px-1.5`} disabled={excludeSaving} onClick={() => setExcludeEditorOpen(false)}>鍙栨秷</button>
-                        <button type="button" className={`${BUTTON} h-6 border-cyan-300/30 bg-cyan-300/15 px-1.5 text-cyan-100`} disabled={excludeSaving} onClick={() => void saveExcludePresets()}>
-                          {excludeSaving ? '淇濆瓨涓? : '淇濆瓨'}
-                        </button>
-                      </div>
+                      <button type="button" className={`${BUTTON} h-6 border-cyan-300/30 bg-cyan-300/15 px-1.5 text-cyan-100`} disabled={excludeSaving} onClick={() => void saveExcludePresets()}>
+                        {excludeSaving ? '保存中' : '保存'}
+                      </button>
                     </>
                   )}
                 </div>
               )}
               <div className="grid grid-cols-2 gap-1">
-                {excludeOptions.map((item: ExhibitionPlanLayoutChoiceItem) => {
+                {excludeOptions.map((item) => {
                   const checked = selectedExcludeIds.includes(item.id);
                   return (
                     <label key={item.id} className="flex items-center gap-1 rounded bg-white/[0.04] px-1.5 py-1 text-[9px] text-white/65">
@@ -996,12 +1051,12 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
 
         <section data-exhibition-compact-section="result" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} /> 鐢熷浘</div>
-            <button type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy} onClick={() => void runGenerate()}><Play size={13} /> 鐢熸垚骞抽潰甯冨眬</button>
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} /> 生图</div>
+            <button type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy} onClick={() => void runGenerate()}><Play size={13} /> {isAiPlanLayout ? '生成平面AI布局' : '生成平面布局'}</button>
           </div>
           <div className="grid grid-cols-2 gap-2 rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
             <label className="space-y-1">
-              <span className="text-[10px] text-white/55">鐢熷浘骞冲彴</span>
+              <span className="text-[10px] text-white/55">生图平台</span>
               <select
                 className={FIELD}
                 value={providerSelectValue}
@@ -1018,15 +1073,15 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
                   update({ providerSource: provider.protocol, providerId: provider.id, providerModel: models[0] || '' });
                 }}
               >
-                {allowZhenzhenFallback && <option value="zhenzhen">鍐呯疆鐢熷浘骞冲彴</option>}
+                {allowZhenzhenFallback && <option value="zhenzhen">内置生图平台</option>}
                 {imageAdvancedProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label || provider.id}</option>)}
               </select>
             </label>
             <label className="space-y-1">
-              <span className="text-[10px] text-white/55">鐢熷浘妯″瀷</span>
+              <span className="text-[10px] text-white/55">生图模型</span>
               {isExternalSelected ? (
                 <select className={FIELD} value={externalProviderModel} disabled={isReadonly || busy || externalModelOptions.length === 0} onChange={(event) => update({ providerModel: event.target.value })}>
-                  {externalModelOptions.length > 0 ? externalModelOptions.map((item) => <option key={item} value={item}>{item}</option>) : <option value="">鏈厤缃浘鍍忔ā鍨?/option>}
+                  {externalModelOptions.length > 0 ? externalModelOptions.map((item) => <option key={item} value={item}>{item}</option>) : <option value="">未配置图像模型</option>}
                 </select>
               ) : (
                 <select className={FIELD} value={apiModel} disabled={isReadonly || busy} onChange={(event) => update({ apiModel: event.target.value })}>
@@ -1035,19 +1090,19 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
               )}
             </label>
             <label className="space-y-1">
-              <span className="text-[10px] text-white/55">鍩虹妯″瀷</span>
+              <span className="text-[10px] text-white/55">基础模型</span>
               <select className={FIELD} value={modelDef.id} disabled={isReadonly || busy || isExternalSelected} onChange={(event) => update({ model: event.target.value, apiModel: (availableModelDefs.find((item) => item.id === event.target.value) || modelDef).apiModel })}>
                 {availableModelDefs.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
               </select>
             </label>
             <label className="space-y-1">
-              <span className="text-[10px] text-white/55">鐢婚潰姣斾緥</span>
+              <span className="text-[10px] text-white/55">画面比例</span>
               <select className={FIELD} value={aspectRatio} disabled={isReadonly || busy} onChange={(event) => update({ aspectRatio: event.target.value })}>
                 {modelDef.aspectRatios.map((ratio) => <option key={ratio} value={ratio}>{ratio}</option>)}
               </select>
             </label>
             <label className="space-y-1">
-              <span className="text-[10px] text-white/55">鍒嗚鲸鐜?/span>
+              <span className="text-[10px] text-white/55">分辨率</span>
               <select className={FIELD} value={sizeLevel} disabled={isReadonly || busy} onChange={(event) => update({ sizeLevel: event.target.value })}>
                 <option value="1K">1K</option>
                 <option value="2K">2K</option>
@@ -1055,24 +1110,8 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
               </select>
             </label>
             <label className="space-y-1">
-              <span className="text-[10px] text-white/55">杈撳嚭鏍煎紡</span>
-              <div className="grid grid-cols-2 gap-0.5 rounded bg-white/5 p-0.5">
-                {(['jpg', 'png'] as const).map((fmt) => (
-                  <button
-                    key={fmt}
-                    type="button"
-                    disabled={isReadonly || busy}
-                    onClick={() => update({ outputFormat: fmt })}
-                    className={`rounded py-1 text-[10px] font-semibold transition-all ${outputFormat === fmt ? 'bg-amber-500/30 text-amber-200' : 'text-zinc-400 hover:text-zinc-200'}`}
-                  >
-                    {fmt.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-            </label>
-            <label className="space-y-1">
               <span className="text-[10px] text-white/55">Seed</span>
-              <input className={FIELD} type="number" min={0} value={seed || ''} disabled={isReadonly || busy} placeholder="闅忔満" onChange={(event) => update({ seed: event.target.value })} />
+              <input className={FIELD} type="number" min={0} value={seed || ''} disabled={isReadonly || busy} placeholder="随机" onChange={(event) => update({ seed: event.target.value })} />
             </label>
           </div>
           {d.progress && <div className="text-[10px] text-cyan-100">{d.progress}</div>}

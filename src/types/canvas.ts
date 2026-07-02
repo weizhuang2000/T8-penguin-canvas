@@ -73,6 +73,7 @@ export type NodeType =
   | 'exhibition-text-image-loop'
   | 'exhibition-outline-split'
   | 'exhibition-plan-layout'
+  | 'exhibition-ai-plan-layout'
   | 'unit-panel-design'
   | 'showcase-interior-design'
   | 'multi-angle-visual'

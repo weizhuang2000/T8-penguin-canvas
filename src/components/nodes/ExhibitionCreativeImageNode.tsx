@@ -2054,11 +2054,11 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       }`}
       style={{ background: 'rgba(17,24,39,.96)', backdropFilter: 'blur(8px)' }}
     >
-      <Handle type="source" position={Position.Right} className="!border-0" style={{ background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输出：展陈创意生图结果（图像）" />
-      <Handle id="space" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '30%', background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输入：空间图 — 约束建筑空间结构" />
-      <Handle id="color-material-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '43%', background: EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR }} title="输入：色彩材质参考图（可选）" />
-      <Handle id="exhibit-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '56%', background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输入：展品参考图（可选）" />
-      <Handle id="document-text" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '69%', background: EXHIBITION_TEXT_HANDLE_COLOR }} title="输入：项目资料文档（DOCX/PDF/TXT，可选）" />
+      <Handle type="source" position={Position.Right} className="!border-0 t8-exhibition-handle--image" style={{ background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输出：展陈创意生图结果（图像）" />
+      <Handle id="space" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 t8-exhibition-handle--image" style={{ top: '30%', background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输入：空间图 — 约束建筑空间结构" />
+      <Handle id="color-material-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 t8-exhibition-handle--pink" style={{ top: '43%', background: EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR }} title="输入：色彩材质参考图（可选）" />
+      <Handle id="exhibit-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 t8-exhibition-handle--image" style={{ top: '56%', background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输入：展品参考图（可选）" />
+      <Handle id="document-text" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 t8-exhibition-handle--text" style={{ top: '69%', background: EXHIBITION_TEXT_HANDLE_COLOR }} title="输入：项目资料文档（DOCX/PDF/TXT，可选）" />
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex h-8 w-8 items-center justify-center rounded bg-cyan-300/15 text-cyan-200">
           <Layers3 size={16} />

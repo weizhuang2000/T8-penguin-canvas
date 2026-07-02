@@ -1040,7 +1040,7 @@ function ImageSlot({
         id={handleId}
         type="target"
         position={Position.Left}
-        className="!h-3 !w-3 !border-0"
+        className={`!h-3 !w-3 !border-0 ${handleId === 'color-material-reference' ? 't8-exhibition-handle--pink' : 't8-exhibition-handle--image'}`}
         style={{ top, background: handleId === 'color-material-reference' ? EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR : EXHIBITION_IMAGE_HANDLE_COLOR }}
         title={`输入：${title} — ${subtitle}`}
       />
@@ -2993,12 +2993,12 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       }`}
       style={{ background: 'rgba(17,24,39,.96)', backdropFilter: 'blur(8px)' }}
     >
-      <Handle id="image" type="source" position={Position.Right} className="!border-0" style={{ background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输出：展陈图生图结果（图像）" />
+      <Handle id="image" type="source" position={Position.Right} className="!border-0 t8-exhibition-handle--image" style={{ background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输出：展陈图生图结果（图像）" />
       <Handle
         id="prompt"
         type="source"
         position={Position.Right}
-        className="!h-3 !w-3 !border-0"
+        className="!h-3 !w-3 !border-0 t8-exhibition-handle--text"
         style={{ top: '41%', background: EXHIBITION_TEXT_HANDLE_COLOR }}
         title="输出：最终提示词文本"
       />
@@ -3006,7 +3006,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         id="document-text"
         type="target"
         position={Position.Left}
-        className="!h-3 !w-3 !border-0"
+        className="!h-3 !w-3 !border-0 t8-exhibition-handle--text"
         style={{ top: '69%', background: EXHIBITION_TEXT_HANDLE_COLOR }}
         title="输入：展墙内容文本（接入后自动启用展墙内容设计）"
       />

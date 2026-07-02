@@ -977,9 +977,9 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
 
   return (
     <div data-exhibition-compact-node-type="showcase-interior-design" className={`relative w-[520px] rounded-xl border bg-zinc-950 text-white shadow-2xl ${selected ? 'border-cyan-300/70' : 'border-white/10'}`}>
-      <Handle type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '32%', background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输入：展品图" />
-      <Handle id="color-material-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0" style={{ top: '52%', background: EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR }} title="输入：色彩与材质参考图" />
-      <Handle type="source" position={Position.Right} className="!h-3 !w-3 !border-0" style={{ background: EXHIBITION_IMAGE_HANDLE_COLOR }} />
+      <Handle type="target" position={Position.Left} className="!h-3 !w-3 !border-0 t8-exhibition-handle--image" style={{ top: '32%', background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输入：展品图" />
+      <Handle id="color-material-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 t8-exhibition-handle--pink" style={{ top: '52%', background: EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR }} title="输入：色彩与材质参考图" />
+      <Handle type="source" position={Position.Right} className="!h-3 !w-3 !border-0 t8-exhibition-handle--image" style={{ background: EXHIBITION_IMAGE_HANDLE_COLOR }} />
 
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <Boxes size={16} className="text-cyan-200" />

@@ -142,6 +142,40 @@ test('exhibition recolor presets are readable and admin managed', async (t) => {
   assert.deepEqual(ceilings.data.map((item) => [item.id, item.label, item.prompt, item.order]), [['custom-ceiling', '自定义天花', '天花改为线性灯带顶', 0]]);
 });
 
+test('exhibition AI plan layout presets are readable and manager managed', async (t) => {
+  const userBase = await startApp(t, { id: 'u1', username: 'alice', name: 'Alice', role: 'designer' });
+  const defaults = await fetch(`${userBase}/api/prompt-library/exhibition-ai-plan-layout/presets`).then((res) => res.json());
+  assert.equal(defaults.success, true);
+  assert.ok(defaults.data.styles.length >= 1);
+  assert.ok(defaults.data.requirements.length >= 1);
+
+  const denied = await fetch(`${userBase}/api/prompt-library/exhibition-ai-plan-layout/presets/styles`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ presets: [{ label: '用户不可写', prompt: '不应保存' }] }),
+  });
+  assert.equal(denied.status, 403);
+
+  const managerBase = await startApp(t, { id: 'm1', username: 'manager', name: 'Manager', role: 'manager' });
+  const styles = await fetch(`${managerBase}/api/prompt-library/exhibition-ai-plan-layout/presets/styles`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ presets: [{ label: '科技蓝白', prompt: '科技馆蓝白线稿汇报风' }] }),
+  }).then((res) => res.json());
+  assert.equal(styles.success, true);
+  assert.equal(styles.data[0].label, '科技蓝白');
+  assert.equal(styles.data[0].prompt, '科技馆蓝白线稿汇报风');
+
+  const requirements = await fetch(`${managerBase}/api/prompt-library/exhibition-ai-plan-layout/presets/requirements`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ presets: [{ label: '保留消防通道', prompt: '保留消防通道，动线单向无分叉' }] }),
+  }).then((res) => res.json());
+  assert.equal(requirements.success, true);
+  assert.equal(requirements.data[0].label, '保留消防通道');
+  assert.equal(requirements.data[0].prompt, '保留消防通道，动线单向无分叉');
+});
+
 test('exhibition img2img exclusions are managed separately from creative exclusions', async (t) => {
   const userBase = await startApp(t, { id: 'u1', username: 'alice', name: 'Alice', role: 'designer' });
   const defaults = await fetch(`${userBase}/api/prompt-library/exhibition-img2img/presets`).then((res) => res.json());
