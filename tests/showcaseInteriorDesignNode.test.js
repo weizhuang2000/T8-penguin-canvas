@@ -94,6 +94,9 @@ test('showcase interior design component wires shared controls and generation se
   assert.match(source, /输入展品主题/);
   assert.match(source, /manualLayoutItems/);
   assert.match(source, /manualLayoutReferenceImage/);
+  assert.match(source, /normalizeReferenceImageToAspectRatio/);
+  assert.match(source, /normalizedColorMaterialReferenceImage/);
+  assert.match(source, /uploadDataUrl\(canvas\.toDataURL\('image\/png'\), 'showcase-color-material-reference'\)/);
   assert.match(source, /ShowcaseManualLayoutModal/);
   assert.match(source, /buildManualLayoutReferenceImage/);
   assert.match(source, /draftItemsRef/);

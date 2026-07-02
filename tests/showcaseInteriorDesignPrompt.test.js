@@ -295,6 +295,8 @@ test('showcase prompt separates exhibit images from color material reference', (
   });
   assert.match(prompt, /普通 image 输入均视为展品图/);
   assert.match(prompt, /独立 color-material-reference 输入/);
+  assert.match(prompt, /色彩与材质参考图不得作为画幅比例、构图比例、展柜宽高比例或输出尺寸依据/);
+  assert.match(prompt, /生图比例只服从节点的“比例”参数和展柜尺寸设定/);
   assert.match(prompt, /排在所有展品图之后/);
   assert.match(prompt, /它不是展品图/);
   assert.match(prompt, /不得套用任何展品高度尺寸/);

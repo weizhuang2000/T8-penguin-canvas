@@ -369,6 +369,7 @@ function colorMaterialText(values) {
 
   if (hasReference) {
     lines.push('色彩与材质参考图使用独立 color-material-reference 输入，只用于提取柜内背景、底座、背板、托架、灯光、金属/亚克力/玻璃等材质语言，不得当作展品图，也不得改变展品本身外观。');
+    lines.push('色彩与材质参考图不得作为画幅比例、构图比例、展柜宽高比例或输出尺寸依据；生图比例只服从节点的“比例”参数和展柜尺寸设定。');
     if (referenceTone) lines.push(`参考图主色调 / 材质说明：${referenceTone}`);
   }
   if (presetText && !hasReference) lines.push(`共享色彩与材质预设（仅采用色彩和材质信息，忽略其中所有图案、纹样、文字、符号、logo、排版约定）：${presetText}`);

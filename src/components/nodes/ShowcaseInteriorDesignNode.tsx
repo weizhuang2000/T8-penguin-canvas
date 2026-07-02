@@ -6,6 +6,7 @@ import { Boxes, Image as ImageIcon, Layers, Loader2, MoveDiagonal2, Palette, Pla
 import { IMAGE_MODELS } from '../../providers/models';
 import { getElevationPromptPresets, type ElevationColorMaterialPresetItem } from '../../services/api';
 import { generateExternalImage, queryExternalImageStatus, queryImageStatus, submitImageAsync } from '../../services/generation';
+import { uploadDataUrl } from '../../services/imageOps';
 import {
   advancedProviderModelOptions,
   advancedProvidersForNode,
@@ -201,6 +202,40 @@ function closestAspectRatio(sourceRatio: number, options: string[]): string {
   return candidates.reduce((best, item) => (
     Math.abs(item.ratio - sourceRatio) < Math.abs(best.ratio - sourceRatio) ? item : best
   )).value;
+}
+
+function canvasSizeForAspectRatio(aspectRatio: string): { width: number; height: number } {
+  const ratio = ratioValue(aspectRatio) || 1;
+  const maxSide = 1024;
+  if (ratio >= 1) {
+    return { width: maxSide, height: Math.max(256, Math.round(maxSide / ratio)) };
+  }
+  return { width: Math.max(256, Math.round(maxSide * ratio)), height: maxSide };
+}
+
+async function normalizeReferenceImageToAspectRatio(src: string, aspectRatio: string): Promise<string> {
+  if (!src || typeof document === 'undefined') return src;
+  const image = await loadLooseImage(src);
+  if (!image) return src;
+  const { width, height } = canvasSizeForAspectRatio(aspectRatio);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return src;
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(0, 0, width, height);
+  const iw = image.naturalWidth || image.width || 1;
+  const ih = image.naturalHeight || image.height || 1;
+  const scale = Math.min(width / iw, height / ih);
+  const drawW = iw * scale;
+  const drawH = ih * scale;
+  ctx.drawImage(image, (width - drawW) / 2, (height - drawH) / 2, drawW, drawH);
+  try {
+    return await uploadDataUrl(canvas.toDataURL('image/png'), 'showcase-color-material-reference');
+  } catch {
+    return src;
+  }
 }
 
 function normalizeLayoutMode(value: unknown): LayoutMode {
@@ -754,6 +789,9 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
       ? await buildManualLayoutReferenceImage(manualLayoutItems, showcaseStyle)
       : '';
     const manualLayoutReferenceImage = generatedManualLayoutReferenceImage || (layoutMode === 'manual' ? String(d.manualLayoutReferenceImage || '') : '');
+    const normalizedColorMaterialReferenceImage = colorMaterialReferenceImage
+      ? await normalizeReferenceImageToAspectRatio(colorMaterialReferenceImage, aspectRatio)
+      : '';
     const imagePrompt = buildShowcaseInteriorDesignPrompt({
       showcaseStyle,
       exhibitItems,
@@ -774,7 +812,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
     });
     const runtimeReferenceImages = [
       ...(layoutMode === 'manual' ? [manualLayoutReferenceImage] : exhibitItems.map((item) => item.url)),
-      colorMaterialReferenceImage,
+      normalizedColorMaterialReferenceImage,
     ].filter(Boolean);
     const runSeed = seed > 0 ? seed : randomImageSeed();
     const src = `showcase-interior-design:${id.slice(0, 6)}`;
