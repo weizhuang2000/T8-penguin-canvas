@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Brain, ChevronDown, ChevronRight, CloudUpload, Download, ExternalLink, Eye, EyeOff, FileUp, Info, KeyRound, Loader2, Lock, Plus, Save, Settings2, TestTube2, Trash2, X, FolderOpen, ServerCog, Volume2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Brain, ChevronDown, ChevronRight, CloudUpload, Download, ExternalLink, Eye, EyeOff, FileUp, Info, KeyRound, Loader2, Lock, MousePointer2, Plus, Save, Settings2, TestTube2, Trash2, X, FolderOpen, ServerCog, Volume2 } from 'lucide-react';
+import * as LucideIcons from 'lucide-react';
 import { useApiKeysStore, FIXED_ZHENZHEN_BASE, RH_BASE, normalizeApiSettings } from '../stores/apiKeys';
 import { taskCompletionSound as taskCompletionSoundController } from '../stores/taskCompletionSound';
 import { useThemeStore } from '../stores/theme';
@@ -27,6 +28,14 @@ import {
   stringifyBasicComfyTextToImageWorkflow,
   type ComfyFieldMapping,
 } from '../utils/comfyuiWorkflow';
+import { NODE_REGISTRY } from '../config/nodeRegistry';
+import {
+  CANVAS_NODE_MENU_SCENE_LABELS,
+  CANVAS_NODE_MENU_SCENES,
+  normalizeCanvasNodeMenuPreferences,
+  type CanvasNodeMenuPreferences,
+  type CanvasNodeMenuScene,
+} from '../utils/canvasNodeMenuPreferences';
 import PromptTextarea from './PromptTextarea';
 import { LocalSettingsAddonSlot } from 'virtual:t8-local-extensions';
 
@@ -309,6 +318,10 @@ function normalizeCloudUploadTargetForms(value: unknown): CloudUploadTargetConfi
   return normalizeApiSettings({ cloudUploadTargets: value as CloudUploadTargetConfig[] }).cloudUploadTargets || [];
 }
 
+function normalizeCanvasNodeMenuPreferenceForms(value: unknown): CanvasNodeMenuPreferences {
+  return normalizeCanvasNodeMenuPreferences(value);
+}
+
 function normalizeLlmConfigForms(value: unknown, settings?: Partial<ApiSettings>): LlmConfig[] {
   const source = Array.isArray(value) ? value : [];
   const normalized = normalizeApiSettings({ ...(settings || {}), llmConfigs: source as LlmConfig[] }).llmConfigs || [];
@@ -391,6 +404,11 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   const [activeCloudTargetId, setActiveCloudTargetId] = useState<string>('');
   const [cloudUploadDirty, setCloudUploadDirty] = useState(false);
   const [cloudTestStatus, setCloudTestStatus] = useState<Record<string, { loading?: boolean; ok?: boolean; message?: string }>>({});
+  const [nodeMenuOpen, setNodeMenuOpen] = useState(false);
+  const [nodeMenuPreferencesInput, setNodeMenuPreferencesInput] = useState<CanvasNodeMenuPreferences>(
+    () => normalizeCanvasNodeMenuPreferenceForms(undefined),
+  );
+  const [nodeMenuDirty, setNodeMenuDirty] = useState(false);
   const [backupMessage, setBackupMessage] = useState<string>('');
   const [taskSoundMessage, setTaskSoundMessage] = useState<string>('');
   const [taskSoundBusy, setTaskSoundBusy] = useState(false);
@@ -432,6 +450,9 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       setActiveCloudTargetId(cloudTargets[0]?.id || '');
       setCloudUploadDirty(false);
       setCloudTestStatus({});
+      setNodeMenuOpen(false);
+      setNodeMenuPreferencesInput(normalizeCanvasNodeMenuPreferenceForms((settings as any)?.canvasNodeMenuPreferences));
+      setNodeMenuDirty(false);
       setTaskSoundMessage('');
       setTaskSoundBusy(false);
       setTaskSoundTesting(false);
@@ -479,6 +500,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     ...(llmConfigsDirty ? { llmConfigs: llmConfigsInput } : {}),
     ...(advancedDirty ? { advancedProviders: advancedProvidersInput } : {}),
     ...(cloudUploadDirty ? { cloudUploadTargets: cloudUploadTargetsInput } : {}),
+    ...(nodeMenuDirty ? { canvasNodeMenuPreferences: nodeMenuPreferencesInput } : {}),
   });
 
   const isMaskedKeyValue = (value: unknown): boolean => {
@@ -519,6 +541,9 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     }
     if (Array.isArray((source as any).cloudUploadTargets)) {
       next.cloudUploadTargets = normalizeCloudUploadTargetForms((source as any).cloudUploadTargets);
+    }
+    if ((source as any).canvasNodeMenuPreferences && typeof (source as any).canvasNodeMenuPreferences === 'object') {
+      next.canvasNodeMenuPreferences = normalizeCanvasNodeMenuPreferenceForms((source as any).canvasNodeMenuPreferences);
     }
     return next;
   };
@@ -604,6 +629,11 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       setActiveCloudTargetId(targets[0]?.id || '');
       setCloudUploadDirty(true);
       setCloudUploadOpen(true);
+    }
+    if ((patch as any).canvasNodeMenuPreferences) {
+      setNodeMenuPreferencesInput(normalizeCanvasNodeMenuPreferenceForms((patch as any).canvasNodeMenuPreferences));
+      setNodeMenuDirty(true);
+      setNodeMenuOpen(true);
     }
     setClassifiedOpen(true);
   };
@@ -721,6 +751,9 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     }
     if (cloudUploadDirty) {
       (patch as any).cloudUploadTargets = cloudUploadTargetsInput;
+    }
+    if (nodeMenuDirty) {
+      (patch as any).canvasNodeMenuPreferences = nodeMenuPreferencesInput;
     }
     // 贞贞工坊启用开关
     if (zhenzhenEnabled !== ((settings as any)?.enableZhenzhenFallback !== false)) {
@@ -1011,6 +1044,57 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     setCloudUploadDirty(true);
   };
 
+  const updateNodeMenuPreferences = (updater: (current: CanvasNodeMenuPreferences) => CanvasNodeMenuPreferences) => {
+    setNodeMenuPreferencesInput((prev) => normalizeCanvasNodeMenuPreferenceForms(updater(prev)));
+    setNodeMenuDirty(true);
+  };
+
+  const updateNodeMenuScene = (scene: CanvasNodeMenuScene, patch: Partial<CanvasNodeMenuPreferences[CanvasNodeMenuScene]>) => {
+    updateNodeMenuPreferences((current) => ({
+      ...current,
+      [scene]: {
+        ...current[scene],
+        ...patch,
+        items: patch.items || current[scene].items,
+      },
+    }));
+  };
+
+  const updateNodeMenuItemVisible = (scene: CanvasNodeMenuScene, type: string, visible: boolean) => {
+    updateNodeMenuPreferences((current) => ({
+      ...current,
+      [scene]: {
+        ...current[scene],
+        items: current[scene].items.map((item) => (
+          item.type === type ? { ...item, visible } : item
+        )),
+      },
+    }));
+  };
+
+  const moveNodeMenuItem = (scene: CanvasNodeMenuScene, type: string, direction: -1 | 1) => {
+    updateNodeMenuPreferences((current) => {
+      const items = [...current[scene].items].sort((a, b) => a.order - b.order);
+      const index = items.findIndex((item) => item.type === type);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= items.length) return current;
+      const [item] = items.splice(index, 1);
+      items.splice(nextIndex, 0, item);
+      return {
+        ...current,
+        [scene]: {
+          ...current[scene],
+          items: items.map((entry, order) => ({ ...entry, order })),
+        },
+      };
+    });
+  };
+
+  const resetNodeMenuPreferences = () => {
+    setNodeMenuPreferencesInput(normalizeCanvasNodeMenuPreferenceForms(undefined));
+    setNodeMenuDirty(true);
+  };
+
   const handleTestCloudTarget = async (target: CloudUploadTargetConfig) => {
     setCloudTestStatus((prev) => ({ ...prev, [target.id]: { loading: true } }));
     try {
@@ -1030,6 +1114,95 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
         [target.id]: { ok: false, message: e?.message || '配置检查失败' },
       }));
     }
+  };
+
+  const renderNodeMenuSceneSettings = (scene: CanvasNodeMenuScene) => {
+    const scenePreference = nodeMenuPreferencesInput[scene];
+    const metaByType = new Map(NODE_REGISTRY.map((meta) => [meta.type, meta]));
+    const items = scenePreference.items
+      .map((item) => ({ item, meta: metaByType.get(item.type) }))
+      .filter((entry) => entry.meta && !entry.meta.hidden);
+    const visibleCount = items.filter((entry) => entry.item.visible).length;
+    return (
+      <AdvancedProviderFormBlock
+        key={scene}
+        className={
+          isPixel
+            ? 't8-api-settings-section border p-3 space-y-3'
+            : 't8-api-settings-section rounded-lg border p-3 space-y-3'
+        }
+        labelClassName={labelCls}
+        hintClassName={hintCls}
+        title={CANVAS_NODE_MENU_SCENE_LABELS[scene].title}
+        note={CANVAS_NODE_MENU_SCENE_LABELS[scene].hint}
+      >
+        <div className="flex items-center gap-3 flex-wrap justify-between">
+          <label className={`flex items-center gap-2 text-xs font-bold ${labelCls}`}>
+            <input
+              type="checkbox"
+              checked={scenePreference.enabled}
+              onChange={(e) => updateNodeMenuScene(scene, { enabled: e.target.checked })}
+            />
+            显示这个菜单
+          </label>
+          <span className={`text-[11px] ${hintCls}`}>已显示 {visibleCount}/{items.length}</span>
+        </div>
+        <div className="max-h-72 overflow-y-auto pr-1 space-y-1">
+          {items.map(({ item, meta }, index) => {
+            const Icon = (LucideIcons as any)[meta?.icon || 'Box'] || LucideIcons.Box;
+            return (
+              <div
+                key={item.type}
+                className={
+                  isPixel
+                    ? 't8-api-settings-provider-card flex items-center gap-2 px-2 py-2 px-btn'
+                    : 't8-api-settings-provider-card flex items-center gap-2 px-2 py-2 rounded-md border'
+                }
+              >
+                <label className="flex items-center gap-2 min-w-0 flex-1">
+                  <input
+                    type="checkbox"
+                    checked={item.visible}
+                    onChange={(e) => updateNodeMenuItemVisible(scene, item.type, e.target.checked)}
+                  />
+                  <Icon size={14} className="shrink-0 t8-api-settings-icon" />
+                  <span className={`text-xs font-bold truncate ${labelCls}`}>{meta?.label || item.type}</span>
+                </label>
+                <span className={`hidden sm:inline text-[10px] truncate max-w-[140px] ${hintCls}`}>{meta?.category}</span>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => moveNodeMenuItem(scene, item.type, -1)}
+                    disabled={index === 0}
+                    className={
+                      isPixel
+                        ? 't8-api-settings-icon-btn px-btn px-btn--icon px-btn--ghost disabled:opacity-40'
+                        : 't8-api-settings-icon-btn p-1 rounded-md disabled:opacity-40'
+                    }
+                    title="上移"
+                  >
+                    <ArrowUp size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveNodeMenuItem(scene, item.type, 1)}
+                    disabled={index === items.length - 1}
+                    className={
+                      isPixel
+                        ? 't8-api-settings-icon-btn px-btn px-btn--icon px-btn--ghost disabled:opacity-40'
+                        : 't8-api-settings-icon-btn p-1 rounded-md disabled:opacity-40'
+                    }
+                    title="下移"
+                  >
+                    <ArrowDown size={13} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </AdvancedProviderFormBlock>
+    );
   };
 
   const renderCloudTargetForm = (target: CloudUploadTargetConfig) => {
@@ -3010,6 +3183,69 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
           </div>
 
           {/* 任务完成提示音 */}
+          <div className="t8-api-settings-divider pt-3 border-t">
+            <button
+              type="button"
+              onClick={() => setNodeMenuOpen((v) => !v)}
+              aria-expanded={nodeMenuOpen}
+              data-open={nodeMenuOpen}
+              className={
+                isPixel
+                  ? 't8-api-settings-toggle w-full flex items-center gap-2 px-3 py-2 px-btn'
+                  : 't8-api-settings-toggle w-full flex items-center gap-2 px-3 py-2 rounded-lg border transition'
+              }
+            >
+              <MousePointer2 size={14} className="t8-api-settings-icon" />
+              <span className="text-xs font-bold shrink-0">画布右键节点菜单</span>
+              <span className={`hidden sm:inline text-[11px] ${hintCls}`}>设置快速添加、从输入口拉线、从输出口拉线时显示哪些节点及顺序</span>
+              <span className="ml-auto flex items-center gap-1.5 flex-wrap justify-end">
+                {CANVAS_NODE_MENU_SCENES.map((scene) => {
+                  const pref = nodeMenuPreferencesInput[scene];
+                  const visible = pref.items.filter((item) => item.visible).length;
+                  return (
+                    <span
+                      key={scene}
+                      className="t8-api-settings-badge px-1.5 py-0.5 text-[10px] rounded border"
+                      data-tone={pref.enabled && visible > 0 ? 'success' : 'muted'}
+                    >
+                      {visible}
+                    </span>
+                  );
+                })}
+              </span>
+              <span className={`flex items-center gap-1 text-[11px] ${hintCls}`}>
+                {nodeMenuOpen ? '收起' : '展开'}
+                {nodeMenuOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </span>
+            </button>
+            {!nodeMenuOpen && (
+              <div className={`text-[11px] mt-2 ${hintCls}`}>
+                用于控制空白区右键“快速添加节点”、输入接口“从...输入”和输出接口“连接到”的候选节点。
+              </div>
+            )}
+            {nodeMenuOpen && (
+              <div className="mt-3 space-y-3">
+                <div className="flex items-start gap-3 justify-between flex-wrap">
+                  <div className={`text-[11px] leading-relaxed ${hintCls}`}>
+                    取消勾选会从对应菜单中隐藏该节点；上下箭头用于调整菜单显示顺序，不影响侧边栏节点列表和已有画布。
+                  </div>
+                  <button
+                    type="button"
+                    onClick={resetNodeMenuPreferences}
+                    className={
+                      isPixel
+                        ? 't8-api-settings-secondary-btn px-btn text-[11px] px-2 py-1 shrink-0'
+                        : 't8-api-settings-secondary-btn rounded border px-2 py-1 text-[11px] shrink-0 inline-flex items-center gap-1'
+                    }
+                  >
+                    恢复默认
+                  </button>
+                </div>
+                {CANVAS_NODE_MENU_SCENES.map((scene) => renderNodeMenuSceneSettings(scene))}
+              </div>
+            )}
+          </div>
+
           <div className="t8-api-settings-divider pt-3 border-t">
             <label className={`text-sm font-medium flex items-center gap-2 flex-wrap ${labelCls}`}>
               <Volume2 size={14} className="t8-api-settings-icon" />

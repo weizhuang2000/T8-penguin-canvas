@@ -85,6 +85,7 @@ import {
   type MaterialSetKind,
 } from '../utils/materialSet';
 import { chooseDefaultSendMode, resolveEffectiveSendMode } from '../utils/sendMode';
+import { applyCanvasNodeMenuPreferences } from '../utils/canvasNodeMenuPreferences';
 import * as api from '../services/api';
 import { logBus } from '../stores/logs';
 import CanvasToolbar from './CanvasToolbar';
@@ -1906,6 +1907,7 @@ function CanvasInner({
   const { activeId, canvases, loadCanvases, setActive } = useCanvasStore();
   const { theme, style, templateId, customTemplates } = useThemeStore();
   const advancedProviders = useApiKeysStore((state) => state.settings.advancedProviders);
+  const canvasNodeMenuPreferences = useApiKeysStore((state) => state.settings.canvasNodeMenuPreferences);
   const shortcuts = useShortcutStore((s) => s.shortcuts);
   const shortcutText = useCallback((actionId: string) => formatShortcutList(shortcuts[actionId]), [shortcuts]);
   const currentTemplate = useMemo(
@@ -4817,7 +4819,7 @@ function CanvasInner({
     const fromOuts = isFromSource ? getNodeOutputs(fromNode) : [];
     const fromIns = !isFromSource ? getNodeInputs(fromNode) : [];
 
-    return NODE_REGISTRY.flatMap((meta) => {
+    const candidates = NODE_REGISTRY.flatMap((meta) => {
       // 隐藏节点不作为候选项出现(仅从主动添加入口中移除,不影响已存在节点连边)
       if (meta.hidden) return [];
       // 不推荐带动态输出的 upload 作为候选 source⚡但允许它作为 target(upload 本身不受输入,实际最后会被过滤)
@@ -4836,13 +4838,16 @@ function CanvasInner({
         matched = candidateOuts.filter((t) => fromIns.includes(t) || fromIns.includes('any') || t === 'any');
       }
       return [{ ...meta, matchedTypes: matched }];
-    }).sort((a, b) => {
+    });
+    return applyCanvasNodeMenuPreferences(
+      candidates,
+      canvasNodeMenuPreferences,
+      isFromSource ? 'connectToOutput' : 'connectFromInput',
+    ).sort((a, b) => {
       // 中继节点(relay)永远置顶,作为最常用的透传/分发节点入口
-      if (a.type === 'relay' && b.type !== 'relay') return -1;
-      if (b.type === 'relay' && a.type !== 'relay') return 1;
       return 0;
     });
-  }, [picker, nodes]);
+  }, [picker, nodes, canvasNodeMenuPreferences]);
 
   // 点击候选项→ 在拖落位置创建节点并自动连线
   const handlePickCandidate = useCallback(
@@ -6287,8 +6292,10 @@ function CanvasInner({
 
       {/* 画布空白区右键菜单: 快速添加节点 */}
       {paneMenu && (() => {
-        const QUICK_NODES = NODE_REGISTRY.filter(
-          (n) => n.category === 'input' || n.category === 'core'
+        const QUICK_NODES = applyCanvasNodeMenuPreferences(
+          NODE_REGISTRY.filter((n) => !n.hidden),
+          canvasNodeMenuPreferences,
+          'quickAdd',
         );
         const COLOR_HEX: Record<string, string> = {
           sky: '#7dd3fc', amber: '#fcd34d', rose: '#fda4af', fuchsia: '#f0abfc',

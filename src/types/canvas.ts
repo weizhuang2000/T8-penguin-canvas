@@ -255,6 +255,21 @@ export interface CloudUploadSummary {
   defaultLabel?: string;
 }
 
+export type CanvasNodeMenuScene = 'quickAdd' | 'connectFromInput' | 'connectToOutput';
+
+export interface CanvasNodeMenuItemPreference {
+  type: NodeType;
+  visible: boolean;
+  order: number;
+}
+
+export interface CanvasNodeMenuScenePreference {
+  enabled: boolean;
+  items: CanvasNodeMenuItemPreference[];
+}
+
+export type CanvasNodeMenuPreferences = Record<CanvasNodeMenuScene, CanvasNodeMenuScenePreference>;
+
 export type CanvasProviderSource = 'zhenzhen' | AdvancedProviderProtocol;
 
 export interface CanvasNodeData {
@@ -462,6 +477,7 @@ export interface ApiSettings {
   advancedProviderSummary?: AdvancedProviderSummary;
   cloudUploadTargets?: CloudUploadTargetConfig[];
   cloudUploadSummary?: CloudUploadSummary;
+  canvasNodeMenuPreferences?: CanvasNodeMenuPreferences;
   taskCompletionSound?: {
     mode?: 'default' | 'custom';
     name?: string;

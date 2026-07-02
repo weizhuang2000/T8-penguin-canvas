@@ -53,6 +53,17 @@ const DEFAULT_SETTINGS = {
   advancedProviders: normalizeAdvancedProviders(),
   // v1.9.x: 云端上传目标（可选）。默认禁用，不影响资源库/自动保存主流程。
   cloudUploadTargets: normalizeCloudUploadTargets(),
+  canvasNodeMenuPreferences: {
+    quickAdd: {
+      enabled: true,
+      items: [
+        'upload', 'model-3d-upload', 'model-3d-preview', 'material-set', 'output',
+        'text', 'image', 'video', 'seedance', 'director-storyboard', 'audio', 'llm',
+      ].map((type, order) => ({ type, visible: true, order })),
+    },
+    connectFromInput: { enabled: true, items: [] },
+    connectToOutput: { enabled: true, items: [] },
+  },
   taskCompletionSound: { mode: 'default', url: '' },
   // 其他偏好
   preferences: {
@@ -99,6 +110,43 @@ const taskCompletionSoundUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: TASK_COMPLETION_SOUND_MAX_SIZE, files: 1 },
 });
+
+const DEFAULT_CANVAS_NODE_MENU_PREFERENCES = {
+  quickAdd: {
+    enabled: true,
+    items: [
+      'upload', 'model-3d-upload', 'model-3d-preview', 'material-set', 'output',
+      'text', 'image', 'video', 'seedance', 'director-storyboard', 'audio', 'llm',
+    ].map((type, order) => ({ type, visible: true, order })),
+  },
+  connectFromInput: { enabled: true, items: [] },
+  connectToOutput: { enabled: true, items: [] },
+};
+
+function normalizeCanvasNodeMenuPreferences(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const scenes = ['quickAdd', 'connectFromInput', 'connectToOutput'];
+  return scenes.reduce((acc, scene) => {
+    const defaults = DEFAULT_CANVAS_NODE_MENU_PREFERENCES[scene] || { enabled: true, items: [] };
+    const rawScene = source[scene] && typeof source[scene] === 'object' && !Array.isArray(source[scene])
+      ? source[scene]
+      : {};
+    const items = Array.isArray(rawScene.items) ? rawScene.items : defaults.items;
+    acc[scene] = {
+      enabled: rawScene.enabled !== false,
+      items: items
+        .filter((item) => item && typeof item === 'object' && String(item.type || '').trim())
+        .map((item, index) => ({
+          type: String(item.type || '').trim().slice(0, 80),
+          visible: item.visible !== false,
+          order: Number.isFinite(Number(item.order)) ? Number(item.order) : index,
+        }))
+        .sort((a, b) => a.order - b.order)
+        .map((item, order) => ({ ...item, order })),
+    };
+    return acc;
+  }, {});
+}
 
 function taskCompletionSoundDir() {
   const dir = path.join(config.DATA_DIR, 'settings-assets');
@@ -287,6 +335,7 @@ function loadSettings({ persistMigrations = true } = {}) {
     Object.assign(merged, syncLegacyLlmConfig(merged));
     merged.advancedProviders = normalizeAdvancedProviders(data.advancedProviders);
     merged.cloudUploadTargets = normalizeCloudUploadTargets(data.cloudUploadTargets);
+    merged.canvasNodeMenuPreferences = normalizeCanvasNodeMenuPreferences(data.canvasNodeMenuPreferences);
     merged.taskCompletionSound = normalizeTaskCompletionSound(data.taskCompletionSound);
     const migrated = migrateLegacyDefaultPaths(merged);
     if (persistMigrations && migrated.changed) {
@@ -427,6 +476,7 @@ router.post('/', requireAdmin, (req, res) => {
   const incoming = req.body || {};
   const hasAdvancedProviders = Object.prototype.hasOwnProperty.call(incoming, 'advancedProviders');
   const hasCloudUploadTargets = Object.prototype.hasOwnProperty.call(incoming, 'cloudUploadTargets');
+  const hasCanvasNodeMenuPreferences = Object.prototype.hasOwnProperty.call(incoming, 'canvasNodeMenuPreferences');
   const hasLlmConfigs = Object.prototype.hasOwnProperty.call(incoming, 'llmConfigs');
   const hasLlmApiKeys = Object.prototype.hasOwnProperty.call(incoming, 'llmApiKeys');
   const hasZhenzhenBaseUrl = Object.prototype.hasOwnProperty.call(incoming, 'zhenzhenBaseUrl');
@@ -488,6 +538,9 @@ router.post('/', requireAdmin, (req, res) => {
   merged.cloudUploadTargets = hasCloudUploadTargets
     ? normalizeCloudUploadTargets(incoming.cloudUploadTargets, current.cloudUploadTargets)
     : normalizeCloudUploadTargets(current.cloudUploadTargets);
+  merged.canvasNodeMenuPreferences = hasCanvasNodeMenuPreferences
+    ? normalizeCanvasNodeMenuPreferences(incoming.canvasNodeMenuPreferences)
+    : normalizeCanvasNodeMenuPreferences(current.canvasNodeMenuPreferences);
   saveSettings(merged);
   // v1.2.10.2/v1.3.1/v1.3.4: 保存后重新确保本地保存路径存在
   for (const field of ['fileSavePath', 'canvasAutoSavePath', 'resourceLibraryPath', 'themeTemplatePath']) {

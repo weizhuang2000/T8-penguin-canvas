@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { AdvancedProviderConfig, ApiSettings, CloudUploadTargetConfig, LlmConfig } from '../types/canvas';
 import * as api from '../services/api';
 import { DEFAULT_LLM_MODEL } from '../providers/models';
+import { createDefaultCanvasNodeMenuPreferences, normalizeCanvasNodeMenuPreferences } from '../utils/canvasNodeMenuPreferences';
 
 // 百达工坊固定地址，也是 LLM 独立 Key 的默认地址
 export const DEFAULT_ZHENZHEN_BASE = 'https://ai.t8star.org';
@@ -60,6 +61,7 @@ const DEFAULT: ApiSettings = {
     defaultTargetId: '',
     defaultLabel: '',
   },
+  canvasNodeMenuPreferences: createDefaultCanvasNodeMenuPreferences(),
   taskCompletionSound: { mode: 'default', url: '' },
   preferences: { theme: 'dark', language: 'zh-CN' },
 };
@@ -173,6 +175,7 @@ export function normalizeApiSettings(data: Partial<ApiSettings>): ApiSettings {
       defaultTargetId: merged.cloudUploadSummary?.defaultTargetId || '',
       defaultLabel: merged.cloudUploadSummary?.defaultLabel || '',
     },
+    canvasNodeMenuPreferences: normalizeCanvasNodeMenuPreferences(merged.canvasNodeMenuPreferences),
     taskCompletionSound: {
       ...DEFAULT.taskCompletionSound,
       ...(merged.taskCompletionSound || {}),

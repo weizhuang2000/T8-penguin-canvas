@@ -29,6 +29,12 @@ test('exhibition AI plan layout node wires vision LLM analysis and team presets'
   assert.match(source, /planAiInterpretation/);
   assert.match(source, /styleRequirement/);
   assert.match(source, /specialRequirement/);
+  assert.match(source, /isTransientGenerationError/);
+  assert.match(source, /接口返回非 JSON\|[\s\S]*HTTP\\s\*502[\s\S]*502\\.3[\s\S]*Bad Gateway/);
+  assert.match(source, /retryTransientGeneration\(\(\) => generateExternalImage/);
+  assert.match(source, /retryTransientGeneration\(\(\) => queryExternalImageStatus/);
+  assert.match(source, /retryTransientGeneration\(\(\) => submitImageAsync/);
+  assert.match(source, /retryTransientGeneration\(\(\) => queryImageStatus/);
   assert.match(source, /getExhibitionAiPlanLayoutPromptPresets/);
   assert.match(source, /updateExhibitionAiPlanLayoutStylePresets/);
   assert.match(source, /updateExhibitionAiPlanLayoutRequirementPresets/);
