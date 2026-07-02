@@ -291,10 +291,14 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
         if (textArrayField) {
           ud[textArrayField].forEach((item: any) => pushTextSegment(out.texts, item));
         } else {
-          pushUniqueText(out.texts, ud.outputText);
-          pushUniqueText(out.texts, ud.reply);
-          pushUniqueText(out.texts, ud.prompt);
-          pushUniqueText(out.texts, ud.text);
+          if (isExhibitionImg2Img && typeof ud.lastPrompt === 'string' && ud.lastPrompt.trim()) {
+            pushUniqueText(out.texts, ud.lastPrompt);
+          } else {
+            pushUniqueText(out.texts, ud.outputText);
+            pushUniqueText(out.texts, ud.reply);
+            pushUniqueText(out.texts, ud.prompt);
+            pushUniqueText(out.texts, ud.text);
+          }
         }
         }
 

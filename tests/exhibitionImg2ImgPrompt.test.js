@@ -20,8 +20,10 @@ test('exhibition img2img node exposes final prompt as text output', () => {
   assert.match(node, /prompt:\s*basePromptForRun[\s\S]*outputText:\s*basePromptForRun[\s\S]*text:\s*basePromptForRun/);
   assert.match(upstream, /n\.type === 'exhibition-img2img'/);
   assert.match(upstream, /handles\.has\('prompt'\) \|\| handles\.has\(null\)/);
+  assert.match(upstream, /isExhibitionImg2Img && typeof ud\.lastPrompt === 'string'[\s\S]*pushText\(sid, ud\.lastPrompt, `text-field:\$\{sid\}:lastPrompt`[\s\S]*continue/);
   assert.match(output, /\(n as any\)\?\.type === 'exhibition-img2img'/);
   assert.match(output, /handles\.has\('prompt'\) \|\| handles\.has\(null\)/);
+  assert.match(output, /if \(isExhibitionImg2Img && typeof ud\.lastPrompt === 'string'[\s\S]*pushUniqueText\(out\.texts, ud\.lastPrompt\)[\s\S]*else/);
 });
 
 test('exhibition img2img appends engineering quantity list only to submitted runtime prompt', () => {

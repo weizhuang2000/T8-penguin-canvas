@@ -317,6 +317,10 @@ export function useUpstreamMaterials(nodeId: string): UpstreamMaterials {
         });
       } else {
         // 文本: outputText (用户编辑覆盖) > reply > promptResolved(@素材已解析) > prompt > text
+        if (isExhibitionImg2Img && typeof ud.lastPrompt === 'string' && ud.lastPrompt.trim()) {
+          pushText(sid, ud.lastPrompt, `text-field:${sid}:lastPrompt`, undefined, textMeta);
+          continue;
+        }
         pushText(sid, ud.outputText, `text-field:${sid}:outputText`, undefined, textMeta);
         pushText(sid, ud.reply, `text-field:${sid}:reply`, undefined, textMeta);
         let primaryPromptText = '';
