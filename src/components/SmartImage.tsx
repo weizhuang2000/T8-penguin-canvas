@@ -17,10 +17,12 @@ export default function SmartImage({
   const imgRef = useRef<HTMLImageElement | null>(null);
   const previewSrc = useMemo(() => previewImageUrl(src, thumbSize), [src, thumbSize]);
   const [fallback, setFallback] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [shouldLoad, setShouldLoad] = useState(loading !== 'lazy');
 
   useEffect(() => {
     setFallback(false);
+    setFailed(false);
     setShouldLoad(loading !== 'lazy');
   }, [previewSrc, loading]);
 
@@ -44,7 +46,7 @@ export default function SmartImage({
     return () => observer.disconnect();
   }, [previewSrc, loading, shouldLoad]);
 
-  const actualSrc = shouldLoad ? (fallback ? src : previewSrc) : undefined;
+  const actualSrc = shouldLoad && !failed ? (fallback ? src : previewSrc) : undefined;
 
   return (
     <img
@@ -61,6 +63,7 @@ export default function SmartImage({
           setFallback(true);
           return;
         }
+        setFailed(true);
         onError?.(event);
       }}
     />
