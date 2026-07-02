@@ -540,6 +540,18 @@ export interface ExhibitionPlanLayoutPromptPresetMap {
   exclusions: ExhibitionPlanLayoutExcludePresetItem[];
 }
 
+export interface ExhibitionAiPlanLayoutPresetItem {
+  id: string;
+  label: string;
+  prompt: string;
+  order: number;
+}
+
+export interface ExhibitionAiPlanLayoutPromptPresetMap {
+  styles: ExhibitionAiPlanLayoutPresetItem[];
+  requirements: ExhibitionAiPlanLayoutPresetItem[];
+}
+
 export interface ExhibitionRecolorPalettePresetItem {
   id: string;
   label: string;
@@ -761,6 +773,39 @@ export async function updateExhibitionPlanLayoutExcludePresets(
 ): Promise<ExhibitionPlanLayoutExcludePresetItem[]> {
   const res = await request<{ success: boolean; data: ExhibitionPlanLayoutExcludePresetItem[] }>(
     `${BASE}/prompt-library/exhibition-plan-layout/presets/exclusions`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ presets }),
+    },
+  );
+  return res.data || [];
+}
+
+export async function getExhibitionAiPlanLayoutPromptPresets(): Promise<ExhibitionAiPlanLayoutPromptPresetMap> {
+  const res = await request<{ success: boolean; data: ExhibitionAiPlanLayoutPromptPresetMap }>(
+    `${BASE}/prompt-library/exhibition-ai-plan-layout/presets`,
+  );
+  return res.data || { styles: [], requirements: [] };
+}
+
+export async function updateExhibitionAiPlanLayoutStylePresets(
+  presets: Array<Pick<ExhibitionAiPlanLayoutPresetItem, 'label' | 'prompt'> & Partial<Pick<ExhibitionAiPlanLayoutPresetItem, 'id' | 'order'>>>,
+): Promise<ExhibitionAiPlanLayoutPresetItem[]> {
+  const res = await request<{ success: boolean; data: ExhibitionAiPlanLayoutPresetItem[] }>(
+    `${BASE}/prompt-library/exhibition-ai-plan-layout/presets/styles`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ presets }),
+    },
+  );
+  return res.data || [];
+}
+
+export async function updateExhibitionAiPlanLayoutRequirementPresets(
+  presets: Array<Pick<ExhibitionAiPlanLayoutPresetItem, 'label' | 'prompt'> & Partial<Pick<ExhibitionAiPlanLayoutPresetItem, 'id' | 'order'>>>,
+): Promise<ExhibitionAiPlanLayoutPresetItem[]> {
+  const res = await request<{ success: boolean; data: ExhibitionAiPlanLayoutPresetItem[] }>(
+    `${BASE}/prompt-library/exhibition-ai-plan-layout/presets/requirements`,
     {
       method: 'PUT',
       body: JSON.stringify({ presets }),

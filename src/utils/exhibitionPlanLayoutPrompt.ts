@@ -1,7 +1,11 @@
 import {
   EXHIBITION_PLAN_LAYOUT_EXCLUDE_ITEMS,
+  EXHIBITION_AI_PLAN_LAYOUT_REQUIREMENT_PRESETS,
+  EXHIBITION_AI_PLAN_LAYOUT_STYLE_PRESETS,
   EXHIBITION_PLAN_LAYOUT_INSERT_ITEMS,
   EXHIBITION_PLAN_LAYOUT_PRESETS,
+  buildExhibitionAiPlanInterpretationPrompt,
+  buildExhibitionAiPlanLayoutPrompt,
   buildExhibitionPlanLayoutPrompt,
   buildExhibitionPlanOutlinePrompt,
   exhibitionPlanLayoutExcludeItemsText,
@@ -65,10 +69,27 @@ export interface ExhibitionPlanLayoutPromptValues {
   excludeItemOptions?: ExhibitionPlanLayoutChoiceItem[];
 }
 
+export interface ExhibitionAiPlanLayoutPromptValues extends ExhibitionPlanLayoutPromptValues {
+  planAiInterpretation?: string;
+  styleRequirement?: string;
+  specialRequirement?: string;
+}
+
+export interface ExhibitionAiPlanPresetItem {
+  id: string;
+  label: string;
+  prompt: string;
+  order?: number;
+}
+
 export {
+  EXHIBITION_AI_PLAN_LAYOUT_REQUIREMENT_PRESETS,
+  EXHIBITION_AI_PLAN_LAYOUT_STYLE_PRESETS,
   EXHIBITION_PLAN_LAYOUT_EXCLUDE_ITEMS,
   EXHIBITION_PLAN_LAYOUT_INSERT_ITEMS,
   EXHIBITION_PLAN_LAYOUT_PRESETS,
+  buildExhibitionAiPlanInterpretationPrompt,
+  buildExhibitionAiPlanLayoutPrompt,
   buildExhibitionPlanLayoutPrompt,
   buildExhibitionPlanOutlinePrompt,
   exhibitionPlanLayoutExcludeItemsText,

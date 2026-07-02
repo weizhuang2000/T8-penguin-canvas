@@ -244,3 +244,78 @@ export function buildExhibitionPlanLayoutPrompt(values = {}) {
     '质量约束：线条锐利、文字如开启则尽量少且可读、分区色彩有区分度、整体像专业展陈设计汇报图；不要生成真实人物、摄影质感、杂乱装饰、三维透视、错误墙体、破碎文字或无关 logo。',
   ].filter(Boolean).join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
+
+export const EXHIBITION_AI_PLAN_LAYOUT_STYLE_PRESETS = [
+  {
+    id: 'tech-blueprint',
+    label: '科技馆蓝白线稿汇报风',
+    prompt: '科技馆蓝白线稿汇报风：白色底图、蓝色/青色分区、清晰细线、红色动线箭头、理性工程图表达，适合科技产业与城市规划展陈。',
+  },
+  {
+    id: 'minimal-museum',
+    label: '极简博物馆风',
+    prompt: '极简博物馆风：低饱和灰白底、克制色块、少量重点色、标注精简，强调留白、秩序和专业博物馆导览感。',
+  },
+  {
+    id: 'family-learning',
+    label: '儿童研学明亮风',
+    prompt: '儿童研学明亮风：明亮友好的分区色彩、清晰图标化展项、动线易懂但不幼稚，适合亲子研学和互动教育空间。',
+  },
+].map((item, index) => ({ ...item, order: index }));
+
+export const EXHIBITION_AI_PLAN_LAYOUT_REQUIREMENT_PRESETS = [
+  {
+    id: 'one-way-no-branch',
+    label: '单向无分叉动线',
+    prompt: '动线从入口到出口必须单向连续、无分叉、无断线，依次经过所有展区，避免回头路和交叉拥堵。',
+  },
+  {
+    id: 'keep-fire-route',
+    label: '保留消防疏散通道',
+    prompt: '必须保留原建筑主要消防疏散通道和门洞可达关系，不得用展墙、展柜或装置遮挡必要疏散路径。',
+  },
+  {
+    id: 'core-exhibit-near-atrium',
+    label: '主展项靠近中庭',
+    prompt: '将核心展项或主题装置布置在中庭、开敞核心区或视觉焦点附近，并围绕它组织若干连续展区。',
+  },
+].map((item, index) => ({ ...item, order: index }));
+
+export function buildExhibitionAiPlanInterpretationPrompt(values = {}) {
+  const outlineText = cleanText(values.outlineText || values.layoutOutlineText, 12000);
+  const manualInterpretation = cleanText(values.planInterpretation, 3000);
+  return [
+    '你是展陈空间规划师和建筑平面图识图专家。请读取图1原始建筑平面图，输出可用于展陈平面AI布局的结构解析。',
+    '只输出中文纯文本，不要 Markdown 表格，不要编造图中没有的尺寸。',
+    '必须重点识别并明确声明：墙体、柱子、外轮廓、门洞、入口、出口、楼梯/电梯/设备井、已有房间边界等不可动结构。',
+    '请按以下顺序输出：',
+    '1. 不可动结构解析：墙体、柱子、外轮廓、门洞、入口出口和原始房间/通道边界。',
+    '2. 可布局范围：哪些区域可叠加展陈分区、展柜、展墙、互动点位、服务点位。',
+    '3. 入口出口与动线约束：入口出口位置、建议起止方向、必须保留的通行关系。',
+    '4. 柱网/障碍约束：柱子和固定构筑物如何被展墙、展柜或展区边界连接，不允许孤零零漂浮。',
+    '5. 与文本大纲的匹配建议：根据大纲给出展区顺序和重点展项落位建议。',
+    manualInterpretation ? `用户补充平面说明：${manualInterpretation}` : '',
+    outlineText ? `文本大纲：\n${outlineText}` : '',
+  ].filter(Boolean).join('\n\n').trim();
+}
+
+export function buildExhibitionAiPlanLayoutPrompt(values = {}) {
+  const base = buildExhibitionPlanLayoutPrompt({
+    ...values,
+    planInterpretation: [
+      cleanText(values.planAiInterpretation, 6000),
+      cleanText(values.planInterpretation, 3000),
+    ].filter(Boolean).join('\n\n'),
+  });
+  const styleRequirement = cleanText(values.styleRequirement, 3000);
+  const specialRequirement = cleanText(values.specialRequirement, 4000);
+  return [
+    'AI floor plan layout mode.',
+    '图1是唯一建筑平面依据。墙体、柱子、外轮廓、门洞、入口出口不可移动、不可删除、不可重绘。',
+    '只能在可布展区域内叠加展陈布局元素；不得把展陈要求当作修改原建筑结构的理由。',
+    '如结构锁定开启，只生成透明背景 overlay，空白区域保持透明，最终由程序把 overlay 合成回原始平面图。',
+    styleRequirement ? `风格要求：${styleRequirement}` : '风格要求：保持专业展陈平面汇报图风格，清晰、克制、可读。',
+    specialRequirement ? `特殊要求：${specialRequirement}` : '',
+    base,
+  ].filter(Boolean).join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
+}
