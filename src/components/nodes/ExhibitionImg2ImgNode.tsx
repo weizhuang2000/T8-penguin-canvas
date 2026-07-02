@@ -813,6 +813,44 @@ function normalizeCraftRandomCounts(value: unknown): Record<string, number> {
   return out;
 }
 
+function compactEngineeringText(value: unknown, fallback = '未填写'): string {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  return text || fallback;
+}
+
+function engineeringWallLength(wall: ElevationWall): number {
+  const direct = Number(wall?.approxLengthM);
+  return Number.isFinite(direct) && direct > 0 ? direct : estimateElevationWallLength(wall);
+}
+
+function craftLabelsFromIds(craftIds: unknown, craftPresets: ElevationCraft[] = []): string {
+  const ids = Array.isArray(craftIds) ? craftIds.map((item) => String(item || '').trim()).filter(Boolean) : [];
+  if (ids.length === 0) return '';
+  const allCrafts = [...craftPresets, ...ELEVATION_CRAFTS];
+  const labelById = new Map(allCrafts.map((craft) => [String(craft.id), String(craft.label || craft.id).trim()]));
+  return ids.map((craftId) => labelById.get(craftId) || craftId).filter(Boolean).join('、');
+}
+
+function buildEngineeringQuantityList(walls: ElevationWall[] = [], craftPresets: ElevationCraft[] = []): string {
+  const validWalls = Array.isArray(walls) ? walls.filter(Boolean) : [];
+  if (validWalls.length === 0) return '';
+  const lines = ['===== 工程量列表 ====='];
+  let totalLength = 0;
+  validWalls.forEach((wall, index) => {
+    const length = engineeringWallLength(wall);
+    totalLength += length;
+    const title = compactEngineeringText(wall.title, `立面 ${index + 1}`);
+    const content = compactEngineeringText(wall.content);
+    const exactText = Array.isArray(wall.exactText) && wall.exactText.length > 0
+      ? wall.exactText.map((item) => String(item || '').trim()).filter(Boolean).join(' / ')
+      : '未填写';
+    const craftConfig = compactEngineeringText(wall.craftNotes || craftLabelsFromIds(wall.craftIds, craftPresets));
+    lines.push(`${index + 1}. ${title}：约 ${length.toFixed(1)}m；展示内容：${content}；上墙文字：${exactText}；工艺配置：${craftConfig}`);
+  });
+  lines.push(`合计：${validWalls.length} 面立面，约 ${totalLength.toFixed(1)}m 展陈墙面长度。`);
+  return lines.join('\n');
+}
+
 function mediaMentions(value: unknown): MediaMention[] {
   return Array.isArray(value) ? (value as MediaMention[]) : [];
 }
@@ -2728,16 +2766,26 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       throw new Error(msg);
     }
     const runtimeCrafts = resolveRuntimeCrafts();
-    let promptForRun = buildPromptForCrafts(runtimeCrafts);
+    let basePromptForRun = buildPromptForCrafts(runtimeCrafts);
+    let engineeringWalls = contentEnabled ? promptContentOutputs.walls : [];
     if (contentEnabled && regenerateContentEachRun) {
       const plan = await planWallContent(undefined, true, runtimeCrafts);
-      if (plan) promptForRun = buildPromptWithWallPlan(plan, runtimeCrafts);
+      if (plan) {
+        basePromptForRun = buildPromptWithWallPlan(plan, runtimeCrafts);
+        engineeringWalls = plan.walls.slice(contentWallRange.start - 1, contentWallRange.end);
+      }
     }
+    const engineeringQuantityList = contentEnabled
+      ? buildEngineeringQuantityList(engineeringWalls, craftPresetOptions)
+      : '';
+    const submittedPromptForRun = engineeringQuantityList
+      ? `${basePromptForRun}\n\n${engineeringQuantityList}`
+      : basePromptForRun;
     update({
-      prompt: promptForRun,
-      outputText: promptForRun,
-      text: promptForRun,
-      lastPrompt: promptForRun,
+      prompt: basePromptForRun,
+      outputText: basePromptForRun,
+      text: basePromptForRun,
+      lastPrompt: submittedPromptForRun,
     });
     const runtimeReferenceImages = await buildRuntimeReferenceImages();
     const src = `exhibition-img2img:${id.slice(0, 6)}`;
@@ -2763,10 +2811,10 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         imageUrls: generatedUrls.slice(),
         imageNames: generatedNames.slice(),
         remoteImageUrls: generatedRemoteUrls.slice(),
-        prompt: promptForRun,
-        outputText: promptForRun,
-        text: promptForRun,
-        lastPrompt: promptForRun,
+        prompt: basePromptForRun,
+        outputText: basePromptForRun,
+        text: basePromptForRun,
+        lastPrompt: submittedPromptForRun,
         lastSeed: runSeed,
         taskId: latestTaskId,
         usedI2I: true,
@@ -2782,10 +2830,10 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
       error: '',
       imageUrl: '',
       imageUrls: [],
-      prompt: promptForRun,
-      outputText: promptForRun,
-      text: promptForRun,
-      lastPrompt: promptForRun,
+      prompt: basePromptForRun,
+      outputText: basePromptForRun,
+      text: basePromptForRun,
+      lastPrompt: submittedPromptForRun,
       lastSeed: latestSeed,
       usedI2I: true,
     });
@@ -2802,7 +2850,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           nodeTitle: `展陈图生图 ${roundIndex}/${generationCount}`,
           outputTitle: formatExhibitionOutputImageName(baseImageName, roundIndex, generationCount, '展陈图'),
         };
-        update({ progress: `提交生图 ${roundIndex}/${generationCount}`, lastSeed: runSeed, lastPrompt: promptForRun });
+        update({ progress: `提交生图 ${roundIndex}/${generationCount}`, lastSeed: runSeed, lastPrompt: submittedPromptForRun });
       if (isExternalSelected && providerSelection.provider) {
         if (!externalProviderModel) throw new Error('扩展平台未配置可用图像模型');
         const size = externalImageSizeFor(effectiveAspectRatio, effectiveSizeLevel);
@@ -2818,7 +2866,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           providerId: providerSelection.provider.id,
           providerModel: externalProviderModel,
           model: externalProviderModel,
-          prompt: promptForRun,
+          prompt: submittedPromptForRun,
           size,
           aspect_ratio: effectiveAspectRatio,
           image_size: effectiveSizeLevel,
@@ -2870,7 +2918,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         model: modelDef.id,
         apiModel,
         paramKind: modelDef.paramKind,
-        prompt: promptForRun,
+        prompt: submittedPromptForRun,
         aspect_ratio: effectiveAspectRatio,
         image_size: effectiveSizeLevel,
         images: runtimeReferenceImages,
@@ -2914,10 +2962,10 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         imageUrls: generatedUrls,
         imageNames: generatedNames,
         remoteImageUrls: generatedRemoteUrls,
-        prompt: promptForRun,
-        outputText: promptForRun,
-        text: promptForRun,
-        lastPrompt: promptForRun,
+        prompt: basePromptForRun,
+        outputText: basePromptForRun,
+        text: basePromptForRun,
+        lastPrompt: submittedPromptForRun,
         lastSeed: latestSeed,
         taskId: latestTaskId,
         usedI2I: true,

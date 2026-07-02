@@ -17,11 +17,32 @@ test('exhibition img2img node exposes final prompt as text output', () => {
   const output = readFileSync(new URL('../src/components/nodes/OutputNode.tsx', import.meta.url), 'utf8');
   assert.match(node, /id="prompt"[\s\S]*type="source"[\s\S]*PORT_COLOR\.text/);
   assert.match(node, /title="输出：最终提示词文本"/);
-  assert.match(node, /prompt:\s*promptForRun[\s\S]*outputText:\s*promptForRun[\s\S]*text:\s*promptForRun/);
+  assert.match(node, /prompt:\s*basePromptForRun[\s\S]*outputText:\s*basePromptForRun[\s\S]*text:\s*basePromptForRun/);
   assert.match(upstream, /n\.type === 'exhibition-img2img'/);
   assert.match(upstream, /handles\.has\('prompt'\) \|\| handles\.has\(null\)/);
   assert.match(output, /\(n as any\)\?\.type === 'exhibition-img2img'/);
   assert.match(output, /handles\.has\('prompt'\) \|\| handles\.has\(null\)/);
+});
+
+test('exhibition img2img appends engineering quantity list only to submitted runtime prompt', () => {
+  const node = readFileSync(new URL('../src/components/nodes/ExhibitionImg2ImgNode.tsx', import.meta.url), 'utf8');
+  const previewPrompt = buildExhibitionImg2ImgPrompt({
+    wallContentPrompt: '立面 1｜序厅\n内容摘要：品牌发展脉络',
+  });
+
+  assert.match(node, /function buildEngineeringQuantityList/);
+  assert.match(node, /===== 工程量列表 =====/);
+  assert.match(node, /合计：\$\{validWalls\.length\} 面立面，约 \$\{totalLength\.toFixed\(1\)\}m 展陈墙面长度。/);
+  assert.match(node, /let engineeringWalls = contentEnabled \? promptContentOutputs\.walls : \[\]/);
+  assert.match(node, /engineeringWalls = plan\.walls\.slice\(contentWallRange\.start - 1, contentWallRange\.end\)/);
+  assert.match(node, /const submittedPromptForRun = engineeringQuantityList[\s\S]*\?\s*`\$\{basePromptForRun\}\\n\\n\$\{engineeringQuantityList\}`[\s\S]*:\s*basePromptForRun/);
+  assert.match(node, /prompt:\s*basePromptForRun[\s\S]*outputText:\s*basePromptForRun[\s\S]*text:\s*basePromptForRun[\s\S]*lastPrompt:\s*submittedPromptForRun/);
+  assert.match(node, /generateExternalImage\(\{[\s\S]*prompt:\s*submittedPromptForRun/);
+  assert.match(node, /submitImageAsync\(\{[\s\S]*prompt:\s*submittedPromptForRun/);
+  assert.match(node, /compactEngineeringText\(wall\.content\)/);
+  assert.match(node, /wall\.exactText\.map/);
+  assert.match(node, /wall\.craftNotes \|\| craftLabelsFromIds\(wall\.craftIds, craftPresets\)/);
+  assert.doesNotMatch(previewPrompt, /工程量列表/);
 });
 
 test('exhibition img2img content planning can limit final prompt to a wall range', () => {
