@@ -43,6 +43,11 @@ test('exhibition plan layout node wires llm and image generation providers', () 
   assert.match(source, /planInterpretation/);
   assert.match(source, /平面图解析/);
   assert.match(source, /总体宽30米，长40米，蓝色线条代表墙体，灰色方块代表柱子，都不可移动/);
+  assert.match(source, /OUTLINE_AND_LAYOUT_REQUIREMENT/);
+  assert.match(source, /runOutlineAndLayout/);
+  assert.match(source, /提炼加布局/);
+  assert.match(source, /动线只有一条且没有分叉/);
+  assert.match(source, /围着原建筑墙的内侧建一圈/);
   assert.match(source, /EXHIBITION_PLAN_LAYOUT_PRESETS/);
   assert.match(source, /EXHIBITION_PLAN_LAYOUT_INSERT_ITEMS/);
   assert.match(source, /EXHIBITION_PLAN_LAYOUT_EXCLUDE_ITEMS/);

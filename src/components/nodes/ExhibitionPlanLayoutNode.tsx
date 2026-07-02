@@ -51,6 +51,19 @@ const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border
 const MAX_IMAGE_SEED = 2147483647;
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
+const OUTLINE_AND_LAYOUT_REQUIREMENT = [
+  '参考图是一张建筑平面布局图，宽24米左右，长28米左右，蓝色线是墙体，实心方块是柱子，用文字标注了一个入口和一个出口。',
+  '你是一位展厅设计师，在参考图上进行分区布局规划参观动线，充分利用柱子划分空间，既不拥挤也不空旷，各空间大小有别，形式多样。',
+  '具体是在参考图添加新建墙体。强制要求：不能移动或删除参考图上的柱子。',
+  '首先围着原建筑墙的内侧建一圈，新建墙体和原墙体之间不要留过大距离，避免浪费空间。',
+  '然后在展厅内部用新建双面墙体隔成连通的小空间，小空间之间不要有空隙，所有柱子要和新建墙体连接在一起，不要存在单独一根柱子的情况。',
+  '用一条从入口开始、最后到出口的连续不间断的参观动线串联起每个空间；空间不能太小，不能有死角，超过10平米的小空间必须让动线穿过。',
+  '动线上的箭头沿着虚线始终指向出口方向。强制要求：动线只有一条且没有分叉。',
+  '新建墙体时注意不要有闭合的区域，内部墙体和边沿墙体之间最好以“丁”字型相连。',
+  '在入口和出口处墙体要断开3米左右，入口进来的空间要大一些，除入口外只有一个可以继续进入展厅的口。',
+  '总结新建墙体原则：用墙体分隔出一个迷宫，从入口走向出口，每个空间只走一遍而且必须走到，路线只有一条且不能分叉。',
+  '顺着新建墙体添加一些展陈设施，比如展柜、触摸屏、展台、场景等的俯视图，完成展陈平面布局图；只显示展陈设施的俯视图，不要立面。',
+].join('\n');
 
 function loadImageElement(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -259,10 +272,10 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
   const selectedExcludeIds = useMemo(() => selectedExcludeItems.map((item) => item.id), [selectedExcludeItems]);
   const allExcludeSelected = excludeOptions.length > 0 && selectedExcludeIds.length === excludeOptions.length;
 
-  const buildPrompt = useCallback((outlineText: string) => buildExhibitionPlanLayoutPrompt({
+  const buildPrompt = useCallback((outlineText: string, extraLayoutRequirement = '') => buildExhibitionPlanLayoutPrompt({
     layoutOutlineText: outlineText,
     planInterpretation: d.planInterpretation,
-    layoutRequirement: d.layoutRequirement,
+    layoutRequirement: [d.layoutRequirement, extraLayoutRequirement].map((item) => String(item || '').trim()).filter(Boolean).join('\n\n'),
     layoutPresetId,
     showRoute,
     showLabels,
@@ -320,17 +333,17 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
     }
   }, [activeLlmConfig?.id, effectiveSourceText, excludeOptions, insertOptions, llmModel, selectedExcludeIds, selectedInsertIds, update]);
 
-  const runGenerate = useCallback(async () => {
+  const runGenerateWithOptions = useCallback(async (options: { outlineText?: string; extraLayoutRequirement?: string } = {}) => {
     if (isReadonly) return;
     if (!planImage) {
       update({ status: 'error', error: '请先连接原始建筑平面图。', progress: '' });
       return;
     }
-    let outlineText = layoutOutlineText;
+    let outlineText = String(options.outlineText || layoutOutlineText || '').trim();
     if (!outlineText && effectiveSourceText.trim()) {
       outlineText = await runOutline();
     }
-    const imagePrompt = buildPrompt(outlineText);
+    const imagePrompt = buildPrompt(outlineText, options.extraLayoutRequirement || '');
     const refs = [planImage].filter(Boolean);
     pollAbortRef.current = false;
     taskCompletionSound.primeAudio();
@@ -454,6 +467,20 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
       throw error;
     }
   }, [activeCanvasId, apiModel, aspectRatio, buildPrompt, d.providerParams, effectiveSourceText, externalProviderModel, id, isExternalSelected, isReadonly, layoutOutlineText, modelDef.id, modelDef.paramKind, outputFormat, planImage, providerSelection.provider, runOutline, seed, sizeLevel, structureLock, update]);
+
+  const runGenerate = useCallback(async () => {
+    await runGenerateWithOptions();
+  }, [runGenerateWithOptions]);
+
+  const runOutlineAndLayout = useCallback(async () => {
+    if (isReadonly || busy) return;
+    if (!planImage) {
+      update({ status: 'error', error: '请先连接原始建筑平面图。', progress: '' });
+      return;
+    }
+    const outlineText = await runOutline();
+    await runGenerateWithOptions({ outlineText, extraLayoutRequirement: OUTLINE_AND_LAYOUT_REQUIREMENT });
+  }, [busy, isReadonly, planImage, runGenerateWithOptions, runOutline, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -615,10 +642,16 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
             </select>
             <input className={FIELD} disabled value={llmModel} title="模型由所选 LLM 配置决定" />
           </div>
-          <button type="button" className="t8-btn min-h-8 w-full px-2 text-[11px]" disabled={isReadonly || busy} onClick={() => void runOutline()}>
-            {status === 'outlining' ? <Loader2 size={14} className="animate-spin" /> : <Brain size={14} />}
-            提炼大纲
-          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" className="t8-btn min-h-8 px-2 text-[11px]" disabled={isReadonly || busy} onClick={() => void runOutline()}>
+              {status === 'outlining' ? <Loader2 size={14} className="animate-spin" /> : <Brain size={14} />}
+              提炼大纲
+            </button>
+            <button type="button" className="t8-btn min-h-8 px-2 text-[11px]" disabled={isReadonly || busy} onClick={() => void runOutlineAndLayout()}>
+              {busy ? <Loader2 size={14} className="animate-spin" /> : <Route size={14} />}
+              提炼加布局
+            </button>
+          </div>
           <textarea
             className={`${FIELD} min-h-[112px] resize-y`}
             value={d.layoutOutlineText || ''}

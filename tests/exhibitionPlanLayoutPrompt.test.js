@@ -94,10 +94,13 @@ test('exhibition plan layout prompt includes preset and custom requirement', () 
   const prompt = buildExhibitionPlanLayoutPrompt({
     layoutOutlineText: '核心展项：城市模型',
     layoutPresetId: 'highlight-core',
-    layoutRequirement: '入口右侧设置接待台，尾厅靠近出口。',
+    layoutRequirement: '入口右侧设置接待台，尾厅靠近出口。\n\n动线只有一条且没有分叉；围着原建筑墙的内侧建一圈；所有柱子要和新建墙体连接在一起。',
   });
   assert.match(prompt, /围绕一个或多个核心展项组织空间/);
   assert.match(prompt, /入口右侧设置接待台/);
+  assert.match(prompt, /动线只有一条且没有分叉/);
+  assert.match(prompt, /围着原建筑墙的内侧建一圈/);
+  assert.match(prompt, /所有柱子要和新建墙体连接在一起/);
   assert.equal(normalizeExhibitionPlanLayoutPresetId('missing'), 'balanced');
   assert.ok(EXHIBITION_PLAN_LAYOUT_PRESETS.length >= 8);
   assert.match(exhibitionPlanLayoutPresetText('family-learning'), /研学/);
