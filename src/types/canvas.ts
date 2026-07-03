@@ -76,6 +76,7 @@ export type NodeType =
   | 'exhibition-ai-plan-layout'
   | 'unit-panel-design'
   | 'sculpture-relief-design'
+  | 'exhibition-scene-design'
   | 'showcase-interior-design'
   | 'multi-angle-visual'
   | 'portrait-master'

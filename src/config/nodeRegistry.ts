@@ -111,6 +111,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: 'exhibition-ai-plan-layout', label: '平面AI布局', category: 'exhibition', description: 'LLM 读取原始建筑平面图并结合文本大纲生成展陈平面布局，默认锁定原墙体、柱子和门洞结构', icon: 'Sparkles', color: 'cyan' },
   { type: 'unit-panel-design', label: '单元板设计', category: 'exhibition', description: '生成单元板/整套板式设计图：两级文字提炼、多语言排序、材质选择、色材参考和尺寸标注', icon: 'PanelsTopLeft', color: 'cyan' },
   { type: 'sculpture-relief-design', label: '雕塑/浮雕设计', category: 'exhibition', description: '展陈雕塑与浮雕设计：文案提炼、类型选择、尺寸材质控制和参考图案轮廓约束', icon: 'Landmark', color: 'cyan' },
+  { type: 'exhibition-scene-design', label: '场景设计', category: 'exhibition', description: '展馆场景设计：场景分类、整体环境参考、人物道具 @ 引用和图像生成', icon: 'Theater', color: 'cyan' },
   { type: 'showcase-interior-design', label: '柜内设计', category: 'exhibition', description: '展柜内部陈列设计：展柜尺寸、展品图与展品高度、色彩材质预设、尺寸标注和爆炸图输出', icon: 'Archive', color: 'cyan' },
   { type: 'multi-angle-visual', label: '可视化多角度', category: 'toolbox', description: '可视化调节方位 / 俯仰 / 远近，支持批量角度、Prompt 模式、前后缀、镜头收藏、JSON 导入/导出与紧凑双栏 UI', icon: 'Compass', color: 'pink' },
   { type: 'portrait-master', label: '肖像大师', category: 'toolbox', description: '捏人 Prompt 设计器：五官、发型、服饰、配饰、气质神情等 9 大类词库，支持随机、锁定、权重和运行输出文本', icon: 'UserRoundCog', color: 'pink' },
