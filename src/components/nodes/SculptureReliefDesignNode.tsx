@@ -26,6 +26,7 @@ import { useCanvasStore } from '../../stores/canvas';
 import { logBus } from '../../stores/logs';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
+import PromptTextarea from '../PromptTextarea';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useUpstreamMaterials } from './useUpstreamMaterials';
 import SculptureReliefMaterialEditorModal from './SculptureReliefMaterialEditorModal';
@@ -509,21 +510,21 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
           </div>
           <input ref={fileRef} type="file" className="hidden" accept=".txt,.md,.docx,.pdf,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => void pickDocument(e.target.files?.[0])} />
           <div data-exhibition-compact-item="document" className="text-[10px] text-white/40">{documentLabel(d.documentMeta)}</div>
-          <textarea data-exhibition-compact-item="document" className={`${FIELD} min-h-[68px] resize-y`} value={sourceText} disabled={isReadonly || busy} placeholder="粘贴雕塑/浮雕资料，或连接上游文本/上传文档" onChange={(e) => update({ sourceText: e.target.value })} />
+          <PromptTextarea data-exhibition-compact-item="document" title="扩大编辑" className={`${FIELD} min-h-[68px] resize-y`} value={sourceText} disabled={isReadonly || busy} readOnly={isReadonly || busy} placeholder="粘贴雕塑/浮雕资料，或连接上游文本/上传文档" onValueChange={(value) => update({ sourceText: value })} />
           {upstream.texts.length > 0 && <div className="text-[10px] text-sky-200/75">已连接 {upstream.texts.length} 条上游文本，运行提炼时会合并使用。</div>}
           <div data-exhibition-compact-item="text-fields" className="grid grid-cols-2 gap-2">
             <label className="space-y-1">
               <span className="text-[10px] text-white/55">标题文字</span>
-              <input className={FIELD} value={titleText} disabled={isReadonly || busy} onChange={(e) => update({ titleText: e.target.value })} />
+              <PromptTextarea compact title="扩大编辑" className={FIELD} value={titleText} disabled={isReadonly || busy} readOnly={isReadonly || busy} onValueChange={(value) => update({ titleText: value })} />
             </label>
             <label className="space-y-1">
               <span className="text-[10px] text-white/55">主题概念</span>
-              <input className={FIELD} value={themeText} disabled={isReadonly || busy} onChange={(e) => update({ themeText: e.target.value })} />
+              <PromptTextarea compact title="扩大编辑" className={FIELD} value={themeText} disabled={isReadonly || busy} readOnly={isReadonly || busy} onValueChange={(value) => update({ themeText: value })} />
             </label>
           </div>
           <label data-exhibition-compact-item="text-fields" className="block space-y-1">
             <span className="text-[10px] text-white/55">设计说明</span>
-            <textarea className={`${FIELD} min-h-[68px] resize-y`} value={bodyText} disabled={isReadonly || busy} onChange={(e) => update({ bodyText: e.target.value })} />
+            <PromptTextarea title="扩大编辑" className={`${FIELD} min-h-[68px] resize-y`} value={bodyText} disabled={isReadonly || busy} readOnly={isReadonly || busy} onValueChange={(value) => update({ bodyText: value })} />
           </label>
         </section>
 
@@ -577,7 +578,7 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
               })}
             </div>
           </div>
-          <textarea data-exhibition-compact-item="manual-input" className={`${FIELD} min-h-[48px] resize-y`} value={d.manualMaterial || ''} disabled={isReadonly || busy} placeholder="手动材质/工艺补充，例如：局部内发光、金属蚀刻、仿石肌理、背板安装方式" onChange={(e) => update({ manualMaterial: e.target.value })} />
+          <PromptTextarea data-exhibition-compact-item="manual-input" title="扩大编辑" className={`${FIELD} min-h-[48px] resize-y`} value={d.manualMaterial || ''} disabled={isReadonly || busy} readOnly={isReadonly || busy} placeholder="手动材质/工艺补充，例如：局部内发光、金属蚀刻、仿石肌理、背板安装方式" onValueChange={(value) => update({ manualMaterial: value })} />
           {patternReferenceImage ? (
             <div data-exhibition-compact-item="reference" className="rounded border border-white/10 bg-black/15 p-2">
               <img src={patternReferenceImage} alt="" className="h-28 w-full rounded border border-white/10 object-contain" draggable={false} />

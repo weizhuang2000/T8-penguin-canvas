@@ -32,6 +32,7 @@ import { useCanvasStore } from '../../stores/canvas';
 import { logBus } from '../../stores/logs';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
+import PromptTextarea from '../PromptTextarea';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useUpstreamMaterials, type Material } from './useUpstreamMaterials';
 import MentionPromptInput from './MentionPromptInput';
@@ -490,25 +491,25 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
           </div>
           <input ref={fileRef} type="file" className="hidden" accept=".txt,.md,.docx,.pdf,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => void pickDocument(event.target.files?.[0])} />
           <div data-exhibition-compact-item="document" className="text-[10px] text-white/40">{documentLabel(d.documentMeta)}</div>
-          <textarea data-exhibition-compact-item="document" className={`${FIELD} min-h-[64px] resize-y`} value={sourceText} disabled={isReadonly || busy} placeholder="粘贴场景设计资料，或连接上游文本/上传文档" onChange={(event) => update({ sourceText: event.target.value })} />
+          <PromptTextarea data-exhibition-compact-item="document" title="扩大编辑" className={`${FIELD} min-h-[64px] resize-y`} value={sourceText} disabled={isReadonly || busy} readOnly={isReadonly || busy} placeholder="粘贴场景设计资料，或连接上游文本/上传文档" onValueChange={(value) => update({ sourceText: value })} />
           {upstream.texts.length > 0 && <div className="text-[10px] text-sky-200/75">已连接 {upstream.texts.length} 条上游文本，运行提炼时会合并使用。</div>}
           <div data-exhibition-compact-item="text-fields" className="grid grid-cols-2 gap-2">
             <label className="space-y-1">
               <span className="text-[10px] text-white/55">标题文字</span>
-              <input className={FIELD} value={titleText} disabled={isReadonly || busy} onChange={(event) => update({ titleText: event.target.value })} />
+              <PromptTextarea compact title="扩大编辑" className={FIELD} value={titleText} disabled={isReadonly || busy} readOnly={isReadonly || busy} onValueChange={(value) => update({ titleText: value })} />
             </label>
             <label className="space-y-1">
               <span className="text-[10px] text-white/55">主题概念</span>
-              <input className={FIELD} value={themeText} disabled={isReadonly || busy} onChange={(event) => update({ themeText: event.target.value })} />
+              <PromptTextarea compact title="扩大编辑" className={FIELD} value={themeText} disabled={isReadonly || busy} readOnly={isReadonly || busy} onValueChange={(value) => update({ themeText: value })} />
             </label>
           </div>
           <label data-exhibition-compact-item="text-fields" className="block space-y-1">
             <span className="text-[10px] text-white/55">场景说明</span>
-            <textarea className={`${FIELD} min-h-[68px] resize-y`} value={sceneText} disabled={isReadonly || busy} onChange={(event) => update({ sceneText: event.target.value })} />
+            <PromptTextarea title="扩大编辑" className={`${FIELD} min-h-[68px] resize-y`} value={sceneText} disabled={isReadonly || busy} readOnly={isReadonly || busy} onValueChange={(value) => update({ sceneText: value })} />
           </label>
           <label data-exhibition-compact-item="text-fields" className="block space-y-1">
             <span className="text-[10px] text-white/55">互动与叙事说明</span>
-            <textarea className={`${FIELD} min-h-[52px] resize-y`} value={interactionText} disabled={isReadonly || busy} onChange={(event) => update({ interactionText: event.target.value })} />
+            <PromptTextarea title="扩大编辑" className={`${FIELD} min-h-[52px] resize-y`} value={interactionText} disabled={isReadonly || busy} readOnly={isReadonly || busy} onValueChange={(value) => update({ interactionText: value })} />
           </label>
         </section>
 

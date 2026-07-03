@@ -52,6 +52,17 @@ test('sculpture relief component exposes pattern reference and generation servic
   assert.doesNotMatch(source, /EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR/);
 });
 
+test('sculpture relief text fields use stable prompt textarea for IME input', () => {
+  const source = read('src/components/nodes/SculptureReliefDesignNode.tsx');
+  assert.match(source, /import PromptTextarea from '\.\.\/PromptTextarea'/);
+  for (const field of ['sourceText', 'titleText', 'themeText', 'bodyText']) {
+    assert.match(source, new RegExp(`<PromptTextarea[\\s\\S]*value=\\{${field}\\}[\\s\\S]*onValueChange=\\{\\(value\\) => update\\(\\{ ${field}: value \\}\\)\\}`));
+  }
+  assert.match(source, /<PromptTextarea[\s\S]*value=\{d\.manualMaterial \|\| ''\}[\s\S]*onValueChange=\{\(value\) => update\(\{ manualMaterial: value \}\)\}/);
+  assert.doesNotMatch(source, /<textarea[\s\S]*value=\{(?:sourceText|bodyText|d\.manualMaterial \|\| '')\}/);
+  assert.doesNotMatch(source, /<input className=\{FIELD\} value=\{(?:titleText|themeText)\}/);
+});
+
 test('sculpture relief materials api and compact form hooks are wired', () => {
   const nodeSource = read('src/components/nodes/SculptureReliefDesignNode.tsx');
   const backendSource = read('backend/src/routes/promptLibrary.js');

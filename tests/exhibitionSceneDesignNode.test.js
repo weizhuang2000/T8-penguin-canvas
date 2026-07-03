@@ -43,6 +43,16 @@ test('exhibition scene component exposes dedicated handles and @ mention control
   assert.match(source, /submitImageAsync/);
 });
 
+test('exhibition scene text fields use stable prompt textarea for IME input', () => {
+  const source = read('src/components/nodes/ExhibitionSceneDesignNode.tsx');
+  assert.match(source, /import PromptTextarea from '\.\.\/PromptTextarea'/);
+  for (const field of ['sourceText', 'titleText', 'themeText', 'sceneText', 'interactionText']) {
+    assert.match(source, new RegExp(`<PromptTextarea[\\s\\S]*value=\\{${field}\\}[\\s\\S]*onValueChange=\\{\\(value\\) => update\\(\\{ ${field}: value \\}\\)\\}`));
+  }
+  assert.doesNotMatch(source, /<textarea[\s\S]*value=\{(?:sourceText|sceneText|interactionText)\}/);
+  assert.doesNotMatch(source, /<input className=\{FIELD\} value=\{(?:titleText|themeText)\}/);
+});
+
 test('scene image generation passes environment then people props references in order', () => {
   const source = read('src/components/nodes/ExhibitionSceneDesignNode.tsx');
   assert.match(source, /const referenceImages = \[\.\.\.environmentReferenceImages, \.\.\.peoplePropsReferenceImages\]/);
