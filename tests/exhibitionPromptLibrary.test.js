@@ -341,6 +341,29 @@ test('elevation color material presets keep entries beyond eighty', async (t) =>
   assert.equal(listed.data.colorMaterial.at(-1).label, '色材预设 95');
 });
 
+test('elevation craft presets keep entries beyond eighty', async (t) => {
+  const adminBase = await startApp(t, { id: 'admin', username: 'root', name: 'Root', role: 'admin' });
+  const presets = Array.from({ length: 95 }, (_, index) => ({
+    label: `craft preset ${index + 1}`,
+    prompt: `craft prompt ${index + 1}`,
+  }));
+
+  const saved = await fetch(`${adminBase}/api/prompt-library/elevation/presets/crafts`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ presets }),
+  }).then((res) => res.json());
+
+  assert.equal(saved.success, true);
+  assert.equal(saved.data.length, 95);
+  assert.equal(saved.data.at(-1).label, 'craft preset 95');
+
+  const listed = await fetch(`${adminBase}/api/prompt-library/elevation/presets`).then((res) => res.json());
+  assert.equal(listed.success, true);
+  assert.equal(listed.data.crafts.length, 95);
+  assert.equal(listed.data.crafts.at(-1).label, 'craft preset 95');
+});
+
 test('elevation craft presets are managed by admin and manager only', async (t) => {
   const managerBase = await startApp(t, { id: 'm1', username: 'manager', name: 'Manager', role: 'manager' });
 
