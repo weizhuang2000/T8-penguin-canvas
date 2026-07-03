@@ -129,6 +129,7 @@ import ExhibitionOutlineSplitNode from './nodes/ExhibitionOutlineSplitNode';
 import ExhibitionPlanLayoutNode from './nodes/ExhibitionPlanLayoutNode';
 import ExhibitionAiPlanLayoutNode from './nodes/ExhibitionAiPlanLayoutNode';
 import UnitPanelDesignNode from './nodes/UnitPanelDesignNode';
+import SculptureReliefDesignNode from './nodes/SculptureReliefDesignNode';
 import ShowcaseInteriorDesignNode from './nodes/ShowcaseInteriorDesignNode';
 import PortraitMasterNode from './nodes/PortraitMasterNode';
 import PoseMasterNode from './nodes/PoseMasterNode';
@@ -233,6 +234,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'exhibition-plan-layout': ExhibitionPlanLayoutNode,
   'exhibition-ai-plan-layout': ExhibitionAiPlanLayoutNode,
   'unit-panel-design': UnitPanelDesignNode,
+  'sculpture-relief-design': SculptureReliefDesignNode,
   'showcase-interior-design': ShowcaseInteriorDesignNode,
   'multi-angle-visual': ToolboxParamNode,
   'portrait-master': PortraitMasterNode,
@@ -960,6 +962,41 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     status: 'idle',
     error: '',
   },
+  'sculpture-relief-design': {
+    model: 'gpt-image-2',
+    apiModel: 'gpt-image-2-all',
+    aspectRatio: '1:1',
+    sizeLevel: '2K',
+    outputFormat: 'jpg',
+    designKind: 'sculpture',
+    sculptureType: 'thematic-round',
+    reliefType: 'low-relief',
+    dimensions: {
+      widthMm: 1200,
+      heightMm: 1800,
+      depthMm: 220,
+      baseHeightMm: 200,
+    },
+    materialId: 'bronze',
+    manualMaterial: '',
+    dimensionMarksEnabled: true,
+    backgroundMode: 'black',
+    useUpstream: true,
+    sourceText: '',
+    documentMeta: null,
+    titleText: '',
+    themeText: '',
+    bodyText: '',
+    prompt: '',
+    outputText: '',
+    text: '',
+    imageUrl: '',
+    imageUrls: [],
+    urls: [],
+    referenceImages: [],
+    status: 'idle',
+    error: '',
+  },
   'showcase-interior-design': {
     model: 'gpt-image-2',
     apiModel: 'gpt-image-2-all',
@@ -1227,6 +1264,7 @@ const EXHIBITION_IMAGE_PROVIDER_NODE_TYPES = new Set<string>([
   'exhibition-plan-layout',
   'exhibition-ai-plan-layout',
   'unit-panel-design',
+  'sculpture-relief-design',
   'showcase-interior-design',
 ]);
 
@@ -1274,6 +1312,9 @@ function exclusiveTargetHandlesForConnection(
   ) {
     return [handle];
   }
+  if (targetType === 'sculpture-relief-design' && handle === 'pattern-reference') {
+    return [handle];
+  }
   if (targetType === 'exhibition-style-transfer' && handle === 'style-reference') {
     return [handle];
   }
@@ -1319,6 +1360,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'exhibition-plan-layout',
   'exhibition-ai-plan-layout',
   'unit-panel-design',
+  'sculpture-relief-design',
   'showcase-interior-design',
   'remove-ai-watermark',
 ]);

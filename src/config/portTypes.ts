@@ -163,6 +163,7 @@ export const NODE_PORTS: Record<string, NodePorts> = {
   'exhibition-plan-layout': { inputs: ['text', 'image'], outputs: ['image', 'text'] },
   'exhibition-ai-plan-layout': { inputs: ['text', 'image'], outputs: ['image', 'text'] },
   'unit-panel-design': { inputs: ['text', 'image'], outputs: ['image'] },
+  'sculpture-relief-design': { inputs: ['text', 'image'], outputs: ['image'] },
   'showcase-interior-design': { inputs: ['image'], outputs: ['image'] },
   'multi-angle-visual': { inputs: ['image'], outputs: ['text'] },
   'portrait-master': { inputs: ['text', 'metadata'], outputs: ['text', 'metadata'] },
