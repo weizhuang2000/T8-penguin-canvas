@@ -61,6 +61,8 @@ test('scene image generation passes environment then people props references in 
   assert.match(source, /environmentReferenceImages/);
   assert.match(source, /peoplePropsReferenceImages/);
   assert.match(source, /@img\{environmentReferenceImages\.length \+ index \+ 1\}/);
+  assert.match(source, /mentionToken: `@img\$\{environmentReferenceImages\.length \+ index \+ 1\}`/);
+  assert.match(source, /\[environmentReferenceImages\.length, peoplePropsReferenceItems\]/);
   assert.doesNotMatch(source, /color-material-reference/);
   assert.doesNotMatch(source, /EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR/);
 });

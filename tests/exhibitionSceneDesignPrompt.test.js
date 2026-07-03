@@ -80,3 +80,14 @@ test('people and props @img mentions are bound to reference image order', () => 
   assert.match(prompt, /道具|閬撳叿/);
   assert.match(prompt, /顺序|椤哄簭/);
 });
+
+test('scene people props prompt uses runtime @img order in Chinese notes', () => {
+  const prompt = buildExhibitionSceneImagePrompt({
+    environmentReferenceImages: ['/files/input/env.png'],
+    peoplePropsReferenceImages: ['/files/input/person.png'],
+    peoplePropsText: '@img2 中的女子在探坑里考古',
+  });
+
+  assert.match(prompt, /人物\/道具补充说明：@img2 中的女子在探坑里考古/);
+  assert.doesNotMatch(prompt, /@image1 中的女子/);
+});

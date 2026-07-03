@@ -198,7 +198,8 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
     sourceNodeId: item.id.split(':')[0] || `scene-people-props-${index + 1}`,
     origin: 'upstream',
     label: item.label || `人物/道具 ${index + 1}`,
-  })), [peoplePropsReferenceItems]);
+    mentionToken: `@img${environmentReferenceImages.length + index + 1}`,
+  })), [environmentReferenceImages.length, peoplePropsReferenceItems]);
   const resolvedPeoplePropsText = useMemo(
     () => resolveMediaMentions(peoplePropsText, peoplePropsMentions, mentionMaterials),
     [mentionMaterials, peoplePropsMentions, peoplePropsText],
