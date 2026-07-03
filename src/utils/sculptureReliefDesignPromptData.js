@@ -37,6 +37,19 @@ export const SCULPTURE_RELIEF_MATERIALS = [
   { id: 'mixed', label: '混合材质', prompt: '多种材质混合，主次明确，避免杂乱' },
 ];
 
+export const SCULPTURE_RELIEF_VIEW_ANGLES = [
+  { id: 'front', label: '正立面', prompt: 'front elevation view, orthographic front composition' },
+  { id: 'front-perspective', label: '正面透视', prompt: 'front three-quarter perspective, slight depth and realistic volume' },
+  { id: 'left-45', label: '左前45度', prompt: 'left front 45-degree view, showing side depth and front silhouette' },
+  { id: 'right-45', label: '右前45度', prompt: 'right front 45-degree view, showing side depth and front silhouette' },
+  { id: 'side', label: '侧立面', prompt: 'side elevation view, showing thickness, depth, and installation profile' },
+  { id: 'top', label: '俯视', prompt: 'top view, plan-like view showing footprint and spatial layout' },
+  { id: 'low-angle', label: '仰视', prompt: 'low angle view, monumental upward perspective' },
+  { id: 'detail', label: '局部细节', prompt: 'close-up detail view, material texture, carving edge, and craft detail' },
+  { id: 'exploded', label: '分解示意', prompt: 'exploded construction view, showing layers, backing, plinth, and assembly logic' },
+  { id: 'in-space', label: '空间关系', prompt: 'in-situ exhibition space view, showing scale relationship with wall, floor, and lighting' },
+];
+
 const DEFAULT_DIMENSIONS = {
   widthMm: 1200,
   heightMm: 1800,
@@ -74,6 +87,18 @@ export function normalizeSculptureReliefMaterial(value) {
   return normalizeId(value, SCULPTURE_RELIEF_MATERIALS, SCULPTURE_RELIEF_MATERIALS[0].id);
 }
 
+export function normalizeSculptureReliefViewAngles(value) {
+  const source = Array.isArray(value) ? value : [];
+  const allowed = new Set(SCULPTURE_RELIEF_VIEW_ANGLES.map((item) => item.id));
+  const out = [];
+  for (const raw of source) {
+    const id = String(raw || '').trim();
+    if (allowed.has(id) && !out.includes(id)) out.push(id);
+    if (out.length >= 4) break;
+  }
+  return out.length ? out : ['front'];
+}
+
 export function sculptureDesignTypeMeta(value) {
   const id = normalizeSculptureDesignType(value);
   return SCULPTURE_DESIGN_TYPES.find((item) => item.id === id) || SCULPTURE_DESIGN_TYPES[0];
@@ -87,6 +112,11 @@ export function reliefDesignTypeMeta(value) {
 export function sculptureReliefMaterialMeta(value) {
   const id = normalizeSculptureReliefMaterial(value);
   return SCULPTURE_RELIEF_MATERIALS.find((item) => item.id === id) || SCULPTURE_RELIEF_MATERIALS[0];
+}
+
+export function sculptureReliefViewAngleMeta(value) {
+  const id = normalizeId(value, SCULPTURE_RELIEF_VIEW_ANGLES, SCULPTURE_RELIEF_VIEW_ANGLES[0].id);
+  return SCULPTURE_RELIEF_VIEW_ANGLES.find((item) => item.id === id) || SCULPTURE_RELIEF_VIEW_ANGLES[0];
 }
 
 export function normalizeSculptureReliefDimensions(value) {
@@ -168,7 +198,17 @@ export function buildSculptureReliefImagePrompt(values = {}) {
   const typeMeta = designKind === 'relief'
     ? reliefDesignTypeMeta(values.reliefType)
     : sculptureDesignTypeMeta(values.sculptureType);
-  const material = sculptureReliefMaterialMeta(values.materialId);
+  const material = values.material && typeof values.material === 'object'
+    ? {
+      label: cleanSculptureReliefText(values.material.label, 120) || sculptureReliefMaterialMeta(values.materialId).label,
+      prompt: [
+        cleanSculptureReliefText(values.material.prompt, 1000),
+        cleanSculptureReliefText(values.material.description, 1000),
+        cleanSculptureReliefText(values.material.texture, 1000),
+        cleanSculptureReliefText(values.material.usage, 1000),
+      ].filter(Boolean).join('；') || sculptureReliefMaterialMeta(values.materialId).prompt,
+    }
+    : sculptureReliefMaterialMeta(values.materialId);
   const manualMaterial = cleanSculptureReliefText(values.manualMaterial, 1200);
   const titleText = cleanSculptureReliefText(values.titleText, 500);
   const themeText = cleanSculptureReliefText(values.themeText, 1200);
@@ -177,6 +217,10 @@ export function buildSculptureReliefImagePrompt(values = {}) {
   const dimensionMarksEnabled = values.dimensionMarksEnabled === true;
   const backgroundMode = values.backgroundMode === 'white' ? 'white' : 'black';
   const hasPatternReferenceImage = values.hasPatternReferenceImage === true;
+  const viewAngles = normalizeSculptureReliefViewAngles(values.viewAngles);
+  const viewAngleText = viewAngles
+    .map((id, index) => `${index + 1}. ${sculptureReliefViewAngleMeta(id).label}: ${sculptureReliefViewAngleMeta(id).prompt}`)
+    .join('\n');
   const dimensionText = dimensionMarksEnabled
     ? `尺寸标注：开启。画面中加入清晰的工程尺寸线和 mm 标注，标注这些关键尺寸：${dimensions}。`
     : `尺寸标注：关闭。不要绘制尺寸线、测量数字、尺子或工程标注符号；但造型比例仍必须遵循这些尺寸：${dimensions}。`;
@@ -198,6 +242,7 @@ export function buildSculptureReliefImagePrompt(values = {}) {
     dimensionText,
     backgroundText,
     patternReferenceText,
+    `多视角要求：在同一张方案图中呈现 ${viewAngles.length} 个视角，最多四宫格或横向分栏排布；每个视角标注清楚但不要出现乱码。视角如下：\n${viewAngleText}`,
     `材质与工艺：主材质为${material.label}；${material.prompt}。${manualMaterial ? ` 手动补充：${manualMaterial}。` : ''}`,
     titleText ? `标题文字：可将“${titleText}”作为方案标题或局部标识，但不要生成乱码。` : '标题文字：无明确标题时，不要强行生成大段文字。',
     themeText ? `主题概念：${themeText}` : '',

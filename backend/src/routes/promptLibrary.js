@@ -16,6 +16,7 @@ const PLAN_LAYOUT_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibitio
 const AI_PLAN_LAYOUT_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition_ai_plan_layout.json');
 const RECOLOR_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition_recolor.json');
 const UNIT_PANEL_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_unit_panel.json');
+const SCULPTURE_RELIEF_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_sculpture_relief.json');
 const DIMENSIONS = new Set([
   'spaceType',
   'functionalZones',
@@ -693,6 +694,45 @@ function normalizeUnitPanelMaterialList(value) {
     .map((item, index) => ({ ...item, order: index }));
 }
 
+const DEFAULT_SCULPTURE_RELIEF_MATERIALS = [
+  { id: 'bronze', category: '金属', label: '铜', description: '青铜或黄铜质感，适合纪念性展陈雕塑和浮雕', texture: '温润金属高光、局部做旧、细腻铸造纹理', usage: '主材质' },
+  { id: 'stainless-steel', category: '金属', label: '不锈钢', description: '现代、坚固、反射克制，适合入口标识和抽象装置', texture: '拉丝、镜面或哑光不锈钢', usage: '主材质或结构材质' },
+  { id: 'aluminum-panel', category: '金属', label: '铝板', description: '轻量化板材，适合分层浮雕、折板和烤漆造型', texture: '切割、折弯、烤漆、阳极氧化', usage: '主材质或分层构件' },
+  { id: 'stone', category: '石材', label: '石材', description: '沉稳厚重，适合历史文化、纪念馆和地域主题', texture: '天然石纹、仿石雕刻、细腻磨砂', usage: '主材质或底座' },
+  { id: 'fiberglass', category: '复合材料', label: '玻璃钢', description: '适合复杂曲面和轻量成型，可做多种表面涂装', texture: '模具成型、哑光喷涂、平滑曲面', usage: '复杂造型主材质' },
+  { id: 'wood', category: '木质', label: '木质', description: '温暖自然，适合人文主题和地域文化叙事', texture: '木纹、雕刻、拼接、清漆或哑光涂装', usage: '主材质或装饰面' },
+  { id: 'acrylic', category: '透光材料', label: '亚克力', description: '清透、轻盈，可结合内发光和图案切割', texture: '透明、磨砂、边缘发光、激光切割', usage: '辅助材质或发光层' },
+  { id: 'composite', category: '复合材料', label: '复合材料', description: '金属、亚克力、石材和涂装材料组合，层次丰富', texture: '多层叠合、异材拼接、可拆装结构', usage: '综合方案主材质' },
+  { id: 'ceramic-brick', category: '陶土砖材', label: '陶土/砖', description: '质朴、有地域性，适合地貌、传统工艺和历史叙事', texture: '陶土肌理、砖纹、手工烧制质感', usage: '墙面浮雕或地域主题材质' },
+  { id: 'mixed', category: '混合材质', label: '混合材质', description: '多材质协同表达，适合复杂展陈艺术装置', texture: '金属、石材、木质、亚克力等主次明确组合', usage: '综合材质策略' },
+].map((item, index) => ({ ...item, order: index }));
+
+function normalizeSculptureReliefMaterialList(value) {
+  const source = Array.isArray(value) && value.length > 0 ? value : DEFAULT_SCULPTURE_RELIEF_MATERIALS;
+  const used = new Set();
+  return source
+    .map((raw, index) => {
+      const label = safeText(raw?.label, 120);
+      if (!label) return null;
+      let id = safeText(raw?.id, 96).replace(/[^a-zA-Z0-9_-]/g, '');
+      if (!id) id = `material_${index + 1}`;
+      while (used.has(id)) id = `${id}_${index + 1}`;
+      used.add(id);
+      return {
+        id,
+        category: safeText(raw?.category, 120) || '默认',
+        label,
+        description: safeText(raw?.description, 1000),
+        texture: safeText(raw?.texture, 1000),
+        usage: safeText(raw?.usage, 1000),
+        prompt: safeText(raw?.prompt, 1000),
+        order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.order - b.order);
+}
+
 function readElevationDb() {
   try {
     if (!fs.existsSync(ELEVATION_DB_FILE)) {
@@ -923,6 +963,35 @@ function writeUnitPanelDb(db) {
     UNIT_PANEL_DB_FILE,
     JSON.stringify({
       materials: normalizeUnitPanelMaterialList(db?.materials),
+    }, null, 2),
+    'utf-8',
+  );
+}
+
+function readSculptureReliefDb() {
+  try {
+    if (!fs.existsSync(SCULPTURE_RELIEF_DB_FILE)) {
+      return {
+        materials: normalizeSculptureReliefMaterialList(DEFAULT_SCULPTURE_RELIEF_MATERIALS),
+      };
+    }
+    const raw = JSON.parse(fs.readFileSync(SCULPTURE_RELIEF_DB_FILE, 'utf-8'));
+    return {
+      materials: normalizeSculptureReliefMaterialList(raw?.materials),
+    };
+  } catch {
+    return {
+      materials: normalizeSculptureReliefMaterialList(DEFAULT_SCULPTURE_RELIEF_MATERIALS),
+    };
+  }
+}
+
+function writeSculptureReliefDb(db) {
+  fs.mkdirSync(path.dirname(SCULPTURE_RELIEF_DB_FILE), { recursive: true });
+  fs.writeFileSync(
+    SCULPTURE_RELIEF_DB_FILE,
+    JSON.stringify({
+      materials: normalizeSculptureReliefMaterialList(db?.materials),
     }, null, 2),
     'utf-8',
   );
@@ -1277,6 +1346,21 @@ router.put('/unit-panel/materials', (req, res) => {
   }
   const materials = normalizeUnitPanelMaterialList(req.body?.materials);
   writeUnitPanelDb({ materials });
+  res.json({ success: true, data: materials });
+});
+
+router.get('/sculpture-relief/materials', (_req, res) => {
+  const db = readSculptureReliefDb();
+  res.json({ success: true, data: normalizeSculptureReliefMaterialList(db.materials) });
+});
+
+router.put('/sculpture-relief/materials', (req, res) => {
+  const user = req.user;
+  if (!isAdminRole(user?.role)) {
+    return res.status(403).json({ success: false, error: '只有系统管理员可以维护雕塑/浮雕材质选项' });
+  }
+  const materials = normalizeSculptureReliefMaterialList(req.body?.materials);
+  writeSculptureReliefDb({ materials });
   res.json({ success: true, data: materials });
 });
 

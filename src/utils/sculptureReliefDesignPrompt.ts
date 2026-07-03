@@ -7,16 +7,19 @@ import {
   normalizeSculptureReliefDesignKind,
   normalizeSculptureReliefDimensions,
   normalizeSculptureReliefMaterial,
+  normalizeSculptureReliefViewAngles,
   parseSculptureReliefExtractJson,
   RELIEF_DESIGN_TYPES,
   SCULPTURE_DESIGN_TYPES,
   SCULPTURE_RELIEF_DESIGN_KINDS,
   SCULPTURE_RELIEF_MATERIALS,
+  SCULPTURE_RELIEF_VIEW_ANGLES,
   reliefDesignTypeMeta,
   sculptureDesignTypeMeta,
   sculptureReliefDesignKindMeta,
   sculptureReliefDimensionsText,
   sculptureReliefMaterialMeta,
+  sculptureReliefViewAngleMeta,
 } from './sculptureReliefDesignPromptData.js';
 
 export type SculptureReliefDesignKind = 'sculpture' | 'relief';
@@ -47,6 +50,12 @@ export interface SculptureReliefImagePromptValues {
   dimensionMarksEnabled?: boolean;
   backgroundMode?: 'black' | 'white';
   hasPatternReferenceImage?: boolean;
+  viewAngles?: string[];
+  material?: Partial<SculptureReliefOption> & {
+    description?: string;
+    texture?: string;
+    usage?: string;
+  };
 }
 
 export {
@@ -58,14 +67,17 @@ export {
   normalizeSculptureReliefDesignKind,
   normalizeSculptureReliefDimensions,
   normalizeSculptureReliefMaterial,
+  normalizeSculptureReliefViewAngles,
   parseSculptureReliefExtractJson,
   RELIEF_DESIGN_TYPES,
   SCULPTURE_DESIGN_TYPES,
   SCULPTURE_RELIEF_DESIGN_KINDS,
   SCULPTURE_RELIEF_MATERIALS,
+  SCULPTURE_RELIEF_VIEW_ANGLES,
   reliefDesignTypeMeta,
   sculptureDesignTypeMeta,
   sculptureReliefDesignKindMeta,
   sculptureReliefDimensionsText,
   sculptureReliefMaterialMeta,
+  sculptureReliefViewAngleMeta,
 };

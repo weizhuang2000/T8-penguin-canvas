@@ -1,9 +1,19 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
 import { Brain, FileText, Image as ImageIcon, Landmark, Loader2, Play, Upload } from 'lucide-react';
 import { EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
-import { extractDocument, MAX_DOCUMENT_FILE_SIZE, MAX_DOCUMENT_FILE_SIZE_MB, type ExtractedDocument } from '../../services/api';
+import {
+  extractDocument,
+  getCurrentUser,
+  getSculptureReliefMaterials,
+  MAX_DOCUMENT_FILE_SIZE,
+  MAX_DOCUMENT_FILE_SIZE_MB,
+  updateSculptureReliefMaterials,
+  type AuthUser,
+  type ExtractedDocument,
+  type SculptureReliefMaterialItem,
+} from '../../services/api';
 import { generateExternalImage, generateLlm, queryExternalImageStatus, queryImageStatus, submitImageAsync } from '../../services/generation';
 import {
   advancedProviderModelOptions,
@@ -18,6 +28,7 @@ import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useUpstreamMaterials } from './useUpstreamMaterials';
+import SculptureReliefMaterialEditorModal from './SculptureReliefMaterialEditorModal';
 import {
   buildSculptureReliefExtractPrompt,
   buildSculptureReliefImagePrompt,
@@ -26,10 +37,12 @@ import {
   normalizeSculptureReliefDesignKind,
   normalizeSculptureReliefDimensions,
   normalizeSculptureReliefMaterial,
+  normalizeSculptureReliefViewAngles,
   parseSculptureReliefExtractJson,
   RELIEF_DESIGN_TYPES,
   SCULPTURE_DESIGN_TYPES,
   SCULPTURE_RELIEF_MATERIALS,
+  SCULPTURE_RELIEF_VIEW_ANGLES,
   type SculptureReliefDesignKind,
   type SculptureReliefOption,
 } from '../../utils/sculptureReliefDesignPrompt';
@@ -110,6 +123,11 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
   const llmConfigs = useApiKeysStore((state) => state.settings.llmConfigs || state.settings.llmApiKeys) || [];
   const advancedProviders = useApiKeysStore((state) => state.settings.advancedProviders);
   const allowZhenzhenFallback = useApiKeysStore((state) => state.settings.enableZhenzhenFallback !== false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [materials, setMaterials] = useState<SculptureReliefMaterialItem[]>([]);
+  const [materialsOpen, setMaterialsOpen] = useState(false);
+  const [materialsSaving, setMaterialsSaving] = useState(false);
+  const [materialsError, setMaterialsError] = useState('');
 
   const llmConfigOptions = useMemo(() => {
     const saved = llmConfigs.filter((item) => item && (item.hasApiKey || item.apiKey || item.baseUrl || item.model));
@@ -152,7 +170,15 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
   const sculptureType = normalizeSculptureDesignType(d.sculptureType);
   const reliefType = normalizeReliefDesignType(d.reliefType);
   const dimensions = normalizeSculptureReliefDimensions(d.dimensions);
-  const materialId = normalizeSculptureReliefMaterial(d.materialId);
+  const materialOptions = materials.length > 0 ? materials : SCULPTURE_RELIEF_MATERIALS;
+  const materialId = materialOptions.some((item) => item.id === d.materialId)
+    ? String(d.materialId)
+    : normalizeSculptureReliefMaterial(d.materialId);
+  const selectedMaterial = useMemo(
+    () => materials.find((item) => item.id === materialId) || null,
+    [materialId, materials],
+  );
+  const viewAngles = useMemo(() => normalizeSculptureReliefViewAngles(d.viewAngles), [d.viewAngles]);
   const titleText = String(d.titleText || '').trim();
   const themeText = String(d.themeText || '').trim();
   const bodyText = String(d.bodyText || '').trim();
@@ -161,6 +187,7 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
   const effectiveSourceText = [d.useUpstream !== false ? upstreamText : '', sourceText].filter((item) => item.trim()).join('\n\n');
   const status = String(d.status || 'idle');
   const busy = ['extracting', 'generating', 'uploading'].includes(status);
+  const canManageMaterials = currentUser?.role === 'admin' || currentUser?.role === 'manager';
 
   const previewPrompt = useMemo(() => buildSculptureReliefImagePrompt({
     designKind,
@@ -168,6 +195,7 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
     reliefType,
     dimensions,
     materialId,
+    material: selectedMaterial || undefined,
     manualMaterial: d.manualMaterial,
     titleText,
     themeText,
@@ -175,7 +203,13 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
     dimensionMarksEnabled: d.dimensionMarksEnabled === true,
     backgroundMode: d.backgroundMode === 'white' ? 'white' : 'black',
     hasPatternReferenceImage: !!patternReferenceImage,
-  }), [bodyText, d.backgroundMode, d.dimensionMarksEnabled, d.manualMaterial, designKind, dimensions, materialId, patternReferenceImage, reliefType, sculptureType, themeText, titleText]);
+    viewAngles,
+  }), [bodyText, d.backgroundMode, d.dimensionMarksEnabled, d.manualMaterial, designKind, dimensions, materialId, patternReferenceImage, reliefType, sculptureType, selectedMaterial, themeText, titleText, viewAngles]);
+
+  useEffect(() => {
+    getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
+    getSculptureReliefMaterials().then(setMaterials).catch(() => setMaterials([]));
+  }, []);
 
   useEffect(() => {
     const refs = [patternReferenceImage].filter(Boolean);
@@ -244,6 +278,7 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
       reliefType,
       dimensions,
       materialId,
+      material: selectedMaterial || undefined,
       manualMaterial: d.manualMaterial,
       titleText,
       themeText,
@@ -251,6 +286,7 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
       dimensionMarksEnabled: d.dimensionMarksEnabled === true,
       backgroundMode: d.backgroundMode === 'white' ? 'white' : 'black',
       hasPatternReferenceImage: !!patternReferenceImage,
+      viewAngles,
     });
     pollAbortRef.current = false;
     taskCompletionSound.primeAudio();
@@ -363,13 +399,34 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`雕塑/浮雕设计生图失败: ${msg}`, src);
       throw error;
     }
-  }, [activeCanvasId, apiModel, aspectRatio, bodyText, busy, d.backgroundMode, d.dimensionMarksEnabled, d.manualMaterial, d.providerParams, designKind, dimensions, externalProviderModel, id, isExternalSelected, isReadonly, materialId, modelDef.id, modelDef.paramKind, outputFormat, patternReferenceImage, providerSelection.provider, reliefType, sculptureType, seed, sizeLevel, themeText, titleText, update]);
+  }, [activeCanvasId, apiModel, aspectRatio, bodyText, busy, d.backgroundMode, d.dimensionMarksEnabled, d.manualMaterial, d.providerParams, designKind, dimensions, externalProviderModel, id, isExternalSelected, isReadonly, materialId, modelDef.id, modelDef.paramKind, outputFormat, patternReferenceImage, providerSelection.provider, reliefType, sculptureType, seed, selectedMaterial, sizeLevel, themeText, titleText, update, viewAngles]);
 
   useRunTrigger(id, runGenerate, 'image');
 
   const updateDimension = (key: string, value: string) => {
     const n = Number(value);
     update({ dimensions: { ...dimensions, [key]: Number.isFinite(n) && n >= 0 ? n : 0 } });
+  };
+
+  const toggleViewAngle = (viewId: string) => {
+    const next = viewAngles.includes(viewId)
+      ? viewAngles.filter((item) => item !== viewId)
+      : [...viewAngles, viewId].slice(0, 4);
+    update({ viewAngles: next.length ? next : ['front'] });
+  };
+
+  const saveMaterials = async (next: SculptureReliefMaterialItem[]) => {
+    setMaterialsSaving(true);
+    setMaterialsError('');
+    try {
+      const saved = await updateSculptureReliefMaterials(next);
+      setMaterials(saved);
+      setMaterialsOpen(false);
+    } catch (error: any) {
+      setMaterialsError(error?.message || '材质保存失败');
+    } finally {
+      setMaterialsSaving(false);
+    }
   };
 
   return (
@@ -459,7 +516,10 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
         </section>
 
         <section data-exhibition-compact-section="layout" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
-          <div className="text-[11px] font-semibold text-cyan-100">尺寸与材质</div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[11px] font-semibold text-cyan-100">尺寸与材质</div>
+            {canManageMaterials && <button data-exhibition-compact-item="actions" type="button" className={BUTTON} disabled={isReadonly || busy} onClick={() => setMaterialsOpen(true)}>编辑材质</button>}
+          </div>
           <div data-exhibition-compact-item="size" className="grid grid-cols-4 gap-2">
             {[
               ['widthMm', '宽 mm'],
@@ -476,8 +536,8 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
           <div className="grid grid-cols-2 gap-2">
             <label data-exhibition-compact-item="material-select" className="space-y-1">
               <span className="text-[10px] text-white/55">主材质</span>
-              <select className={FIELD} value={materialId} disabled={isReadonly || busy} onChange={(e) => update({ materialId: normalizeSculptureReliefMaterial(e.target.value) })}>
-                {SCULPTURE_RELIEF_MATERIALS.map((item: SculptureReliefOption) => <option key={item.id} value={item.id}>{item.label}</option>)}
+              <select className={FIELD} value={materialId} disabled={isReadonly || busy} onChange={(e) => update({ materialId: e.target.value })}>
+                {materialOptions.map((item: SculptureReliefOption | SculptureReliefMaterialItem) => <option key={item.id} value={item.id}>{item.label}</option>)}
               </select>
             </label>
             <label className="space-y-1">
@@ -486,6 +546,24 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
                 {modelDef.aspectRatios.map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
             </label>
+          </div>
+          <div data-exhibition-compact-item="view-angles" className="space-y-1">
+            <div className="flex items-center justify-between text-[10px] text-white/55">
+              <span>多视角</span>
+              <span>{viewAngles.length}/4</span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {SCULPTURE_RELIEF_VIEW_ANGLES.map((item: SculptureReliefOption) => {
+                const checked = viewAngles.includes(item.id);
+                const disabled = isReadonly || busy || (!checked && viewAngles.length >= 4);
+                return (
+                  <label key={item.id} className={`flex items-center gap-1.5 rounded border px-2 py-1 text-[10px] ${checked ? 'border-cyan-300/40 bg-cyan-300/10 text-cyan-100' : 'border-white/10 bg-black/15 text-white/60'} ${disabled ? 'opacity-45' : ''}`}>
+                    <input type="checkbox" className="accent-cyan-300" checked={checked} disabled={disabled} onChange={() => toggleViewAngle(item.id)} />
+                    <span className="truncate">{item.label}</span>
+                  </label>
+                );
+              })}
+            </div>
           </div>
           <textarea data-exhibition-compact-item="manual-input" className={`${FIELD} min-h-[48px] resize-y`} value={d.manualMaterial || ''} disabled={isReadonly || busy} placeholder="手动材质/工艺补充，例如：局部内发光、金属蚀刻、仿石肌理、背板安装方式" onChange={(e) => update({ manualMaterial: e.target.value })} />
           {patternReferenceImage ? (
@@ -567,6 +645,15 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
           <div className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words text-[10px] leading-relaxed text-white/72">{previewPrompt}</div>
         </section>
       </div>
+
+      <SculptureReliefMaterialEditorModal
+        open={materialsOpen}
+        materials={materials}
+        saving={materialsSaving}
+        error={materialsError}
+        onClose={() => setMaterialsOpen(false)}
+        onSave={saveMaterials}
+      />
     </div>
   );
 };

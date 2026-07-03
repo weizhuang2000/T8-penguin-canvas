@@ -979,6 +979,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     },
     materialId: 'bronze',
     manualMaterial: '',
+    viewAngles: ['front'],
     dimensionMarksEnabled: true,
     backgroundMode: 'black',
     useUpstream: true,

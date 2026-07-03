@@ -4,6 +4,7 @@ import {
   buildSculptureReliefExtractPrompt,
   buildSculptureReliefImagePrompt,
   normalizeSculptureReliefDimensions,
+  normalizeSculptureReliefViewAngles,
   parseSculptureReliefExtractJson,
 } from '../src/utils/sculptureReliefDesignPromptData.js';
 
@@ -28,6 +29,21 @@ test('sculpture relief extract prompt and parser support title theme and body te
     themeText: 'Theme',
     bodyText: 'Body',
   });
+});
+
+test('view angles are limited to four and emitted in image prompt', () => {
+  assert.deepEqual(
+    normalizeSculptureReliefViewAngles(['front', 'left-45', 'right-45', 'side', 'top']),
+    ['front', 'left-45', 'right-45', 'side'],
+  );
+
+  const prompt = buildSculptureReliefImagePrompt({
+    viewAngles: ['front', 'left-45', 'right-45', 'top'],
+  });
+  assert.match(prompt, /front elevation view/);
+  assert.match(prompt, /left front 45-degree view/);
+  assert.match(prompt, /right front 45-degree view/);
+  assert.match(prompt, /top view/);
 });
 
 test('sculpture and relief modes emit their own design constraints', () => {

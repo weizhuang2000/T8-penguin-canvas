@@ -203,6 +203,7 @@ const EXHIBITION_COMPACT_FORM_DEFINITIONS = [
     { id: 'layout', label: '\u5c3a\u5bf8\u6750\u8d28', items: [
       { id: 'size', label: '\u5c3a\u5bf8\u8bbe\u7f6e' },
       { id: 'material-select', label: '\u6750\u8d28\u9009\u62e9' },
+      { id: 'view-angles', label: '\u591a\u89c6\u89d2' },
       { id: 'manual-input', label: '\u624b\u52a8\u8865\u5145' },
       { id: 'reference', label: '\u53c2\u8003\u56fe\u6848' },
     ] },

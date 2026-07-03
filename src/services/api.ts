@@ -617,6 +617,17 @@ export interface UnitPanelMaterialItem {
   order: number;
 }
 
+export interface SculptureReliefMaterialItem {
+  id: string;
+  category: string;
+  label: string;
+  description: string;
+  texture: string;
+  usage: string;
+  prompt?: string;
+  order: number;
+}
+
 export async function listExhibitionPromptLibrary(options?: {
   dimension?: ExhibitionPromptDimension;
   includePersonal?: boolean;
@@ -908,6 +919,26 @@ export async function updateUnitPanelMaterials(
 ): Promise<UnitPanelMaterialItem[]> {
   const res = await request<{ success: boolean; data: UnitPanelMaterialItem[] }>(
     `${BASE}/prompt-library/unit-panel/materials`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ materials }),
+    },
+  );
+  return res.data || [];
+}
+
+export async function getSculptureReliefMaterials(): Promise<SculptureReliefMaterialItem[]> {
+  const res = await request<{ success: boolean; data: SculptureReliefMaterialItem[] }>(
+    `${BASE}/prompt-library/sculpture-relief/materials`,
+  );
+  return res.data || [];
+}
+
+export async function updateSculptureReliefMaterials(
+  materials: Array<Pick<SculptureReliefMaterialItem, 'label'> & Partial<Pick<SculptureReliefMaterialItem, 'id' | 'category' | 'description' | 'texture' | 'usage' | 'prompt' | 'order'>>>,
+): Promise<SculptureReliefMaterialItem[]> {
+  const res = await request<{ success: boolean; data: SculptureReliefMaterialItem[] }>(
+    `${BASE}/prompt-library/sculpture-relief/materials`,
     {
       method: 'PUT',
       body: JSON.stringify({ materials }),

@@ -17,6 +17,7 @@ test('sculpture relief design node is registered in frontend and permissions', (
   assert.match(read('src/components/Canvas.tsx'), /heightMm: 1800/);
   assert.match(read('src/components/Canvas.tsx'), /depthMm: 220/);
   assert.match(read('src/components/Canvas.tsx'), /baseHeightMm: 200/);
+  assert.match(read('src/components/Canvas.tsx'), /viewAngles: \['front'\]/);
   assert.match(read('src/components/Canvas.tsx'), /'sculpture-relief-design'/);
   assert.match(read('src/config/portTypes.ts'), /'sculpture-relief-design': \{ inputs: \['text', 'image'\], outputs: \['image'\] \}/);
   assert.match(read('src/utils/nodePlacement.ts'), /'sculpture-relief-design': \{ w: 620, h: 740 \}/);
@@ -29,6 +30,14 @@ test('sculpture relief design node is registered in frontend and permissions', (
 test('sculpture relief component exposes pattern reference and generation services', () => {
   const source = read('src/components/nodes/SculptureReliefDesignNode.tsx');
   assert.match(source, /id="pattern-reference"/);
+  assert.match(source, /SculptureReliefMaterialEditorModal/);
+  assert.match(source, /getCurrentUser/);
+  assert.match(source, /getSculptureReliefMaterials/);
+  assert.match(source, /updateSculptureReliefMaterials/);
+  assert.match(source, /canManageMaterials/);
+  assert.match(source, /SCULPTURE_RELIEF_VIEW_ANGLES/);
+  assert.match(source, /normalizeSculptureReliefViewAngles/);
+  assert.match(source, /data-exhibition-compact-item="view-angles"/);
   assert.match(source, /buildSculptureReliefExtractPrompt/);
   assert.match(source, /buildSculptureReliefImagePrompt/);
   assert.match(source, /parseSculptureReliefExtractJson/);
@@ -41,4 +50,13 @@ test('sculpture relief component exposes pattern reference and generation servic
   assert.match(source, /referenceImages = patternReferenceImage \? \[patternReferenceImage\] : \[\]/);
   assert.doesNotMatch(source, /color-material-reference/);
   assert.doesNotMatch(source, /EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR/);
+});
+
+test('sculpture relief materials api and compact form hooks are wired', () => {
+  assert.match(read('src/services/api.ts'), /getSculptureReliefMaterials/);
+  assert.match(read('src/services/api.ts'), /updateSculptureReliefMaterials/);
+  assert.match(read('backend/src/routes/promptLibrary.js'), /\/sculpture-relief\/materials/);
+  assert.match(read('backend/src/routes/promptLibrary.js'), /isAdminRole\(user\?\.role\)/);
+  assert.match(read('src/config/exhibitionCompactForm.ts'), /id: 'view-angles'/);
+  assert.match(read('backend/src/auth/exhibitionCompactForm.js'), /id: 'view-angles'/);
 });
