@@ -189,6 +189,16 @@ test('exhibition creative image prompt lets preset override both color recogniti
   assert.doesNotMatch(prompt, /主色调：浅蓝、白灰/);
 });
 
+test('exhibition creative image prompt appends color material preset negative prompt', () => {
+  const prompt = buildExhibitionCreativeImagePrompt({
+    hasColorMaterialPreset: true,
+    colorMaterial: '暖白石材与拉丝铜',
+    colorMaterialNegativePrompt: '可读错字、乱码文字不符合物理特性的结构和光线',
+  });
+
+  assert.match(prompt, /Avoid: [^\n]*可读错字、乱码文字不符合物理特性的结构和光线/);
+});
+
 test('exhibition creative image prompt lets overall lighting override color material brightness', () => {
   const disabled = buildExhibitionCreativeImagePrompt({
     spaceLightingEnabled: false,

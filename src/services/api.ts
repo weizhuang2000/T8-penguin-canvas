@@ -493,6 +493,7 @@ export interface ElevationColorMaterialPresetItem {
   core?: string;
   features?: string;
   usage?: string;
+  negativePrompt?: string;
   info: string;
   order: number;
 }
@@ -679,7 +680,7 @@ export async function getElevationPromptPresets(): Promise<ElevationPromptPreset
 }
 
 export async function updateElevationColorMaterialPresets(
-  presets: Array<Pick<ElevationColorMaterialPresetItem, 'label'> & Partial<Pick<ElevationColorMaterialPresetItem, 'id' | 'category' | 'core' | 'features' | 'usage' | 'info' | 'order'>>>,
+  presets: Array<Pick<ElevationColorMaterialPresetItem, 'label'> & Partial<Pick<ElevationColorMaterialPresetItem, 'id' | 'category' | 'core' | 'features' | 'usage' | 'negativePrompt' | 'info' | 'order'>>>,
 ): Promise<ElevationColorMaterialPresetItem[]> {
   const res = await request<{ success: boolean; data: ElevationColorMaterialPresetItem[] }>(
     `${BASE}/prompt-library/elevation/presets/colorMaterial`,

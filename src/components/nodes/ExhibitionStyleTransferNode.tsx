@@ -230,6 +230,7 @@ function buildColorMaterialPresetPayload(presets: ElevationColorMaterialPresetIt
     core: preset.core || '',
     features: preset.features || '',
     usage: preset.usage || '',
+    negativePrompt: preset.negativePrompt || '',
     info: preset.info || '',
     order: index,
   }));

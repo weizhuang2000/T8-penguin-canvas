@@ -110,7 +110,9 @@ function parseColorPresetEditorText(text: string) {
       const rest = hasCategory ? parts.slice(2) : parts.slice(1);
       const core = String(rest[0] || '').trim();
       const features = String(rest[1] || '').trim();
-      const usage = rest.slice(2).join('｜').trim();
+      const usageParts = rest.length >= 4 ? rest.slice(2, -1) : rest.slice(2);
+      const usage = usageParts.join('｜').trim();
+      const negativePrompt = String(rest.length >= 4 ? rest[rest.length - 1] : '可读错字、乱码文字不符合物理特性的结构和光线').trim();
       const info = rest.length > 2
         ? [core && `核心：${core}`, features && `特征：${features}`, usage && `适用：${usage}`].filter(Boolean).join('')
         : rest.join('｜').trim();
@@ -121,11 +123,12 @@ function parseColorPresetEditorText(text: string) {
         core,
         features,
         usage,
+        negativePrompt,
         info,
         order: index,
       };
     })
-    .filter(Boolean) as Array<{ id: string; category: string; label: string; core: string; features: string; usage: string; info: string; order: number }>;
+    .filter(Boolean) as Array<{ id: string; category: string; label: string; core: string; features: string; usage: string; negativePrompt: string; info: string; order: number }>;
 }
 
 function colorMaterialTextFromPreset(preset: ElevationColorMaterialPresetItem): string {
@@ -145,6 +148,7 @@ function buildColorMaterialPresetPayload(presets: ElevationColorMaterialPresetIt
     core: preset.core || '',
     features: preset.features || '',
     usage: preset.usage || '',
+    negativePrompt: preset.negativePrompt || '',
     info: preset.info || '',
     order: index,
   }));

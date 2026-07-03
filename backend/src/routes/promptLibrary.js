@@ -28,6 +28,8 @@ const DIMENSIONS = new Set([
   'negativeItems',
 ]);
 
+const DEFAULT_COLOR_MATERIAL_NEGATIVE_PROMPT = '可读错字、乱码文字不符合物理特性的结构和光线';
+
 const DEFAULT_ELEVATION_COLOR_MATERIAL_PRESETS = [
   {
     id: 'minimalism',
@@ -301,6 +303,7 @@ function normalizeElevationPresetList(value) {
       const features = safeText(raw?.features, 1600) || splitInfo.features;
       const usage = safeText(raw?.usage, 1200) || splitInfo.usage;
       const category = safeText(raw?.category || raw?.group || raw?.type, 80) || '默认';
+      const negativePrompt = safeText(raw?.negativePrompt || raw?.negative || raw?.avoid, 1200) || DEFAULT_COLOR_MATERIAL_NEGATIVE_PROMPT;
       return {
         id,
         category,
@@ -308,6 +311,7 @@ function normalizeElevationPresetList(value) {
         core,
         features,
         usage,
+        negativePrompt,
         info: safeText(raw?.info, 4000) || [core && `核心：${core}`, features && `特征：${features}`, usage && `适用：${usage}`].filter(Boolean).join(''),
         order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,
       };

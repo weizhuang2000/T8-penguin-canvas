@@ -4,6 +4,7 @@ import { CheckSquare, FolderPlus, Plus, Save, Square, Trash2, X } from 'lucide-r
 import type { ElevationColorMaterialPresetItem } from '../../services/api';
 
 const DEFAULT_CATEGORY = '默认';
+const DEFAULT_NEGATIVE_PROMPT = '可读错字、乱码文字不符合物理特性的结构和光线';
 const FIELD = 'w-full rounded border border-white/10 bg-black/25 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
 
@@ -50,6 +51,7 @@ function makeDraft(preset: Partial<ElevationColorMaterialPresetItem>, index: num
     core: String(preset.core || '').trim(),
     features: String(preset.features || '').trim(),
     usage: String(preset.usage || '').trim(),
+    negativePrompt: String(preset.negativePrompt || DEFAULT_NEGATIVE_PROMPT).trim(),
     info: String(preset.info || '').trim(),
     order: Number.isFinite(Number(preset.order)) ? Number(preset.order) : index,
   };
@@ -63,6 +65,7 @@ function toSaveItem(preset: DraftPreset, order: number): ElevationColorMaterialP
     core: String(preset.core || '').trim(),
     features: String(preset.features || '').trim(),
     usage: String(preset.usage || '').trim(),
+    negativePrompt: String(preset.negativePrompt || DEFAULT_NEGATIVE_PROMPT).trim(),
     info: presetInfo(preset),
     order,
   };
@@ -76,6 +79,7 @@ function serializeDrafts(presets: DraftPreset[]): string {
       String(preset.core || '').trim(),
       String(preset.features || '').trim(),
       String(preset.usage || '').trim(),
+      String(preset.negativePrompt || DEFAULT_NEGATIVE_PROMPT).trim(),
     ].join('｜'))
     .join('\n');
 }
@@ -92,13 +96,16 @@ function parseRawText(text: string): DraftPreset[] {
       const label = String(hasCategory ? parts[1] : (parts[0] || '')).trim();
       if (!label) return null;
       const rest = hasCategory ? parts.slice(2) : parts.slice(1);
+      const usageParts = rest.length >= 4 ? rest.slice(2, -1) : rest.slice(2);
+      const negativePrompt = rest.length >= 4 ? rest[rest.length - 1] : DEFAULT_NEGATIVE_PROMPT;
       return makeDraft({
         id: `${label.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'preset'}-${index + 1}`,
         category,
         label,
         core: String(rest[0] || '').trim(),
         features: String(rest[1] || '').trim(),
-        usage: rest.slice(2).join('｜').trim(),
+        usage: usageParts.join('｜').trim(),
+        negativePrompt: String(negativePrompt || DEFAULT_NEGATIVE_PROMPT).trim(),
       }, index);
     })
     .filter(Boolean) as DraftPreset[];
@@ -361,7 +368,7 @@ export default function ColorMaterialPresetEditorModal({
               <div className="flex min-h-0 flex-1 flex-col p-3">
                 <div className="mb-2 flex items-center gap-2">
                   <div className="min-w-0 flex-1 text-[10px] text-white/45">
-                    每行格式：分类｜名称｜{paletteLabel}｜{texturesLabel}｜适用。旧格式“名称｜核心｜特征｜适用”会归入默认分类。
+                    每行格式：分类｜名称｜{paletteLabel}｜{texturesLabel}｜适用｜负面提示词。旧格式“名称｜核心｜特征｜适用”会归入默认分类并自动补默认负面提示词。
                   </div>
                   <button type="button" className={BUTTON} onClick={() => setEditMode('table')} disabled={saving}>
                     返回表格
@@ -400,14 +407,15 @@ export default function ColorMaterialPresetEditorModal({
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto p-3">
-              <div className="min-w-[880px] overflow-hidden rounded border border-white/10">
-                <div className="grid grid-cols-[34px_140px_150px_1fr_1fr_1fr_36px] border-b border-white/10 bg-white/[0.06] text-[10px] font-semibold text-white/55">
+              <div className="min-w-[1040px] overflow-hidden rounded border border-white/10">
+                <div className="grid grid-cols-[34px_120px_140px_1fr_1fr_1fr_1fr_36px] border-b border-white/10 bg-white/[0.06] text-[10px] font-semibold text-white/55">
                   <div className="px-2 py-2">选</div>
                   <div className="px-2 py-2">分类</div>
                   <div className="px-2 py-2">名称</div>
                   <div className="px-2 py-2">{paletteLabel}</div>
                   <div className="px-2 py-2">{texturesLabel}</div>
                   <div className="px-2 py-2">适用</div>
+                  <div className="px-2 py-2">负面提示词</div>
                   <div className="px-2 py-2" />
                 </div>
                 {visibleDrafts.length === 0 ? (
@@ -415,7 +423,7 @@ export default function ColorMaterialPresetEditorModal({
                 ) : visibleDrafts.map((preset) => {
                   const selected = selectedIds.has(preset.draftId);
                   return (
-                    <div key={preset.draftId} className={`grid grid-cols-[34px_140px_150px_1fr_1fr_1fr_36px] items-start gap-1 border-b border-white/5 p-1.5 ${selected ? 'bg-cyan-300/[0.08]' : 'bg-black/10'}`}>
+                    <div key={preset.draftId} className={`grid grid-cols-[34px_120px_140px_1fr_1fr_1fr_1fr_36px] items-start gap-1 border-b border-white/5 p-1.5 ${selected ? 'bg-cyan-300/[0.08]' : 'bg-black/10'}`}>
                       <label className="flex h-8 items-center justify-center">
                         <input
                           type="checkbox"
@@ -441,6 +449,7 @@ export default function ColorMaterialPresetEditorModal({
                       <textarea className={`${FIELD} min-h-[58px] resize-y`} value={preset.core || ''} disabled={saving} onChange={(event) => updateDraft(preset.draftId, { core: event.target.value })} />
                       <textarea className={`${FIELD} min-h-[58px] resize-y`} value={preset.features || ''} disabled={saving} onChange={(event) => updateDraft(preset.draftId, { features: event.target.value })} />
                       <textarea className={`${FIELD} min-h-[58px] resize-y`} value={preset.usage || ''} disabled={saving} onChange={(event) => updateDraft(preset.draftId, { usage: event.target.value })} />
+                      <textarea className={`${FIELD} min-h-[58px] resize-y`} value={preset.negativePrompt || DEFAULT_NEGATIVE_PROMPT} disabled={saving} onChange={(event) => updateDraft(preset.draftId, { negativePrompt: event.target.value })} />
                       <button type="button" className="mt-0.5 rounded p-1.5 text-white/45 hover:bg-rose-400/15 hover:text-rose-200" disabled={saving} onClick={() => setDrafts((items) => items.filter((item) => item.draftId !== preset.draftId))} title="删除">
                         <Trash2 size={13} />
                       </button>

@@ -334,7 +334,7 @@ function exhibitionCreativeMaterialsText({ colorMaterialTextures, colorMaterial,
   return textures || '微水泥、哑光石材、拉丝金属、局部半透发光亚克力、深色木饰面、精细浮雕肌理、低反射地面和可施工的展陈饰面。';
 }
 
-function exhibitionCreativeAvoidText(excludeItemsText) {
+function exhibitionCreativeAvoidText(excludeItemsText, colorMaterialNegativePrompt) {
   const defaults = [
     'people',
     'readable small text',
@@ -349,6 +349,8 @@ function exhibitionCreativeAvoidText(excludeItemsText) {
     'stone pomegranate shapes',
   ];
   if (excludeItemsText) defaults.push(excludeItemsText);
+  const presetNegative = cleanExhibitionCreativeText(colorMaterialNegativePrompt, 1200);
+  if (presetNegative) defaults.push(presetNegative);
   return defaults.join(', ');
 }
 
@@ -363,6 +365,7 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
   const colorMaterialPalette = cleanColorMaterialText(values.colorMaterialPalette, 1000);
   const colorMaterialTextures = cleanColorMaterialText(values.colorMaterialTextures, 1000);
   const colorMaterialOverride = hasColorMaterialPreset ? cleanColorMaterialText(values.colorMaterial, 1000) : '';
+  const colorMaterialNegativePrompt = hasColorMaterialPreset ? cleanExhibitionCreativeText(values.colorMaterialNegativePrompt, 1200) : '';
   const colorMaterialPriorityMode = values.colorMaterialPriorityMode === 'llm' ? 'llm' : 'frontend';
   const colorMaterialReferenceTone = cleanColorMaterialText(values.colorMaterialReferenceTone, 500);
   const inspiration = cleanExhibitionCreativeText(values.inspiration, 2000);
@@ -421,7 +424,7 @@ export function buildExhibitionCreativeImagePrompt(values = {}) {
     `Materials/textures: ${exhibitionCreativeMaterialsText({ colorMaterialTextures, colorMaterial: colorMaterialOverride || colorMaterial, hasColorMaterialPreset, hasColorMaterialReferenceImage })}`,
     `Text (verbatim): ${projectTheme ? `仅允许出现大型立体主题字装置“${projectTheme}”或等价主题装置字形；` : '仅允许出现必要的大型立体主题字装置或抽象主题装置字形；'}不要出现任何小字、说明文字、乱码、展板文字、标签文字、Markdown 字段名或参数说明。`,
     `Constraints: ${hasSpaceImage ? '必须保留图1的原始建筑结构，不得改变主要开口、墙体、顶面、地面边界、透视、层高、动线和尺度关系；不把空间改造成另一处建筑；' : '必须保持真实室内空间尺度、墙体边界、开口逻辑、动线和可施工性；'}不增加人物；不出现蒙文；不出现可读错字或乱码；不出现小结构堆砌；不出现石榴造型；${hasExhibitReferenceImage ? '展品参考图只影响展品外观和展示重点，不影响空间结构或色彩材质；' : ''}${excludeItemsText ? `不得出现：${excludeItemsText}；` : ''}最终画面必须是高完成度、可落地的展陈空间效果图。`,
-    `Avoid: ${exhibitionCreativeAvoidText(excludeItemsText)}`,
+    `Avoid: ${exhibitionCreativeAvoidText(excludeItemsText, colorMaterialNegativePrompt)}`,
   ];
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
