@@ -5,8 +5,8 @@ import { useApiKeysStore, FIXED_ZHENZHEN_BASE, RH_BASE, normalizeApiSettings } f
 import { taskCompletionSound as taskCompletionSoundController } from '../stores/taskCompletionSound';
 import { useThemeStore } from '../stores/theme';
 import type { AdvancedProviderConfig, AdvancedProviderProtocol, ApiSettings, CloudUploadProvider, CloudUploadTargetConfig, LlmConfig } from '../types/canvas';
-import { getRawSettings, resetTaskCompletionSound, testAdvancedProvider, testCloudUploadTarget, uploadTaskCompletionSound } from '../services/api';
-import { playTaskCompletionSound } from '../utils/taskCompletionSound';
+import { getRawSettings, resetTaskCompletionSound, resetTaskFailureSound, testAdvancedProvider, testCloudUploadTarget, uploadTaskCompletionSound, uploadTaskFailureSound } from '../services/api';
+import { playTaskCompletionSound, playTaskFailureSound } from '../utils/taskCompletionSound';
 import { DEFAULT_LLM_MODEL } from '../providers/models';
 import {
   advancedProviderSummary as summarizeAdvancedProviderForm,
@@ -413,10 +413,14 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   const [taskSoundMessage, setTaskSoundMessage] = useState<string>('');
   const [taskSoundBusy, setTaskSoundBusy] = useState(false);
   const [taskSoundTesting, setTaskSoundTesting] = useState(false);
+  const [taskFailureSoundMessage, setTaskFailureSoundMessage] = useState<string>('');
+  const [taskFailureSoundBusy, setTaskFailureSoundBusy] = useState(false);
+  const [taskFailureSoundTesting, setTaskFailureSoundTesting] = useState(false);
   // 贞贞工坊启用开关（对应 enableZhenzhenFallback）
   const [zhenzhenEnabled, setZhenzhenEnabled] = useState(true);
   const backupFileInputRef = useRef<HTMLInputElement | null>(null);
   const taskCompletionSoundFileInputRef = useRef<HTMLInputElement | null>(null);
+  const taskFailureSoundFileInputRef = useRef<HTMLInputElement | null>(null);
   // 眼睛预览拉取的明文（仅缓存，不提交）
   const revealedRef = useRef<Partial<Record<KeyField, string>>>({});
 
@@ -456,6 +460,9 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       setTaskSoundMessage('');
       setTaskSoundBusy(false);
       setTaskSoundTesting(false);
+      setTaskFailureSoundMessage('');
+      setTaskFailureSoundBusy(false);
+      setTaskFailureSoundTesting(false);
       // 回填文件自动保存路径(明文字段，不脱敏)
       setFileSavePathInput((settings as any)?.fileSavePath || '');
       setCanvasAutoSavePathInput((settings as any)?.canvasAutoSavePath || '');
@@ -875,6 +882,54 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   };
 
   // 每个字段费应的「获取 APIKey」按钮配置
+  const handleTaskFailureSoundUpload = async (file: File | null) => {
+    if (!file) return;
+    if (!isTaskCompletionSoundFile(file)) {
+      setTaskFailureSoundMessage('Please choose an audio file: mp3 / wav / ogg / m4a / aac / flac / webm.');
+      if (taskFailureSoundFileInputRef.current) taskFailureSoundFileInputRef.current.value = '';
+      return;
+    }
+    setTaskFailureSoundBusy(true);
+    setTaskFailureSoundMessage('');
+    try {
+      const result = await uploadTaskFailureSound(file);
+      await refreshTaskCompletionSoundSettings();
+      const sizeLabel = formatTaskCompletionSoundSize(result.size || file.size);
+      setTaskFailureSoundMessage(`Custom failure sound saved: ${result.name || file.name}${sizeLabel ? ` · ${sizeLabel}` : ''}`);
+    } catch (e: any) {
+      setTaskFailureSoundMessage(e?.message || 'Failed to upload sound.');
+    } finally {
+      setTaskFailureSoundBusy(false);
+      if (taskFailureSoundFileInputRef.current) taskFailureSoundFileInputRef.current.value = '';
+    }
+  };
+
+  const handleResetTaskFailureSound = async () => {
+    setTaskFailureSoundBusy(true);
+    setTaskFailureSoundMessage('');
+    try {
+      await resetTaskFailureSound();
+      await refreshTaskCompletionSoundSettings();
+      setTaskFailureSoundMessage('Default failure sound restored.');
+    } catch (e: any) {
+      setTaskFailureSoundMessage(e?.message || 'Failed to restore default sound.');
+    } finally {
+      setTaskFailureSoundBusy(false);
+    }
+  };
+
+  const handlePreviewTaskFailureSound = async () => {
+    setTaskFailureSoundTesting(true);
+    setTaskFailureSoundMessage('');
+    try {
+      await playTaskFailureSound((settings as any)?.taskFailureSound);
+    } catch (e: any) {
+      setTaskFailureSoundMessage(e?.message || 'Failed to preview sound. Interact with the page and try again.');
+    } finally {
+      setTaskFailureSoundTesting(false);
+    }
+  };
+
   const renderGetKeyButtons = (field: KeyField) => {
     if (field === 'zhenzhenApiKey') {
       return (
@@ -924,6 +979,9 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   const taskCompletionSoundSettings = (settings as any)?.taskCompletionSound || { mode: 'default', url: '' };
   const hasCustomTaskCompletionSound = taskCompletionSoundSettings.mode === 'custom' && !!taskCompletionSoundSettings.url;
   const taskCompletionSoundSizeLabel = formatTaskCompletionSoundSize(taskCompletionSoundSettings.size);
+  const taskFailureSoundSettings = (settings as any)?.taskFailureSound || { mode: 'default', url: '' };
+  const hasCustomTaskFailureSound = taskFailureSoundSettings.mode === 'custom' && !!taskFailureSoundSettings.url;
+  const taskFailureSoundSizeLabel = formatTaskCompletionSoundSize(taskFailureSoundSettings.size);
 
   const updateAdvancedProvider = (id: string, patch: Partial<AdvancedProviderConfig>) => {
     setAdvancedProvidersInput((prev) => prev.map((provider) => (
@@ -3283,6 +3341,13 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                 className="hidden"
                 onChange={(e) => handleTaskCompletionSoundUpload(e.target.files?.[0] || null)}
               />
+              <input
+                ref={taskFailureSoundFileInputRef}
+                type="file"
+                accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac,.webm"
+                className="hidden"
+                onChange={(e) => handleTaskFailureSoundUpload(e.target.files?.[0] || null)}
+              />
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -3335,6 +3400,77 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                   {taskSoundMessage}
                 </div>
               )}
+              <div className="t8-api-settings-divider border-t pt-3">
+                <div className="flex items-start gap-3 justify-between flex-wrap">
+                  <div className="min-w-0">
+                    <div className={`text-xs font-black ${labelCls}`}>
+                      任务失败提示音：{hasCustomTaskFailureSound ? (taskFailureSoundSettings.name || '自定义提示音') : '默认提示音'}
+                    </div>
+                    <div className={`mt-1 text-[11px] leading-relaxed ${hintCls}`}>
+                      任务失败时播放，支持 mp3 / wav / ogg / m4a / aac / flac / webm。
+                      {hasCustomTaskFailureSound && taskFailureSoundSizeLabel ? ` 当前文件 ${taskFailureSoundSizeLabel}。` : ''}
+                    </div>
+                  </div>
+                  <span
+                    className="t8-api-settings-badge px-2 py-1 text-[10px] rounded border shrink-0"
+                    data-tone={hasCustomTaskFailureSound ? 'success' : 'muted'}
+                  >
+                    {hasCustomTaskFailureSound ? '自定义' : '默认'}
+                  </span>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => taskFailureSoundFileInputRef.current?.click()}
+                    disabled={taskFailureSoundBusy}
+                    className={
+                      isPixel
+                        ? 't8-api-settings-secondary-btn px-btn flex items-center gap-2 disabled:opacity-50'
+                        : 't8-api-settings-secondary-btn px-3 py-2 text-xs rounded-md border flex items-center gap-2 disabled:opacity-50'
+                    }
+                  >
+                    <FileUp size={13} />
+                    {taskFailureSoundBusy ? '处理中...' : '上传失败音'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePreviewTaskFailureSound}
+                    disabled={taskFailureSoundBusy || taskFailureSoundTesting}
+                    className={
+                      isPixel
+                        ? 't8-api-settings-action-btn px-btn flex items-center gap-2 disabled:opacity-50'
+                        : 't8-api-settings-action-btn px-3 py-2 text-xs rounded-md border flex items-center gap-2 disabled:opacity-50'
+                    }
+                  >
+                    <Volume2 size={13} />
+                    {taskFailureSoundTesting ? '试听中...' : '试听失败音'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetTaskFailureSound}
+                    disabled={taskFailureSoundBusy || !hasCustomTaskFailureSound}
+                    className={
+                      isPixel
+                        ? 't8-api-settings-secondary-btn px-btn flex items-center gap-2 disabled:opacity-50'
+                        : 't8-api-settings-secondary-btn px-3 py-2 text-xs rounded-md border flex items-center gap-2 disabled:opacity-50'
+                    }
+                  >
+                    <Trash2 size={13} />
+                    恢复默认
+                  </button>
+                </div>
+                {taskFailureSoundMessage && (
+                  <div
+                    className={
+                      taskFailureSoundMessage.includes('Failed') || taskFailureSoundMessage.includes('Please choose')
+                        ? 'mt-2 text-[11px] text-red-400'
+                        : 'mt-2 text-[11px] text-emerald-500'
+                    }
+                  >
+                    {taskFailureSoundMessage}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

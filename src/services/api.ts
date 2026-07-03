@@ -21,6 +21,7 @@ export const MAX_DOCUMENT_FILE_SIZE_MB = 100;
 export const MAX_DOCUMENT_FILE_SIZE = MAX_DOCUMENT_FILE_SIZE_MB * 1024 * 1024;
 
 export type TaskCompletionSoundSettings = NonNullable<ApiSettings['taskCompletionSound']>;
+export type TaskFailureSoundSettings = NonNullable<ApiSettings['taskFailureSound']>;
 
 export async function getTaskCompletionSoundSettings(): Promise<TaskCompletionSoundSettings> {
   const res = await request<{ success: boolean; data: TaskCompletionSoundSettings }>(BASE + '/settings/task-completion-sound');
@@ -39,6 +40,27 @@ export async function uploadTaskCompletionSound(file: File): Promise<TaskComplet
 
 export async function resetTaskCompletionSound(): Promise<TaskCompletionSoundSettings> {
   const res = await request<{ success: boolean; data: TaskCompletionSoundSettings }>(BASE + '/settings/task-completion-sound', { method: 'DELETE' });
+  if (!res.success) throw new Error('?????????');
+  return res.data;
+}
+
+export async function getTaskFailureSoundSettings(): Promise<TaskFailureSoundSettings> {
+  const res = await request<{ success: boolean; data: TaskFailureSoundSettings }>(BASE + '/settings/task-failure-sound');
+  if (!res.success) throw new Error('???????????');
+  return res.data;
+}
+
+export async function uploadTaskFailureSound(file: File): Promise<TaskFailureSoundSettings> {
+  const form = new FormData();
+  form.append('audio', file, file.name);
+  const res = await fetch(BASE + '/settings/task-failure-sound', { method: 'POST', body: form });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) throw new Error(data?.error || `HTTP ${res.status}`);
+  return data.data;
+}
+
+export async function resetTaskFailureSound(): Promise<TaskFailureSoundSettings> {
+  const res = await request<{ success: boolean; data: TaskFailureSoundSettings }>(BASE + '/settings/task-failure-sound', { method: 'DELETE' });
   if (!res.success) throw new Error('?????????');
   return res.data;
 }

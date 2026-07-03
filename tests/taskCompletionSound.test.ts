@@ -5,6 +5,7 @@ import {
   isCompletionSoundEligibleNodeType,
   nextCompletionSoundGateState,
   resolveTaskCompletionSoundPlaybackUrl,
+  resolveTaskFailureSoundPlaybackUrl,
   resolveCompletionSoundNodeType,
   shouldNotifyCompletionSoundForNodeType,
   shouldPlayCompletionSound,
@@ -64,4 +65,11 @@ test('task completion sound prefers a configured custom audio URL and falls back
   assert.equal(resolveTaskCompletionSoundPlaybackUrl({ mode: 'custom', url: '' }), '');
   assert.equal(resolveTaskCompletionSoundPlaybackUrl({ mode: 'default' }), '');
   assert.equal(resolveTaskCompletionSoundPlaybackUrl(undefined), '');
+  assert.equal(
+    resolveTaskFailureSoundPlaybackUrl({
+      mode: 'custom',
+      url: '/api/settings/task-failure-sound/file?v=123',
+    }),
+    '/api/settings/task-failure-sound/file?v=123',
+  );
 });

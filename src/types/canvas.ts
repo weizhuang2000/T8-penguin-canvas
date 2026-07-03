@@ -487,6 +487,15 @@ export interface ApiSettings {
     updatedAt?: number;
     url?: string;
   };
+  taskFailureSound?: {
+    mode?: 'default' | 'custom';
+    name?: string;
+    fileName?: string;
+    mimeType?: string;
+    size?: number;
+    updatedAt?: number;
+    url?: string;
+  };
   preferences?: {
     theme?: 'dark' | 'light';
     language?: string;

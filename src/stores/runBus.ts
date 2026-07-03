@@ -72,6 +72,7 @@ export const useRunBusStore = create<RunBusState>((set) => ({
   markDone: (id, ok, error) => {
     const ts = Date.now();
     if (ok) taskCompletionSound.notifyComplete(id, undefined, ts);
+    else taskCompletionSound.notifyFailure(id, undefined, ts);
     set((s) => {
       const nextRunningIds = s.runningIds.filter((x) => x !== id);
       return {

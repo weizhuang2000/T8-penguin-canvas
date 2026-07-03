@@ -65,6 +65,7 @@ const DEFAULT_SETTINGS = {
     connectToOutput: { enabled: true, items: [] },
   },
   taskCompletionSound: { mode: 'default', url: '' },
+  taskFailureSound: { mode: 'default', url: '' },
   // 其他偏好
   preferences: {
     theme: 'dark',
@@ -93,6 +94,7 @@ const CLASSIFIED_KEY_FIELDS = [
 ];
 
 const DEFAULT_TASK_COMPLETION_SOUND = { mode: 'default', url: '' };
+const DEFAULT_TASK_FAILURE_SOUND = { mode: 'default', url: '' };
 const TASK_COMPLETION_SOUND_MAX_SIZE = 10 * 1024 * 1024;
 const TASK_COMPLETION_SOUND_EXTENSIONS = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.webm']);
 const TASK_COMPLETION_SOUND_MIME_EXTENSIONS = new Map([
@@ -168,6 +170,11 @@ function taskCompletionSoundUrl(updatedAt) {
   return `/api/settings/task-completion-sound/file?v=${version}`;
 }
 
+function taskFailureSoundUrl(updatedAt) {
+  const version = Number(updatedAt) || Date.now();
+  return `/api/settings/task-failure-sound/file?v=${version}`;
+}
+
 function normalizeTaskCompletionSound(value) {
   if (!value || value.mode !== 'custom') return { ...DEFAULT_TASK_COMPLETION_SOUND };
   const fileName = path.basename(String(value.fileName || ''));
@@ -182,6 +189,23 @@ function normalizeTaskCompletionSound(value) {
     size: Number(value.size) || fs.statSync(filePath).size,
     updatedAt,
     url: taskCompletionSoundUrl(updatedAt),
+  };
+}
+
+function normalizeTaskFailureSound(value) {
+  if (!value || value.mode !== 'custom') return { ...DEFAULT_TASK_FAILURE_SOUND };
+  const fileName = path.basename(String(value.fileName || ''));
+  const filePath = taskCompletionSoundPath(fileName);
+  if (!fileName || !filePath || !fs.existsSync(filePath)) return { ...DEFAULT_TASK_FAILURE_SOUND };
+  const updatedAt = Number(value.updatedAt) || Date.now();
+  return {
+    mode: 'custom',
+    name: String(value.name || fileName).slice(0, 180),
+    fileName,
+    mimeType: String(value.mimeType || 'audio/mpeg').slice(0, 120),
+    size: Number(value.size) || fs.statSync(filePath).size,
+    updatedAt,
+    url: taskFailureSoundUrl(updatedAt),
   };
 }
 
@@ -337,6 +361,7 @@ function loadSettings({ persistMigrations = true } = {}) {
     merged.cloudUploadTargets = normalizeCloudUploadTargets(data.cloudUploadTargets);
     merged.canvasNodeMenuPreferences = normalizeCanvasNodeMenuPreferences(data.canvasNodeMenuPreferences);
     merged.taskCompletionSound = normalizeTaskCompletionSound(data.taskCompletionSound);
+    merged.taskFailureSound = normalizeTaskFailureSound(data.taskFailureSound);
     const migrated = migrateLegacyDefaultPaths(merged);
     if (persistMigrations && migrated.changed) {
       saveSettings(migrated.settings);
@@ -401,12 +426,30 @@ router.get('/task-completion-sound', (_req, res) => {
   res.json({ success: true, data: normalizeTaskCompletionSound(settings.taskCompletionSound) });
 });
 
+router.get('/task-failure-sound', (_req, res) => {
+  const settings = loadSettings();
+  res.json({ success: true, data: normalizeTaskFailureSound(settings.taskFailureSound) });
+});
+
 router.get('/task-completion-sound/file', (_req, res) => {
   const settings = loadSettings();
   const sound = normalizeTaskCompletionSound(settings.taskCompletionSound);
   const filePath = taskCompletionSoundPath(sound.fileName);
   if (sound.mode !== 'custom' || !filePath || !fs.existsSync(filePath)) {
     return res.status(404).json({ success: false, error: '提示音文件不存在' });
+  }
+  res.setHeader('Content-Type', sound.mimeType || 'audio/mpeg');
+  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  return res.sendFile(filePath);
+});
+
+router.get('/task-failure-sound/file', (_req, res) => {
+  const settings = loadSettings();
+  const sound = normalizeTaskFailureSound(settings.taskFailureSound);
+  const filePath = taskCompletionSoundPath(sound.fileName);
+  if (sound.mode !== 'custom' || !filePath || !fs.existsSync(filePath)) {
+    return res.status(404).json({ success: false, error: 'Sound file does not exist' });
   }
   res.setHeader('Content-Type', sound.mimeType || 'audio/mpeg');
   res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
@@ -450,6 +493,42 @@ router.post('/task-completion-sound', requireAdmin, (req, res) => {
   });
 });
 
+router.post('/task-failure-sound', requireAdmin, (req, res) => {
+  taskCompletionSoundUpload.single('audio')(req, res, (uploadError) => {
+    if (uploadError) return sendTaskCompletionSoundUploadError(res, uploadError);
+    if (!req.file) return res.status(400).json({ success: false, error: 'Audio file is required' });
+    const ext = resolveTaskCompletionSoundExtension(req.file);
+    if (!ext || !String(req.file.mimetype || '').toLowerCase().startsWith('audio/')) {
+      return res.status(400).json({ success: false, error: 'Please choose an audio file' });
+    }
+    try {
+      const current = loadSettings();
+      const previous = normalizeTaskFailureSound(current.taskFailureSound);
+      const fileName = `task-failure-sound${ext}`;
+      const target = taskCompletionSoundPath(fileName);
+      fs.writeFileSync(target, req.file.buffer);
+      if (previous.fileName && previous.fileName !== fileName) {
+        const previousPath = taskCompletionSoundPath(previous.fileName);
+        if (previousPath && fs.existsSync(previousPath)) fs.unlinkSync(previousPath);
+      }
+      const updatedAt = Date.now();
+      const nextSound = {
+        mode: 'custom',
+        name: cleanTaskCompletionSoundName(req.file.originalname),
+        fileName,
+        mimeType: req.file.mimetype || 'audio/mpeg',
+        size: req.file.size,
+        updatedAt,
+        url: taskFailureSoundUrl(updatedAt),
+      };
+      saveSettings({ ...current, taskFailureSound: nextSound });
+      return res.json({ success: true, data: nextSound });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e?.message || 'Failed to upload sound' });
+    }
+  });
+});
+
 router.delete('/task-completion-sound', requireAdmin, (_req, res) => {
   try {
     const current = loadSettings();
@@ -462,6 +541,21 @@ router.delete('/task-completion-sound', requireAdmin, (_req, res) => {
     res.json({ success: true, data: { ...DEFAULT_TASK_COMPLETION_SOUND } });
   } catch (e) {
     res.status(500).json({ success: false, error: e?.message || '提示音重置失败' });
+  }
+});
+
+router.delete('/task-failure-sound', requireAdmin, (_req, res) => {
+  try {
+    const current = loadSettings();
+    const previous = normalizeTaskFailureSound(current.taskFailureSound);
+    if (previous.fileName) {
+      const previousPath = taskCompletionSoundPath(previous.fileName);
+      if (previousPath && fs.existsSync(previousPath)) fs.unlinkSync(previousPath);
+    }
+    saveSettings({ ...current, taskFailureSound: { ...DEFAULT_TASK_FAILURE_SOUND } });
+    res.json({ success: true, data: { ...DEFAULT_TASK_FAILURE_SOUND } });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e?.message || 'Failed to reset sound' });
   }
 });
 

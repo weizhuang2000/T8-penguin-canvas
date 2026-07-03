@@ -11,6 +11,8 @@ export interface TaskCompletionSoundPlaybackSettings {
   url?: string;
 }
 
+export type TaskFailureSoundPlaybackSettings = TaskCompletionSoundPlaybackSettings;
+
 export function isCompletionSoundEligibleNodeType(nodeType?: string | null): boolean {
   return COMPLETION_SOUND_ELIGIBLE_NODE_TYPES.includes(nodeType as any);
 }
@@ -20,6 +22,8 @@ export function resolveTaskCompletionSoundPlaybackUrl(settings?: TaskCompletionS
   const url = String(settings.url || '').trim();
   return url ? url : '';
 }
+
+export const resolveTaskFailureSoundPlaybackUrl = resolveTaskCompletionSoundPlaybackUrl;
 
 export function resolveCompletionSoundNodeType(
   registeredNodeType?: string | null,
@@ -122,6 +126,24 @@ export async function playTaskCompletionTone(): Promise<void> {
   }, 520);
 }
 
+export async function playTaskFailureTone(): Promise<void> {
+  const ctx = await getOrCreateCompletionAudioContext();
+  if (!ctx) return;
+  const master = ctx.createGain();
+  master.gain.value = 0.75;
+  master.connect(ctx.destination);
+  const startAt = ctx.currentTime + 0.018;
+  scheduleCompletionNote(ctx, master, 420, startAt, 0.12, 'triangle');
+  scheduleCompletionNote(ctx, master, 260, startAt + 0.15, 0.18, 'sawtooth');
+  window.setTimeout(() => {
+    try {
+      master.disconnect();
+    } catch {
+      /* ignore cleanup errors */
+    }
+  }, 620);
+}
+
 async function playCustomTaskCompletionSound(url: string): Promise<boolean> {
   if (typeof Audio === 'undefined') return false;
   const audio = new Audio(url);
@@ -155,4 +177,17 @@ export async function playTaskCompletionSound(settings?: TaskCompletionSoundPlay
     }
   }
   await playTaskCompletionTone();
+}
+
+export async function playTaskFailureSound(settings?: TaskFailureSoundPlaybackSettings | null): Promise<void> {
+  const url = resolveTaskFailureSoundPlaybackUrl(settings);
+  if (url) {
+    try {
+      const played = await playCustomTaskCompletionSound(url);
+      if (played) return;
+    } catch (error) {
+      console.warn('[task-failure-sound] custom audio failed, falling back to default tone', error);
+    }
+  }
+  await playTaskFailureTone();
 }

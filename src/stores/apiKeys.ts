@@ -63,6 +63,7 @@ const DEFAULT: ApiSettings = {
   },
   canvasNodeMenuPreferences: createDefaultCanvasNodeMenuPreferences(),
   taskCompletionSound: { mode: 'default', url: '' },
+  taskFailureSound: { mode: 'default', url: '' },
   preferences: { theme: 'dark', language: 'zh-CN' },
 };
 
@@ -179,6 +180,10 @@ export function normalizeApiSettings(data: Partial<ApiSettings>): ApiSettings {
     taskCompletionSound: {
       ...DEFAULT.taskCompletionSound,
       ...(merged.taskCompletionSound || {}),
+    },
+    taskFailureSound: {
+      ...DEFAULT.taskFailureSound,
+      ...(merged.taskFailureSound || {}),
     },
     preferences: {
       ...DEFAULT.preferences,

@@ -2,6 +2,7 @@ import { useReactFlow } from '@xyflow/react';
 import { useCallback, useRef } from 'react';
 import * as api from '../../services/api';
 import { useCanvasStore } from '../../stores/canvas';
+import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { isCanvasNodeDeleted } from '../../utils/deletedNodeRegistry';
 import { useCanvasRuntime } from './canvasRuntimeContext';
 
@@ -65,11 +66,14 @@ export function useUpdateNodeData(nodeId: string) {
         if (activeCanvasId !== originCanvasId) return;
       }
       setNodes((nds) =>
-        nds.map((n) =>
-          n.id === nodeId
-            ? { ...n, data: { ...(n.data as any), ...patch } }
-            : n
-        )
+        nds.map((n) => {
+          if (n.id !== nodeId) return n;
+          const prevData = (n.data as any) || {};
+          if (patch.status === 'error' && prevData.status !== 'error') {
+            taskCompletionSound.notifyFailure(nodeId, n.type);
+          }
+          return { ...n, data: { ...prevData, ...patch } };
+        })
       );
     },
     [nodeId, originCanvasId, setNodes],
