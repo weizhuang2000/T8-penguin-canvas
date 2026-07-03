@@ -47,7 +47,7 @@ test('sculpture relief component exposes pattern reference and generation servic
   assert.match(source, /submitImageAsync/);
   assert.match(source, /queryImageStatus/);
   assert.match(source, /images: referenceImages/);
-  assert.match(source, /referenceImages = patternReferenceImage \? \[patternReferenceImage\] : \[\]/);
+  assert.match(source, /referenceImages = \[\.\.\.\(patternReferenceImage \? \[patternReferenceImage\] : \[\]\), \.\.\.peoplePropsReferenceImages\]/);
   assert.doesNotMatch(source, /color-material-reference/);
   assert.doesNotMatch(source, /EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR/);
 });

@@ -28,8 +28,10 @@ import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import PromptTextarea from '../PromptTextarea';
 import { useUpdateNodeData } from './useUpdateNodeData';
-import { useUpstreamMaterials } from './useUpstreamMaterials';
+import { useUpstreamMaterials, type Material } from './useUpstreamMaterials';
 import SculptureReliefMaterialEditorModal from './SculptureReliefMaterialEditorModal';
+import MentionPromptInput from './MentionPromptInput';
+import { resolveMediaMentions, type MediaMention } from './mediaMentions';
 import {
   buildSculptureReliefExtractPrompt,
   buildSculptureReliefImagePrompt,
@@ -53,6 +55,12 @@ const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border
 const MAX_IMAGE_SEED = 2147483647;
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
+
+interface InputImageItem {
+  id: string;
+  url: string;
+  label: string;
+}
 
 function documentLabel(meta?: Omit<ExtractedDocument, 'text'> | null) {
   if (!meta) return '未选择文档';
@@ -87,6 +95,10 @@ function firstImageFromData(data: any): string {
   return imagesFromData(data)[0] || '';
 }
 
+function shortFileLabel(url: string, fallback = '图像') {
+  return (url.split('/').pop() || fallback).split('?')[0].slice(0, 28) || fallback;
+}
+
 function mergeMaterialOptions(materials: SculptureReliefMaterialItem[]): Array<SculptureReliefOption | SculptureReliefMaterialItem> {
   const byId = new Map<string, SculptureReliefOption | SculptureReliefMaterialItem>(
     SCULPTURE_RELIEF_MATERIALS.map((item) => [item.id, item]),
@@ -99,21 +111,39 @@ function mergeMaterialOptions(materials: SculptureReliefMaterialItem[]): Array<S
   return Array.from(byId.values()).sort((a: any, b: any) => (Number(a.order) || 0) - (Number(b.order) || 0));
 }
 
-function useInputImageByHandle(nodeId: string, handle: string): string {
+function useInputImagesByHandle(nodeId: string, handle: string): InputImageItem[] {
   const conns = useNodeConnections({ id: nodeId, handleType: 'target' });
   const sourceIds = useMemo(
-    () => Array.from(new Set(conns.filter((conn: any) => (conn.targetHandle || '') === handle).map((conn: any) => conn.source).filter(Boolean))),
+    () => Array.from(new Set(conns
+      .filter((conn: any) => (conn.targetHandle || '') === handle)
+      .map((conn: any) => conn.source)
+      .filter(Boolean))),
     [conns, handle],
   );
   const nodesData = useNodesData(sourceIds);
   return useMemo(() => {
     const list = Array.isArray(nodesData) ? nodesData : [nodesData];
+    const out: InputImageItem[] = [];
     for (const node of list) {
-      const url = firstImageFromData((node as any)?.data || {});
-      if (url) return url;
+      const sourceId = String((node as any)?.id || '');
+      const urls = imagesFromData((node as any)?.data || {});
+      urls.forEach((url, index) => {
+        if (!out.some((item) => item.url === url)) {
+          out.push({
+            id: `${sourceId || 'source'}:${handle}:${index}`,
+            url,
+            label: shortFileLabel(url, handle === 'pattern-reference' ? '参考图案' : '人物道具'),
+          });
+        }
+      });
     }
-    return '';
-  }, [nodesData]);
+    return out;
+  }, [handle, nodesData]);
+}
+
+function useInputImageByHandle(nodeId: string, handle: string): string {
+  const items = useInputImagesByHandle(nodeId, handle);
+  return items[0]?.url || '';
 }
 
 function llmErrorMessage(error: any) {
@@ -129,6 +159,8 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
   const pollAbortRef = useRef(false);
   const upstream = useUpstreamMaterials(id);
   const patternReferenceImage = useInputImageByHandle(id, 'pattern-reference');
+  const peoplePropsReferenceItems = useInputImagesByHandle(id, 'people-props');
+  const peoplePropsReferenceImages = useMemo(() => peoplePropsReferenceItems.map((item) => item.url), [peoplePropsReferenceItems]);
   const activeCanvas = useCanvasStore((state) => state.canvases.find((canvas) => canvas.id === state.activeId) || null);
   const activeCanvasId = useCanvasStore((state) => state.activeId);
   const isReadonly = activeCanvas?.access?.canEdit === false;
@@ -195,12 +227,32 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
   const titleText = String(d.titleText || '').trim();
   const themeText = String(d.themeText || '').trim();
   const bodyText = String(d.bodyText || '').trim();
+  const peoplePropsText = String(d.peoplePropsText || '');
+  const peoplePropsMentions: MediaMention[] = Array.isArray(d.peoplePropsMentions) ? d.peoplePropsMentions : [];
   const sourceText = String(d.sourceText || '');
   const upstreamText = useMemo(() => upstream.texts.map((item) => item.url).join('\n\n'), [upstream.texts]);
   const effectiveSourceText = [d.useUpstream !== false ? upstreamText : '', sourceText].filter((item) => item.trim()).join('\n\n');
   const status = String(d.status || 'idle');
   const busy = ['extracting', 'generating', 'uploading'].includes(status);
   const canManageMaterials = currentUser?.role === 'admin' || currentUser?.role === 'manager';
+  const peoplePropsOffset = patternReferenceImage ? 1 : 0;
+  const mentionMaterials: Material[] = useMemo(() => peoplePropsReferenceItems.map((item, index) => ({
+    id: item.id,
+    kind: 'image',
+    url: item.url,
+    sourceNodeId: item.id.split(':')[0] || `sculpture-people-props-${index + 1}`,
+    origin: 'upstream',
+    label: item.label || `人物/道具 ${index + 1}`,
+    mentionToken: `@img${peoplePropsOffset + index + 1}`,
+  })), [peoplePropsOffset, peoplePropsReferenceItems]);
+  const resolvedPeoplePropsText = useMemo(
+    () => resolveMediaMentions(peoplePropsText, peoplePropsMentions, mentionMaterials),
+    [mentionMaterials, peoplePropsMentions, peoplePropsText],
+  );
+  const previewReferenceImages = useMemo(
+    () => [...(patternReferenceImage ? [patternReferenceImage] : []), ...peoplePropsReferenceImages],
+    [patternReferenceImage, peoplePropsReferenceImages],
+  );
 
   const previewPrompt = useMemo(() => buildSculptureReliefImagePrompt({
     designKind,
@@ -216,8 +268,11 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
     dimensionMarksEnabled: d.dimensionMarksEnabled === true,
     backgroundMode: d.backgroundMode === 'white' ? 'white' : 'black',
     hasPatternReferenceImage: !!patternReferenceImage,
+    peoplePropsText: resolvedPeoplePropsText,
+    peoplePropsReferenceImages,
+    hasPeoplePropsReferenceImage: peoplePropsReferenceImages.length > 0,
     viewAngles,
-  }), [bodyText, d.backgroundMode, d.dimensionMarksEnabled, d.manualMaterial, designKind, dimensions, materialId, patternReferenceImage, reliefType, sculptureType, selectedMaterial, themeText, titleText, viewAngles]);
+  }), [bodyText, d.backgroundMode, d.dimensionMarksEnabled, d.manualMaterial, designKind, dimensions, materialId, patternReferenceImage, peoplePropsReferenceImages, reliefType, resolvedPeoplePropsText, sculptureType, selectedMaterial, themeText, titleText, viewAngles]);
 
   useEffect(() => {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
@@ -225,16 +280,22 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
   }, []);
 
   useEffect(() => {
-    const refs = [patternReferenceImage].filter(Boolean);
     if (
       d.prompt !== previewPrompt ||
       d.outputText !== previewPrompt ||
       d.text !== previewPrompt ||
-      JSON.stringify(d.referenceImages || []) !== JSON.stringify(refs)
+      JSON.stringify(d.referenceImages || []) !== JSON.stringify(previewReferenceImages) ||
+      JSON.stringify(d.peoplePropsReferenceImages || []) !== JSON.stringify(peoplePropsReferenceImages)
     ) {
-      update({ prompt: previewPrompt, outputText: previewPrompt, text: previewPrompt, referenceImages: refs });
+      update({
+        prompt: previewPrompt,
+        outputText: previewPrompt,
+        text: previewPrompt,
+        referenceImages: previewReferenceImages,
+        peoplePropsReferenceImages,
+      });
     }
-  }, [d.outputText, d.prompt, d.referenceImages, d.text, patternReferenceImage, previewPrompt, update]);
+  }, [d.outputText, d.peoplePropsReferenceImages, d.prompt, d.referenceImages, d.text, peoplePropsReferenceImages, previewPrompt, previewReferenceImages, update]);
 
   const pickDocument = useCallback(async (file?: File) => {
     if (!file || isReadonly || busy) return;
@@ -299,14 +360,17 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
       dimensionMarksEnabled: d.dimensionMarksEnabled === true,
       backgroundMode: d.backgroundMode === 'white' ? 'white' : 'black',
       hasPatternReferenceImage: !!patternReferenceImage,
+      peoplePropsText: resolvedPeoplePropsText,
+      peoplePropsReferenceImages,
+      hasPeoplePropsReferenceImage: peoplePropsReferenceImages.length > 0,
       viewAngles,
     });
     pollAbortRef.current = false;
     taskCompletionSound.primeAudio();
     const runSeed = seed > 0 ? seed : randomImageSeed();
     const src = `sculpture-relief-design:${id.slice(0, 6)}`;
-    const referenceImages = patternReferenceImage ? [patternReferenceImage] : [];
-    update({ status: 'generating', progress: '提交生图...', error: '', imageUrls: [], lastPrompt: imagePrompt, lastSeed: runSeed, referenceImages });
+    const referenceImages = [...(patternReferenceImage ? [patternReferenceImage] : []), ...peoplePropsReferenceImages];
+    update({ status: 'generating', progress: '提交生图...', error: '', imageUrls: [], lastPrompt: imagePrompt, lastSeed: runSeed, referenceImages, peoplePropsReferenceImages });
     try {
       logBus.info(`雕塑/浮雕设计生图提交 seed=${runSeed}`, src);
       const historyContext = { canvasId: activeCanvasId, sourceNodeId: id, sourceNodeType: 'sculpture-relief-design', seed: runSeed, nodeTitle: '雕塑/浮雕设计' };
@@ -402,6 +466,7 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
         outputText: imagePrompt,
         text: imagePrompt,
         referenceImages,
+        peoplePropsReferenceImages,
         error: '',
       });
       logBus.success(`雕塑/浮雕设计生图完成: ${urls.length} 张`, src);
@@ -412,7 +477,7 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`雕塑/浮雕设计生图失败: ${msg}`, src);
       throw error;
     }
-  }, [activeCanvasId, apiModel, aspectRatio, bodyText, busy, d.backgroundMode, d.dimensionMarksEnabled, d.manualMaterial, d.providerParams, designKind, dimensions, externalProviderModel, id, isExternalSelected, isReadonly, materialId, modelDef.id, modelDef.paramKind, outputFormat, patternReferenceImage, providerSelection.provider, reliefType, sculptureType, seed, selectedMaterial, sizeLevel, themeText, titleText, update, viewAngles]);
+  }, [activeCanvasId, apiModel, aspectRatio, bodyText, busy, d.backgroundMode, d.dimensionMarksEnabled, d.manualMaterial, d.providerParams, designKind, dimensions, externalProviderModel, id, isExternalSelected, isReadonly, materialId, modelDef.id, modelDef.paramKind, outputFormat, patternReferenceImage, peoplePropsReferenceImages, providerSelection.provider, reliefType, resolvedPeoplePropsText, sculptureType, seed, selectedMaterial, sizeLevel, themeText, titleText, update, viewAngles]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -451,6 +516,7 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
       <Handle type="source" position={Position.Right} className="!border-0 t8-exhibition-handle--image" style={{ background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输出：雕塑/浮雕设计图" />
       <Handle id="text" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 t8-exhibition-handle--text" style={{ top: '34%', background: EXHIBITION_TEXT_HANDLE_COLOR }} title="输入：上游文本资料" />
       <Handle id="pattern-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 t8-exhibition-handle--image" style={{ top: '54%', background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输入：参考图案轮廓" />
+      <Handle id="people-props" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 t8-exhibition-handle--image" style={{ top: '68%', background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输入：人物及道具参考图" />
 
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex h-8 w-8 items-center justify-center rounded bg-cyan-300/15 text-cyan-200"><Landmark size={16} /></div>
@@ -585,6 +651,32 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
               <div className="mt-1 text-[10px] leading-relaxed text-cyan-100/75">参考图案仅用于轮廓、剪影、外形节奏和构图，不复制细节、色彩或材质。</div>
             </div>
           ) : <div data-exhibition-compact-item="reference" className="rounded border border-dashed border-white/15 p-2 text-center text-[10px] text-white/35">可连接参考图案，为雕塑或浮雕提供大致轮廓。</div>}
+          <div data-exhibition-compact-item="people-props" className="space-y-2 rounded border border-white/10 bg-black/15 p-2">
+            <div className="text-[10px] text-white/55">人物及道具参考图 · {peoplePropsReferenceImages.length}</div>
+            {peoplePropsReferenceImages.length ? (
+              <div className="grid grid-cols-4 gap-1.5">
+                {peoplePropsReferenceImages.slice(0, 8).map((url, index) => (
+                  <div key={url} className="relative">
+                    <img src={url} alt="" className="h-16 w-full rounded border border-white/10 object-cover" draggable={false} />
+                    <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[9px] text-cyan-100">@img{peoplePropsOffset + index + 1}</span>
+                  </div>
+                ))}
+              </div>
+            ) : <div className="rounded border border-dashed border-white/15 p-2 text-center text-[10px] text-white/35">可连接人物及道具参考图，并在下方输入 @ 引用说明。</div>}
+            <MentionPromptInput
+              title="人物及道具 @ 引用说明"
+              value={peoplePropsText}
+              mentions={peoplePropsMentions}
+              materials={mentionMaterials}
+              onChange={(value, mentions) => update({ peoplePropsText: value, peoplePropsMentions: mentions })}
+              placeholder="描述人物姿态、服饰、道具、比例或情节，可输入 @ 引用人物及道具图"
+              isDark
+              isPixel={false}
+              promptTemplateKind="image"
+              className={`${FIELD} min-h-[58px] resize-y`}
+              disabled={isReadonly || busy}
+            />
+          </div>
         </section>
 
         <section data-exhibition-compact-section="model" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">

@@ -50,6 +50,9 @@ export interface SculptureReliefImagePromptValues {
   dimensionMarksEnabled?: boolean;
   backgroundMode?: 'black' | 'white';
   hasPatternReferenceImage?: boolean;
+  peoplePropsText?: string;
+  hasPeoplePropsReferenceImage?: boolean;
+  peoplePropsReferenceImages?: string[];
   viewAngles?: string[];
   material?: Partial<SculptureReliefOption> & {
     description?: string;

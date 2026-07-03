@@ -217,6 +217,13 @@ export function buildSculptureReliefImagePrompt(values = {}) {
   const dimensionMarksEnabled = values.dimensionMarksEnabled === true;
   const backgroundMode = values.backgroundMode === 'white' ? 'white' : 'black';
   const hasPatternReferenceImage = values.hasPatternReferenceImage === true;
+  const peoplePropsText = cleanSculptureReliefText(values.peoplePropsText, 3000);
+  const peoplePropsImages = Array.isArray(values.peoplePropsReferenceImages) ? values.peoplePropsReferenceImages.filter(Boolean) : [];
+  const hasPeoplePropsReference = peoplePropsImages.length > 0 || values.hasPeoplePropsReferenceImage === true;
+  const peoplePropsOffset = hasPatternReferenceImage ? 1 : 0;
+  const peoplePropsOrderText = peoplePropsImages
+    .map((url, index) => `@img${peoplePropsOffset + index + 1}: 人物/道具参考${index + 1} = ${url}`)
+    .join('\n');
   const viewAngles = normalizeSculptureReliefViewAngles(values.viewAngles);
   const viewAngleText = viewAngles
     .map((id, index) => `${index + 1}. ${sculptureReliefViewAngleMeta(id).label}: ${sculptureReliefViewAngleMeta(id).prompt}`)
@@ -225,8 +232,16 @@ export function buildSculptureReliefImagePrompt(values = {}) {
     ? `尺寸标注：开启。画面中加入清晰的工程尺寸线和 mm 标注，标注这些关键尺寸：${dimensions}。`
     : `尺寸标注：关闭。不要绘制尺寸线、测量数字、尺子或工程标注符号；但造型比例仍必须遵循这些尺寸：${dimensions}。`;
   const patternReferenceText = hasPatternReferenceImage
-    ? '输入参考图案作用：仅参考轮廓、剪影、外形节奏和大致构图；不要复制参考图案的细节、色彩、材质、文字、logo 或具体画面内容。'
+    ? '输入参考图案作用：参考图总顺序中的 @img1 为参考图案，仅参考轮廓、剪影、外形节奏和大致构图；不要复制参考图案的细节、色彩、材质、文字、logo 或具体画面内容。'
     : '未提供参考图案：请根据主题自行设计清晰、完整、有展陈识别度的轮廓。';
+  const peoplePropsReferenceText = hasPeoplePropsReference
+    ? [
+      '人物及道具参考图作用：仅参考人物姿态、服饰轮廓、道具类型、展项形态和情节元素；不要复制原图色彩、商标、文字、摄影背景或无关画面内容。',
+      '人物/道具参考图顺序如下，文案中的 @img 标记必须按此顺序理解：',
+      peoplePropsOrderText,
+      peoplePropsText ? `人物/道具补充说明：${peoplePropsText}` : '',
+    ].filter(Boolean).join('\n')
+    : (peoplePropsText ? `人物/道具补充说明：${peoplePropsText}` : '未提供人物及道具参考图：如方案需要人物、道具或情节元素，请根据主题自行设计，避免喧宾夺主。');
   const backgroundText = backgroundMode === 'white'
     ? '背景模式：白背景。使用白色、浅灰白或近白方案展示背景，便于观察轮廓和材质。'
     : '背景模式：黑背景。使用黑色、深灰黑或近黑方案展示背景，突出体量、高光和边缘层次。';
@@ -242,6 +257,11 @@ export function buildSculptureReliefImagePrompt(values = {}) {
     dimensionText,
     backgroundText,
     patternReferenceText,
+    peoplePropsReferenceText,
+    (hasPatternReferenceImage || peoplePropsImages.length) ? `参考图总顺序：${[
+      ...(hasPatternReferenceImage ? ['@img1=参考图案'] : []),
+      ...peoplePropsImages.map((_, index) => `@img${peoplePropsOffset + index + 1}=人物/道具参考${index + 1}`),
+    ].join('、')}。` : '',
     `多视角要求：在同一张方案图中呈现 ${viewAngles.length} 个视角，最多四宫格或横向分栏排布；每个视角标注清楚但不要出现乱码。视角如下：\n${viewAngleText}`,
     `材质与工艺：主材质为${material.label}；${material.prompt}。${manualMaterial ? ` 手动补充：${manualMaterial}。` : ''}`,
     titleText ? `标题文字：可将“${titleText}”作为方案标题或局部标识，但不要生成乱码。` : '标题文字：无明确标题时，不要强行生成大段文字。',

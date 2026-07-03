@@ -382,6 +382,7 @@ export const EXHIBITION_COMPACT_FORM_DEFINITIONS: ExhibitionCompactNodeDefinitio
       { id: 'view-angles', label: '\u591a\u89c6\u89d2' },
       { id: 'manual-input', label: '\u624b\u52a8\u8865\u5145' },
       { id: 'reference', label: '\u53c2\u8003\u56fe\u6848' },
+      { id: 'people-props', label: '\u4eba\u7269\u53ca\u9053\u5177' },
     ] },
     { id: 'model', label: '\u6a21\u578b\u53c2\u6570', items: [
       { id: 'actions', label: '\u751f\u6210\u64cd\u4f5c' },
