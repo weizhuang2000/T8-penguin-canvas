@@ -86,6 +86,18 @@ function firstImageFromData(data: any): string {
   return imagesFromData(data)[0] || '';
 }
 
+function mergeMaterialOptions(materials: SculptureReliefMaterialItem[]): Array<SculptureReliefOption | SculptureReliefMaterialItem> {
+  const byId = new Map<string, SculptureReliefOption | SculptureReliefMaterialItem>(
+    SCULPTURE_RELIEF_MATERIALS.map((item) => [item.id, item]),
+  );
+  for (const item of materials) {
+    if (!item?.id || !item?.label) continue;
+    const previous = byId.get(item.id);
+    byId.set(item.id, previous ? { ...previous, ...item } : item);
+  }
+  return Array.from(byId.values()).sort((a: any, b: any) => (Number(a.order) || 0) - (Number(b.order) || 0));
+}
+
 function useInputImageByHandle(nodeId: string, handle: string): string {
   const conns = useNodeConnections({ id: nodeId, handleType: 'target' });
   const sourceIds = useMemo(
@@ -170,13 +182,13 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
   const sculptureType = normalizeSculptureDesignType(d.sculptureType);
   const reliefType = normalizeReliefDesignType(d.reliefType);
   const dimensions = normalizeSculptureReliefDimensions(d.dimensions);
-  const materialOptions = materials.length > 0 ? materials : SCULPTURE_RELIEF_MATERIALS;
+  const materialOptions = useMemo(() => mergeMaterialOptions(materials), [materials]);
   const materialId = materialOptions.some((item) => item.id === d.materialId)
     ? String(d.materialId)
     : normalizeSculptureReliefMaterial(d.materialId);
   const selectedMaterial = useMemo(
-    () => materials.find((item) => item.id === materialId) || null,
-    [materialId, materials],
+    () => materialOptions.find((item) => item.id === materialId) || null,
+    [materialId, materialOptions],
   );
   const viewAngles = useMemo(() => normalizeSculptureReliefViewAngles(d.viewAngles), [d.viewAngles]);
   const titleText = String(d.titleText || '').trim();
@@ -648,7 +660,7 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
 
       <SculptureReliefMaterialEditorModal
         open={materialsOpen}
-        materials={materials}
+        materials={materialOptions as SculptureReliefMaterialItem[]}
         saving={materialsSaving}
         error={materialsError}
         onClose={() => setMaterialsOpen(false)}

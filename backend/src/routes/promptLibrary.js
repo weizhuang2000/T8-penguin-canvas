@@ -733,6 +733,19 @@ function normalizeSculptureReliefMaterialList(value) {
     .sort((a, b) => a.order - b.order);
 }
 
+function mergeSculptureReliefMaterialsWithDefaults(value) {
+  const defaults = normalizeSculptureReliefMaterialList(DEFAULT_SCULPTURE_RELIEF_MATERIALS);
+  const incoming = normalizeSculptureReliefMaterialList(value);
+  const byId = new Map(defaults.map((item) => [item.id, item]));
+  for (const item of incoming) {
+    const previous = byId.get(item.id);
+    byId.set(item.id, previous ? { ...previous, ...item } : item);
+  }
+  return Array.from(byId.values())
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+    .map((item, index) => ({ ...item, order: index }));
+}
+
 function readElevationDb() {
   try {
     if (!fs.existsSync(ELEVATION_DB_FILE)) {
@@ -972,16 +985,16 @@ function readSculptureReliefDb() {
   try {
     if (!fs.existsSync(SCULPTURE_RELIEF_DB_FILE)) {
       return {
-        materials: normalizeSculptureReliefMaterialList(DEFAULT_SCULPTURE_RELIEF_MATERIALS),
+        materials: mergeSculptureReliefMaterialsWithDefaults(DEFAULT_SCULPTURE_RELIEF_MATERIALS),
       };
     }
     const raw = JSON.parse(fs.readFileSync(SCULPTURE_RELIEF_DB_FILE, 'utf-8'));
     return {
-      materials: normalizeSculptureReliefMaterialList(raw?.materials),
+      materials: mergeSculptureReliefMaterialsWithDefaults(raw?.materials),
     };
   } catch {
     return {
-      materials: normalizeSculptureReliefMaterialList(DEFAULT_SCULPTURE_RELIEF_MATERIALS),
+      materials: mergeSculptureReliefMaterialsWithDefaults(DEFAULT_SCULPTURE_RELIEF_MATERIALS),
     };
   }
 }
@@ -991,7 +1004,7 @@ function writeSculptureReliefDb(db) {
   fs.writeFileSync(
     SCULPTURE_RELIEF_DB_FILE,
     JSON.stringify({
-      materials: normalizeSculptureReliefMaterialList(db?.materials),
+      materials: mergeSculptureReliefMaterialsWithDefaults(db?.materials),
     }, null, 2),
     'utf-8',
   );
@@ -1351,7 +1364,7 @@ router.put('/unit-panel/materials', (req, res) => {
 
 router.get('/sculpture-relief/materials', (_req, res) => {
   const db = readSculptureReliefDb();
-  res.json({ success: true, data: normalizeSculptureReliefMaterialList(db.materials) });
+  res.json({ success: true, data: mergeSculptureReliefMaterialsWithDefaults(db.materials) });
 });
 
 router.put('/sculpture-relief/materials', (req, res) => {
@@ -1359,7 +1372,7 @@ router.put('/sculpture-relief/materials', (req, res) => {
   if (!isAdminRole(user?.role)) {
     return res.status(403).json({ success: false, error: '只有系统管理员可以维护雕塑/浮雕材质选项' });
   }
-  const materials = normalizeSculptureReliefMaterialList(req.body?.materials);
+  const materials = mergeSculptureReliefMaterialsWithDefaults(req.body?.materials);
   writeSculptureReliefDb({ materials });
   res.json({ success: true, data: materials });
 });

@@ -53,10 +53,18 @@ test('sculpture relief component exposes pattern reference and generation servic
 });
 
 test('sculpture relief materials api and compact form hooks are wired', () => {
+  const nodeSource = read('src/components/nodes/SculptureReliefDesignNode.tsx');
+  const backendSource = read('backend/src/routes/promptLibrary.js');
   assert.match(read('src/services/api.ts'), /getSculptureReliefMaterials/);
   assert.match(read('src/services/api.ts'), /updateSculptureReliefMaterials/);
-  assert.match(read('backend/src/routes/promptLibrary.js'), /\/sculpture-relief\/materials/);
-  assert.match(read('backend/src/routes/promptLibrary.js'), /isAdminRole\(user\?\.role\)/);
+  assert.match(backendSource, /\/sculpture-relief\/materials/);
+  assert.match(backendSource, /isAdminRole\(user\?\.role\)/);
+  assert.match(backendSource, /function mergeSculptureReliefMaterialsWithDefaults/);
+  assert.match(backendSource, /const defaults = normalizeSculptureReliefMaterialList\(DEFAULT_SCULPTURE_RELIEF_MATERIALS\)/);
+  assert.match(backendSource, /const materials = mergeSculptureReliefMaterialsWithDefaults\(req\.body\?\.materials\)/);
+  assert.match(nodeSource, /function mergeMaterialOptions/);
+  assert.match(nodeSource, /SCULPTURE_RELIEF_MATERIALS\.map/);
+  assert.match(nodeSource, /const materialOptions = useMemo\(\(\) => mergeMaterialOptions\(materials\), \[materials\]\)/);
   assert.match(read('src/config/exhibitionCompactForm.ts'), /id: 'view-angles'/);
   assert.match(read('backend/src/auth/exhibitionCompactForm.js'), /id: 'view-angles'/);
 });
