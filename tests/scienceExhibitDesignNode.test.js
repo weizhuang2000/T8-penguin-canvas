@@ -15,6 +15,7 @@ test('science exhibit design node is registered across frontend and permissions'
   assert.match(read('src/components/Canvas.tsx'), /ScienceExhibitDesignNode/);
   assert.match(read('src/components/Canvas.tsx'), /'science-exhibit-design': ScienceExhibitDesignNode/);
   assert.match(read('src/components/Canvas.tsx'), /scienceDomain: 'physics'/);
+  assert.match(read('src/components/Canvas.tsx'), /backgroundMode: 'white'/);
   assert.match(read('src/components/Canvas.tsx'), /widthMm: 2200/);
   assert.match(read('src/components/Canvas.tsx'), /estimatedPowerW: 800/);
   assert.match(read('src/components/Canvas.tsx'), /drawingSelection: \['exploded', 'principle', 'orthographic', 'parameter-table'\]/);
@@ -39,6 +40,9 @@ test('science exhibit component exposes handles, llm extraction and generation s
   assert.match(source, /buildScienceExhibitImagePrompt/);
   assert.match(source, /buildScienceExhibitDrawingPrompt/);
   assert.match(source, /normalizeScienceExhibitDimensions/);
+  assert.match(source, /normalizeScienceExhibitBackground/);
+  assert.match(source, /SCIENCE_EXHIBIT_BACKGROUNDS/);
+  assert.match(source, /data-exhibition-compact-item=\{String\(key\) === 'backgroundMode' \? 'background-mode' : 'parameter-input'\}/);
   assert.match(source, /data-exhibition-compact-section="dimensions"/);
   assert.match(source, /data-exhibition-compact-item="size-input"/);
   assert.match(source, /parseScienceExhibitExtractJson/);
@@ -66,6 +70,7 @@ test('compact form exposes science exhibit sections and references', () => {
     const source = read(file);
     assert.match(source, /nodeType: 'science-exhibit-design'/);
     assert.match(source, /id: 'science'/);
+    assert.match(source, /id: 'background-mode'/);
     assert.match(source, /id: 'dimensions'/);
     assert.match(source, /id: 'size-input'/);
     assert.match(source, /id: 'language'/);

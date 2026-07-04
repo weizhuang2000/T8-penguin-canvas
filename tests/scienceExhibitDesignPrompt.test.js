@@ -6,6 +6,7 @@ import {
   buildScienceExhibitImagePrompt,
   buildScienceExhibitParameterMarkdown,
   normalizeScienceExhibitAudience,
+  normalizeScienceExhibitBackground,
   normalizeScienceExhibitDimensions,
   normalizeScienceExhibitDomain,
   normalizeScienceExhibitDrawingSelection,
@@ -59,6 +60,7 @@ test('science exhibit extract prompt and parser cover required fields', () => {
 test('normalizers use stable defaults', () => {
   assert.equal(normalizeScienceExhibitDomain('bad'), 'physics');
   assert.equal(normalizeScienceExhibitAudience('bad'), 'general');
+  assert.equal(normalizeScienceExhibitBackground('bad'), 'white');
   assert.deepEqual(normalizeScienceExhibitDimensions({}, 'island'), dimensions);
   assert.deepEqual(normalizeScienceExhibitDrawingSelection(['exploded', 'render', 'bad']), ['exploded']);
   assert.deepEqual(normalizeScienceExhibitDrawingSelection([]), SCIENCE_EXHIBIT_DEFAULT_DRAWINGS);
@@ -71,6 +73,7 @@ test('main image prompt keeps real science and parameter consistency', () => {
     interactionMode: 'turn-handle',
     audience: 'teenagers',
     spatialScale: 'island',
+    backgroundMode: 'white',
     dimensions,
     analysis,
     spaceReferenceImages: ['/files/input/space.png'],
@@ -83,6 +86,7 @@ test('main image prompt keeps real science and parameter consistency', () => {
   assert.match(prompt, /@img2/);
   assert.match(prompt, /2200mm/);
   assert.match(prompt, /900mm/);
+  assert.match(prompt, /白背景|白底/);
   assert.match(prompt, /叶片角度/);
 });
 
@@ -96,6 +100,7 @@ test('technical drawing prompts bind later drawings to render reference', () => 
     const prompt = buildScienceExhibitDrawingPrompt({
       drawingType,
       analysis,
+      backgroundMode: 'white',
       dimensions,
       spatialScale: 'island',
       renderImage: '/files/output/render.png',
@@ -104,6 +109,12 @@ test('technical drawing prompts bind later drawings to render reference', () => 
       parameterMarkdown,
     });
     assert.match(prompt, /800W/);
+    if (drawingType === 'orthographic') {
+      assert.match(prompt, /CAD/);
+      assert.match(prompt, /orthographic projection|正交投影|正投影/);
+      assert.match(prompt, /no perspective|不允许任何透视关系|禁止.*透视/);
+      assert.match(prompt, /操作台.*设备.*零部件|operating table.*device.*parts/i);
+    }
     assert.match(prompt, /@img1: 主效果图一致性参考/);
     assert.match(prompt, /同一科学原理/);
     assert.match(prompt, /同一参数体系/);

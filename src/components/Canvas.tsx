@@ -1060,6 +1060,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     interactionMode: 'turn-handle',
     audience: 'general',
     spatialScale: 'island',
+    backgroundMode: 'white',
     dimensions: {
       widthMm: 2200,
       depthMm: 1600,

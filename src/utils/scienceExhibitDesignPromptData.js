@@ -49,6 +49,12 @@ export const SCIENCE_EXHIBIT_DRAWING_TYPES = [
   { id: 'parameter-table', label: '参数表', prompt: 'visual parameter table board with dimensions, ranges, sensors, media and safety notes' },
 ];
 
+export const SCIENCE_EXHIBIT_BACKGROUNDS = [
+  { id: 'white', label: '白背景', prompt: 'clean pure white studio background, no environmental decoration, clear object silhouette' },
+  { id: 'black', label: '黑背景', prompt: 'clean matte black studio background, controlled highlights, no environmental decoration' },
+  { id: 'environment', label: '模拟环境', prompt: 'realistic science museum gallery environment with floor, lighting, circulation and surrounding exhibition context' },
+];
+
 export const SCIENCE_EXHIBIT_DEFAULT_DRAWINGS = ['exploded', 'principle', 'orthographic', 'parameter-table'];
 
 export const SCIENCE_EXHIBIT_DEFAULT_DIMENSIONS = {
@@ -132,6 +138,10 @@ export function normalizeScienceExhibitDrawingType(value) {
   return normalizeId(value, SCIENCE_EXHIBIT_DRAWING_TYPES, SCIENCE_EXHIBIT_DRAWING_TYPES[0].id);
 }
 
+export function normalizeScienceExhibitBackground(value) {
+  return normalizeId(value, SCIENCE_EXHIBIT_BACKGROUNDS, SCIENCE_EXHIBIT_BACKGROUNDS[0].id);
+}
+
 export function normalizeScienceExhibitDrawingSelection(value) {
   const source = Array.isArray(value) ? value : SCIENCE_EXHIBIT_DEFAULT_DRAWINGS;
   const out = [];
@@ -191,6 +201,11 @@ export function scienceExhibitScaleMeta(value) {
 export function scienceExhibitDrawingMeta(value) {
   const id = normalizeScienceExhibitDrawingType(value);
   return SCIENCE_EXHIBIT_DRAWING_TYPES.find((item) => item.id === id) || SCIENCE_EXHIBIT_DRAWING_TYPES[0];
+}
+
+export function scienceExhibitBackgroundMeta(value) {
+  const id = normalizeScienceExhibitBackground(value);
+  return SCIENCE_EXHIBIT_BACKGROUNDS.find((item) => item.id === id) || SCIENCE_EXHIBIT_BACKGROUNDS[0];
 }
 
 function extractJsonObject(text) {
@@ -254,6 +269,18 @@ function dimensionsText(dimensions, scaleValue) {
     `maintenance clearance ${d.maintenanceClearanceMm}mm`,
     `estimated electrical load ${d.estimatedPowerW}W`,
   ].join('; ');
+}
+
+function backgroundText(backgroundMode, drawingType) {
+  const background = scienceExhibitBackgroundMeta(backgroundMode);
+  if (drawingType === 'orthographic') {
+    return background.id === 'black'
+      ? '三视图背景：纯黑 CAD 图纸底，使用单色浅色线稿；禁止环境、阴影、透视、材质渲染。'
+      : '三视图背景：纯白 CAD 图纸底，使用单色黑/深灰线稿；禁止环境、阴影、透视、材质渲染。';
+  }
+  if (background.id === 'white') return '背景：白背景，纯净白底展示展项主体，不出现真实展厅环境。';
+  if (background.id === 'black') return '背景：黑背景，纯净黑底展示展项主体，不出现真实展厅环境。';
+  return '背景：模拟环境，将展项放入可信的科技馆展厅环境中，包含地面、灯光、动线和周边展陈语境。';
 }
 
 export function buildScienceExhibitExtractPrompt(values = {}) {
@@ -354,6 +381,7 @@ export function buildScienceExhibitImagePrompt(values = {}) {
   const scale = scienceExhibitScaleMeta(values.spatialScale);
   const analysis = normalizeScienceExhibitAnalysis(values.analysis || {});
   const dimensionText = dimensionsText(values.dimensions, values.spatialScale);
+  const bgText = backgroundText(values.backgroundMode);
   const spaceReferences = Array.isArray(values.spaceReferenceImages) ? values.spaceReferenceImages.filter(Boolean) : [];
   const deviceReferences = Array.isArray(values.deviceReferenceImages) ? values.deviceReferenceImages.filter(Boolean) : [];
   const allReferences = [...spaceReferences, ...deviceReferences];
@@ -366,6 +394,7 @@ export function buildScienceExhibitImagePrompt(values = {}) {
     `互动方式：${interaction.label}，${interaction.prompt}`,
     `目标观众：${audience.label}，${audience.prompt}`,
     `空间尺度：${scale.label}，${scale.prompt}`,
+    bgText,
     `尺寸设置：${dimensionText}。画面中的展项比例、观众尺度、操作高度、安全边界和维护门位置必须与这些尺寸一致。`,
     analysisText(analysis),
     spaceReferences.length ? `整体空间/风格参考图只参考空间气质、尺度、动线、材质和灯光，不复制无关展品、文字或品牌。\n${referenceOrderText(spaceReferences, '整体空间/风格参考')}` : '未提供整体空间/风格参考图，请自行设计清晰可落地的科技馆展项环境。',
@@ -381,6 +410,7 @@ export function buildScienceExhibitDrawingPrompt(values = {}) {
   const drawing = scienceExhibitDrawingMeta(values.drawingType);
   const analysis = normalizeScienceExhibitAnalysis(values.analysis || {});
   const dimensionText = dimensionsText(values.dimensions, values.spatialScale);
+  const bgText = backgroundText(values.backgroundMode, drawing.id);
   const renderImage = cleanScienceExhibitText(values.renderImage, 1000);
   const previousDrawingImage = cleanScienceExhibitText(values.previousDrawingImage, 1000);
   const userReferences = Array.isArray(values.userReferenceImages) ? values.userReferenceImages.filter(Boolean) : [];
@@ -393,13 +423,14 @@ export function buildScienceExhibitDrawingPrompt(values = {}) {
   const typeRequirements = {
     exploded: '生成爆炸分析图：用清晰轴测/分层方式拆开外壳、机械传动、传感器、控制器、显示/投影、支撑结构、维护门和安全防护件；用编号和短标签表现部件关系。',
     principle: '生成展项原理图：展示输入动作、科学变量、核心机制、反馈输出之间的因果链路；用箭头、流程、简洁示意图表现真实科学原理和参数影响。',
-    orthographic: '生成三视图：正视图、侧视图、俯视图放在同一张技术图纸中，比例和部件位置与主效果图一致，标注主要外形尺寸、操作高度、安全边界和维护空间。',
+    orthographic: '生成三视图：必须是单色 CAD 技术图纸形式，只允许正投影/正交投影 orthographic projection，no perspective，不允许任何透视关系、轴测角度、摄影阴影、材质渲染或环境背景。同一张图纸内按正视图、侧视图、俯视图排列；每个视图中操作台 operating table、整机设备 device、零部件 parts、屏幕、按钮、传感器和维护门必须使用同一个视角方向：正视图全部为正视，侧视图全部为侧视，俯视图全部为俯视，禁止出现“操作台是左视图但单设备是正视图”这类混合视角。比例和部件位置与主效果图一致，标注主要外形尺寸、操作高度、安全边界和维护空间。',
     'parameter-table': '生成参数表图：做成清晰技术参数板，包含尺寸、互动方式、传感器/执行器、媒体系统、结构材质、关键科学变量、安全维护和待工程校核项。',
   };
 
   return [
     `核心要求：根据同一科技展项生成“${drawing.label}”，必须和主效果图保持同一装置、同一科学原理、同一参数体系；不要伪科学、不要乱标文字、不要改变展项主体结构。`,
     `图纸类型：${drawing.prompt}`,
+    bgText,
     typeRequirements[drawing.id] || drawing.prompt,
     `尺寸设置：${dimensionText}。三视图、爆炸图、原理图和参数表中的外形尺寸、操作高度、安全净距、维护净距和功率估算必须沿用这些实际值。`,
     '一致性参考：后续图纸必须以 @img1 主效果图为首要依据；若有 @img2，则用于保持上一张图纸中的部件命名和结构编号一致。',

@@ -38,6 +38,7 @@ export const SCIENCE_EXHIBIT_INTERACTIONS: ScienceExhibitPromptOption[];
 export const SCIENCE_EXHIBIT_AUDIENCES: ScienceExhibitPromptOption[];
 export const SCIENCE_EXHIBIT_SCALES: ScienceExhibitPromptOption[];
 export const SCIENCE_EXHIBIT_DRAWING_TYPES: ScienceExhibitPromptOption[];
+export const SCIENCE_EXHIBIT_BACKGROUNDS: ScienceExhibitPromptOption[];
 export const SCIENCE_EXHIBIT_DEFAULT_DRAWINGS: string[];
 export const SCIENCE_EXHIBIT_DEFAULT_DIMENSIONS: Record<string, ScienceExhibitPromptDimensions>;
 
@@ -48,6 +49,7 @@ export function normalizeScienceExhibitInteraction(value: unknown): string;
 export function normalizeScienceExhibitAudience(value: unknown): string;
 export function normalizeScienceExhibitScale(value: unknown): string;
 export function normalizeScienceExhibitDrawingType(value: unknown): string;
+export function normalizeScienceExhibitBackground(value: unknown): string;
 export function normalizeScienceExhibitDrawingSelection(value: unknown): string[];
 export function normalizeScienceExhibitDimensions(value?: unknown, scaleValue?: unknown): ScienceExhibitPromptDimensions;
 export function scienceExhibitDomainMeta(value: unknown): ScienceExhibitPromptOption;
@@ -56,6 +58,7 @@ export function scienceExhibitInteractionMeta(value: unknown): ScienceExhibitPro
 export function scienceExhibitAudienceMeta(value: unknown): ScienceExhibitPromptOption;
 export function scienceExhibitScaleMeta(value: unknown): ScienceExhibitPromptOption;
 export function scienceExhibitDrawingMeta(value: unknown): ScienceExhibitPromptOption;
+export function scienceExhibitBackgroundMeta(value: unknown): ScienceExhibitPromptOption;
 export function normalizeScienceExhibitAnalysis(value?: unknown): ScienceExhibitPromptAnalysis;
 export function buildScienceExhibitExtractPrompt(values?: Record<string, unknown>): string;
 export function parseScienceExhibitExtractJson(text: string): ScienceExhibitPromptAnalysis;

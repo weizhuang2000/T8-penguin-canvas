@@ -18,6 +18,7 @@ import {
   buildScienceExhibitParameterMarkdown,
   normalizeScienceExhibitAnalysis,
   normalizeScienceExhibitAudience,
+  normalizeScienceExhibitBackground,
   normalizeScienceExhibitDimensions,
   normalizeScienceExhibitDomain,
   normalizeScienceExhibitDrawingSelection,
@@ -26,6 +27,7 @@ import {
   normalizeScienceExhibitType,
   parseScienceExhibitExtractJson,
   SCIENCE_EXHIBIT_AUDIENCES,
+  SCIENCE_EXHIBIT_BACKGROUNDS,
   SCIENCE_EXHIBIT_DEFAULT_DRAWINGS,
   SCIENCE_EXHIBIT_DOMAINS,
   SCIENCE_EXHIBIT_DRAWING_TYPES,
@@ -210,6 +212,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
   const interactionMode = normalizeScienceExhibitInteraction(d.interactionMode);
   const audience = normalizeScienceExhibitAudience(d.audience);
   const spatialScale = normalizeScienceExhibitScale(d.spatialScale);
+  const backgroundMode = normalizeScienceExhibitBackground(d.backgroundMode);
   const dimensions = useMemo(() => normalizeScienceExhibitDimensions(d.dimensions, spatialScale), [d.dimensions, spatialScale]);
   const drawingSelection = useMemo(() => normalizeScienceExhibitDrawingSelection(d.drawingSelection), [d.drawingSelection]);
   const analysis = useMemo(() => normalizeScienceExhibitAnalysis(d.analysis || {
@@ -252,12 +255,13 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
     interactionMode,
     audience,
     spatialScale,
+    backgroundMode,
     dimensions,
     analysis,
     spaceReferenceImages,
     deviceReferenceImages,
     supplement: resolvedSupplement,
-  }), [analysis, audience, deviceReferenceImages, dimensions, exhibitType, interactionMode, resolvedSupplement, scienceDomain, spaceReferenceImages, spatialScale]);
+  }), [analysis, audience, backgroundMode, deviceReferenceImages, dimensions, exhibitType, interactionMode, resolvedSupplement, scienceDomain, spaceReferenceImages, spatialScale]);
 
   useEffect(() => {
     if (
@@ -493,6 +497,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
             interactionMode,
             audience,
             spatialScale,
+            backgroundMode,
             dimensions,
             analysis: runtimeAnalysis,
             spaceReferenceImages,
@@ -502,6 +507,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
           : buildScienceExhibitDrawingPrompt({
             drawingType: kind,
             analysis: runtimeAnalysis,
+            backgroundMode,
             dimensions,
             spatialScale,
             renderImage,
@@ -563,7 +569,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`科技展项设计失败: ${msg}`, src);
       throw error;
     }
-  }, [analysis, audience, busy, deviceReferenceImages, dimensions, drawingSelection, exhibitType, generateOneImage, id, interactionMode, isReadonly, resolvedSupplement, runExtract, scienceDomain, seed, spaceReferenceImages, spatialScale, update]);
+  }, [analysis, audience, backgroundMode, busy, deviceReferenceImages, dimensions, drawingSelection, exhibitType, generateOneImage, id, interactionMode, isReadonly, resolvedSupplement, runExtract, scienceDomain, seed, spaceReferenceImages, spatialScale, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -608,8 +614,9 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
             ['interactionMode', '互动方式', interactionMode, SCIENCE_EXHIBIT_INTERACTIONS, normalizeScienceExhibitInteraction],
             ['audience', '目标观众', audience, SCIENCE_EXHIBIT_AUDIENCES, normalizeScienceExhibitAudience],
             ['spatialScale', '空间尺度', spatialScale, SCIENCE_EXHIBIT_SCALES, normalizeScienceExhibitScale],
+            ['backgroundMode', '背景', backgroundMode, SCIENCE_EXHIBIT_BACKGROUNDS, normalizeScienceExhibitBackground],
           ].map(([key, label, value, options, normalize]) => (
-            <label key={String(key)} data-exhibition-compact-item="parameter-input" className="space-y-1">
+            <label key={String(key)} data-exhibition-compact-item={String(key) === 'backgroundMode' ? 'background-mode' : 'parameter-input'} className="space-y-1">
               <span className="text-[10px] text-white/55">{String(label)}</span>
               <select className={FIELD} value={String(value)} disabled={isReadonly || busy} onChange={(event) => update({ [String(key)]: (normalize as (raw: string) => string)(event.target.value) })}>
                 {(options as ScienceExhibitOption[]).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
