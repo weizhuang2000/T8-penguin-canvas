@@ -15,6 +15,8 @@ test('science exhibit design node is registered across frontend and permissions'
   assert.match(read('src/components/Canvas.tsx'), /ScienceExhibitDesignNode/);
   assert.match(read('src/components/Canvas.tsx'), /'science-exhibit-design': ScienceExhibitDesignNode/);
   assert.match(read('src/components/Canvas.tsx'), /scienceDomain: 'physics'/);
+  assert.match(read('src/components/Canvas.tsx'), /widthMm: 2200/);
+  assert.match(read('src/components/Canvas.tsx'), /estimatedPowerW: 800/);
   assert.match(read('src/components/Canvas.tsx'), /drawingSelection: \['exploded', 'principle', 'orthographic', 'parameter-table'\]/);
   assert.match(read('src/config/portTypes.ts'), /'science-exhibit-design': \{ inputs: \['text', 'image'\], outputs: \['image', 'text'\] \}/);
   assert.match(read('src/utils/nodePlacement.ts'), /'science-exhibit-design': \{ w: 660, h: 820 \}/);
@@ -36,6 +38,9 @@ test('science exhibit component exposes handles, llm extraction and generation s
   assert.match(source, /buildScienceExhibitExtractPrompt/);
   assert.match(source, /buildScienceExhibitImagePrompt/);
   assert.match(source, /buildScienceExhibitDrawingPrompt/);
+  assert.match(source, /normalizeScienceExhibitDimensions/);
+  assert.match(source, /data-exhibition-compact-section="dimensions"/);
+  assert.match(source, /data-exhibition-compact-item="size-input"/);
   assert.match(source, /parseScienceExhibitExtractJson/);
   assert.match(source, /generateLlm/);
   assert.match(source, /generateExternalImage/);
@@ -61,6 +66,8 @@ test('compact form exposes science exhibit sections and references', () => {
     const source = read(file);
     assert.match(source, /nodeType: 'science-exhibit-design'/);
     assert.match(source, /id: 'science'/);
+    assert.match(source, /id: 'dimensions'/);
+    assert.match(source, /id: 'size-input'/);
     assert.match(source, /id: 'language'/);
     assert.match(source, /id: 'drawings'/);
     assert.match(source, /id: 'references'/);

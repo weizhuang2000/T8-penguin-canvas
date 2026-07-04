@@ -18,6 +18,7 @@ import {
   buildScienceExhibitParameterMarkdown,
   normalizeScienceExhibitAnalysis,
   normalizeScienceExhibitAudience,
+  normalizeScienceExhibitDimensions,
   normalizeScienceExhibitDomain,
   normalizeScienceExhibitDrawingSelection,
   normalizeScienceExhibitInteraction,
@@ -32,6 +33,7 @@ import {
   SCIENCE_EXHIBIT_SCALES,
   SCIENCE_EXHIBIT_TYPES,
   type ScienceExhibitAnalysis,
+  type ScienceExhibitDimensions,
   type ScienceExhibitDrawingType,
   type ScienceExhibitOption,
   type ScienceExhibitResult,
@@ -208,6 +210,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
   const interactionMode = normalizeScienceExhibitInteraction(d.interactionMode);
   const audience = normalizeScienceExhibitAudience(d.audience);
   const spatialScale = normalizeScienceExhibitScale(d.spatialScale);
+  const dimensions = useMemo(() => normalizeScienceExhibitDimensions(d.dimensions, spatialScale), [d.dimensions, spatialScale]);
   const drawingSelection = useMemo(() => normalizeScienceExhibitDrawingSelection(d.drawingSelection), [d.drawingSelection]);
   const analysis = useMemo(() => normalizeScienceExhibitAnalysis(d.analysis || {
     titleText: d.titleText,
@@ -241,7 +244,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
     () => resolveMediaMentions(supplement, supplementMentions, mentionMaterials),
     [mentionMaterials, supplement, supplementMentions],
   );
-  const parameterMarkdown = useMemo(() => buildScienceExhibitParameterMarkdown({ analysis }), [analysis]);
+  const parameterMarkdown = useMemo(() => buildScienceExhibitParameterMarkdown({ analysis, dimensions, spatialScale }), [analysis, dimensions, spatialScale]);
   const previewReferenceImages = useMemo(() => [...spaceReferenceImages, ...deviceReferenceImages], [deviceReferenceImages, spaceReferenceImages]);
   const previewPrompt = useMemo(() => buildScienceExhibitImagePrompt({
     scienceDomain,
@@ -249,11 +252,12 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
     interactionMode,
     audience,
     spatialScale,
+    dimensions,
     analysis,
     spaceReferenceImages,
     deviceReferenceImages,
     supplement: resolvedSupplement,
-  }), [analysis, audience, deviceReferenceImages, exhibitType, interactionMode, resolvedSupplement, scienceDomain, spaceReferenceImages, spatialScale]);
+  }), [analysis, audience, deviceReferenceImages, dimensions, exhibitType, interactionMode, resolvedSupplement, scienceDomain, spaceReferenceImages, spatialScale]);
 
   useEffect(() => {
     if (
@@ -293,6 +297,10 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
     update({ analysis: normalizeScienceExhibitAnalysis({ ...analysis, ...patch }) });
   };
 
+  const patchDimensions = (patch: Partial<ScienceExhibitDimensions>) => {
+    update({ dimensions: normalizeScienceExhibitDimensions({ ...dimensions, ...patch }, spatialScale) });
+  };
+
   const runExtract = useCallback(async (): Promise<ScienceExhibitAnalysis | null> => {
     if (isReadonly || busy) return null;
     if (!effectiveSourceText.trim()) {
@@ -305,7 +313,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
         model: llmModel,
         llmKeyId: activeLlmConfig?.id,
         temperature: 0.2,
-        messages: [{ role: 'user', content: buildScienceExhibitExtractPrompt({ sourceText: effectiveSourceText }) }],
+        messages: [{ role: 'user', content: buildScienceExhibitExtractPrompt({ sourceText: effectiveSourceText, dimensions, spatialScale }) }],
       });
       const parsed = parseScienceExhibitExtractJson(response.content || '');
       if (!analysisHasContent(parsed)) throw new Error('LLM 未返回有效科技展项分析');
@@ -319,8 +327,8 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
         safetyMaintenance: parsed.safetyMaintenance,
         visualBrief: parsed.visualBrief,
         drawingNotes: parsed.drawingNotes,
-        outputText: buildScienceExhibitParameterMarkdown({ analysis: parsed }),
-        text: buildScienceExhibitParameterMarkdown({ analysis: parsed }),
+        outputText: buildScienceExhibitParameterMarkdown({ analysis: parsed, dimensions, spatialScale }),
+        text: buildScienceExhibitParameterMarkdown({ analysis: parsed, dimensions, spatialScale }),
         status: 'idle',
         progress: '',
         error: '',
@@ -330,7 +338,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
       update({ status: 'error', error: llmErrorMessage(error), progress: '' });
       return null;
     }
-  }, [activeLlmConfig?.id, busy, effectiveSourceText, isReadonly, llmModel, update]);
+  }, [activeLlmConfig?.id, busy, dimensions, effectiveSourceText, isReadonly, llmModel, spatialScale, update]);
 
   const generateOneImage = useCallback(async ({
     kind,
@@ -470,7 +478,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
         runtimeAnalysis = await runExtract();
         if (!runtimeAnalysis) throw new Error('未获得科技展项科学分析');
       }
-      const markdown = buildScienceExhibitParameterMarkdown({ analysis: runtimeAnalysis });
+      const markdown = buildScienceExhibitParameterMarkdown({ analysis: runtimeAnalysis, dimensions, spatialScale });
       const sequence: ScienceExhibitDrawingType[] = DRAWING_ORDER.filter((item) => item === 'render' || drawingSelection.includes(item));
       for (let index = 0; index < sequence.length; index += 1) {
         if (abortRef.current) throw new Error('任务已取消');
@@ -485,6 +493,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
             interactionMode,
             audience,
             spatialScale,
+            dimensions,
             analysis: runtimeAnalysis,
             spaceReferenceImages,
             deviceReferenceImages,
@@ -493,6 +502,8 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
           : buildScienceExhibitDrawingPrompt({
             drawingType: kind,
             analysis: runtimeAnalysis,
+            dimensions,
+            spatialScale,
             renderImage,
             previousDrawingImage,
             userReferenceImages,
@@ -552,7 +563,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`科技展项设计失败: ${msg}`, src);
       throw error;
     }
-  }, [analysis, audience, busy, deviceReferenceImages, drawingSelection, exhibitType, generateOneImage, id, interactionMode, isReadonly, resolvedSupplement, runExtract, scienceDomain, seed, spaceReferenceImages, spatialScale, update]);
+  }, [analysis, audience, busy, deviceReferenceImages, dimensions, drawingSelection, exhibitType, generateOneImage, id, interactionMode, isReadonly, resolvedSupplement, runExtract, scienceDomain, seed, spaceReferenceImages, spatialScale, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -611,6 +622,34 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
               {modelDef.aspectRatios.map((ratio) => <option key={ratio} value={ratio}>{ratio}</option>)}
             </select>
           </label>
+        </section>
+
+        <section data-exhibition-compact-section="dimensions" className="grid grid-cols-3 gap-2 rounded border border-white/10 bg-white/[0.035] p-2">
+          <div className="col-span-3 flex items-center justify-between">
+            <div className="text-[11px] font-semibold text-cyan-100">尺寸设置</div>
+            <div className="text-[10px] text-white/45">单位 mm / W，进入效果图、图纸和参数表</div>
+          </div>
+          {[
+            ['widthMm', '宽度 mm'],
+            ['depthMm', '深度 mm'],
+            ['heightMm', '高度 mm'],
+            ['operationHeightMm', '操作高度 mm'],
+            ['safetyClearanceMm', '安全净距 mm'],
+            ['maintenanceClearanceMm', '维护净距 mm'],
+            ['estimatedPowerW', '估算功率 W'],
+          ].map(([key, label]) => (
+            <label key={key} data-exhibition-compact-item="size-input" className="space-y-1">
+              <span className="text-[10px] text-white/55">{label}</span>
+              <input
+                className={FIELD}
+                type="number"
+                min={0}
+                value={dimensions[key as keyof ScienceExhibitDimensions]}
+                disabled={isReadonly || busy}
+                onChange={(event) => patchDimensions({ [key]: Math.max(0, Math.round(Number(event.target.value) || 0)) } as Partial<ScienceExhibitDimensions>)}
+              />
+            </label>
+          ))}
         </section>
 
         <section data-exhibition-compact-section="language" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">

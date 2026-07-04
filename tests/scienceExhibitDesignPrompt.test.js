@@ -6,6 +6,7 @@ import {
   buildScienceExhibitImagePrompt,
   buildScienceExhibitParameterMarkdown,
   normalizeScienceExhibitAudience,
+  normalizeScienceExhibitDimensions,
   normalizeScienceExhibitDomain,
   normalizeScienceExhibitDrawingSelection,
   parseScienceExhibitExtractJson,
@@ -24,6 +25,16 @@ const analysis = {
   safetyMaintenance: '透明防护罩、低压供电、可开启维护门。',
   visualBrief: '明亮科技馆岛台，半透明风洞和可视化屏幕。',
   drawingNotes: '风机、旋钮、屏幕、传感器位置在所有图纸中保持一致。',
+};
+
+const dimensions = {
+  widthMm: 2200,
+  depthMm: 1600,
+  heightMm: 1600,
+  operationHeightMm: 900,
+  safetyClearanceMm: 900,
+  maintenanceClearanceMm: 600,
+  estimatedPowerW: 800,
 };
 
 test('science exhibit extract prompt and parser cover required fields', () => {
@@ -48,6 +59,7 @@ test('science exhibit extract prompt and parser cover required fields', () => {
 test('normalizers use stable defaults', () => {
   assert.equal(normalizeScienceExhibitDomain('bad'), 'physics');
   assert.equal(normalizeScienceExhibitAudience('bad'), 'general');
+  assert.deepEqual(normalizeScienceExhibitDimensions({}, 'island'), dimensions);
   assert.deepEqual(normalizeScienceExhibitDrawingSelection(['exploded', 'render', 'bad']), ['exploded']);
   assert.deepEqual(normalizeScienceExhibitDrawingSelection([]), SCIENCE_EXHIBIT_DEFAULT_DRAWINGS);
 });
@@ -59,6 +71,7 @@ test('main image prompt keeps real science and parameter consistency', () => {
     interactionMode: 'turn-handle',
     audience: 'teenagers',
     spatialScale: 'island',
+    dimensions,
     analysis,
     spaceReferenceImages: ['/files/input/space.png'],
     deviceReferenceImages: ['/files/input/device.png'],
@@ -68,11 +81,14 @@ test('main image prompt keeps real science and parameter consistency', () => {
   assert.match(prompt, /参数关系前后一致/);
   assert.match(prompt, /@img1/);
   assert.match(prompt, /@img2/);
+  assert.match(prompt, /2200mm/);
+  assert.match(prompt, /900mm/);
   assert.match(prompt, /叶片角度/);
 });
 
 test('technical drawing prompts bind later drawings to render reference', () => {
-  const parameterMarkdown = buildScienceExhibitParameterMarkdown({ analysis });
+  const parameterMarkdown = buildScienceExhibitParameterMarkdown({ analysis, dimensions, spatialScale: 'island' });
+  assert.match(parameterMarkdown, /2200 x 1600 x 1600 mm/);
   assert.match(parameterMarkdown, /## 关键参数/);
   assert.match(parameterMarkdown, /叶片角度/);
 
@@ -80,11 +96,14 @@ test('technical drawing prompts bind later drawings to render reference', () => 
     const prompt = buildScienceExhibitDrawingPrompt({
       drawingType,
       analysis,
+      dimensions,
+      spatialScale: 'island',
       renderImage: '/files/output/render.png',
       previousDrawingImage: '/files/output/prev.png',
       userReferenceImages: ['/files/input/device.png'],
       parameterMarkdown,
     });
+    assert.match(prompt, /800W/);
     assert.match(prompt, /@img1: 主效果图一致性参考/);
     assert.match(prompt, /同一科学原理/);
     assert.match(prompt, /同一参数体系/);

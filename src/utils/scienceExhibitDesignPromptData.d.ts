@@ -22,6 +22,16 @@ export interface ScienceExhibitPromptAnalysis {
   drawingNotes: string;
 }
 
+export interface ScienceExhibitPromptDimensions {
+  widthMm: number;
+  depthMm: number;
+  heightMm: number;
+  operationHeightMm: number;
+  safetyClearanceMm: number;
+  maintenanceClearanceMm: number;
+  estimatedPowerW: number;
+}
+
 export const SCIENCE_EXHIBIT_DOMAINS: ScienceExhibitPromptOption[];
 export const SCIENCE_EXHIBIT_TYPES: ScienceExhibitPromptOption[];
 export const SCIENCE_EXHIBIT_INTERACTIONS: ScienceExhibitPromptOption[];
@@ -29,6 +39,7 @@ export const SCIENCE_EXHIBIT_AUDIENCES: ScienceExhibitPromptOption[];
 export const SCIENCE_EXHIBIT_SCALES: ScienceExhibitPromptOption[];
 export const SCIENCE_EXHIBIT_DRAWING_TYPES: ScienceExhibitPromptOption[];
 export const SCIENCE_EXHIBIT_DEFAULT_DRAWINGS: string[];
+export const SCIENCE_EXHIBIT_DEFAULT_DIMENSIONS: Record<string, ScienceExhibitPromptDimensions>;
 
 export function cleanScienceExhibitText(value: unknown, limit?: number): string;
 export function normalizeScienceExhibitDomain(value: unknown): string;
@@ -38,6 +49,7 @@ export function normalizeScienceExhibitAudience(value: unknown): string;
 export function normalizeScienceExhibitScale(value: unknown): string;
 export function normalizeScienceExhibitDrawingType(value: unknown): string;
 export function normalizeScienceExhibitDrawingSelection(value: unknown): string[];
+export function normalizeScienceExhibitDimensions(value?: unknown, scaleValue?: unknown): ScienceExhibitPromptDimensions;
 export function scienceExhibitDomainMeta(value: unknown): ScienceExhibitPromptOption;
 export function scienceExhibitTypeMeta(value: unknown): ScienceExhibitPromptOption;
 export function scienceExhibitInteractionMeta(value: unknown): ScienceExhibitPromptOption;

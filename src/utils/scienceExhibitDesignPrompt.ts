@@ -6,6 +6,7 @@ import {
   cleanScienceExhibitText,
   normalizeScienceExhibitAnalysis,
   normalizeScienceExhibitAudience,
+  normalizeScienceExhibitDimensions,
   normalizeScienceExhibitDomain,
   normalizeScienceExhibitDrawingSelection,
   normalizeScienceExhibitDrawingType,
@@ -20,6 +21,7 @@ import {
   scienceExhibitScaleMeta,
   scienceExhibitTypeMeta,
   SCIENCE_EXHIBIT_AUDIENCES,
+  SCIENCE_EXHIBIT_DEFAULT_DIMENSIONS,
   SCIENCE_EXHIBIT_DEFAULT_DRAWINGS,
   SCIENCE_EXHIBIT_DOMAINS,
   SCIENCE_EXHIBIT_DRAWING_TYPES,
@@ -52,6 +54,16 @@ export interface ScienceExhibitAnalysis {
   drawingNotes: string;
 }
 
+export interface ScienceExhibitDimensions {
+  widthMm: number;
+  depthMm: number;
+  heightMm: number;
+  operationHeightMm: number;
+  safetyClearanceMm: number;
+  maintenanceClearanceMm: number;
+  estimatedPowerW: number;
+}
+
 export type ScienceExhibitDrawingType = 'render' | 'exploded' | 'principle' | 'orthographic' | 'parameter-table';
 
 export interface ScienceExhibitResult {
@@ -71,6 +83,7 @@ export {
   cleanScienceExhibitText,
   normalizeScienceExhibitAnalysis,
   normalizeScienceExhibitAudience,
+  normalizeScienceExhibitDimensions,
   normalizeScienceExhibitDomain,
   normalizeScienceExhibitDrawingSelection,
   normalizeScienceExhibitDrawingType,
@@ -85,6 +98,7 @@ export {
   scienceExhibitScaleMeta,
   scienceExhibitTypeMeta,
   SCIENCE_EXHIBIT_AUDIENCES,
+  SCIENCE_EXHIBIT_DEFAULT_DIMENSIONS,
   SCIENCE_EXHIBIT_DEFAULT_DRAWINGS,
   SCIENCE_EXHIBIT_DOMAINS,
   SCIENCE_EXHIBIT_DRAWING_TYPES,

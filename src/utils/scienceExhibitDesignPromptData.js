@@ -51,6 +51,54 @@ export const SCIENCE_EXHIBIT_DRAWING_TYPES = [
 
 export const SCIENCE_EXHIBIT_DEFAULT_DRAWINGS = ['exploded', 'principle', 'orthographic', 'parameter-table'];
 
+export const SCIENCE_EXHIBIT_DEFAULT_DIMENSIONS = {
+  tabletop: {
+    widthMm: 900,
+    depthMm: 600,
+    heightMm: 450,
+    operationHeightMm: 760,
+    safetyClearanceMm: 300,
+    maintenanceClearanceMm: 300,
+    estimatedPowerW: 150,
+  },
+  'wall-bay': {
+    widthMm: 2400,
+    depthMm: 600,
+    heightMm: 2200,
+    operationHeightMm: 1050,
+    safetyClearanceMm: 800,
+    maintenanceClearanceMm: 600,
+    estimatedPowerW: 500,
+  },
+  island: {
+    widthMm: 2200,
+    depthMm: 1600,
+    heightMm: 1600,
+    operationHeightMm: 900,
+    safetyClearanceMm: 900,
+    maintenanceClearanceMm: 600,
+    estimatedPowerW: 800,
+  },
+  room: {
+    widthMm: 6000,
+    depthMm: 4500,
+    heightMm: 2800,
+    operationHeightMm: 1000,
+    safetyClearanceMm: 1200,
+    maintenanceClearanceMm: 800,
+    estimatedPowerW: 2500,
+  },
+  'hall-landmark': {
+    widthMm: 8000,
+    depthMm: 5000,
+    heightMm: 4500,
+    operationHeightMm: 1100,
+    safetyClearanceMm: 1800,
+    maintenanceClearanceMm: 1200,
+    estimatedPowerW: 5000,
+  },
+};
+
 function normalizeId(value, options, fallback) {
   const id = String(value || '').trim();
   return options.some((item) => item.id === id) ? id : fallback;
@@ -92,6 +140,27 @@ export function normalizeScienceExhibitDrawingSelection(value) {
     if (id !== 'render' && !out.includes(id)) out.push(id);
   }
   return out.length ? out : SCIENCE_EXHIBIT_DEFAULT_DRAWINGS.slice();
+}
+
+function positiveNumber(value, fallback, min = 0, max = 999999) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
+
+export function normalizeScienceExhibitDimensions(value = {}, scaleValue) {
+  const scaleId = normalizeScienceExhibitScale(scaleValue || value.spatialScale);
+  const fallback = SCIENCE_EXHIBIT_DEFAULT_DIMENSIONS[scaleId] || SCIENCE_EXHIBIT_DEFAULT_DIMENSIONS.island;
+  const source = value && typeof value === 'object' ? value : {};
+  return {
+    widthMm: positiveNumber(source.widthMm, fallback.widthMm, 300),
+    depthMm: positiveNumber(source.depthMm, fallback.depthMm, 300),
+    heightMm: positiveNumber(source.heightMm, fallback.heightMm, 200),
+    operationHeightMm: positiveNumber(source.operationHeightMm, fallback.operationHeightMm, 450),
+    safetyClearanceMm: positiveNumber(source.safetyClearanceMm, fallback.safetyClearanceMm, 0),
+    maintenanceClearanceMm: positiveNumber(source.maintenanceClearanceMm, fallback.maintenanceClearanceMm, 0),
+    estimatedPowerW: positiveNumber(source.estimatedPowerW, fallback.estimatedPowerW, 0),
+  };
 }
 
 export function scienceExhibitDomainMeta(value) {
@@ -176,13 +245,26 @@ export function normalizeScienceExhibitAnalysis(value = {}) {
   };
 }
 
+function dimensionsText(dimensions, scaleValue) {
+  const d = normalizeScienceExhibitDimensions(dimensions, scaleValue);
+  return [
+    `overall footprint ${d.widthMm}mm(W) x ${d.depthMm}mm(D) x ${d.heightMm}mm(H)`,
+    `visitor operation height ${d.operationHeightMm}mm`,
+    `safety clearance ${d.safetyClearanceMm}mm`,
+    `maintenance clearance ${d.maintenanceClearanceMm}mm`,
+    `estimated electrical load ${d.estimatedPowerW}W`,
+  ].join('; ');
+}
+
 export function buildScienceExhibitExtractPrompt(values = {}) {
   const sourceText = cleanScienceExhibitText(values.sourceText, 50000);
+  const sizeText = dimensionsText(values.dimensions, values.spatialScale);
   return [
     '请从科技馆/科学中心展项资料中提炼“科技展项设计”所需的真实科学分析。',
     '必须基于资料和可验证的科学常识，不要编造不可验证的科学结论、实验数据、品牌、专利或精密数值；不确定的参数用“建议范围/待工程校核”表达。',
     '输出 JSON，不要 Markdown，不要解释。',
     'JSON 结构：{"titleText":"展项名称","sciencePrinciple":"真实科学原理说明","keyParameters":[{"name":"参数名称","range":"建议范围","unit":"单位","effect":"该参数如何影响演示结果"}],"interactionFlow":"观众操作流程","mechanismDesign":"机械/电子/软件/媒体构成","safetyMaintenance":"安全、耐久、维护要点","visualBrief":"效果图视觉说明","drawingNotes":"后续爆炸图、原理图、三视图、参数表必须保持一致的结构约束"}',
+    `已知尺寸基准：${sizeText}。请优先给出可执行的建议数值或建议范围，不要把参数全部写成“待工程校核”；仅对确实依赖深化设计的项标注“需工程校核”。`,
     '要求：科学原理、参数、互动流程、安全维护、图纸约束都要明确；语言适合展陈方案汇报和图像生成。',
     '',
     sourceText,
@@ -206,9 +288,17 @@ export function parseScienceExhibitExtractJson(text) {
 
 export function buildScienceExhibitParameterMarkdown(values = {}) {
   const analysis = normalizeScienceExhibitAnalysis(values.analysis || values);
+  const dimensions = normalizeScienceExhibitDimensions(values.dimensions, values.spatialScale);
   const rows = analysis.keyParameters.length
     ? analysis.keyParameters
-    : [{ name: '核心参数', range: '待工程校核', unit: '', effect: '根据科学原理和互动目标确定' }];
+    : [
+      { name: '设备宽度', range: String(dimensions.widthMm), unit: 'mm', effect: '决定展项正面展示尺度和三视图比例' },
+      { name: '设备深度', range: String(dimensions.depthMm), unit: 'mm', effect: '决定岛台/墙面占地和维护空间' },
+      { name: '设备高度', range: String(dimensions.heightMm), unit: 'mm', effect: '决定可视高度、灯光和顶部结构关系' },
+      { name: '操作高度', range: String(dimensions.operationHeightMm), unit: 'mm', effect: '影响儿童、亲子或公众观众的可操作性' },
+      { name: '安全净距', range: String(dimensions.safetyClearanceMm), unit: 'mm', effect: '用于观众排队、运动部件防护和安全边界' },
+      { name: '估算功率', range: String(dimensions.estimatedPowerW), unit: 'W', effect: '用于屏幕、传感器、执行器和控制系统供电预估' },
+    ];
   return [
     `# ${analysis.titleText || '科技展项设计参数表'}`,
     '',
@@ -218,7 +308,14 @@ export function buildScienceExhibitParameterMarkdown(values = {}) {
     '## 关键参数',
     '| 参数 | 建议范围 | 单位 | 影响关系 |',
     '| --- | --- | --- | --- |',
-    ...rows.map((item) => `| ${item.name || '-'} | ${item.range || '待工程校核'} | ${item.unit || '-'} | ${item.effect || '-'} |`),
+    ...rows.map((item) => `| ${item.name || '-'} | ${item.range || '建议深化校核'} | ${item.unit || '-'} | ${item.effect || '-'} |`),
+    '',
+    '## 尺寸基准',
+    `- 外形尺寸：${dimensions.widthMm} x ${dimensions.depthMm} x ${dimensions.heightMm} mm`,
+    `- 操作高度：${dimensions.operationHeightMm} mm`,
+    `- 安全净距：${dimensions.safetyClearanceMm} mm`,
+    `- 维护净距：${dimensions.maintenanceClearanceMm} mm`,
+    `- 估算功率：${dimensions.estimatedPowerW} W`,
     '',
     '## 互动流程',
     analysis.interactionFlow || '待补充。',
@@ -256,6 +353,7 @@ export function buildScienceExhibitImagePrompt(values = {}) {
   const audience = scienceExhibitAudienceMeta(values.audience);
   const scale = scienceExhibitScaleMeta(values.spatialScale);
   const analysis = normalizeScienceExhibitAnalysis(values.analysis || {});
+  const dimensionText = dimensionsText(values.dimensions, values.spatialScale);
   const spaceReferences = Array.isArray(values.spaceReferenceImages) ? values.spaceReferenceImages.filter(Boolean) : [];
   const deviceReferences = Array.isArray(values.deviceReferenceImages) ? values.deviceReferenceImages.filter(Boolean) : [];
   const allReferences = [...spaceReferences, ...deviceReferences];
@@ -268,6 +366,7 @@ export function buildScienceExhibitImagePrompt(values = {}) {
     `互动方式：${interaction.label}，${interaction.prompt}`,
     `目标观众：${audience.label}，${audience.prompt}`,
     `空间尺度：${scale.label}，${scale.prompt}`,
+    `尺寸设置：${dimensionText}。画面中的展项比例、观众尺度、操作高度、安全边界和维护门位置必须与这些尺寸一致。`,
     analysisText(analysis),
     spaceReferences.length ? `整体空间/风格参考图只参考空间气质、尺度、动线、材质和灯光，不复制无关展品、文字或品牌。\n${referenceOrderText(spaceReferences, '整体空间/风格参考')}` : '未提供整体空间/风格参考图，请自行设计清晰可落地的科技馆展项环境。',
     deviceReferences.length ? `装置/结构参考图只参考机械结构、交互部件、屏幕/传感器/支架关系，不复制无关 logo 或文字。\n${referenceOrderText(deviceReferences, '装置/结构参考', spaceReferences.length)}` : '未提供装置/结构参考图，请基于科学原理设计合理的机械、电子和媒体构成。',
@@ -281,6 +380,7 @@ export function buildScienceExhibitImagePrompt(values = {}) {
 export function buildScienceExhibitDrawingPrompt(values = {}) {
   const drawing = scienceExhibitDrawingMeta(values.drawingType);
   const analysis = normalizeScienceExhibitAnalysis(values.analysis || {});
+  const dimensionText = dimensionsText(values.dimensions, values.spatialScale);
   const renderImage = cleanScienceExhibitText(values.renderImage, 1000);
   const previousDrawingImage = cleanScienceExhibitText(values.previousDrawingImage, 1000);
   const userReferences = Array.isArray(values.userReferenceImages) ? values.userReferenceImages.filter(Boolean) : [];
@@ -301,6 +401,7 @@ export function buildScienceExhibitDrawingPrompt(values = {}) {
     `核心要求：根据同一科技展项生成“${drawing.label}”，必须和主效果图保持同一装置、同一科学原理、同一参数体系；不要伪科学、不要乱标文字、不要改变展项主体结构。`,
     `图纸类型：${drawing.prompt}`,
     typeRequirements[drawing.id] || drawing.prompt,
+    `尺寸设置：${dimensionText}。三视图、爆炸图、原理图和参数表中的外形尺寸、操作高度、安全净距、维护净距和功率估算必须沿用这些实际值。`,
     '一致性参考：后续图纸必须以 @img1 主效果图为首要依据；若有 @img2，则用于保持上一张图纸中的部件命名和结构编号一致。',
     referenceLines,
     analysisText(analysis),

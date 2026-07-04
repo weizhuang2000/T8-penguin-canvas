@@ -260,6 +260,9 @@ const EXHIBITION_COMPACT_FORM_DEFINITIONS = [
       { id: 'parameter-input', label: '\u53c2\u6570\u8f93\u5165' },
       { id: 'aspect-size', label: '\u6bd4\u4f8b/\u5c3a\u5bf8' },
     ] },
+    { id: 'dimensions', label: '\u5c3a\u5bf8\u8bbe\u7f6e', items: [
+      { id: 'size-input', label: '\u5c3a\u5bf8/\u529f\u7387\u8f93\u5165' },
+    ] },
     { id: 'language', label: '\u8d44\u6599\u4e0e\u5206\u6790', items: [
       { id: 'document', label: '\u6587\u6863\u5bfc\u5165' },
       { id: 'text-fields', label: '\u79d1\u5b66\u5206\u6790\u5b57\u6bb5' },
