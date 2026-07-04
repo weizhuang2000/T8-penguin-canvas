@@ -18,6 +18,7 @@ test('cinema auditorium design node is registered across frontend and permission
   assert.match(read('src/components/Canvas.tsx'), /widthMm: 16000/);
   assert.match(read('src/components/Canvas.tsx'), /heightMm: 7500/);
   assert.match(read('src/components/Canvas.tsx'), /screenStageSide: 'north'/);
+  assert.match(read('src/components/Canvas.tsx'), /mainScreenKind: 'unspecified'/);
   assert.match(read('src/components/Canvas.tsx'), /venueType: 'standard-cinema'/);
   assert.match(read('src/components/Canvas.tsx'), /outputSelection: \['render', 'color-plan', 'system-principle'\]/);
   assert.match(read('src/config/portTypes.ts'), /'cinema-auditorium-design': \{ inputs: \['text', 'image'\], outputs: \['image', 'text'\] \}/);
@@ -25,7 +26,9 @@ test('cinema auditorium design node is registered across frontend and permission
   assert.match(read('src/components/NodeActionBar.tsx'), /'cinema-auditorium-design'/);
   assert.match(read('backend/src/auth/toolPermissions.js'), /'cinema-auditorium-design'/);
   assert.match(read('src/config/exhibitionCompactForm.ts'), /nodeType: 'cinema-auditorium-design'/);
+  assert.match(read('src/config/exhibitionCompactForm.ts'), /main-screen-kind/);
   assert.match(read('backend/src/auth/exhibitionCompactForm.js'), /nodeType: 'cinema-auditorium-design'/);
+  assert.match(read('backend/src/auth/exhibitionCompactForm.js'), /main-screen-kind/);
 });
 
 test('cinema auditorium component exposes handles, shared material controls and generation services', () => {
@@ -35,6 +38,10 @@ test('cinema auditorium component exposes handles, shared material controls and 
   assert.match(source, /id="color-material-reference"/);
   assert.match(source, /id="equipment-reference"/);
   assert.match(source, /id="text-output"/);
+  assert.match(source, /CINEMA_MAIN_SCREEN_KINDS/);
+  assert.match(source, /mainScreenKind/);
+  assert.match(source, /normalizeCinemaMainScreenKind/);
+  assert.match(source, /主屏幕种类/);
   assert.match(source, /ColorMaterialPresetSelect/);
   assert.match(source, /getElevationPromptPresets/);
   assert.match(source, /MentionPromptInput/);
@@ -52,9 +59,14 @@ test('cinema auditorium component exposes handles, shared material controls and 
 
 test('cinema auditorium output order and result fields are stable', () => {
   const source = read('src/components/nodes/CinemaAuditoriumDesignNode.tsx');
-  assert.match(source, /OUTPUT_ORDER: CinemaAuditoriumOutputType\[\] = \['render', 'color-plan', 'system-principle'\]/);
+  assert.match(source, /OUTPUT_ORDER: CinemaAuditoriumOutputType\[\] = \['color-plan', 'render', 'system-principle'\]/);
   assert.match(source, /const sequence = OUTPUT_ORDER\.filter/);
+  assert.match(source, /sequence\.includes\('color-plan'\) \|\| sequence\.includes\('render'\)/);
+  assert.match(source, /colorPlanReferenceImages: \[generatedColorPlanImage \|\| planReferenceImage\]\.filter\(Boolean\)/);
+  assert.match(source, /\[generatedColorPlanImage \|\| planReferenceImage, \.\.\.spaceReferenceImages/);
   assert.match(source, /if \(kind === 'render'\) renderImage = generated\.imageUrl/);
+  assert.match(source, /else if \(kind === 'color-plan'\) \{/);
+  assert.match(source, /generatedColorPlanImage = generated\.imageUrl/);
   assert.match(source, /else if \(kind !== 'system-principle'\) previousDrawingImage = generated\.imageUrl/);
   assert.match(source, /kind === 'system-principle'\s*\?\s*equipmentReferenceImages/);
   assert.match(source, /cinemaAuditoriumResults: results\.slice\(\)/);
@@ -72,6 +84,9 @@ test('cinema auditorium prompt presets cover special theaters and diagrams', asy
   assert.ok(venueIds.includes('academic-report-hall'));
   const colorPlan = mod.buildCinemaAuditoriumDrawingPrompt({ outputType: 'color-plan', dimensions: { lengthMm: 24000, widthMm: 16000, heightMm: 7500 }, screenStageSide: 'north' });
   assert.match(colorPlan, /长宽比例|比例|银幕舞台方向|座席|走道|设备区/);
+  const render = mod.buildCinemaAuditoriumImagePrompt({ capacityMode: 'manual', seatCount: 240, colorPlanReferenceImages: ['/files/output/plan.png'] });
+  assert.match(render, /彩平图是硬约束|座椅总数量|不要把单侧座位数误当成总座位数/);
+  assert.match(render, /合计才是 240 座|不是每侧 240 座/);
   const principle = mod.buildCinemaAuditoriumDrawingPrompt({ outputType: 'system-principle', specialEffects: ['motion-seats', 'wind', 'water-mist', 'scent'] });
   assert.match(principle, /拓扑|连线|图标|符号|pictogram/);
   assert.match(principle, /不需要主效果图|不需要彩色平面图|不要生成室内效果图|不要生成.*平面布局图/);
@@ -79,4 +94,11 @@ test('cinema auditorium prompt presets cover special theaters and diagrams', asy
   assert.match(principle, /音响|灯光|控制机房|服务器|播放系统/);
   assert.match(principle, /动感座椅|风效|水雾|气味/);
   assert.match(principle, /疏散|检修/);
+  assert.match(principle, /估算总功率|kW|分项功率/);
+  const led = mod.buildCinemaAuditoriumDrawingPrompt({ outputType: 'system-principle', mainScreenKind: 'led' });
+  assert.match(led, /LED 大屏|发送盒|接收卡|箱体模组|配电柜|散热/);
+  const projection = mod.buildCinemaAuditoriumDrawingPrompt({ outputType: 'system-principle', mainScreenKind: 'projection' });
+  assert.match(projection, /投影系统|投影机|镜头|投影银幕|HDBaseT|校正控制/);
+  const screenKinds = mod.CINEMA_MAIN_SCREEN_KINDS.map((item) => item.id);
+  assert.deepEqual(screenKinds, ['unspecified', 'led', 'projection']);
 });

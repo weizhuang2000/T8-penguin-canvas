@@ -122,6 +122,10 @@ test('technical drawing prompts bind later drawings to render reference', () => 
       assert.match(prompt, /orthographic projection|正交投影|正投影/);
       assert.match(prompt, /no perspective|不允许任何透视关系|禁止.*透视/);
       assert.match(prompt, /操作台.*设备.*零部件|operating table.*device.*parts/i);
+      assert.match(prompt, /side elevation|left or right side projection/);
+      assert.match(prompt, /depth \/ D/);
+      assert.match(prompt, /width \/ W/);
+      assert.match(prompt, /正视图横向缩短|压扁/);
     }
     assert.match(prompt, /@img1: 主效果图一致性参考/);
     assert.match(prompt, /同一科学原理/);

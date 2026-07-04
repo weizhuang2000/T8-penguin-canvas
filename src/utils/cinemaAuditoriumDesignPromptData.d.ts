@@ -17,6 +17,7 @@ export const CINEMA_SCREEN_STAGE_SIDES: CinemaAuditoriumPromptOption[];
 export const CINEMA_AISLE_MODES: CinemaAuditoriumPromptOption[];
 export const CINEMA_SLOPE_MODES: CinemaAuditoriumPromptOption[];
 export const CINEMA_SCREEN_TYPES: CinemaAuditoriumPromptOption[];
+export const CINEMA_MAIN_SCREEN_KINDS: CinemaAuditoriumPromptOption[];
 export const CINEMA_AUDIO_SYSTEMS: CinemaAuditoriumPromptOption[];
 export const CINEMA_SPECIAL_EFFECTS: CinemaAuditoriumPromptOption[];
 
@@ -28,6 +29,7 @@ export function normalizeCinemaScreenStageSide(value: unknown): string;
 export function normalizeCinemaAisleMode(value: unknown): string;
 export function normalizeCinemaSlopeMode(value: unknown): string;
 export function normalizeCinemaScreenType(value: unknown): string;
+export function normalizeCinemaMainScreenKind(value: unknown): string;
 export function normalizeCinemaAudioSystem(value: unknown): string;
 export function normalizeCinemaSpecialEffects(value: unknown): string[];
 export function normalizeCinemaDimensions(value?: unknown): CinemaAuditoriumDimensions;
@@ -37,8 +39,18 @@ export function cinemaScreenStageSideMeta(value: unknown): CinemaAuditoriumPromp
 export function cinemaAisleModeMeta(value: unknown): CinemaAuditoriumPromptOption;
 export function cinemaSlopeModeMeta(value: unknown): CinemaAuditoriumPromptOption;
 export function cinemaScreenTypeMeta(value: unknown): CinemaAuditoriumPromptOption;
+export function cinemaMainScreenKindMeta(value: unknown): CinemaAuditoriumPromptOption;
 export function cinemaAudioSystemMeta(value: unknown): CinemaAuditoriumPromptOption;
 export function cinemaSpecialEffectMetas(value: unknown): CinemaAuditoriumPromptOption[];
+export function estimateCinemaSystemPower(values?: Record<string, unknown>): {
+  totalKw: number;
+  displayPowerKw: number;
+  audioPowerKw: number;
+  lightingPowerKw: number;
+  controlPowerKw: number;
+  effectPowerKw: number;
+  effectiveSeats: number;
+};
 export function colorMaterialTextFromCinemaPreset(preset: unknown): string;
 export function buildCinemaAuditoriumSummary(values?: Record<string, unknown>): string;
 export function buildCinemaAuditoriumImagePrompt(values?: Record<string, unknown>): string;

@@ -476,7 +476,7 @@ export const EXHIBITION_COMPACT_FORM_DEFINITIONS: ExhibitionCompactNodeDefinitio
   { nodeType: 'cinema-auditorium-design', label: '\u5f71\u9662\u62a5\u544a\u5385\u8bbe\u8ba1', sections: [
     { id: 'venue', label: '\u7a7a\u95f4\u7c7b\u578b', items: [{ id: 'venue-type', label: '\u7c7b\u578b' }, { id: 'screen-stage-side', label: '\u94f6\u5e55/\u821e\u53f0\u65b9\u5411' }] },
     { id: 'dimensions', label: '\u7a7a\u95f4\u5c3a\u5bf8', items: [{ id: 'size-input', label: '\u957f\u5bbd\u9ad8' }, { id: 'seat-count', label: '\u5ea7\u5e2d\u6570' }] },
-    { id: 'layout', label: '\u5ea7\u5e2d\u52a8\u7ebf', items: [{ id: 'aisle-mode', label: '\u8d70\u9053' }, { id: 'slope-mode', label: '\u89c6\u7ebf' }, { id: 'screen-type', label: '\u94f6\u5e55' }, { id: 'audio-system', label: '\u58f0\u5b66' }] },
+    { id: 'layout', label: '\u5ea7\u5e2d\u52a8\u7ebf', items: [{ id: 'aisle-mode', label: '\u8d70\u9053' }, { id: 'slope-mode', label: '\u89c6\u7ebf' }, { id: 'screen-type', label: '\u94f6\u5e55' }, { id: 'main-screen-kind', label: '\u4e3b\u5c4f\u5e55\u79cd\u7c7b' }, { id: 'audio-system', label: '\u58f0\u5b66' }] },
     { id: 'equipment', label: '\u7cfb\u7edf\u8bbe\u5907', items: [{ id: 'special-effects', label: '\u7279\u6548\u7cfb\u7edf' }] },
     { id: 'color-material', label: '\u8272\u5f69\u6750\u8d28', items: [{ id: 'preset-options', label: '\u9884\u8bbe' }, { id: 'manual-input', label: '\u624b\u52a8\u8865\u5145' }, { id: 'reference-analysis', label: '\u53c2\u8003\u56fe\u5206\u6790' }] },
     { id: 'output', label: '\u540c\u6b65\u8f93\u51fa', items: [{ id: 'output-selection', label: '\u8f93\u51fa\u9009\u62e9' }] },

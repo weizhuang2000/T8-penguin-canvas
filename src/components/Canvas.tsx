@@ -1162,6 +1162,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     aisleMode: 'center-and-side',
     slopeMode: 'raked-floor',
     screenType: 'cinema-screen',
+    mainScreenKind: 'unspecified',
     audioSystem: 'surround-7-1',
     specialEffects: [],
     outputSelection: ['render', 'color-plan', 'system-principle'],

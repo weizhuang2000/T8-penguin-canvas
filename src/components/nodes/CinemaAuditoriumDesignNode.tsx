@@ -24,6 +24,7 @@ import {
   normalizeCinemaOutputSelection,
   normalizeCinemaScreenStageSide,
   normalizeCinemaScreenType,
+  normalizeCinemaMainScreenKind,
   normalizeCinemaSlopeMode,
   normalizeCinemaSpecialEffects,
   normalizeCinemaVenueType,
@@ -33,6 +34,7 @@ import {
   CINEMA_AUDITORIUM_VENUE_TYPES,
   CINEMA_SCREEN_STAGE_SIDES,
   CINEMA_SCREEN_TYPES,
+  CINEMA_MAIN_SCREEN_KINDS,
   CINEMA_SLOPE_MODES,
   CINEMA_SPECIAL_EFFECTS,
   type CinemaAuditoriumOutputType,
@@ -55,7 +57,7 @@ const INTERNAL_IMAGE_MAX_POLLS = 300;
 const INTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
-const OUTPUT_ORDER: CinemaAuditoriumOutputType[] = ['render', 'color-plan', 'system-principle'];
+const OUTPUT_ORDER: CinemaAuditoriumOutputType[] = ['color-plan', 'render', 'system-principle'];
 
 function randomImageSeed(): number {
   if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
@@ -216,7 +218,51 @@ function buildCinemaColorPlanReferenceDataUrl(params: {
   ctx.fillRect(seatArea.x, seatArea.y, seatArea.w, seatArea.h);
   ctx.fillStyle = '#166534';
   ctx.font = 'bold 20px sans-serif';
-  ctx.fillText(`观众席 ${Math.max(0, Math.round(params.seatCount || 0)) || '自动'} seats`, seatArea.x + 12, seatArea.y + 30);
+  const totalSeats = Math.max(0, Math.round(params.seatCount || 0));
+  const effectiveSeats = totalSeats || 120;
+  const bankCount = params.aisleMode === 'center-and-side' || params.aisleMode === 'center-only' || params.aisleMode === 'cross-aisle' ? 2 : 1;
+  const leftSeats = bankCount === 2 ? Math.ceil(effectiveSeats / 2) : effectiveSeats;
+  const rightSeats = bankCount === 2 ? effectiveSeats - leftSeats : 0;
+  ctx.fillText(`观众席 总计${effectiveSeats}座${bankCount === 2 ? `（左${leftSeats}+右${rightSeats}）` : ''}`, seatArea.x + 12, seatArea.y + 30);
+
+  const drawSeatBank = (bankX: number, bankY: number, bankW: number, bankH: number, count: number, label: string) => {
+    if (count <= 0 || bankW <= 20 || bankH <= 36) return;
+    const cols = Math.max(1, Math.min(12, Math.ceil(Math.sqrt(count * (bankW / Math.max(1, bankH))))));
+    const rows = Math.ceil(count / cols);
+    const gap = 4;
+    const seatW = Math.max(5, Math.min(18, (bankW - gap * (cols - 1)) / cols));
+    const seatH = Math.max(5, Math.min(14, (bankH - 24 - gap * (rows - 1)) / rows));
+    ctx.fillStyle = '#166534';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.fillText(`${label} ${count}座`, bankX, bankY + 14);
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 1;
+    for (let index = 0; index < count; index += 1) {
+      const row = Math.floor(index / cols);
+      const col = index % cols;
+      const x = bankX + col * (seatW + gap);
+      const y = bankY + 24 + row * (seatH + gap);
+      ctx.fillStyle = '#e5e7eb';
+      ctx.fillRect(x, y, seatW, seatH);
+      ctx.strokeRect(x, y, seatW, seatH);
+    }
+  };
+  const bankTop = seatArea.y + 48;
+  const bankHeight = Math.max(40, seatArea.h - 62);
+  if (bankCount === 2) {
+    const bankGap = isHorizontalStage ? Math.max(24, seatArea.w * 0.08) : Math.max(24, seatArea.h * 0.08);
+    if (isHorizontalStage) {
+      const bankW = (seatArea.w - bankGap - 24) / 2;
+      drawSeatBank(seatArea.x + 10, bankTop, bankW, bankHeight, leftSeats, '左区');
+      drawSeatBank(seatArea.x + 14 + bankW + bankGap, bankTop, bankW, bankHeight, rightSeats, '右区');
+    } else {
+      const bankH = (seatArea.h - bankGap - 62) / 2;
+      drawSeatBank(seatArea.x + 10, bankTop, seatArea.w - 20, bankH, leftSeats, '前区');
+      drawSeatBank(seatArea.x + 10, bankTop + bankH + bankGap, seatArea.w - 20, bankH, rightSeats, '后区');
+    }
+  } else {
+    drawSeatBank(seatArea.x + 10, bankTop, seatArea.w - 20, bankHeight, effectiveSeats, '全区');
+  }
 
   ctx.strokeStyle = '#f97316';
   ctx.lineWidth = 8;
@@ -291,6 +337,7 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
   const aisleMode = normalizeCinemaAisleMode(d.aisleMode);
   const slopeMode = normalizeCinemaSlopeMode(d.slopeMode);
   const screenType = normalizeCinemaScreenType(d.screenType);
+  const mainScreenKind = normalizeCinemaMainScreenKind(d.mainScreenKind);
   const audioSystem = normalizeCinemaAudioSystem(d.audioSystem);
   const specialEffects = normalizeCinemaSpecialEffects(d.specialEffects);
   const outputSelection = normalizeCinemaOutputSelection(d.outputSelection);
@@ -342,13 +389,14 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
     aisleMode,
     slopeMode,
     screenType,
+    mainScreenKind,
     audioSystem,
     specialEffects,
     colorMaterialPresetText,
     colorMaterial: d.colorMaterial,
     colorMaterialReferenceTone: d.colorMaterialReferenceTone,
     supplement: resolvedSupplement,
-  }), [audioSystem, aisleMode, colorMaterialPresetText, d.capacityMode, d.colorMaterial, d.colorMaterialReferenceTone, d.seatCount, dimensions, resolvedSupplement, screenStageSide, screenType, slopeMode, specialEffects, venueType]);
+  }), [audioSystem, aisleMode, colorMaterialPresetText, d.capacityMode, d.colorMaterial, d.colorMaterialReferenceTone, d.seatCount, dimensions, mainScreenKind, resolvedSupplement, screenStageSide, screenType, slopeMode, specialEffects, venueType]);
 
   useEffect(() => {
     getElevationPromptPresets().then((presets) => setColorMaterialPresets(presets.colorMaterial || [])).catch(() => setColorMaterialPresets([]));
@@ -479,6 +527,7 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
     let renderImage = '';
     let previousDrawingImage = '';
     let planReferenceImage = '';
+    let generatedColorPlanImage = '';
     let latestTaskId = '';
     const sequence = OUTPUT_ORDER.filter((kind) => outputSelection.includes(kind));
     if (sequence.length === 0) {
@@ -496,7 +545,7 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
         cinemaAuditoriumResults: [],
         referenceImages: [...spaceReferenceImages, ...colorMaterialReferenceImages, ...equipmentReferenceImages],
       });
-      if (sequence.includes('color-plan')) {
+      if (sequence.includes('color-plan') || sequence.includes('render')) {
         const dataUrl = buildCinemaColorPlanReferenceDataUrl({
           lengthMm: dimensions.lengthMm,
           widthMm: dimensions.widthMm,
@@ -525,12 +574,14 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
             aisleMode,
             slopeMode,
             screenType,
+            mainScreenKind,
             audioSystem,
             specialEffects,
             colorMaterialPresetText,
             colorMaterial: d.colorMaterial,
             colorMaterialReferenceTone: d.colorMaterialReferenceTone,
             supplement: [sourceText, resolvedSupplement].filter(Boolean).join('\n\n'),
+            colorPlanReferenceImages: [generatedColorPlanImage || planReferenceImage].filter(Boolean),
             spaceReferenceImages,
             colorMaterialReferenceImages,
             equipmentReferenceImages,
@@ -545,6 +596,7 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
             aisleMode,
             slopeMode,
             screenType,
+            mainScreenKind,
             audioSystem,
             specialEffects,
             colorMaterialPresetText,
@@ -559,7 +611,7 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
               : [...spaceReferenceImages, ...colorMaterialReferenceImages, ...equipmentReferenceImages],
           });
         const images = kind === 'render'
-          ? [...spaceReferenceImages, ...colorMaterialReferenceImages, ...equipmentReferenceImages]
+          ? [generatedColorPlanImage || planReferenceImage, ...spaceReferenceImages, ...colorMaterialReferenceImages, ...equipmentReferenceImages].filter(Boolean)
           : kind === 'system-principle'
             ? equipmentReferenceImages
             : [renderImage, previousDrawingImage, kind === 'color-plan' ? planReferenceImage : '', ...spaceReferenceImages, ...colorMaterialReferenceImages, ...equipmentReferenceImages].filter(Boolean);
@@ -583,7 +635,10 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
         };
         if (generated.taskId) latestTaskId = generated.taskId;
         if (kind === 'render') renderImage = generated.imageUrl;
-        else if (kind !== 'system-principle') previousDrawingImage = generated.imageUrl;
+        else if (kind === 'color-plan') {
+          generatedColorPlanImage = generated.imageUrl;
+          previousDrawingImage = generated.imageUrl;
+        } else if (kind !== 'system-principle') previousDrawingImage = generated.imageUrl;
         generatedUrls.push(generated.imageUrl);
         results.push(result);
         update({
@@ -612,7 +667,7 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
       taskCompletionSound.notifyFailure(id, 'image');
       throw error;
     }
-  }, [audioSystem, aisleMode, busy, colorMaterialPresetText, colorMaterialReferenceImages, d.capacityMode, d.colorMaterial, d.colorMaterialReferenceTone, d.seatCount, dimensions, equipmentReferenceImages, generateOneImage, id, isReadonly, outputSelection, resolvedSupplement, screenStageSide, screenType, seed, slopeMode, sourceText, spaceReferenceImages, specialEffects, summaryText, update, venueType]);
+  }, [audioSystem, aisleMode, busy, colorMaterialPresetText, colorMaterialReferenceImages, d.capacityMode, d.colorMaterial, d.colorMaterialReferenceTone, d.seatCount, dimensions, equipmentReferenceImages, generateOneImage, id, isReadonly, mainScreenKind, outputSelection, resolvedSupplement, screenStageSide, screenType, seed, slopeMode, sourceText, spaceReferenceImages, specialEffects, summaryText, update, venueType]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -704,6 +759,12 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
           银幕系统
           <select className={FIELD} value={screenType} disabled={isReadonly || busy} onChange={(event) => update({ screenType: normalizeCinemaScreenType(event.target.value) })}>
             {CINEMA_SCREEN_TYPES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+          </select>
+        </label>
+        <label data-exhibition-compact-item="main-screen-kind" className="space-y-1 text-[10px] text-white/55">
+          主屏幕种类
+          <select className={FIELD} value={mainScreenKind} disabled={isReadonly || busy} onChange={(event) => update({ mainScreenKind: normalizeCinemaMainScreenKind(event.target.value) })}>
+            {CINEMA_MAIN_SCREEN_KINDS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
           </select>
         </label>
         <label data-exhibition-compact-item="audio-system" className="space-y-1 text-[10px] text-white/55">

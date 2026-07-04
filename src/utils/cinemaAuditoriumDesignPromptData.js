@@ -51,6 +51,12 @@ export const CINEMA_SCREEN_TYPES = [
   { id: 'dome-screen', label: '穹幕', prompt: 'hemispherical dome screen with central or multi-projector system' },
 ];
 
+export const CINEMA_MAIN_SCREEN_KINDS = [
+  { id: 'unspecified', label: '不指定', prompt: 'main screen type is not specified, keep projection or LED chain selectable in the system topology' },
+  { id: 'led', label: 'LED大屏', prompt: 'LED main screen with sending box, receiving cards, video processor, power distribution, cooling and maintenance modules' },
+  { id: 'projection', label: '投影', prompt: 'projection main screen with projector, lens, media server, projection screen, signal extender and projection control chain' },
+];
+
 export const CINEMA_AUDIO_SYSTEMS = [
   { id: 'surround-7-1', label: '7.1环绕声', prompt: '7.1 surround sound with front, side, rear speakers and subwoofers' },
   { id: 'dolby-atmos', label: '全景声', prompt: 'immersive spatial audio with overhead speakers, surround arrays and tuned acoustic panels' },
@@ -111,6 +117,10 @@ export function normalizeCinemaScreenType(value) {
   return normalizeId(value, CINEMA_SCREEN_TYPES, 'cinema-screen');
 }
 
+export function normalizeCinemaMainScreenKind(value) {
+  return normalizeId(value, CINEMA_MAIN_SCREEN_KINDS, 'unspecified');
+}
+
 export function normalizeCinemaAudioSystem(value) {
   return normalizeId(value, CINEMA_AUDIO_SYSTEMS, 'surround-7-1');
 }
@@ -169,6 +179,10 @@ export function cinemaScreenTypeMeta(value) {
   return meta(CINEMA_SCREEN_TYPES, value, 'cinema-screen');
 }
 
+export function cinemaMainScreenKindMeta(value) {
+  return meta(CINEMA_MAIN_SCREEN_KINDS, value, 'unspecified');
+}
+
 export function cinemaAudioSystemMeta(value) {
   return meta(CINEMA_AUDIO_SYSTEMS, value, 'surround-7-1');
 }
@@ -192,6 +206,48 @@ function dimensionsText(values = {}) {
   return `${d.lengthMm}mm(L) x ${d.widthMm}mm(W) x ${d.heightMm}mm(H)`;
 }
 
+export function estimateCinemaSystemPower(values = {}) {
+  const dimensions = normalizeCinemaDimensions(values.dimensions);
+  const mainScreenKind = normalizeCinemaMainScreenKind(values.mainScreenKind);
+  const audioSystem = normalizeCinemaAudioSystem(values.audioSystem);
+  const effects = normalizeCinemaSpecialEffects(values.specialEffects);
+  const areaSqm = Math.max(1, (dimensions.lengthMm * dimensions.widthMm) / 1000000);
+  const seatCount = Math.max(0, Math.round(Number(values.seatCount) || 0));
+  const effectiveSeats = seatCount || Math.max(40, Math.round(areaSqm / 2.8));
+  const displayPowerKw = mainScreenKind === 'led'
+    ? Math.max(12, Math.round(areaSqm * 0.55))
+    : mainScreenKind === 'projection'
+      ? Math.max(3, Math.round(areaSqm * 0.08))
+      : Math.max(6, Math.round(areaSqm * 0.18));
+  const audioPowerKw = audioSystem === 'dolby-atmos'
+    ? Math.max(6, Math.round(effectiveSeats * 0.08))
+    : audioSystem === 'conference-audio'
+      ? Math.max(2, Math.round(effectiveSeats * 0.03))
+      : Math.max(4, Math.round(effectiveSeats * 0.05));
+  const lightingPowerKw = Math.max(3, Math.round(areaSqm * 0.04));
+  const controlPowerKw = mainScreenKind === 'led' ? 6 : 4;
+  const effectPowerKw = effects.reduce((sum, id) => {
+    if (id === 'motion-seats') return sum + Math.max(6, Math.round(effectiveSeats * 0.05));
+    if (id === 'wind') return sum + 4;
+    if (id === 'water-mist') return sum + 3;
+    if (id === 'scent') return sum + 1;
+    if (id === 'vibration') return sum + 4;
+    if (id === 'leg-tickler') return sum + 2;
+    if (id === 'vr') return sum + Math.max(2, Math.round(effectiveSeats * 0.02));
+    return sum;
+  }, 0);
+  const totalKw = Math.max(1, Math.round((displayPowerKw + audioPowerKw + lightingPowerKw + controlPowerKw + effectPowerKw) * 1.2));
+  return {
+    totalKw,
+    displayPowerKw,
+    audioPowerKw,
+    lightingPowerKw,
+    controlPowerKw,
+    effectPowerKw,
+    effectiveSeats,
+  };
+}
+
 function referenceOrderText(urls, labelPrefix, offset = 0) {
   return urls.map((url, index) => `@img${offset + index + 1}: ${labelPrefix}${index + 1} = ${url}`).join('\n');
 }
@@ -202,6 +258,7 @@ function baseCinemaContext(values = {}) {
   const aisle = cinemaAisleModeMeta(values.aisleMode);
   const slope = cinemaSlopeModeMeta(values.slopeMode);
   const screen = cinemaScreenTypeMeta(values.screenType);
+  const mainScreen = cinemaMainScreenKindMeta(values.mainScreenKind);
   const audio = cinemaAudioSystemMeta(values.audioSystem);
   const effects = cinemaSpecialEffectMetas(values.specialEffects);
   const capacityMode = values.capacityMode === 'manual' ? 'manual' : 'auto';
@@ -214,6 +271,7 @@ function baseCinemaContext(values = {}) {
     `走道模式：${aisle.label}；${aisle.prompt}。`,
     `地坪/视线：${slope.label}；${slope.prompt}。`,
     `银幕系统：${screen.label}；${screen.prompt}。`,
+    `主屏幕种类：${mainScreen.label}；${mainScreen.prompt}。`,
     `声学系统：${audio.label}；${audio.prompt}。`,
     effects.length ? `特效系统：${effects.map((item) => `${item.label}(${item.prompt})`).join('；')}。` : '特效系统：无额外特效，按常规影院/报告厅设备配置。',
   ].join('\n');
@@ -245,17 +303,22 @@ export function buildCinemaAuditoriumImagePrompt(values = {}) {
   const spaceReferences = Array.isArray(values.spaceReferenceImages) ? values.spaceReferenceImages.filter(Boolean) : [];
   const colorReferences = Array.isArray(values.colorMaterialReferenceImages) ? values.colorMaterialReferenceImages.filter(Boolean) : [];
   const equipmentReferences = Array.isArray(values.equipmentReferenceImages) ? values.equipmentReferenceImages.filter(Boolean) : [];
-  const allReferences = [...spaceReferences, ...colorReferences, ...equipmentReferences];
+  const colorPlanReferences = Array.isArray(values.colorPlanReferenceImages) ? values.colorPlanReferenceImages.filter(Boolean) : [];
+  const allReferences = [...colorPlanReferences, ...spaceReferences, ...colorReferences, ...equipmentReferences];
+  const capacityMode = values.capacityMode === 'manual' ? 'manual' : 'auto';
+  const seatCount = Math.max(0, Math.round(Number(values.seatCount) || 0));
   return [
     '核心要求：生成专业影院/报告厅/特效影院空间设计主效果图，可用于方案汇报；空间尺度、银幕舞台方向、座席视线、声学材料、疏散与设备区必须可信。',
+    colorPlanReferences.length ? `彩平图是硬约束：必须严格按照彩平图推理座椅总数量、左右/前后分区、中心走道、侧走道、银幕舞台方向和控制/设备区位置；不要把单侧座位数误当成总座位数，也不要让效果图座椅数量与彩平图不符。\n${referenceOrderText(colorPlanReferences, '彩平图硬约束')}` : '',
+    capacityMode === 'manual' && seatCount > 0 ? `座椅数量硬约束：画面中的观众座椅总数必须约为 ${seatCount} 座；如彩平图分为左右两区，则左右两区合计才是 ${seatCount} 座，不是每侧 ${seatCount} 座。` : '',
     baseCinemaContext(values),
     colorMaterialContext(values),
-    spaceReferences.length ? `空间/建筑参考图只参考结构尺度、入口位置、层高、动线和空间气质，不复制无关文字或品牌。\n${referenceOrderText(spaceReferences, '空间/建筑参考')}` : '',
-    colorReferences.length ? `色彩材质参考图只参考配色、饰面材质、反射/吸音/软包质感和灯光氛围。\n${referenceOrderText(colorReferences, '色彩材质参考', spaceReferences.length)}` : '',
-    equipmentReferences.length ? `设备/座椅/舞台参考图只参考座椅、银幕、舞台、音响、灯光、放映/LED/特效设备的构成关系。\n${referenceOrderText(equipmentReferences, '设备参考', spaceReferences.length + colorReferences.length)}` : '',
+    spaceReferences.length ? `空间/建筑参考图只参考结构尺度、入口位置、层高、动线和空间气质，不复制无关文字或品牌。\n${referenceOrderText(spaceReferences, '空间/建筑参考', colorPlanReferences.length)}` : '',
+    colorReferences.length ? `色彩材质参考图只参考配色、饰面材质、反射/吸音/软包质感和灯光氛围。\n${referenceOrderText(colorReferences, '色彩材质参考', colorPlanReferences.length + spaceReferences.length)}` : '',
+    equipmentReferences.length ? `设备/座椅/舞台参考图只参考座椅、银幕、舞台、音响、灯光、放映/LED/特效设备的构成关系。\n${referenceOrderText(equipmentReferences, '设备参考', colorPlanReferences.length + spaceReferences.length + colorReferences.length)}` : '',
     allReferences.length ? `参考图总顺序：${allReferences.map((_, index) => `@img${index + 1}`).join('、')}` : '',
     values.supplement ? `补充要求：${cleanCinemaAuditoriumText(values.supplement, 3000)}` : '',
-    '画面要求：广角但不变形，能看清银幕/舞台区、观众席、墙顶地材质、声学扩散/吸音处理、灯光层次、控制室或设备入口暗示；避免随机logo、乱码文字、不可施工悬浮结构。',
+    '画面要求：广角但不变形，能看清银幕/舞台区、观众席、墙顶地材质、声学扩散/吸音处理、灯光层次、控制室或设备入口暗示；座椅排数、左右分区、走道位置必须与彩平图一致；避免随机logo、乱码文字、不可施工悬浮结构。',
   ].filter(Boolean).join('\n');
 }
 
@@ -266,6 +329,8 @@ export function buildCinemaAuditoriumDrawingPrompt(values = {}) {
   const planReferenceImage = cleanCinemaAuditoriumText(values.planReferenceImage, 1000);
   const userReferences = Array.isArray(values.userReferenceImages) ? values.userReferenceImages.filter(Boolean) : [];
   const isSystemPrinciple = output.id === 'system-principle';
+  const mainScreen = cinemaMainScreenKindMeta(values.mainScreenKind);
+  const power = estimateCinemaSystemPower(values);
   const referenceLines = [
     !isSystemPrinciple && renderImage ? `@img1: 主效果图一致性参考 = ${renderImage}` : '',
     !isSystemPrinciple && previousDrawingImage ? `@img2: 上一张图纸一致性参考 = ${previousDrawingImage}` : '',
@@ -281,6 +346,16 @@ export function buildCinemaAuditoriumDrawingPrompt(values = {}) {
     'color-plan': '生成彩色平面图：必须保持长宽比例和银幕舞台方向，清晰标出银幕/舞台区、座席区、排距逻辑、中心/侧走道、出入口、疏散方向、控制室/机房、设备区、无障碍席位、墙体边界和功能分区色块。以给定前端比例底图为首要结构依据。',
     'system-principle': '生成系统设备原理图：只做各系统设备之间的连线拓扑结构图，不需要主效果图，不需要彩色平面图，不表现空间透视、座席排布或房间平面。必须包含放映/LED/投影系统、银幕或舞台显示面、音响系统、灯光系统、控制机房、服务器/播放系统、功放/处理器、网络/信号链路、电源与弱电、动感座椅/风效/水雾/气味/震动等特效设备（如启用）、疏散报警/应急广播与检修维护节点；设备尽量以清晰图标、符号或小型 pictogram 表现，用箭头和不同线型表达视频信号、音频信号、控制信号、供电、特效联动和安全联动关系。',
   };
+  const screenTopologyText = isSystemPrinciple && mainScreen.id === 'led'
+    ? '主屏幕链路必须按 LED 大屏细化：播放服务器/媒体服务器 -> 拼接/视频处理器 -> LED发送盒 -> 接收卡/箱体模组 -> LED显示屏；同时标出配电柜、开关电源、散热/检修、备份信号和控制网络。'
+    : isSystemPrinciple && mainScreen.id === 'projection'
+      ? '主屏幕链路必须按投影系统细化：播放服务器/媒体服务器 -> 视频处理/矩阵 -> 光纤/HDBaseT延长 -> 投影机 -> 镜头 -> 投影银幕；同时标出投影机供电、吊架/放映窗、散热、校正控制和备份输入。'
+      : isSystemPrinciple
+        ? '主屏幕链路未指定时，图中保留“主显示系统”模块，并用可替换分支表示 LED 大屏或投影均可接入视频处理/播放服务器。'
+        : '';
+  const powerText = isSystemPrinciple
+    ? `功率标注要求：系统原理图必须显示估算总功率约 ${power.totalKw} kW，并列出分项功率：主屏显示约 ${power.displayPowerKw} kW、音响约 ${power.audioPowerKw} kW、灯光约 ${power.lightingPowerKw} kW、控制/服务器约 ${power.controlPowerKw} kW、特效约 ${power.effectPowerKw} kW；标注“估算值，需深化校核”。`
+    : '';
 
   return [
     isSystemPrinciple
@@ -288,6 +363,8 @@ export function buildCinemaAuditoriumDrawingPrompt(values = {}) {
       : `核心要求：根据同一影院报告厅设计生成“${output.label}”，必须和主效果图保持同一空间、同一银幕舞台方向、同一座席与设备系统逻辑。`,
     `图纸类型：${output.prompt}`,
     typeRequirements[output.id] || output.prompt,
+    screenTopologyText,
+    powerText,
     baseCinemaContext(values),
     colorMaterialContext(values),
     isSystemPrinciple
