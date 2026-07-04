@@ -678,6 +678,7 @@ function App() {
             <Canvas
               onAddNodeRef={addNodeRef}
               onInsertWorkflowRef={insertWorkflowRef}
+              currentUserId={authUser.id}
               allowedNodeTypes={allowedNodeTypes}
               exhibitionCompactForm={exhibitionCompactForm}
               canEditExhibitionCompactForm={canManageSettings}

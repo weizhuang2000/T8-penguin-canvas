@@ -19,6 +19,7 @@ import {
   type Node,
   type NodeChange,
   type EdgeChange,
+  type Viewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Play, Copy, CopyPlus, Trash2, FolderPlus, PackagePlus, Library, Download, Workflow, Send as SendIcon } from 'lucide-react';
@@ -1901,6 +1902,47 @@ function BulkPhantomNode() {
 }
 nodeTypes.bulkPhantom = BulkPhantomNode;
 const BULK_PHANTOM_ID = '__bulk_phantom__';
+const USER_CANVAS_VIEWPORT_STORAGE_PREFIX = 't8:canvas-viewport:v1';
+const MIN_REMEMBERED_VIEWPORT_ZOOM = 0.02;
+const MAX_REMEMBERED_VIEWPORT_ZOOM = 4;
+
+function clampRememberedViewportZoom(zoom: number) {
+  return Math.max(MIN_REMEMBERED_VIEWPORT_ZOOM, Math.min(MAX_REMEMBERED_VIEWPORT_ZOOM, zoom));
+}
+
+function normalizeRememberedViewport(value: unknown): Viewport | null {
+  const raw = value as Partial<Viewport> | null | undefined;
+  const x = Number(raw?.x);
+  const y = Number(raw?.y);
+  const zoom = Number(raw?.zoom);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(zoom)) return null;
+  return { x, y, zoom: clampRememberedViewportZoom(zoom) };
+}
+
+function userCanvasViewportStorageKey(userId: string, canvasId: string) {
+  return `${USER_CANVAS_VIEWPORT_STORAGE_PREFIX}:${encodeURIComponent(userId)}:${encodeURIComponent(canvasId)}`;
+}
+
+function readUserCanvasViewport(userId: string | null | undefined, canvasId: string | null | undefined): Viewport | null {
+  if (!userId || !canvasId || typeof window === 'undefined') return null;
+  try {
+    const stored = window.localStorage.getItem(userCanvasViewportStorageKey(userId, canvasId));
+    return stored ? normalizeRememberedViewport(JSON.parse(stored)) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeUserCanvasViewport(userId: string | null | undefined, canvasId: string | null | undefined, viewport: unknown) {
+  if (!userId || !canvasId || typeof window === 'undefined') return;
+  const normalized = normalizeRememberedViewport(viewport);
+  if (!normalized) return;
+  try {
+    window.localStorage.setItem(userCanvasViewportStorageKey(userId, canvasId), JSON.stringify(normalized));
+  } catch {
+    /* ignore */
+  }
+}
 
 function findNearestNavigableNode(nodes: Node[], center: { x: number; y: number }): Node | null {
   const valid = (node: Node, includeGroups: boolean) => {
@@ -2118,6 +2160,7 @@ function getReactFlowHandleInfo(target: EventTarget | null): {
 interface CanvasInnerProps {
   onAddNodeRef?: React.MutableRefObject<AddNodeFn | null>;
   onInsertWorkflowRef?: React.MutableRefObject<InsertWorkflowFn | null>;
+  currentUserId?: string | null;
   allowedNodeTypes?: string[];
   exhibitionCompactForm?: ExhibitionCompactFormConfig;
   canEditExhibitionCompactForm?: boolean;
@@ -2127,6 +2170,7 @@ interface CanvasInnerProps {
 function CanvasInner({
   onAddNodeRef,
   onInsertWorkflowRef,
+  currentUserId,
   allowedNodeTypes,
   exhibitionCompactForm,
   canEditExhibitionCompactForm,
@@ -2414,6 +2458,13 @@ function CanvasInner({
         );
         allowEmptySaveCanvasIdsRef.current.delete(requestedCanvasId);
         histReset({ nodes: fixedNs, edges: es });
+        const restoredViewport =
+          pendingSendFocusRef.current?.canvasId === requestedCanvasId
+            ? null
+            : readUserCanvasViewport(currentUserId, requestedCanvasId) || normalizeRememberedViewport(data.viewport);
+        if (restoredViewport) {
+          void setViewport(restoredViewport, { duration: 0 });
+        }
         setLoadedCanvasId(requestedCanvasId);
         setLoaded(true);
       })
@@ -2430,7 +2481,12 @@ function CanvasInner({
     return () => {
       cancelled = true;
     };
-  }, [activeId, histReset]);
+  }, [activeId, currentUserId, histReset, setViewport]);
+
+  const handleMoveEnd = useCallback((_event: MouseEvent | TouchEvent | null, viewport: Viewport) => {
+    if (!activeId || !loaded || loadedCanvasId !== activeId) return;
+    writeUserCanvasViewport(currentUserId, activeId, viewport);
+  }, [activeId, currentUserId, loaded, loadedCanvasId]);
 
   useEffect(() => {
     return () => {
@@ -5994,6 +6050,7 @@ function CanvasInner({
         onDrop={onCanvasFileDrop}
         onSelectionChange={onSelectionChange}
         onSelectionEnd={onSelectionEnd}
+        onMoveEnd={handleMoveEnd}
         onError={handleFlowError}
         nodesDraggable={canEditActiveCanvas}
         nodesConnectable={canEditActiveCanvas}
@@ -6591,6 +6648,7 @@ function CanvasInner({
 interface CanvasProps {
   onAddNodeRef?: React.MutableRefObject<AddNodeFn | null>;
   onInsertWorkflowRef?: React.MutableRefObject<InsertWorkflowFn | null>;
+  currentUserId?: string | null;
   allowedNodeTypes?: string[];
   exhibitionCompactForm?: ExhibitionCompactFormConfig;
   canEditExhibitionCompactForm?: boolean;
