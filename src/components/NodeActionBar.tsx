@@ -40,7 +40,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'loop', 'pick-from-set',
   // v1.4.6: 工具箱文本节点也可点击 RUN 直接外挂 OutputNode
   'cinematic', 'video-motion',
-  'elevation-prompt', 'exhibition-img2img', 'exhibition-style-transfer', 'exhibition-recolor', 'exhibition-lighting-heatmap', 'exhibition-creative-image', 'exhibition-render-to-elevation', 'exhibition-text-image-loop', 'exhibition-outline-split', 'exhibition-plan-layout', 'exhibition-ai-plan-layout', 'unit-panel-design', 'sculpture-relief-design', 'exhibition-scene-design', 'showcase-interior-design',
+  'elevation-prompt', 'exhibition-img2img', 'exhibition-style-transfer', 'exhibition-recolor', 'exhibition-lighting-heatmap', 'exhibition-creative-image', 'exhibition-render-to-elevation', 'exhibition-text-image-loop', 'exhibition-outline-split', 'exhibition-plan-layout', 'exhibition-ai-plan-layout', 'unit-panel-design', 'sculpture-relief-design', 'exhibition-scene-design', 'science-exhibit-design', 'showcase-interior-design',
   'portrait-master', 'pose-master', 'aggregate-parser', 'batch-processor',
   'topaz-image-upscale', 'topaz-video-upscale',
   'remove-ai-watermark',

@@ -1,0 +1,310 @@
+export const SCIENCE_EXHIBIT_DOMAINS = [
+  { id: 'physics', label: '物理科学', prompt: 'force, motion, optics, electricity, magnetism, wave or energy conversion principle' },
+  { id: 'life-science', label: '生命科学', prompt: 'biology, human body, ecology, genetics or microscopic life science principle' },
+  { id: 'earth-space', label: '地球与宇宙', prompt: 'geology, climate, astronomy, planetary motion or earth system principle' },
+  { id: 'engineering', label: '工程技术', prompt: 'mechanical, robotics, automation, materials, manufacturing or civil engineering principle' },
+  { id: 'information', label: '信息科技', prompt: 'computing, AI, sensing, communication, data visualization or cyber-physical system principle' },
+  { id: 'chemistry', label: '化学与材料', prompt: 'chemical reaction, molecular structure, material property or energy storage principle' },
+];
+
+export const SCIENCE_EXHIBIT_TYPES = [
+  { id: 'interactive-device', label: '互动机械展项', prompt: 'hands-on mechanical or electromechanical interactive exhibit with visible operating parts' },
+  { id: 'digital-installation', label: '数字互动展项', prompt: 'digital media exhibit with screens, projection, sensors and real-time feedback' },
+  { id: 'demonstration-model', label: '原理演示模型', prompt: 'principle demonstration model with clear cause-effect visualization' },
+  { id: 'immersive-theater', label: '沉浸式科普剧场', prompt: 'immersive science theater with spatial media, narration and audience participation' },
+  { id: 'experiment-station', label: '实验操作台', prompt: 'visitor experiment station with durable controls, instruments and observation area' },
+  { id: 'large-landmark', label: '大型标志展项', prompt: 'large iconic science exhibit as a gallery landmark, visible from distance' },
+];
+
+export const SCIENCE_EXHIBIT_INTERACTIONS = [
+  { id: 'turn-handle', label: '手摇/转动', prompt: 'visitor turns a wheel, crank or handle and sees immediate physical feedback' },
+  { id: 'touch-screen', label: '触控选择', prompt: 'visitor selects parameters on a touchscreen and observes visualized results' },
+  { id: 'sensor-trigger', label: '感应触发', prompt: 'motion, proximity, light or pressure sensors trigger exhibit response' },
+  { id: 'multi-user', label: '多人协作', prompt: 'several visitors cooperate or compete to change exhibit state' },
+  { id: 'physical-experiment', label: '实体实验', prompt: 'visitor manipulates real objects, samples, airflow, water, light or magnetic elements' },
+  { id: 'mixed-reality', label: '虚实融合', prompt: 'physical exhibit combined with AR, projection mapping or digital overlay' },
+];
+
+export const SCIENCE_EXHIBIT_AUDIENCES = [
+  { id: 'children', label: '儿童启蒙', prompt: 'simple robust interaction, low height, clear safety edges, playful but scientifically accurate' },
+  { id: 'family', label: '亲子家庭', prompt: 'multi-level explanation, parent-child cooperation, strong visibility and low operation difficulty' },
+  { id: 'teenagers', label: '青少年探究', prompt: 'parameter exploration, measurable results, challenge and inquiry-based learning' },
+  { id: 'general', label: '公众科普', prompt: 'legible science interpretation, intuitive operation and strong exhibition appeal' },
+  { id: 'professional', label: '专业研学', prompt: 'more technical labels, quantitative parameters and deeper mechanism explanation' },
+];
+
+export const SCIENCE_EXHIBIT_SCALES = [
+  { id: 'tabletop', label: '桌面操作', prompt: 'tabletop exhibit, close viewing distance, compact mechanism and durable controls' },
+  { id: 'wall-bay', label: '墙面展项', prompt: 'wall-integrated exhibit bay with graphics, screens, devices and maintenance access' },
+  { id: 'island', label: '岛台展项', prompt: 'freestanding island exhibit allowing visitors around multiple sides' },
+  { id: 'room', label: '小型展厅', prompt: 'room-scale exhibit with circulation, overhead media and multiple interaction zones' },
+  { id: 'hall-landmark', label: '大厅标志物', prompt: 'large hall landmark exhibit with strong silhouette, safety boundary and queue area' },
+];
+
+export const SCIENCE_EXHIBIT_DRAWING_TYPES = [
+  { id: 'render', label: '效果图', prompt: 'main exhibit concept rendering' },
+  { id: 'exploded', label: '爆炸分析图', prompt: 'exploded axonometric analysis drawing showing separated components and assembly relationship' },
+  { id: 'principle', label: '展项原理图', prompt: 'science principle diagram showing input, mechanism, parameter change and output feedback' },
+  { id: 'orthographic', label: '三视图', prompt: 'front view, side view and top view technical drawing with consistent proportions' },
+  { id: 'parameter-table', label: '参数表', prompt: 'visual parameter table board with dimensions, ranges, sensors, media and safety notes' },
+];
+
+export const SCIENCE_EXHIBIT_DEFAULT_DRAWINGS = ['exploded', 'principle', 'orthographic', 'parameter-table'];
+
+function normalizeId(value, options, fallback) {
+  const id = String(value || '').trim();
+  return options.some((item) => item.id === id) ? id : fallback;
+}
+
+export function cleanScienceExhibitText(value, limit = 4000) {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, limit);
+}
+
+export function normalizeScienceExhibitDomain(value) {
+  return normalizeId(value, SCIENCE_EXHIBIT_DOMAINS, SCIENCE_EXHIBIT_DOMAINS[0].id);
+}
+
+export function normalizeScienceExhibitType(value) {
+  return normalizeId(value, SCIENCE_EXHIBIT_TYPES, SCIENCE_EXHIBIT_TYPES[0].id);
+}
+
+export function normalizeScienceExhibitInteraction(value) {
+  return normalizeId(value, SCIENCE_EXHIBIT_INTERACTIONS, SCIENCE_EXHIBIT_INTERACTIONS[0].id);
+}
+
+export function normalizeScienceExhibitAudience(value) {
+  return normalizeId(value, SCIENCE_EXHIBIT_AUDIENCES, SCIENCE_EXHIBIT_AUDIENCES[3].id);
+}
+
+export function normalizeScienceExhibitScale(value) {
+  return normalizeId(value, SCIENCE_EXHIBIT_SCALES, SCIENCE_EXHIBIT_SCALES[2].id);
+}
+
+export function normalizeScienceExhibitDrawingType(value) {
+  return normalizeId(value, SCIENCE_EXHIBIT_DRAWING_TYPES, SCIENCE_EXHIBIT_DRAWING_TYPES[0].id);
+}
+
+export function normalizeScienceExhibitDrawingSelection(value) {
+  const source = Array.isArray(value) ? value : SCIENCE_EXHIBIT_DEFAULT_DRAWINGS;
+  const out = [];
+  for (const item of source) {
+    const id = normalizeScienceExhibitDrawingType(item);
+    if (id !== 'render' && !out.includes(id)) out.push(id);
+  }
+  return out.length ? out : SCIENCE_EXHIBIT_DEFAULT_DRAWINGS.slice();
+}
+
+export function scienceExhibitDomainMeta(value) {
+  const id = normalizeScienceExhibitDomain(value);
+  return SCIENCE_EXHIBIT_DOMAINS.find((item) => item.id === id) || SCIENCE_EXHIBIT_DOMAINS[0];
+}
+
+export function scienceExhibitTypeMeta(value) {
+  const id = normalizeScienceExhibitType(value);
+  return SCIENCE_EXHIBIT_TYPES.find((item) => item.id === id) || SCIENCE_EXHIBIT_TYPES[0];
+}
+
+export function scienceExhibitInteractionMeta(value) {
+  const id = normalizeScienceExhibitInteraction(value);
+  return SCIENCE_EXHIBIT_INTERACTIONS.find((item) => item.id === id) || SCIENCE_EXHIBIT_INTERACTIONS[0];
+}
+
+export function scienceExhibitAudienceMeta(value) {
+  const id = normalizeScienceExhibitAudience(value);
+  return SCIENCE_EXHIBIT_AUDIENCES.find((item) => item.id === id) || SCIENCE_EXHIBIT_AUDIENCES[3];
+}
+
+export function scienceExhibitScaleMeta(value) {
+  const id = normalizeScienceExhibitScale(value);
+  return SCIENCE_EXHIBIT_SCALES.find((item) => item.id === id) || SCIENCE_EXHIBIT_SCALES[2];
+}
+
+export function scienceExhibitDrawingMeta(value) {
+  const id = normalizeScienceExhibitDrawingType(value);
+  return SCIENCE_EXHIBIT_DRAWING_TYPES.find((item) => item.id === id) || SCIENCE_EXHIBIT_DRAWING_TYPES[0];
+}
+
+function extractJsonObject(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      try {
+        return JSON.parse(raw.slice(start, end + 1));
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+function normalizeParameter(item, index) {
+  if (typeof item === 'string') {
+    return {
+      name: cleanScienceExhibitText(item, 80) || `参数 ${index + 1}`,
+      range: '',
+      unit: '',
+      effect: '',
+    };
+  }
+  const source = item && typeof item === 'object' ? item : {};
+  return {
+    name: cleanScienceExhibitText(source.name || source.label, 80) || `参数 ${index + 1}`,
+    range: cleanScienceExhibitText(source.range || source.value || source.suggestedRange, 120),
+    unit: cleanScienceExhibitText(source.unit, 40),
+    effect: cleanScienceExhibitText(source.effect || source.impact || source.description, 300),
+  };
+}
+
+export function normalizeScienceExhibitAnalysis(value = {}) {
+  const parsed = value && typeof value === 'object' ? value : {};
+  const rawParameters = Array.isArray(parsed.keyParameters) ? parsed.keyParameters : [];
+  return {
+    titleText: cleanScienceExhibitText(parsed.titleText, 500),
+    sciencePrinciple: cleanScienceExhibitText(parsed.sciencePrinciple, 4000),
+    keyParameters: rawParameters.map(normalizeParameter).filter((item) => item.name || item.effect).slice(0, 12),
+    interactionFlow: cleanScienceExhibitText(parsed.interactionFlow, 2500),
+    mechanismDesign: cleanScienceExhibitText(parsed.mechanismDesign, 3000),
+    safetyMaintenance: cleanScienceExhibitText(parsed.safetyMaintenance, 2500),
+    visualBrief: cleanScienceExhibitText(parsed.visualBrief, 3000),
+    drawingNotes: cleanScienceExhibitText(parsed.drawingNotes, 3000),
+  };
+}
+
+export function buildScienceExhibitExtractPrompt(values = {}) {
+  const sourceText = cleanScienceExhibitText(values.sourceText, 50000);
+  return [
+    '请从科技馆/科学中心展项资料中提炼“科技展项设计”所需的真实科学分析。',
+    '必须基于资料和可验证的科学常识，不要编造不可验证的科学结论、实验数据、品牌、专利或精密数值；不确定的参数用“建议范围/待工程校核”表达。',
+    '输出 JSON，不要 Markdown，不要解释。',
+    'JSON 结构：{"titleText":"展项名称","sciencePrinciple":"真实科学原理说明","keyParameters":[{"name":"参数名称","range":"建议范围","unit":"单位","effect":"该参数如何影响演示结果"}],"interactionFlow":"观众操作流程","mechanismDesign":"机械/电子/软件/媒体构成","safetyMaintenance":"安全、耐久、维护要点","visualBrief":"效果图视觉说明","drawingNotes":"后续爆炸图、原理图、三视图、参数表必须保持一致的结构约束"}',
+    '要求：科学原理、参数、互动流程、安全维护、图纸约束都要明确；语言适合展陈方案汇报和图像生成。',
+    '',
+    sourceText,
+  ].filter(Boolean).join('\n');
+}
+
+export function parseScienceExhibitExtractJson(text) {
+  const parsed = extractJsonObject(text);
+  if (parsed && typeof parsed === 'object') return normalizeScienceExhibitAnalysis(parsed);
+  const lines = String(text || '').split(/\r?\n/).map((line) => cleanScienceExhibitText(line, 4000)).filter(Boolean);
+  return normalizeScienceExhibitAnalysis({
+    titleText: lines[0] || '',
+    sciencePrinciple: lines[1] || '',
+    interactionFlow: lines[2] || '',
+    mechanismDesign: lines[3] || '',
+    safetyMaintenance: lines[4] || '',
+    visualBrief: lines[5] || '',
+    drawingNotes: lines.slice(6).join('\n') || '',
+  });
+}
+
+export function buildScienceExhibitParameterMarkdown(values = {}) {
+  const analysis = normalizeScienceExhibitAnalysis(values.analysis || values);
+  const rows = analysis.keyParameters.length
+    ? analysis.keyParameters
+    : [{ name: '核心参数', range: '待工程校核', unit: '', effect: '根据科学原理和互动目标确定' }];
+  return [
+    `# ${analysis.titleText || '科技展项设计参数表'}`,
+    '',
+    '## 科学原理',
+    analysis.sciencePrinciple || '待补充真实科学原理。',
+    '',
+    '## 关键参数',
+    '| 参数 | 建议范围 | 单位 | 影响关系 |',
+    '| --- | --- | --- | --- |',
+    ...rows.map((item) => `| ${item.name || '-'} | ${item.range || '待工程校核'} | ${item.unit || '-'} | ${item.effect || '-'} |`),
+    '',
+    '## 互动流程',
+    analysis.interactionFlow || '待补充。',
+    '',
+    '## 构成与维护',
+    analysis.mechanismDesign || '待补充。',
+    '',
+    '## 安全维护',
+    analysis.safetyMaintenance || '待补充。',
+  ].join('\n');
+}
+
+function referenceOrderText(urls, labelPrefix, offset = 0) {
+  return urls.map((url, index) => `@img${offset + index + 1}: ${labelPrefix}${index + 1} = ${url}`).join('\n');
+}
+
+function analysisText(analysis) {
+  const normalized = normalizeScienceExhibitAnalysis(analysis);
+  return [
+    normalized.titleText ? `展项名称：${normalized.titleText}` : '',
+    normalized.sciencePrinciple ? `真实科学原理：${normalized.sciencePrinciple}` : '',
+    normalized.keyParameters.length ? `关键参数：${normalized.keyParameters.map((item) => `${item.name}${item.range ? ` ${item.range}` : ''}${item.unit ? ` ${item.unit}` : ''}${item.effect ? ` (${item.effect})` : ''}`).join('；')}` : '',
+    normalized.interactionFlow ? `互动流程：${normalized.interactionFlow}` : '',
+    normalized.mechanismDesign ? `构成设计：${normalized.mechanismDesign}` : '',
+    normalized.safetyMaintenance ? `安全维护：${normalized.safetyMaintenance}` : '',
+    normalized.visualBrief ? `视觉说明：${normalized.visualBrief}` : '',
+    normalized.drawingNotes ? `图纸一致性约束：${normalized.drawingNotes}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+export function buildScienceExhibitImagePrompt(values = {}) {
+  const domain = scienceExhibitDomainMeta(values.scienceDomain);
+  const exhibitType = scienceExhibitTypeMeta(values.exhibitType);
+  const interaction = scienceExhibitInteractionMeta(values.interactionMode);
+  const audience = scienceExhibitAudienceMeta(values.audience);
+  const scale = scienceExhibitScaleMeta(values.spatialScale);
+  const analysis = normalizeScienceExhibitAnalysis(values.analysis || {});
+  const spaceReferences = Array.isArray(values.spaceReferenceImages) ? values.spaceReferenceImages.filter(Boolean) : [];
+  const deviceReferences = Array.isArray(values.deviceReferenceImages) ? values.deviceReferenceImages.filter(Boolean) : [];
+  const allReferences = [...spaceReferences, ...deviceReferences];
+  const supplement = cleanScienceExhibitText(values.supplement, 3000);
+
+  return [
+    '核心要求：生成专业科技馆/科学中心“科技展项设计”主效果图，画面应能用于方案汇报，必须围绕真实科学原理设计，不要伪科学、不要随机炫酷装置、不要错误公式或乱码文字。',
+    `科学领域：${domain.label}，${domain.prompt}`,
+    `展项类型：${exhibitType.label}，${exhibitType.prompt}`,
+    `互动方式：${interaction.label}，${interaction.prompt}`,
+    `目标观众：${audience.label}，${audience.prompt}`,
+    `空间尺度：${scale.label}，${scale.prompt}`,
+    analysisText(analysis),
+    spaceReferences.length ? `整体空间/风格参考图只参考空间气质、尺度、动线、材质和灯光，不复制无关展品、文字或品牌。\n${referenceOrderText(spaceReferences, '整体空间/风格参考')}` : '未提供整体空间/风格参考图，请自行设计清晰可落地的科技馆展项环境。',
+    deviceReferences.length ? `装置/结构参考图只参考机械结构、交互部件、屏幕/传感器/支架关系，不复制无关 logo 或文字。\n${referenceOrderText(deviceReferences, '装置/结构参考', spaceReferences.length)}` : '未提供装置/结构参考图，请基于科学原理设计合理的机械、电子和媒体构成。',
+    allReferences.length ? `参考图总顺序：${allReferences.map((_, index) => `@img${index + 1}`).join('、')}` : '',
+    supplement ? `补充要求：${supplement}` : '',
+    '构图要求：展项主体完整，包含观众操作点、反馈显示、科学解释图文区域、维护检修边界和安全距离；材质、结构、线缆/传感器/屏幕位置要可信。',
+    '质量约束：参数关系前后一致；不要把科技展项画成普通商场互动屏；不要低清模糊、随机品牌 logo、乱码文字、无法施工的悬浮结构或与科学原理无关的装饰。',
+  ].filter(Boolean).join('\n');
+}
+
+export function buildScienceExhibitDrawingPrompt(values = {}) {
+  const drawing = scienceExhibitDrawingMeta(values.drawingType);
+  const analysis = normalizeScienceExhibitAnalysis(values.analysis || {});
+  const renderImage = cleanScienceExhibitText(values.renderImage, 1000);
+  const previousDrawingImage = cleanScienceExhibitText(values.previousDrawingImage, 1000);
+  const userReferences = Array.isArray(values.userReferenceImages) ? values.userReferenceImages.filter(Boolean) : [];
+  const referenceLines = [
+    renderImage ? `@img1: 主效果图一致性参考 = ${renderImage}` : '',
+    previousDrawingImage ? `@img2: 上一张技术图纸一致性参考 = ${previousDrawingImage}` : '',
+    userReferences.length ? referenceOrderText(userReferences, '用户原始参考', (renderImage ? 1 : 0) + (previousDrawingImage ? 1 : 0)) : '',
+  ].filter(Boolean).join('\n');
+
+  const typeRequirements = {
+    exploded: '生成爆炸分析图：用清晰轴测/分层方式拆开外壳、机械传动、传感器、控制器、显示/投影、支撑结构、维护门和安全防护件；用编号和短标签表现部件关系。',
+    principle: '生成展项原理图：展示输入动作、科学变量、核心机制、反馈输出之间的因果链路；用箭头、流程、简洁示意图表现真实科学原理和参数影响。',
+    orthographic: '生成三视图：正视图、侧视图、俯视图放在同一张技术图纸中，比例和部件位置与主效果图一致，标注主要外形尺寸、操作高度、安全边界和维护空间。',
+    'parameter-table': '生成参数表图：做成清晰技术参数板，包含尺寸、互动方式、传感器/执行器、媒体系统、结构材质、关键科学变量、安全维护和待工程校核项。',
+  };
+
+  return [
+    `核心要求：根据同一科技展项生成“${drawing.label}”，必须和主效果图保持同一装置、同一科学原理、同一参数体系；不要伪科学、不要乱标文字、不要改变展项主体结构。`,
+    `图纸类型：${drawing.prompt}`,
+    typeRequirements[drawing.id] || drawing.prompt,
+    '一致性参考：后续图纸必须以 @img1 主效果图为首要依据；若有 @img2，则用于保持上一张图纸中的部件命名和结构编号一致。',
+    referenceLines,
+    analysisText(analysis),
+    values.parameterMarkdown ? `参数表 Markdown 文本依据：\n${cleanScienceExhibitText(values.parameterMarkdown, 5000)}` : '',
+    '表现要求：白底或深浅清晰的技术制图风格，线条清楚，层级明确，文字只用短中文标签和可信参数，不生成长篇乱码；所有参数标注为建议范围或待工程校核，不伪造精密工程数据。',
+  ].filter(Boolean).join('\n');
+}

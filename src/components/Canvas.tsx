@@ -131,6 +131,7 @@ import ExhibitionAiPlanLayoutNode from './nodes/ExhibitionAiPlanLayoutNode';
 import UnitPanelDesignNode from './nodes/UnitPanelDesignNode';
 import SculptureReliefDesignNode from './nodes/SculptureReliefDesignNode';
 import ExhibitionSceneDesignNode from './nodes/ExhibitionSceneDesignNode';
+import ScienceExhibitDesignNode from './nodes/ScienceExhibitDesignNode';
 import ShowcaseInteriorDesignNode from './nodes/ShowcaseInteriorDesignNode';
 import PortraitMasterNode from './nodes/PortraitMasterNode';
 import PoseMasterNode from './nodes/PoseMasterNode';
@@ -237,6 +238,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'unit-panel-design': UnitPanelDesignNode,
   'sculpture-relief-design': SculptureReliefDesignNode,
   'exhibition-scene-design': ExhibitionSceneDesignNode,
+  'science-exhibit-design': ScienceExhibitDesignNode,
   'showcase-interior-design': ShowcaseInteriorDesignNode,
   'multi-angle-visual': ToolboxParamNode,
   'portrait-master': PortraitMasterNode,
@@ -1035,6 +1037,46 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     status: 'idle',
     error: '',
   },
+  'science-exhibit-design': {
+    model: 'gpt-image-2',
+    apiModel: 'gpt-image-2-all',
+    aspectRatio: '16:9',
+    sizeLevel: '2K',
+    outputFormat: 'jpg',
+    scienceDomain: 'physics',
+    exhibitType: 'interactive-device',
+    interactionMode: 'turn-handle',
+    audience: 'general',
+    spatialScale: 'island',
+    drawingSelection: ['exploded', 'principle', 'orthographic', 'parameter-table'],
+    useUpstream: true,
+    sourceText: '',
+    documentMeta: null,
+    analysis: {
+      titleText: '',
+      sciencePrinciple: '',
+      keyParameters: [],
+      interactionFlow: '',
+      mechanismDesign: '',
+      safetyMaintenance: '',
+      visualBrief: '',
+      drawingNotes: '',
+    },
+    supplement: '',
+    supplementMentions: [],
+    prompt: '',
+    outputText: '',
+    text: '',
+    imageUrl: '',
+    imageUrls: [],
+    urls: [],
+    scienceExhibitResults: [],
+    referenceImages: [],
+    spaceReferenceImages: [],
+    deviceReferenceImages: [],
+    status: 'idle',
+    error: '',
+  },
   'showcase-interior-design': {
     model: 'gpt-image-2',
     apiModel: 'gpt-image-2-all',
@@ -1304,6 +1346,7 @@ const EXHIBITION_IMAGE_PROVIDER_NODE_TYPES = new Set<string>([
   'unit-panel-design',
   'sculpture-relief-design',
   'exhibition-scene-design',
+  'science-exhibit-design',
   'showcase-interior-design',
 ]);
 
@@ -1360,6 +1403,12 @@ function exclusiveTargetHandlesForConnection(
   ) {
     return [handle];
   }
+  if (
+    targetType === 'science-exhibit-design'
+    && (handle === 'space-reference' || handle === 'device-reference')
+  ) {
+    return [handle];
+  }
   if (targetType === 'exhibition-style-transfer' && handle === 'style-reference') {
     return [handle];
   }
@@ -1407,6 +1456,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'unit-panel-design',
   'sculpture-relief-design',
   'exhibition-scene-design',
+  'science-exhibit-design',
   'showcase-interior-design',
   'remove-ai-watermark',
 ]);

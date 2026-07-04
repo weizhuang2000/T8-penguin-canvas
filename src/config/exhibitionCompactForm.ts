@@ -425,6 +425,37 @@ export const EXHIBITION_COMPACT_FORM_DEFINITIONS: ExhibitionCompactNodeDefinitio
       { id: 'prompt-preview', label: '\u63d0\u793a\u8bcd\u9884\u89c8' },
     ] },
   ] },
+  { nodeType: 'science-exhibit-design', label: '\u79d1\u6280\u5c55\u9879\u8bbe\u8ba1', sections: [
+    { id: 'science', label: '\u79d1\u5b66\u8bbe\u7f6e', items: [
+      { id: 'parameter-input', label: '\u53c2\u6570\u8f93\u5165' },
+      { id: 'aspect-size', label: '\u6bd4\u4f8b/\u5c3a\u5bf8' },
+    ] },
+    { id: 'language', label: '\u8d44\u6599\u4e0e\u5206\u6790', items: [
+      { id: 'document', label: '\u6587\u6863\u5bfc\u5165' },
+      { id: 'text-fields', label: '\u79d1\u5b66\u5206\u6790\u5b57\u6bb5' },
+    ] },
+    { id: 'drawings', label: '\u56fe\u7eb8\u8f93\u51fa', items: [
+      { id: 'drawing-selection', label: '\u56fe\u7eb8\u9009\u62e9' },
+      { id: 'parameter-table', label: '\u53c2\u6570\u8868' },
+    ] },
+    { id: 'references', label: '\u53c2\u8003\u56fe', items: [
+      { id: 'space-reference', label: '\u6574\u4f53\u7a7a\u95f4/\u98ce\u683c\u53c2\u8003' },
+      { id: 'device-reference', label: '\u88c5\u7f6e/\u7ed3\u6784\u53c2\u8003' },
+    ] },
+    { id: 'model', label: '\u6a21\u578b\u53c2\u6570', items: [
+      { id: 'actions', label: '\u751f\u6210\u64cd\u4f5c' },
+      { id: 'provider', label: '\u5e73\u53f0' },
+      { id: 'model', label: '\u6a21\u578b' },
+      { id: 'aspect-size', label: '\u6bd4\u4f8b/\u5c3a\u5bf8' },
+      { id: 'output-format', label: '\u8f93\u51fa\u683c\u5f0f' },
+      { id: 'seed-name', label: 'Seed' },
+      { id: 'progress', label: '\u8fdb\u5ea6\u72b6\u6001' },
+      { id: 'preview', label: '\u7ed3\u679c\u9884\u89c8' },
+    ] },
+    { id: 'prompt', label: '\u63d0\u793a\u8bcd', items: [
+      { id: 'prompt-preview', label: '\u63d0\u793a\u8bcd\u9884\u89c8' },
+    ] },
+  ] },
   { nodeType: 'showcase-interior-design', label: '\u67dc\u5185\u8bbe\u8ba1', sections: [
     { id: 'showcase', label: '\u5c55\u67dc\u5c3a\u5bf8', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
     { id: 'exhibits', label: '\u5c55\u54c1\u7d20\u6750', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
