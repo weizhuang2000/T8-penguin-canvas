@@ -166,6 +166,34 @@ function fitSeatGrid(count: number, bankW: number, bankH: number, seatW: number,
   return { cols, rows };
 }
 
+function isDomeCinemaLayout(params: { venueType?: string; screenType?: string; slopeMode?: string }): boolean {
+  return params.venueType === 'dome-cinema' || params.screenType === 'dome-screen' || params.slopeMode === 'reclined-dome';
+}
+
+function domeRowSeatCounts(totalSeats: number, rowCount: number): number[] {
+  const total = Math.max(1, Math.round(totalSeats));
+  const rows = Math.max(3, rowCount);
+  const middle = (rows - 1) / 2;
+  const weights = Array.from({ length: rows }, (_, index) => 0.45 + (1 - Math.abs(index - middle) / Math.max(1, middle)) * 1.55);
+  const sum = weights.reduce((acc, item) => acc + item, 0);
+  const counts = weights.map((weight) => Math.max(1, Math.floor((weight / sum) * total)));
+  let diff = total - counts.reduce((acc, item) => acc + item, 0);
+  const order = counts.map((_, index) => index).sort((a, b) => weights[b] - weights[a]);
+  for (let index = 0; diff !== 0 && index < 10000; index += 1) {
+    const target = order[index % order.length];
+    if (diff > 0) {
+      counts[target] += 1;
+      diff -= 1;
+    } else if (counts[target] > 1) {
+      counts[target] -= 1;
+      diff += 1;
+    } else {
+      break;
+    }
+  }
+  return counts;
+}
+
 function buildCinemaColorPlanReferenceDataUrl(params: {
   lengthMm: number;
   widthMm: number;
@@ -174,6 +202,8 @@ function buildCinemaColorPlanReferenceDataUrl(params: {
   seatCount: number;
   aisleMode: string;
   venueType: string;
+  screenType?: string;
+  slopeMode?: string;
   seatWidthMm?: number;
   seatDepthMm?: number;
   seatGapMm?: number;
@@ -211,6 +241,105 @@ function buildCinemaColorPlanReferenceDataUrl(params: {
   if (!ctx) return '';
   ctx.fillStyle = '#f8fafc';
   ctx.fillRect(0, 0, canvasW, canvasH);
+
+  if (isDomeCinemaLayout(params)) {
+    const cx = x0 + w / 2;
+    const cy = y0 + h / 2;
+    const radius = Math.max(80, Math.min(w, h) * 0.43);
+    const effectiveSeats = Math.max(1, Math.round(params.seatCount || 120));
+    const rowPitch = Math.max(seatDepthMm * scale + 2, rowSpacingMm * scale);
+    const seatW = Math.max(4, seatWidthMm * scale);
+    const seatH = Math.max(4, seatDepthMm * scale);
+    const seatGap = Math.max(2, seatGapMm * scale);
+    const usableVertical = radius * 1.55;
+    const rowCount = Math.max(5, Math.min(32, Math.round(usableVertical / Math.max(1, rowPitch))));
+    const rowCounts = domeRowSeatCounts(effectiveSeats, rowCount);
+
+    ctx.fillStyle = '#fff7ed';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 3;
+    ctx.fillRect(x0, y0, w, h);
+    ctx.strokeRect(x0, y0, w, h);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.fillStyle = '#dcfce7';
+    ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+    ctx.fillStyle = '#60a5fa';
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, Math.PI, 0);
+    ctx.lineTo(cx + radius, cy);
+    ctx.lineTo(cx - radius, cy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = '#0369a1';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 0.94, Math.PI, 0);
+    ctx.stroke();
+
+    ctx.fillStyle = '#0369a1';
+    ctx.font = 'bold 22px sans-serif';
+    ctx.fillText('倒扣半球穹幕/顶部半圆屏', cx - radius + 24, cy - radius + 38);
+    ctx.fillStyle = '#166534';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText(`圆形观众场地 总计${effectiveSeats}座`, cx - radius + 24, cy + 30);
+
+    const firstY = cy - radius * 0.48;
+    const lastY = cy + radius * 0.72;
+    const rowStep = rowCount > 1 ? (lastY - firstY) / (rowCount - 1) : rowPitch;
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 1;
+    rowCounts.forEach((count, rowIndex) => {
+      const y = firstY + rowIndex * rowStep;
+      const chord = Math.max(seatW, Math.sqrt(Math.max(0, radius * radius - (y - cy) * (y - cy))) * 2 - sideAisleWidthMm * scale * 2);
+      const totalRowW = count * seatW + Math.max(0, count - 1) * seatGap;
+      const startX = cx - totalRowW / 2;
+      ctx.fillStyle = '#166534';
+      if (rowIndex === Math.floor(rowCount / 2)) ctx.fillText(`中部最大排 ${count}座`, Math.max(cx - chord / 2, x0 + 10), y - 8);
+      for (let index = 0; index < count; index += 1) {
+        const x = startX + index * (seatW + seatGap);
+        ctx.fillStyle = '#e5e7eb';
+        ctx.fillRect(x, y, seatW, seatH);
+        ctx.strokeRect(x, y, seatW, seatH);
+      }
+    });
+
+    ctx.strokeStyle = '#f97316';
+    ctx.lineWidth = 5;
+    ctx.setLineDash([14, 10]);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - radius * 0.45);
+    ctx.lineTo(cx, cy + radius * 0.82);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = '#c4b5fd';
+    ctx.strokeStyle = '#4c1d95';
+    ctx.lineWidth = 2;
+    const control = { x: x0 + w / 2 - 100, y: y0 + h - 92, w: 200, h: 58 };
+    ctx.fillRect(control.x, control.y, control.w, control.h);
+    ctx.strokeRect(control.x, control.y, control.w, control.h);
+    ctx.fillStyle = '#4c1d95';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillText('控制室/机房/投影设备', control.x + 14, control.y + 36);
+
+    ctx.fillStyle = '#0f172a';
+    ctx.font = '16px sans-serif';
+    ctx.fillText(`穹幕影院圆形比例底图 ${lengthMm} x ${widthMm} x ${Math.max(2500, Math.round(params.heightMm || 0))} mm`, 60, canvasH - 30);
+    ctx.fillText(`座椅 ${seatWidthMm}x${seatDepthMm}mm / 行距${rowSpacingMm}mm / 圆弧排布`, 60, canvasH - 10);
+    return canvas.toDataURL('image/png');
+  }
+
   ctx.fillStyle = '#fff7ed';
   ctx.strokeStyle = '#0f172a';
   ctx.lineWidth = 3;
@@ -735,6 +864,8 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
           seatCount: Number(d.seatCount) || 0,
           aisleMode,
           venueType,
+          screenType,
+          slopeMode,
           seatWidthMm,
           seatDepthMm,
           seatGapMm,
@@ -893,6 +1024,8 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
     capacityMode: d.capacityMode,
     aisleMode,
     venueType,
+    screenType,
+    slopeMode,
     seatWidthMm,
     seatDepthMm,
     seatGapMm,
@@ -900,7 +1033,7 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
     frontClearanceMm,
     sideAisleWidthMm,
     centerAisleWidthMm,
-  }), [aisleMode, centerAisleWidthMm, d.capacityMode, d.seatCount, dimensions.heightMm, dimensions.lengthMm, dimensions.widthMm, frontClearanceMm, rowSpacingMm, screenStageSide, seatDepthMm, seatGapMm, seatWidthMm, sideAisleWidthMm, venueType]);
+  }), [aisleMode, centerAisleWidthMm, d.capacityMode, d.seatCount, dimensions.heightMm, dimensions.lengthMm, dimensions.widthMm, frontClearanceMm, rowSpacingMm, screenStageSide, screenType, seatDepthMm, seatGapMm, seatWidthMm, sideAisleWidthMm, slopeMode, venueType]);
 
   return (
     <div className="w-[640px] rounded-xl border border-cyan-300/20 bg-zinc-950/95 p-3 text-white shadow-2xl shadow-cyan-950/30" data-exhibition-compact-node-type="cinema-auditorium-design">
@@ -927,7 +1060,13 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
       <div data-exhibition-compact-section="venue" className="grid grid-cols-1 gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-2">
         <label data-exhibition-compact-item="venue-type" className="space-y-1 text-[10px] text-white/55">
           影院/报告厅类型
-          <select className={FIELD} value={venueType} disabled={isReadonly || busy} onChange={(event) => update({ venueType: normalizeCinemaVenueType(event.target.value) })}>
+          <select className={FIELD} value={venueType} disabled={isReadonly || busy} onChange={(event) => {
+            const nextVenueType = normalizeCinemaVenueType(event.target.value);
+            update({
+              venueType: nextVenueType,
+              ...(nextVenueType === 'dome-cinema' ? { screenType: 'dome-screen', slopeMode: 'reclined-dome' } : {}),
+            });
+          }}>
             {CINEMA_AUDITORIUM_VENUE_TYPES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
           </select>
         </label>

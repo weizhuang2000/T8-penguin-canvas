@@ -270,6 +270,7 @@ function baseCinemaContext(values = {}) {
   const frontClearanceMm = Math.max(0, Math.round(Number(values.frontClearanceMm) || 1600));
   const sideAisleWidthMm = Math.max(0, Math.round(Number(values.sideAisleWidthMm) || 1200));
   const centerAisleWidthMm = Math.max(0, Math.round(Number(values.centerAisleWidthMm) || 1200));
+  const isDomeCinema = venue.id === 'dome-cinema' || screen.id === 'dome-screen' || slope.id === 'reclined-dome';
   return [
     `空间类型：${venue.label}；${venue.prompt}`,
     `空间尺寸：${dimensionsText(values.dimensions)}。`,
@@ -282,6 +283,7 @@ function baseCinemaContext(values = {}) {
     `主屏幕种类：${mainScreen.label}；${mainScreen.prompt}。`,
     `声学系统：${audio.label}；${audio.prompt}。`,
     effects.length ? `特效系统：${effects.map((item) => `${item.label}(${item.prompt})`).join('；')}。` : '特效系统：无额外特效，按常规影院/报告厅设备配置。',
+    isDomeCinema ? '穹幕影院专用约束：顶部必须是倒扣的半圆形/半球形穹幕屏，不是普通竖向银幕；地面场地按圆形或近圆形组织，观众席沿圆弧排布，中间几行座椅数量最多，向前排和后排逐渐减少，座椅宜为仰躺或半躺观看穹顶。' : '',
   ].join('\n');
 }
 
@@ -315,8 +317,10 @@ export function buildCinemaAuditoriumImagePrompt(values = {}) {
   const allReferences = [...colorPlanReferences, ...spaceReferences, ...colorReferences, ...equipmentReferences];
   const capacityMode = values.capacityMode === 'manual' ? 'manual' : 'auto';
   const seatCount = Math.max(0, Math.round(Number(values.seatCount) || 0));
+  const isDomeCinema = values.venueType === 'dome-cinema' || values.screenType === 'dome-screen' || values.slopeMode === 'reclined-dome';
   return [
     '核心要求：生成专业影院/报告厅/特效影院空间设计主效果图，可用于方案汇报；空间尺度、银幕舞台方向、座席视线、声学材料、疏散与设备区必须可信。',
+    isDomeCinema ? '穹幕影院主效果图专用要求：画面顶部必须表现倒扣半圆形/半球形穹幕屏，观众仰视穹顶内容；不要生成一面普通墙面银幕或矩形影厅。地面和坐席按圆形场地组织，座椅沿圆弧成排，中间几排座椅数量最多，前后排逐渐减少，整体类似天文馆/穹幕影院。' : '',
     colorPlanReferences.length ? `平面布局参考图是硬约束：必须严格依据该布局图推理座椅总数量、座椅占地、行间距、左右/前后分区、中心走道、侧走道、银幕舞台方向和控制/设备区位置；不要把单侧座位数误当成总座位数，也不要让效果图座椅数量与平面布局或彩平图不符。\n${referenceOrderText(colorPlanReferences, '平面布局硬约束')}` : '',
     capacityMode === 'manual' && seatCount > 0 ? `座椅数量硬约束：画面中的观众座椅总数必须约为 ${seatCount} 座；如彩平图分为左右两区，则左右两区合计才是 ${seatCount} 座，不是每侧 ${seatCount} 座。` : '',
     baseCinemaContext(values),
@@ -338,6 +342,7 @@ export function buildCinemaAuditoriumDrawingPrompt(values = {}) {
   const userReferences = Array.isArray(values.userReferenceImages) ? values.userReferenceImages.filter(Boolean) : [];
   const isSystemPrinciple = output.id === 'system-principle';
   const mainScreen = cinemaMainScreenKindMeta(values.mainScreenKind);
+  const isDomeCinema = values.venueType === 'dome-cinema' || values.screenType === 'dome-screen' || values.slopeMode === 'reclined-dome';
   const power = estimateCinemaSystemPower(values);
   const referenceLines = [
     !isSystemPrinciple && renderImage ? `@img1: 主效果图一致性参考 = ${renderImage}` : '',
@@ -351,7 +356,9 @@ export function buildCinemaAuditoriumDrawingPrompt(values = {}) {
   ].filter(Boolean).join('\n');
 
   const typeRequirements = {
-    'color-plan': '生成彩色平面图：必须保持长宽比例和银幕舞台方向，清晰标出银幕/舞台区、座席区、座椅占地、行间距、排距逻辑、中心/侧走道、出入口、疏散方向、控制室/机房、设备区、无障碍席位、墙体边界和功能分区色块。以给定前端平面布局底图为首要结构依据，不得增减座位总数或改变走道宽度逻辑。',
+    'color-plan': isDomeCinema
+      ? '生成穹幕影院彩色平面图：必须保持圆形或近圆形场地，清晰标出上方半圆穹幕/倒扣半球屏、圆形观众区、弧形座椅排、中心/环形走道、出入口、疏散方向、控制室/机房和投影设备区；座椅排布必须中间几行数量最多，向前后逐渐减少。以给定前端圆形平面布局底图为首要结构依据，不得改成矩形影厅或普通银幕厅。'
+      : '生成彩色平面图：必须保持长宽比例和银幕舞台方向，清晰标出银幕/舞台区、座席区、座椅占地、行间距、排距逻辑、中心/侧走道、出入口、疏散方向、控制室/机房、设备区、无障碍席位、墙体边界和功能分区色块。以给定前端平面布局底图为首要结构依据，不得增减座位总数或改变走道宽度逻辑。',
     'system-principle': '生成系统设备原理图：只做各系统设备之间的连线拓扑结构图，不需要主效果图，不需要彩色平面图，不表现空间透视、座席排布或房间平面。必须包含放映/LED/投影系统、银幕或舞台显示面、音响系统、灯光系统、控制机房、服务器/播放系统、功放/处理器、网络/信号链路、电源与弱电、动感座椅/风效/水雾/气味/震动等特效设备（如启用）、疏散报警/应急广播与检修维护节点；设备尽量以清晰图标、符号或小型 pictogram 表现，用箭头和不同线型表达视频信号、音频信号、控制信号、供电、特效联动和安全联动关系。',
   };
   const screenTopologyText = isSystemPrinciple && mainScreen.id === 'led'

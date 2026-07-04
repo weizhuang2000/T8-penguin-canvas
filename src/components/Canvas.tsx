@@ -6207,9 +6207,9 @@ function CanvasInner({
             className="fixed z-40 overflow-hidden t8-context-menu t8-context-menu--picker"
             style={{
               // 使用 fixed + clientX/clientY (视口坐标) 让菜单精确跟随鼠标释放位置
-              left: Math.min(picker.screenPos.x, window.innerWidth - 280),
+              left: Math.max(12, Math.min(picker.screenPos.x, window.innerWidth - 540)),
               top: Math.min(picker.screenPos.y, window.innerHeight - 360),
-              width: 260,
+              width: 'min(520px, calc(100vw - 24px))',
               maxHeight: 360,
             }}
           >
@@ -6248,7 +6248,7 @@ function CanvasInner({
               </div>
               <div className="text-[10px] opacity-60 flex-shrink-0">#</div>
             </button>
-            <div className="overflow-y-auto" style={{ maxHeight: 320 }}>
+            <div className="t8-context-menu__grid t8-context-menu__grid--scroll">
               {pickerCandidates.length === 0 && (
                 <div className="t8-context-menu__empty">
                   没有可连接的节点
@@ -6547,37 +6547,39 @@ function CanvasInner({
               data-canvas-floating-ui="pane-menu"
               className="fixed z-40 overflow-hidden t8-context-menu t8-context-menu--quick-add"
               style={{
-                left: Math.min(paneMenu.x, window.innerWidth - 220),
+                left: Math.max(12, Math.min(paneMenu.x, window.innerWidth - 420)),
                 top: Math.min(paneMenu.y, window.innerHeight - 360),
-                width: 200,
+                width: 'min(400px, calc(100vw - 24px))',
               }}
             >
               <div className="t8-context-menu__header">
                 快速添加节点
               </div>
-              {QUICK_NODES.map((meta) => {
-                const Icon = (LucideIcons as any)[meta.icon] || LucideIcons.Box;
-                const color = COLOR_HEX[meta.color] || COLOR_HEX.slate;
-                return (
-                  <button
-                    key={meta.type}
-                    className={itemCls}
-                    onClick={() => {
-                      const at = { x: paneMenu.x, y: paneMenu.y };
-                      closePaneMenu();
-                      addNode(meta.type as NodeType, { atScreen: at });
-                    }}
-                  >
-                    <span
-                      className="t8-context-menu__node-icon"
-                      style={{ '--t8-menu-icon-color': color } as CSSProperties}
+              <div className="t8-context-menu__grid t8-context-menu__grid--scroll">
+                {QUICK_NODES.map((meta) => {
+                  const Icon = (LucideIcons as any)[meta.icon] || LucideIcons.Box;
+                  const color = COLOR_HEX[meta.color] || COLOR_HEX.slate;
+                  return (
+                    <button
+                      key={meta.type}
+                      className={itemCls}
+                      onClick={() => {
+                        const at = { x: paneMenu.x, y: paneMenu.y };
+                        closePaneMenu();
+                        addNode(meta.type as NodeType, { atScreen: at });
+                      }}
                     >
-                      <Icon size={13} />
-                    </span>
-                    <span className="flex-1 truncate">{meta.label}</span>
-                  </button>
-                );
-              })}
+                      <span
+                        className="t8-context-menu__node-icon"
+                        style={{ '--t8-menu-icon-color': color } as CSSProperties}
+                      >
+                        <Icon size={13} />
+                      </span>
+                      <span className="flex-1 truncate">{meta.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </>
         );
