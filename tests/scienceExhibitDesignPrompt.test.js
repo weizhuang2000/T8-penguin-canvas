@@ -84,6 +84,8 @@ test('main image prompt keeps real science and parameter consistency', () => {
   assert.match(prompt, /参数关系前后一致/);
   assert.match(prompt, /@img1/);
   assert.match(prompt, /@img2/);
+  assert.match(prompt, /HIGH PRIORITY style reference/);
+  assert.match(prompt, /must influence the design/);
   assert.match(prompt, /2200mm/);
   assert.match(prompt, /900mm/);
   assert.match(prompt, /白背景|白底/);
@@ -109,6 +111,12 @@ test('technical drawing prompts bind later drawings to render reference', () => 
       parameterMarkdown,
     });
     assert.match(prompt, /800W/);
+    if (drawingType === 'parameter-table') {
+      assert.match(prompt, /TABLE ONLY/);
+      assert.match(prompt, /no render image/);
+      assert.match(prompt, /no orthographic views/);
+      assert.match(prompt, /no thumbnails/);
+    }
     if (drawingType === 'orthographic') {
       assert.match(prompt, /CAD/);
       assert.match(prompt, /orthographic projection|正交投影|正投影/);

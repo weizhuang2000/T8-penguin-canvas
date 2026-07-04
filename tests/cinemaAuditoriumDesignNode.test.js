@@ -55,7 +55,8 @@ test('cinema auditorium output order and result fields are stable', () => {
   assert.match(source, /OUTPUT_ORDER: CinemaAuditoriumOutputType\[\] = \['render', 'color-plan', 'system-principle'\]/);
   assert.match(source, /const sequence = OUTPUT_ORDER\.filter/);
   assert.match(source, /if \(kind === 'render'\) renderImage = generated\.imageUrl/);
-  assert.match(source, /previousDrawingImage = generated\.imageUrl/);
+  assert.match(source, /else if \(kind !== 'system-principle'\) previousDrawingImage = generated\.imageUrl/);
+  assert.match(source, /kind === 'system-principle'\s*\?\s*equipmentReferenceImages/);
   assert.match(source, /cinemaAuditoriumResults: results\.slice\(\)/);
   assert.match(source, /imageUrls: generatedUrls\.slice\(\)/);
   assert.match(source, /urls: generatedUrls\.slice\(\)/);
@@ -72,6 +73,8 @@ test('cinema auditorium prompt presets cover special theaters and diagrams', asy
   const colorPlan = mod.buildCinemaAuditoriumDrawingPrompt({ outputType: 'color-plan', dimensions: { lengthMm: 24000, widthMm: 16000, heightMm: 7500 }, screenStageSide: 'north' });
   assert.match(colorPlan, /长宽比例|比例|银幕舞台方向|座席|走道|设备区/);
   const principle = mod.buildCinemaAuditoriumDrawingPrompt({ outputType: 'system-principle', specialEffects: ['motion-seats', 'wind', 'water-mist', 'scent'] });
+  assert.match(principle, /拓扑|连线|图标|符号|pictogram/);
+  assert.match(principle, /不需要主效果图|不需要彩色平面图|不要生成室内效果图|不要生成.*平面布局图/);
   assert.match(principle, /放映|LED|投影/);
   assert.match(principle, /音响|灯光|控制机房|服务器|播放系统/);
   assert.match(principle, /动感座椅|风效|水雾|气味/);

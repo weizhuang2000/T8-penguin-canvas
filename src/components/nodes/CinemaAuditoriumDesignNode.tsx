@@ -552,13 +552,17 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
             colorMaterialReferenceTone: d.colorMaterialReferenceTone,
             supplement: [sourceText, resolvedSupplement].filter(Boolean).join('\n\n'),
             renderImage,
-            previousDrawingImage,
+            previousDrawingImage: kind === 'system-principle' ? '' : previousDrawingImage,
             planReferenceImage: kind === 'color-plan' ? planReferenceImage : '',
-            userReferenceImages: [...spaceReferenceImages, ...colorMaterialReferenceImages, ...equipmentReferenceImages],
+            userReferenceImages: kind === 'system-principle'
+              ? equipmentReferenceImages
+              : [...spaceReferenceImages, ...colorMaterialReferenceImages, ...equipmentReferenceImages],
           });
         const images = kind === 'render'
           ? [...spaceReferenceImages, ...colorMaterialReferenceImages, ...equipmentReferenceImages]
-          : [renderImage, previousDrawingImage, kind === 'color-plan' ? planReferenceImage : '', ...spaceReferenceImages, ...colorMaterialReferenceImages, ...equipmentReferenceImages].filter(Boolean);
+          : kind === 'system-principle'
+            ? equipmentReferenceImages
+            : [renderImage, previousDrawingImage, kind === 'color-plan' ? planReferenceImage : '', ...spaceReferenceImages, ...colorMaterialReferenceImages, ...equipmentReferenceImages].filter(Boolean);
         update({
           status: `generating-${kind}`,
           progress: `提交 ${index + 1}/${sequence.length} · ${outputLabel(kind)}`,
@@ -579,7 +583,7 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
         };
         if (generated.taskId) latestTaskId = generated.taskId;
         if (kind === 'render') renderImage = generated.imageUrl;
-        else previousDrawingImage = generated.imageUrl;
+        else if (kind !== 'system-principle') previousDrawingImage = generated.imageUrl;
         generatedUrls.push(generated.imageUrl);
         results.push(result);
         update({

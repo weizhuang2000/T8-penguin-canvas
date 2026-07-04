@@ -265,27 +265,38 @@ export function buildCinemaAuditoriumDrawingPrompt(values = {}) {
   const previousDrawingImage = cleanCinemaAuditoriumText(values.previousDrawingImage, 1000);
   const planReferenceImage = cleanCinemaAuditoriumText(values.planReferenceImage, 1000);
   const userReferences = Array.isArray(values.userReferenceImages) ? values.userReferenceImages.filter(Boolean) : [];
+  const isSystemPrinciple = output.id === 'system-principle';
   const referenceLines = [
-    renderImage ? `@img1: 主效果图一致性参考 = ${renderImage}` : '',
-    previousDrawingImage ? `@img2: 上一张图纸一致性参考 = ${previousDrawingImage}` : '',
-    planReferenceImage ? `@img${(renderImage ? 1 : 0) + (previousDrawingImage ? 1 : 0) + 1}: 严格比例彩平底图 = ${planReferenceImage}` : '',
-    userReferences.length ? referenceOrderText(userReferences, '用户参考图', (renderImage ? 1 : 0) + (previousDrawingImage ? 1 : 0) + (planReferenceImage ? 1 : 0)) : '',
+    !isSystemPrinciple && renderImage ? `@img1: 主效果图一致性参考 = ${renderImage}` : '',
+    !isSystemPrinciple && previousDrawingImage ? `@img2: 上一张图纸一致性参考 = ${previousDrawingImage}` : '',
+    !isSystemPrinciple && planReferenceImage ? `@img${(renderImage ? 1 : 0) + (previousDrawingImage ? 1 : 0) + 1}: 严格比例彩平底图 = ${planReferenceImage}` : '',
+    userReferences.length ? referenceOrderText(
+      userReferences,
+      isSystemPrinciple ? '设备图标/系统参考图' : '用户参考图',
+      isSystemPrinciple ? 0 : (renderImage ? 1 : 0) + (previousDrawingImage ? 1 : 0) + (planReferenceImage ? 1 : 0),
+    ) : '',
   ].filter(Boolean).join('\n');
 
   const typeRequirements = {
     'color-plan': '生成彩色平面图：必须保持长宽比例和银幕舞台方向，清晰标出银幕/舞台区、座席区、排距逻辑、中心/侧走道、出入口、疏散方向、控制室/机房、设备区、无障碍席位、墙体边界和功能分区色块。以给定前端比例底图为首要结构依据。',
-    'system-principle': '生成系统设备原理图：必须包含放映/LED/投影系统、银幕或舞台显示面、音响系统、灯光系统、控制机房、服务器/播放系统、功放/处理器、网络/信号链路、电源与弱电、动感座椅/风效/水雾/气味/震动等特效设备（如启用）、疏散与检修关系；用箭头和分区表达信号、控制、动力和观众体验链路。',
+    'system-principle': '生成系统设备原理图：只做各系统设备之间的连线拓扑结构图，不需要主效果图，不需要彩色平面图，不表现空间透视、座席排布或房间平面。必须包含放映/LED/投影系统、银幕或舞台显示面、音响系统、灯光系统、控制机房、服务器/播放系统、功放/处理器、网络/信号链路、电源与弱电、动感座椅/风效/水雾/气味/震动等特效设备（如启用）、疏散报警/应急广播与检修维护节点；设备尽量以清晰图标、符号或小型 pictogram 表现，用箭头和不同线型表达视频信号、音频信号、控制信号、供电、特效联动和安全联动关系。',
   };
 
   return [
-    `核心要求：根据同一影院报告厅设计生成“${output.label}”，必须和主效果图保持同一空间、同一银幕舞台方向、同一座席与设备系统逻辑。`,
+    isSystemPrinciple
+      ? `核心要求：根据影院报告厅配置生成“${output.label}”，画面必须是设备系统拓扑连线图；不要参考主效果图或彩平图，不要生成室内效果图、平面布局图、座席图或空间渲染图。`
+      : `核心要求：根据同一影院报告厅设计生成“${output.label}”，必须和主效果图保持同一空间、同一银幕舞台方向、同一座席与设备系统逻辑。`,
     `图纸类型：${output.prompt}`,
     typeRequirements[output.id] || output.prompt,
     baseCinemaContext(values),
     colorMaterialContext(values),
-    '一致性参考：后续图纸必须优先继承 @img1 主效果图的空间语言；彩平图必须优先继承严格比例彩平底图；系统设备原理图必须继承彩平图中的功能区位置。',
+    isSystemPrinciple
+      ? '拓扑表达要求：以控制机房/播放服务器/中央控制为核心，向显示、音频、灯光、特效、安全与电源系统分组连线；每个设备用图标化符号表达，配短中文标签和图例，线缆关系要清楚。'
+      : '一致性参考：后续图纸必须优先继承 @img1 主效果图的空间语言；彩平图必须优先继承严格比例彩平底图。',
     referenceLines,
     values.supplement ? `补充要求：${cleanCinemaAuditoriumText(values.supplement, 3000)}` : '',
-    '表现要求：白底或浅底专业汇报图风格，色块、箭头、图例和短中文标签清晰可信；不要长段乱码文字，不要伪造品牌，不要改变已给定长宽高和银幕舞台方向。',
+    isSystemPrinciple
+      ? '表现要求：白底或浅底的专业系统拓扑图风格，图标、节点、箭头、线型图例和短中文标签清晰可信；不要画成效果图、彩平图、剖面图或复杂施工图，不要长段乱码文字，不要伪造品牌。'
+      : '表现要求：白底或浅底专业汇报图风格，色块、箭头、图例和短中文标签清晰可信；不要长段乱码文字，不要伪造品牌，不要改变已给定长宽高和银幕舞台方向。',
   ].filter(Boolean).join('\n');
 }
