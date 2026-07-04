@@ -131,6 +131,7 @@ import ExhibitionPlanLayoutNode from './nodes/ExhibitionPlanLayoutNode';
 import ExhibitionAiPlanLayoutNode from './nodes/ExhibitionAiPlanLayoutNode';
 import UnitPanelDesignNode from './nodes/UnitPanelDesignNode';
 import SculptureReliefDesignNode from './nodes/SculptureReliefDesignNode';
+import WayfindingDesignNode from './nodes/WayfindingDesignNode';
 import ExhibitionSceneDesignNode from './nodes/ExhibitionSceneDesignNode';
 import ScienceExhibitDesignNode from './nodes/ScienceExhibitDesignNode';
 import ShowcaseInteriorDesignNode from './nodes/ShowcaseInteriorDesignNode';
@@ -239,6 +240,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'exhibition-ai-plan-layout': ExhibitionAiPlanLayoutNode,
   'unit-panel-design': UnitPanelDesignNode,
   'sculpture-relief-design': SculptureReliefDesignNode,
+  'exhibition-wayfinding-design': WayfindingDesignNode,
   'exhibition-scene-design': ExhibitionSceneDesignNode,
   'science-exhibit-design': ScienceExhibitDesignNode,
   'showcase-interior-design': ShowcaseInteriorDesignNode,
@@ -1008,6 +1010,53 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     status: 'idle',
     error: '',
   },
+  'exhibition-wayfinding-design': {
+    model: 'gpt-image-2',
+    apiModel: 'gpt-image-2-all',
+    aspectRatio: '16:9',
+    sizeLevel: '2K',
+    outputFormat: 'jpg',
+    outputMode: 'system-board',
+    scope: 'mixed',
+    signTypes: ['floor-directory', 'hanging-directional', 'wall-directional', 'gallery-room-id', 'outdoor-pylon', 'outdoor-map', 'accessible-safety'],
+    materialId: 'brushed-metal',
+    mountingId: 'wall-mounted',
+    arrowStyle: 'standard',
+    language: 'zh-en',
+    dimensions: {
+      widthMm: 900,
+      heightMm: 1800,
+      depthMm: 80,
+      installHeightMm: 1500,
+    },
+    useUpstream: true,
+    sourceText: '',
+    documentMeta: null,
+    museumName: '',
+    projectTheme: '',
+    zones: [],
+    destinations: [],
+    routeText: '',
+    signText: '',
+    notes: '',
+    supplement: '',
+    providerSource: 'zhenzhen',
+    providerId: '',
+    providerModel: '',
+    providerParams: {},
+    seed: 0,
+    prompt: '',
+    outputText: '',
+    text: '',
+    imageUrl: '',
+    imageUrls: [],
+    urls: [],
+    referenceImages: [],
+    spaceReferenceImages: [],
+    graphicReferenceImages: [],
+    status: 'idle',
+    error: '',
+  },
   'exhibition-scene-design': {
     model: 'gpt-image-2',
     apiModel: 'gpt-image-2-all',
@@ -1428,6 +1477,7 @@ const EXHIBITION_IMAGE_PROVIDER_NODE_TYPES = new Set<string>([
   'exhibition-ai-plan-layout',
   'unit-panel-design',
   'sculpture-relief-design',
+  'exhibition-wayfinding-design',
   'exhibition-scene-design',
   'science-exhibit-design',
   'showcase-interior-design',
@@ -1479,6 +1529,12 @@ function exclusiveTargetHandlesForConnection(
     return [handle];
   }
   if (targetType === 'sculpture-relief-design' && handle === 'pattern-reference') {
+    return [handle];
+  }
+  if (
+    targetType === 'exhibition-wayfinding-design'
+    && (handle === 'space-reference' || handle === 'graphic-reference')
+  ) {
     return [handle];
   }
   if (
@@ -1545,6 +1601,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'exhibition-ai-plan-layout',
   'unit-panel-design',
   'sculpture-relief-design',
+  'exhibition-wayfinding-design',
   'exhibition-scene-design',
   'science-exhibit-design',
   'showcase-interior-design',

@@ -223,6 +223,45 @@ const EXHIBITION_COMPACT_FORM_DEFINITIONS = [
       { id: 'prompt-preview', label: '\u63d0\u793a\u8bcd\u9884\u89c8' },
     ] },
   ] },
+  { nodeType: 'exhibition-wayfinding-design', label: '导视系统设计', sections: [
+    { id: 'source', label: '资料与提炼', items: [
+      { id: 'actions', label: '操作按钮' },
+      { id: 'llm-settings', label: 'LLM 配置模型' },
+      { id: 'document', label: '文档导入' },
+    ] },
+    { id: 'system', label: '系统内容', items: [
+      { id: 'mode-scope', label: '模式与范围' },
+      { id: 'text-fields', label: '文本字段' },
+    ] },
+    { id: 'signage', label: '标牌类型', items: [
+      { id: 'sign-types', label: '标牌类型' },
+    ] },
+    { id: 'style', label: '视觉与工艺', items: [
+      { id: 'material', label: '材质工艺' },
+      { id: 'mounting', label: '安装方式' },
+      { id: 'icons-language', label: '图标与语言' },
+      { id: 'dimensions', label: '尺寸设置' },
+      { id: 'copy', label: '导览文字' },
+      { id: 'manual-input', label: '补充要求' },
+    ] },
+    { id: 'references', label: '参考图', items: [
+      { id: 'space-reference', label: '空间/材质参考' },
+      { id: 'graphic-reference', label: '标识图形参考' },
+    ] },
+    { id: 'model', label: '模型参数', items: [
+      { id: 'actions', label: '生成操作' },
+      { id: 'provider', label: '平台' },
+      { id: 'model', label: '模型' },
+      { id: 'aspect-size', label: '比例/尺寸' },
+      { id: 'output-format', label: '输出格式' },
+      { id: 'seed-name', label: 'Seed' },
+      { id: 'progress', label: '进度状态' },
+      { id: 'preview', label: '结果预览' },
+    ] },
+    { id: 'prompt', label: '提示词', items: [
+      { id: 'prompt-preview', label: '提示词预览' },
+    ] },
+  ] },
   { nodeType: 'exhibition-scene-design', label: '\u573a\u666f\u8bbe\u8ba1', sections: [
     { id: 'scene', label: '\u573a\u666f\u8bbe\u7f6e', items: [
       { id: 'parameter-input', label: '\u53c2\u6570\u8f93\u5165' },

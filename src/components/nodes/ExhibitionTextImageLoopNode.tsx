@@ -44,6 +44,7 @@ const EXEC_TYPES = new Set<string>([
   'exhibition-outline-split',
   'exhibition-plan-layout',
   'unit-panel-design',
+  'exhibition-wayfinding-design',
   'showcase-interior-design',
 ]);
 

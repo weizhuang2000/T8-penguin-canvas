@@ -111,6 +111,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: 'exhibition-ai-plan-layout', label: '平面AI布局', category: 'exhibition', description: 'LLM 读取原始建筑平面图并结合文本大纲生成展陈平面布局，默认锁定原墙体、柱子和门洞结构', icon: 'Sparkles', color: 'cyan' },
   { type: 'unit-panel-design', label: '单元板设计', category: 'exhibition', description: '生成单元板/整套板式设计图：两级文字提炼、多语言排序、材质选择、色材参考和尺寸标注', icon: 'PanelsTopLeft', color: 'cyan' },
   { type: 'sculpture-relief-design', label: '雕塑/浮雕设计', category: 'exhibition', description: '展陈雕塑与浮雕设计：文案提炼、类型选择、尺寸材质控制和参考图案轮廓约束', icon: 'Landmark', color: 'cyan' },
+  { type: 'exhibition-wayfinding-design', label: '导视系统设计', category: 'exhibition', description: '博物馆室内外导视系统：导览标牌、方向牌、楼层索引、无障碍与安全导视的规范图和效果图生成', icon: 'MapPinned', color: 'cyan' },
   { type: 'exhibition-scene-design', label: '场景设计', category: 'exhibition', description: '展馆场景设计：场景分类、整体环境参考、人物道具 @ 引用和图像生成', icon: 'Theater', color: 'cyan' },
   { type: 'science-exhibit-design', label: '科技展项设计', category: 'exhibition', description: '科技馆展项设计：LLM 提炼真实科学原理与参数，一键生成效果图、爆炸图、原理图、三视图和参数表', icon: 'Atom', color: 'cyan' },
   { type: 'showcase-interior-design', label: '柜内设计', category: 'exhibition', description: '展柜内部陈列设计：展柜尺寸、展品图与展品高度、色彩材质预设、尺寸标注和爆炸图输出', icon: 'Archive', color: 'cyan' },
