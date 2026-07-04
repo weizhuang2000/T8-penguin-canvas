@@ -22,6 +22,7 @@ const EXHIBITION_COMPACT_FORM_DEFINITIONS = [
       { id: 'protected-options', label: '\u4fdd\u62a4\u9009\u9879' },
     ] },
     { id: 'color-material', label: '\u8272\u5f69\u6750\u8d28', items: [
+      { id: 'preset-options', label: '\u9884\u8bbe\u65b9\u6848' },
       { id: 'priority-mode', label: '\u4f18\u5148\u7ea7' },
       { id: 'manual-input', label: '\u624b\u52a8\u8865\u5145' },
     ] },

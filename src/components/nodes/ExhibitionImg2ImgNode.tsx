@@ -3309,23 +3309,25 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               })}
             </div>
           </div>
-          <ColorMaterialPresetSelect
-            className={FIELD}
-            presets={colorMaterialPresets}
-            value={d.colorMaterialPreset || ''}
-            disabled={isReadonly || busy}
-            onChange={(presetId, preset) => {
-              if (presetId) disconnectColorMaterialReferenceInput();
-              update({
-                colorMaterialPreset: presetId,
-                ...(preset ? {
-                  colorMaterial: colorMaterialTextFromPreset(preset),
-                  colorMaterialPalette: colorPaletteTextFromPreset(preset),
-                  colorMaterialTextures: materialTexturesTextFromPreset(preset),
-                } : {}),
-              });
-            }}
-          />
+          <div data-exhibition-compact-item="preset-options">
+            <ColorMaterialPresetSelect
+              className={FIELD}
+              presets={colorMaterialPresets}
+              value={d.colorMaterialPreset || ''}
+              disabled={isReadonly || busy}
+              onChange={(presetId, preset) => {
+                if (presetId) disconnectColorMaterialReferenceInput();
+                update({
+                  colorMaterialPreset: presetId,
+                  ...(preset ? {
+                    colorMaterial: colorMaterialTextFromPreset(preset),
+                    colorMaterialPalette: colorPaletteTextFromPreset(preset),
+                    colorMaterialTextures: materialTexturesTextFromPreset(preset),
+                  } : {}),
+                });
+              }}
+            />
+          </div>
           {selectedColorMaterialPreset?.info && (
             <div className="rounded border border-cyan-300/15 bg-cyan-300/5 px-2 py-1 text-[10px] leading-snug text-cyan-50/70">
               {selectedColorMaterialPreset.info}

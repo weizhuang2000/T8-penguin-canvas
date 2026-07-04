@@ -33,6 +33,18 @@ test('exhibition img2img node exposes final prompt as text output', () => {
   assert.match(output, /if \(isExhibitionImg2Img && typeof ud\.lastPrompt === 'string'[\s\S]*pushUniqueText\(out\.texts, ud\.lastPrompt\)[\s\S]*else/);
 });
 
+test('exhibition img2img node exposes color material preset module', () => {
+  const node = readFileSync(new URL('../src/components/nodes/ExhibitionImg2ImgNode.tsx', import.meta.url), 'utf8');
+  assert.match(node, /import ColorMaterialPresetSelect from '\.\/ColorMaterialPresetSelect'/);
+  assert.match(node, /import ColorMaterialPresetEditorModal from '\.\/ColorMaterialPresetEditorModal'/);
+  assert.match(node, /updateElevationColorMaterialPresets/);
+  assert.match(node, /const \[colorMaterialPresets, setColorMaterialPresets\]/);
+  assert.match(node, /data-exhibition-compact-section="color-material"/);
+  assert.match(node, /data-exhibition-compact-item="preset-options"[\s\S]*<ColorMaterialPresetSelect/);
+  assert.match(node, /colorMaterialPreset:\s*presetId[\s\S]*colorMaterialPalette:\s*colorPaletteTextFromPreset\(preset\)[\s\S]*colorMaterialTextures:\s*materialTexturesTextFromPreset\(preset\)/);
+  assert.match(node, /hasColorMaterialPreset/);
+});
+
 test('exhibition img2img appends engineering quantity list only to submitted runtime prompt', () => {
   const node = readFileSync(new URL('../src/components/nodes/ExhibitionImg2ImgNode.tsx', import.meta.url), 'utf8');
   const previewPrompt = buildExhibitionImg2ImgPrompt({

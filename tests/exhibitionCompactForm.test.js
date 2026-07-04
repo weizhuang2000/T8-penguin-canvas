@@ -110,3 +110,12 @@ test('legacy compact form definitions remain available while DOM keys drive the 
   assert.match(frontendSource, /hiddenKeysByNodeType/);
   assert.match(read('src/components/UserManagementModal.tsx'), /hiddenKeysByNodeType: \{\}/);
 });
+
+test('exhibition img2img compact form exposes color material preset item', () => {
+  const { EXHIBITION_COMPACT_FORM_DEFINITIONS } = require('../backend/src/auth/exhibitionCompactForm.js');
+  const backendDefinition = EXHIBITION_COMPACT_FORM_DEFINITIONS.find((definition) => definition.nodeType === 'exhibition-img2img');
+  const backendColorMaterial = backendDefinition.sections.find((section) => section.id === 'color-material');
+  assert.ok(backendColorMaterial.items.some((item) => item.id === 'preset-options'));
+  assert.match(read('src/config/exhibitionCompactForm.ts'), /nodeType: 'exhibition-img2img'[\s\S]*id: 'color-material'[\s\S]*id: 'preset-options'/);
+  assert.match(read('src/components/nodes/ExhibitionImg2ImgNode.tsx'), /data-exhibition-compact-section="color-material"[\s\S]*data-exhibition-compact-item="preset-options"/);
+});
