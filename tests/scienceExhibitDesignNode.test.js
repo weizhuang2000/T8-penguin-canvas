@@ -16,6 +16,9 @@ test('science exhibit design node is registered across frontend and permissions'
   assert.match(read('src/components/Canvas.tsx'), /'science-exhibit-design': ScienceExhibitDesignNode/);
   assert.match(read('src/components/Canvas.tsx'), /scienceDomain: 'physics'/);
   assert.match(read('src/components/Canvas.tsx'), /backgroundMode: 'white'/);
+  assert.match(read('src/components/Canvas.tsx'), /colorMaterialPreset: ''/);
+  assert.match(read('src/components/Canvas.tsx'), /colorMaterialPalette: ''/);
+  assert.match(read('src/components/Canvas.tsx'), /colorMaterialTextures: ''/);
   assert.match(read('src/components/Canvas.tsx'), /widthMm: 2200/);
   assert.match(read('src/components/Canvas.tsx'), /estimatedPowerW: 800/);
   assert.match(read('src/components/Canvas.tsx'), /drawingSelection: \['exploded', 'principle', 'orthographic', 'parameter-table'\]/);
@@ -35,6 +38,9 @@ test('science exhibit component exposes handles, llm extraction and generation s
   assert.match(source, /id="text-output"/);
   assert.match(source, /PromptTextarea/);
   assert.match(source, /MentionPromptInput/);
+  assert.match(source, /ColorMaterialPresetSelect/);
+  assert.match(source, /getElevationPromptPresets/);
+  assert.match(source, /colorMaterialTextFromPreset/);
   assert.match(source, /resolveMediaMentions/);
   assert.match(source, /buildScienceExhibitExtractPrompt/);
   assert.match(source, /buildScienceExhibitImagePrompt/);
@@ -44,6 +50,8 @@ test('science exhibit component exposes handles, llm extraction and generation s
   assert.match(source, /SCIENCE_EXHIBIT_BACKGROUNDS/);
   assert.match(source, /data-exhibition-compact-item=\{String\(key\) === 'backgroundMode' \? 'background-mode' : 'parameter-input'\}/);
   assert.match(source, /data-exhibition-compact-section="dimensions"/);
+  assert.match(source, /data-exhibition-compact-section="color-material"/);
+  assert.match(source, /data-exhibition-compact-item="preset-select"/);
   assert.match(source, /data-exhibition-compact-item="size-input"/);
   assert.match(source, /parseScienceExhibitExtractJson/);
   assert.match(source, /generateLlm/);
@@ -72,6 +80,9 @@ test('compact form exposes science exhibit sections and references', () => {
     assert.match(source, /id: 'science'/);
     assert.match(source, /id: 'background-mode'/);
     assert.match(source, /id: 'dimensions'/);
+    assert.match(source, /id: 'color-material'/);
+    assert.match(source, /id: 'preset-select'/);
+    assert.match(source, /id: 'manual-input'/);
     assert.match(source, /id: 'size-input'/);
     assert.match(source, /id: 'language'/);
     assert.match(source, /id: 'drawings'/);

@@ -374,6 +374,7 @@ export const EXHIBITION_COMPACT_FORM_DEFINITIONS: ExhibitionCompactNodeDefinitio
     ] },
     { id: 'language', label: '\u6587\u6848\u63a5\u53e3', items: [
       { id: 'document', label: '\u6587\u6863\u5bfc\u5165' },
+      { id: 'llm-settings', label: 'LLM \u914d\u7f6e\u6a21\u578b' },
       { id: 'text-fields', label: '\u6587\u672c\u5b57\u6bb5' },
     ] },
     { id: 'layout', label: '\u5c3a\u5bf8\u6750\u8d28', items: [
@@ -405,6 +406,7 @@ export const EXHIBITION_COMPACT_FORM_DEFINITIONS: ExhibitionCompactNodeDefinitio
     ] },
     { id: 'language', label: '\u6587\u6848\u63a5\u53e3', items: [
       { id: 'document', label: '\u6587\u6863\u5bfc\u5165' },
+      { id: 'llm-settings', label: 'LLM \u914d\u7f6e\u6a21\u578b' },
       { id: 'text-fields', label: '\u6587\u672c\u5b57\u6bb5' },
     ] },
     { id: 'color-material', label: '\u8272\u5f69\u6750\u8d28', items: [
@@ -440,8 +442,13 @@ export const EXHIBITION_COMPACT_FORM_DEFINITIONS: ExhibitionCompactNodeDefinitio
     { id: 'dimensions', label: '\u5c3a\u5bf8\u8bbe\u7f6e', items: [
       { id: 'size-input', label: '\u5c3a\u5bf8/\u529f\u7387\u8f93\u5165' },
     ] },
+    { id: 'color-material', label: '\u8272\u5f69\u4e0e\u6750\u8d28', items: [
+      { id: 'preset-select', label: '\u9884\u8bbe\u9009\u62e9' },
+      { id: 'manual-input', label: '\u624b\u52a8\u8865\u5145' },
+    ] },
     { id: 'language', label: '\u8d44\u6599\u4e0e\u5206\u6790', items: [
       { id: 'document', label: '\u6587\u6863\u5bfc\u5165' },
+      { id: 'llm-settings', label: 'LLM \u914d\u7f6e\u6a21\u578b' },
       { id: 'text-fields', label: '\u79d1\u5b66\u5206\u6790\u5b57\u6bb5' },
     ] },
     { id: 'drawings', label: '\u56fe\u7eb8\u8f93\u51fa', items: [

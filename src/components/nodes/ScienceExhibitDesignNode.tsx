@@ -1,9 +1,9 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
 import { Atom, Brain, FileText, Image as ImageIcon, Loader2, Play, Upload } from 'lucide-react';
 import { EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
-import { extractDocument, MAX_DOCUMENT_FILE_SIZE, MAX_DOCUMENT_FILE_SIZE_MB, type ExtractedDocument } from '../../services/api';
+import { extractDocument, getElevationPromptPresets, MAX_DOCUMENT_FILE_SIZE, MAX_DOCUMENT_FILE_SIZE_MB, type ElevationColorMaterialPresetItem, type ExtractedDocument } from '../../services/api';
 import { generateExternalImage, generateLlm, queryExternalImageStatus, queryImageStatus, submitImageAsync } from '../../services/generation';
 import {
   advancedProviderModelOptions,
@@ -46,6 +46,7 @@ import { logBus } from '../../stores/logs';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import PromptTextarea from '../PromptTextarea';
+import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useUpstreamMaterials, type Material } from './useUpstreamMaterials';
 import MentionPromptInput from './MentionPromptInput';
@@ -152,11 +153,37 @@ function drawingLabel(kind: ScienceExhibitDrawingType) {
   return SCIENCE_EXHIBIT_DRAWING_TYPES.find((item: ScienceExhibitOption) => item.id === kind)?.label || kind;
 }
 
+function colorMaterialTextFromPreset(preset: ElevationColorMaterialPresetItem | null): string {
+  if (!preset) return '';
+  return [
+    preset.label,
+    String(preset.core || '').trim(),
+    String(preset.features || '').trim(),
+    String(preset.usage || '').trim(),
+  ].filter(Boolean).join('; ');
+}
+
+function colorPaletteTextFromPreset(preset: ElevationColorMaterialPresetItem | null): string {
+  if (!preset) return '';
+  return String(preset.core || preset.info || preset.label || '').trim();
+}
+
+function materialTexturesTextFromPreset(preset: ElevationColorMaterialPresetItem | null): string {
+  if (!preset) return '';
+  return String(preset.features || preset.info || preset.core || preset.label || '').trim();
+}
+
+function combineColorMaterialText(palette: string, textures: string, fallback = ''): string {
+  const parts = [String(palette || '').trim(), String(textures || '').trim()].filter(Boolean);
+  return parts.length ? parts.join('; ') : String(fallback || '').trim();
+}
+
 const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
   const fileRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef(false);
+  const [colorMaterialPresets, setColorMaterialPresets] = useState<ElevationColorMaterialPresetItem[]>([]);
   const upstream = useUpstreamMaterials(id);
   const spaceReferenceItems = useInputImagesByHandle(id, 'space-reference');
   const deviceReferenceItems = useInputImagesByHandle(id, 'device-reference');
@@ -215,6 +242,18 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
   const backgroundMode = normalizeScienceExhibitBackground(d.backgroundMode);
   const dimensions = useMemo(() => normalizeScienceExhibitDimensions(d.dimensions, spatialScale), [d.dimensions, spatialScale]);
   const drawingSelection = useMemo(() => normalizeScienceExhibitDrawingSelection(d.drawingSelection), [d.drawingSelection]);
+  const selectedColorMaterialPreset = useMemo(
+    () => colorMaterialPresets.find((preset) => preset.id === d.colorMaterialPreset) || null,
+    [colorMaterialPresets, d.colorMaterialPreset],
+  );
+  const colorMaterialPalette = String(d.colorMaterialPalette || colorPaletteTextFromPreset(selectedColorMaterialPreset)).trim();
+  const colorMaterialTextures = String(d.colorMaterialTextures || materialTexturesTextFromPreset(selectedColorMaterialPreset)).trim();
+  const colorMaterialText = combineColorMaterialText(
+    colorMaterialPalette,
+    colorMaterialTextures,
+    String(d.colorMaterial || colorMaterialTextFromPreset(selectedColorMaterialPreset)).trim(),
+  );
+  const hasColorMaterialPreset = !!selectedColorMaterialPreset;
   const analysis = useMemo(() => normalizeScienceExhibitAnalysis(d.analysis || {
     titleText: d.titleText,
     sciencePrinciple: d.sciencePrinciple,
@@ -247,7 +286,14 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
     () => resolveMediaMentions(supplement, supplementMentions, mentionMaterials),
     [mentionMaterials, supplement, supplementMentions],
   );
-  const parameterMarkdown = useMemo(() => buildScienceExhibitParameterMarkdown({ analysis, dimensions, spatialScale }), [analysis, dimensions, spatialScale]);
+  const parameterMarkdown = useMemo(() => buildScienceExhibitParameterMarkdown({
+    analysis,
+    dimensions,
+    spatialScale,
+    colorMaterial: colorMaterialText,
+    colorMaterialPalette,
+    colorMaterialTextures,
+  }), [analysis, colorMaterialPalette, colorMaterialText, colorMaterialTextures, dimensions, spatialScale]);
   const previewReferenceImages = useMemo(() => [...spaceReferenceImages, ...deviceReferenceImages], [deviceReferenceImages, spaceReferenceImages]);
   const previewPrompt = useMemo(() => buildScienceExhibitImagePrompt({
     scienceDomain,
@@ -261,7 +307,17 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
     spaceReferenceImages,
     deviceReferenceImages,
     supplement: resolvedSupplement,
-  }), [analysis, audience, backgroundMode, deviceReferenceImages, dimensions, exhibitType, interactionMode, resolvedSupplement, scienceDomain, spaceReferenceImages, spatialScale]);
+    colorMaterial: colorMaterialText,
+    colorMaterialPalette,
+    colorMaterialTextures,
+    hasColorMaterialPreset,
+  }), [analysis, audience, backgroundMode, colorMaterialPalette, colorMaterialText, colorMaterialTextures, deviceReferenceImages, dimensions, exhibitType, hasColorMaterialPreset, interactionMode, resolvedSupplement, scienceDomain, spaceReferenceImages, spatialScale]);
+
+  useEffect(() => {
+    getElevationPromptPresets()
+      .then((presets) => setColorMaterialPresets(presets.colorMaterial || []))
+      .catch(() => setColorMaterialPresets([]));
+  }, []);
 
   useEffect(() => {
     if (
@@ -331,8 +387,22 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
         safetyMaintenance: parsed.safetyMaintenance,
         visualBrief: parsed.visualBrief,
         drawingNotes: parsed.drawingNotes,
-        outputText: buildScienceExhibitParameterMarkdown({ analysis: parsed, dimensions, spatialScale }),
-        text: buildScienceExhibitParameterMarkdown({ analysis: parsed, dimensions, spatialScale }),
+        outputText: buildScienceExhibitParameterMarkdown({
+          analysis: parsed,
+          dimensions,
+          spatialScale,
+          colorMaterial: colorMaterialText,
+          colorMaterialPalette,
+          colorMaterialTextures,
+        }),
+        text: buildScienceExhibitParameterMarkdown({
+          analysis: parsed,
+          dimensions,
+          spatialScale,
+          colorMaterial: colorMaterialText,
+          colorMaterialPalette,
+          colorMaterialTextures,
+        }),
         status: 'idle',
         progress: '',
         error: '',
@@ -342,7 +412,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
       update({ status: 'error', error: llmErrorMessage(error), progress: '' });
       return null;
     }
-  }, [activeLlmConfig?.id, busy, dimensions, effectiveSourceText, isReadonly, llmModel, spatialScale, update]);
+  }, [activeLlmConfig?.id, busy, colorMaterialPalette, colorMaterialText, colorMaterialTextures, dimensions, effectiveSourceText, isReadonly, llmModel, spatialScale, update]);
 
   const generateOneImage = useCallback(async ({
     kind,
@@ -482,7 +552,14 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
         runtimeAnalysis = await runExtract();
         if (!runtimeAnalysis) throw new Error('未获得科技展项科学分析');
       }
-      const markdown = buildScienceExhibitParameterMarkdown({ analysis: runtimeAnalysis, dimensions, spatialScale });
+      const markdown = buildScienceExhibitParameterMarkdown({
+        analysis: runtimeAnalysis,
+        dimensions,
+        spatialScale,
+        colorMaterial: colorMaterialText,
+        colorMaterialPalette,
+        colorMaterialTextures,
+      });
       const sequence: ScienceExhibitDrawingType[] = DRAWING_ORDER.filter((item) => item === 'render' || drawingSelection.includes(item));
       for (let index = 0; index < sequence.length; index += 1) {
         if (abortRef.current) throw new Error('任务已取消');
@@ -503,6 +580,10 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
             spaceReferenceImages,
             deviceReferenceImages,
             supplement: resolvedSupplement,
+            colorMaterial: colorMaterialText,
+            colorMaterialPalette,
+            colorMaterialTextures,
+            hasColorMaterialPreset,
           })
           : buildScienceExhibitDrawingPrompt({
             drawingType: kind,
@@ -514,6 +595,10 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
             previousDrawingImage,
             userReferenceImages,
             parameterMarkdown: markdown,
+            colorMaterial: colorMaterialText,
+            colorMaterialPalette,
+            colorMaterialTextures,
+            hasColorMaterialPreset,
           });
         const images = kind === 'render'
           ? userReferenceImages
@@ -569,7 +654,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`科技展项设计失败: ${msg}`, src);
       throw error;
     }
-  }, [analysis, audience, backgroundMode, busy, deviceReferenceImages, dimensions, drawingSelection, exhibitType, generateOneImage, id, interactionMode, isReadonly, resolvedSupplement, runExtract, scienceDomain, seed, spaceReferenceImages, spatialScale, update]);
+  }, [analysis, audience, backgroundMode, busy, colorMaterialPalette, colorMaterialText, colorMaterialTextures, deviceReferenceImages, dimensions, drawingSelection, exhibitType, generateOneImage, hasColorMaterialPreset, id, interactionMode, isReadonly, resolvedSupplement, runExtract, scienceDomain, seed, spaceReferenceImages, spatialScale, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -659,6 +744,75 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
           ))}
         </section>
 
+        <section data-exhibition-compact-section="color-material" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[11px] font-semibold text-cyan-100">色彩与材质预设</div>
+            {hasColorMaterialPreset && <div className="truncate text-[10px] text-white/45">{selectedColorMaterialPreset?.label}</div>}
+          </div>
+          <div data-exhibition-compact-item="preset-select">
+            <ColorMaterialPresetSelect
+              presets={colorMaterialPresets}
+              value={d.colorMaterialPreset || ''}
+              disabled={isReadonly || busy}
+              className={FIELD}
+              placeholder="不使用色彩与材质预设"
+              onChange={(presetId, preset) => update({
+                colorMaterialPreset: presetId,
+                colorMaterial: colorMaterialTextFromPreset(preset),
+                colorMaterialPalette: colorPaletteTextFromPreset(preset),
+                colorMaterialTextures: materialTexturesTextFromPreset(preset),
+              })}
+            />
+          </div>
+          <div data-exhibition-compact-item="manual-input" className="grid grid-cols-2 gap-2">
+            <label className="space-y-1">
+              <span className="text-[10px] text-white/55">色彩倾向</span>
+              <PromptTextarea
+                compact
+                title="扩大编辑"
+                className={`${FIELD} min-h-[52px] resize-y`}
+                value={colorMaterialPalette}
+                disabled={isReadonly || busy}
+                readOnly={isReadonly || busy}
+                placeholder="例如：冷白、银灰、低饱和蓝绿色点缀"
+                onValueChange={(value) => update({
+                  colorMaterialPalette: value,
+                  colorMaterial: combineColorMaterialText(value, colorMaterialTextures, d.colorMaterial),
+                  colorMaterialPreset: '',
+                })}
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-[10px] text-white/55">材质纹理</span>
+              <PromptTextarea
+                compact
+                title="扩大编辑"
+                className={`${FIELD} min-h-[52px] resize-y`}
+                value={colorMaterialTextures}
+                disabled={isReadonly || busy}
+                readOnly={isReadonly || busy}
+                placeholder="例如：拉丝金属、磨砂亚克力、透明防护罩"
+                onValueChange={(value) => update({
+                  colorMaterialTextures: value,
+                  colorMaterial: combineColorMaterialText(colorMaterialPalette, value, d.colorMaterial),
+                  colorMaterialPreset: '',
+                })}
+              />
+            </label>
+          </div>
+          <PromptTextarea
+            data-exhibition-compact-item="manual-input"
+            compact
+            title="扩大编辑"
+            className={`${FIELD} min-h-[48px] resize-y`}
+            value={d.colorMaterial || ''}
+            disabled={isReadonly || busy}
+            readOnly={isReadonly || busy}
+            placeholder="手动补充色彩、材料、表面处理或耐久要求"
+            onValueChange={(value) => update({ colorMaterial: value, colorMaterialPreset: '' })}
+          />
+        </section>
+
         <section data-exhibition-compact-section="language" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><FileText size={13} /> 资料与科学分析</div>
@@ -667,6 +821,24 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
               <button type="button" className={BUTTON} disabled={isReadonly || busy} onClick={() => void runExtract()}><Brain size={13} /> LLM 提炼</button>
             </div>
           </div>
+          <label data-exhibition-compact-item="llm-settings" className="block space-y-1">
+            <span className="text-[10px] text-white/55">LLM 配置模型</span>
+            <select
+              className={FIELD}
+              value={activeLlmConfig?.id || ''}
+              disabled={isReadonly || busy || llmConfigOptions.length === 0}
+              onChange={(event) => {
+                const next = llmConfigOptions.find((item) => item.id === event.target.value) || llmConfigOptions[0];
+                update({ llmKeyId: next?.id || '', llmModel: next?.model || configuredLlmModel });
+              }}
+            >
+              {llmConfigOptions.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label || item.id} · {item.model || configuredLlmModel}
+                </option>
+              ))}
+            </select>
+          </label>
           <input ref={fileRef} type="file" className="hidden" accept=".txt,.md,.docx,.pdf,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => void pickDocument(event.target.files?.[0])} />
           <div data-exhibition-compact-item="document" className="text-[10px] text-white/40">{documentLabel(d.documentMeta)}</div>
           <PromptTextarea data-exhibition-compact-item="document" title="扩大编辑" className={`${FIELD} min-h-[58px] resize-y`} value={sourceText} disabled={isReadonly || busy} readOnly={isReadonly || busy} placeholder="粘贴科技展项资料，或连接上游文本/上传文档" onValueChange={(value) => update({ sourceText: value })} />

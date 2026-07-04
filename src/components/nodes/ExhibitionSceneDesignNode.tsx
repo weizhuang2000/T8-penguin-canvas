@@ -633,6 +633,24 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
               <button type="button" className={BUTTON} disabled={isReadonly || busy} onClick={() => void runExtract()}><Brain size={13} /> LLM 提炼</button>
             </div>
           </div>
+          <label data-exhibition-compact-item="llm-settings" className="block space-y-1">
+            <span className="text-[10px] text-white/55">LLM 配置模型</span>
+            <select
+              className={FIELD}
+              value={activeLlmConfig?.id || ''}
+              disabled={isReadonly || busy || llmConfigOptions.length === 0}
+              onChange={(event) => {
+                const next = llmConfigOptions.find((item) => item.id === event.target.value) || llmConfigOptions[0];
+                update({ llmKeyId: next?.id || '', llmModel: next?.model || configuredLlmModel });
+              }}
+            >
+              {llmConfigOptions.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label || item.id} · {item.model || configuredLlmModel}
+                </option>
+              ))}
+            </select>
+          </label>
           <input ref={fileRef} type="file" className="hidden" accept=".txt,.md,.docx,.pdf,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => void pickDocument(event.target.files?.[0])} />
           <div data-exhibition-compact-item="document" className="text-[10px] text-white/40">{documentLabel(d.documentMeta)}</div>
           <PromptTextarea data-exhibition-compact-item="document" title="扩大编辑" className={`${FIELD} min-h-[64px] resize-y`} value={sourceText} disabled={isReadonly || busy} readOnly={isReadonly || busy} placeholder="粘贴场景设计资料，或连接上游文本/上传文档" onValueChange={(value) => update({ sourceText: value })} />

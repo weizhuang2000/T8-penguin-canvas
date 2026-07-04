@@ -283,6 +283,28 @@ function backgroundText(backgroundMode, drawingType) {
   return '背景：模拟环境，将展项放入可信的科技馆展厅环境中，包含地面、灯光、动线和周边展陈语境。';
 }
 
+function colorMaterialContext(values = {}, drawingType = '') {
+  const colorMaterial = cleanScienceExhibitText(values.colorMaterial, 2000);
+  const palette = cleanScienceExhibitText(values.colorMaterialPalette, 1200);
+  const textures = cleanScienceExhibitText(values.colorMaterialTextures, 1200);
+  if (!colorMaterial && !palette && !textures) return '';
+  const lines = [
+    'Color and material preset / 色彩与材质预设：必须作为展项外壳、操作台、屏幕边框、支架、防护罩、标识板和可触摸部件的统一设计约束；不得改变真实科学原理、尺寸比例、结构关系和安全边界。',
+  ];
+  if (values.hasColorMaterialPreset) lines.push('Preset source：来自展陈图生图色彩与材质预设，优先级高于通用视觉风格，但低于科学结构和尺寸参数。');
+  if (palette) lines.push(`Color palette：${palette}`);
+  if (textures) lines.push(`Materials/textures：${textures}`);
+  if (colorMaterial && (!palette || !textures)) lines.push(`Visual/material brief：${colorMaterial}`);
+  if (drawingType === 'orthographic') {
+    lines.push('Orthographic CAD note：三视图保持单色 CAD 线稿；色彩与材质只转化为材料标注、剖面/图例文字和部件命名，不要做彩色渲染、阴影或透视质感。');
+  } else if (drawingType === 'parameter-table') {
+    lines.push('Parameter table note：参数表图纸只把色彩与材质写成表格字段，不要插入效果图、三视图、材质球、缩略图或装饰渲染。');
+  } else if (drawingType) {
+    lines.push('Drawing note：技术图纸中的部件编号、材料标注和结构层级需与该色彩材质方案一致。');
+  }
+  return lines.join('\n');
+}
+
 export function buildScienceExhibitExtractPrompt(values = {}) {
   const sourceText = cleanScienceExhibitText(values.sourceText, 50000);
   const sizeText = dimensionsText(values.dimensions, values.spatialScale);
@@ -316,6 +338,9 @@ export function parseScienceExhibitExtractJson(text) {
 export function buildScienceExhibitParameterMarkdown(values = {}) {
   const analysis = normalizeScienceExhibitAnalysis(values.analysis || values);
   const dimensions = normalizeScienceExhibitDimensions(values.dimensions, values.spatialScale);
+  const colorMaterial = cleanScienceExhibitText(values.colorMaterial, 2000);
+  const colorMaterialPalette = cleanScienceExhibitText(values.colorMaterialPalette, 1200);
+  const colorMaterialTextures = cleanScienceExhibitText(values.colorMaterialTextures, 1200);
   const rows = analysis.keyParameters.length
     ? analysis.keyParameters
     : [
@@ -343,6 +368,12 @@ export function buildScienceExhibitParameterMarkdown(values = {}) {
     `- 安全净距：${dimensions.safetyClearanceMm} mm`,
     `- 维护净距：${dimensions.maintenanceClearanceMm} mm`,
     `- 估算功率：${dimensions.estimatedPowerW} W`,
+    '',
+    '## 色彩与材质',
+    colorMaterialPalette ? `- Color palette：${colorMaterialPalette}` : '',
+    colorMaterialTextures ? `- Materials/textures：${colorMaterialTextures}` : '',
+    colorMaterial ? `- 设计说明：${colorMaterial}` : '',
+    (!colorMaterialPalette && !colorMaterialTextures && !colorMaterial) ? '- 未指定色彩与材质预设。' : '',
     '',
     '## 互动流程',
     analysis.interactionFlow || '待补充。',
@@ -397,6 +428,7 @@ export function buildScienceExhibitImagePrompt(values = {}) {
     bgText,
     `尺寸设置：${dimensionText}。画面中的展项比例、观众尺度、操作高度、安全边界和维护门位置必须与这些尺寸一致。`,
     analysisText(analysis),
+    colorMaterialContext(values),
     spaceReferences.length ? `高优先级参考：整体空间/风格参考图必须生效，必须从 @img1 起的空间参考中提取并应用整体设计语言、色彩倾向、材质质感、灯光层次、尺度关系、展厅气质和动线秩序；即使选择白背景或黑背景，也要把这些风格特征迁移到展项本体、操作台、屏幕边框、支架、标识板和材质细节上。只排除无关展品、文字、logo 或品牌，不要忽略空间/风格参考图。HIGH PRIORITY style reference must influence the design.\n${referenceOrderText(spaceReferences, '整体空间/风格参考')}` : '未提供整体空间/风格参考图，请自行设计清晰可落地的科技馆展项环境。',
     deviceReferences.length ? `装置/结构参考图只参考机械结构、交互部件、屏幕/传感器/支架关系，不复制无关 logo 或文字。\n${referenceOrderText(deviceReferences, '装置/结构参考', spaceReferences.length)}` : '未提供装置/结构参考图，请基于科学原理设计合理的机械、电子和媒体构成。',
     allReferences.length ? `参考图总顺序：${allReferences.map((_, index) => `@img${index + 1}`).join('、')}` : '',
@@ -437,6 +469,7 @@ export function buildScienceExhibitDrawingPrompt(values = {}) {
     '一致性参考：后续图纸必须以 @img1 主效果图为首要依据；若有 @img2，则用于保持上一张图纸中的部件命名和结构编号一致。',
     referenceLines,
     analysisText(analysis),
+    colorMaterialContext(values, drawing.id),
     values.parameterMarkdown ? `参数表 Markdown 文本依据：\n${cleanScienceExhibitText(values.parameterMarkdown, 5000)}` : '',
     '表现要求：白底或深浅清晰的技术制图风格，线条清楚，层级明确，文字只用短中文标签和可信参数，不生成长篇乱码；所有参数标注为建议范围或待工程校核，不伪造精密工程数据。',
   ].filter(Boolean).join('\n');

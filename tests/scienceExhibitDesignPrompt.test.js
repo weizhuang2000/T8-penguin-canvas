@@ -75,6 +75,9 @@ test('main image prompt keeps real science and parameter consistency', () => {
     spatialScale: 'island',
     backgroundMode: 'white',
     dimensions,
+    colorMaterial: '银灰金属外壳；透明亚克力防护罩；蓝绿色灯带',
+    colorMaterialPalette: '银灰、冷白、蓝绿色点缀',
+    colorMaterialTextures: '拉丝金属、磨砂亚克力、透明防护罩',
     analysis,
     spaceReferenceImages: ['/files/input/space.png'],
     deviceReferenceImages: ['/files/input/device.png'],
@@ -88,15 +91,29 @@ test('main image prompt keeps real science and parameter consistency', () => {
   assert.match(prompt, /must influence the design/);
   assert.match(prompt, /2200mm/);
   assert.match(prompt, /900mm/);
+  assert.match(prompt, /Color and material preset/);
+  assert.match(prompt, /Color palette/);
+  assert.match(prompt, /Materials\/textures/);
+  assert.match(prompt, /拉丝金属/);
   assert.match(prompt, /白背景|白底/);
   assert.match(prompt, /叶片角度/);
 });
 
 test('technical drawing prompts bind later drawings to render reference', () => {
-  const parameterMarkdown = buildScienceExhibitParameterMarkdown({ analysis, dimensions, spatialScale: 'island' });
+  const parameterMarkdown = buildScienceExhibitParameterMarkdown({
+    analysis,
+    dimensions,
+    spatialScale: 'island',
+    colorMaterial: '银灰金属外壳；透明亚克力防护罩',
+    colorMaterialPalette: '银灰、冷白、蓝绿色点缀',
+    colorMaterialTextures: '拉丝金属、磨砂亚克力',
+  });
   assert.match(parameterMarkdown, /2200 x 1600 x 1600 mm/);
   assert.match(parameterMarkdown, /## 关键参数/);
   assert.match(parameterMarkdown, /叶片角度/);
+  assert.match(parameterMarkdown, /## 色彩与材质/);
+  assert.match(parameterMarkdown, /Color palette/);
+  assert.match(parameterMarkdown, /Materials\/textures/);
 
   for (const drawingType of ['exploded', 'principle', 'orthographic', 'parameter-table']) {
     const prompt = buildScienceExhibitDrawingPrompt({
@@ -109,6 +126,9 @@ test('technical drawing prompts bind later drawings to render reference', () => 
       previousDrawingImage: '/files/output/prev.png',
       userReferenceImages: ['/files/input/device.png'],
       parameterMarkdown,
+      colorMaterial: '银灰金属外壳；透明亚克力防护罩',
+      colorMaterialPalette: '银灰、冷白、蓝绿色点缀',
+      colorMaterialTextures: '拉丝金属、磨砂亚克力',
     });
     assert.match(prompt, /800W/);
     if (drawingType === 'parameter-table') {
@@ -116,9 +136,11 @@ test('technical drawing prompts bind later drawings to render reference', () => 
       assert.match(prompt, /no render image/);
       assert.match(prompt, /no orthographic views/);
       assert.match(prompt, /no thumbnails/);
+      assert.match(prompt, /Parameter table note/);
     }
     if (drawingType === 'orthographic') {
       assert.match(prompt, /CAD/);
+      assert.match(prompt, /Orthographic CAD note/);
       assert.match(prompt, /orthographic projection|正交投影|正投影/);
       assert.match(prompt, /no perspective|不允许任何透视关系|禁止.*透视/);
       assert.match(prompt, /操作台.*设备.*零部件|operating table.*device.*parts/i);
@@ -130,6 +152,8 @@ test('technical drawing prompts bind later drawings to render reference', () => 
     assert.match(prompt, /@img1: 主效果图一致性参考/);
     assert.match(prompt, /同一科学原理/);
     assert.match(prompt, /同一参数体系/);
+    assert.match(prompt, /Color and material preset/);
+    assert.match(prompt, /Materials\/textures/);
     assert.match(prompt, /不要伪科学/);
     assert.match(prompt, /不要乱标文字/);
     assert.match(prompt, /待工程校核/);
