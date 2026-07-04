@@ -79,6 +79,7 @@ export type NodeType =
   | 'exhibition-scene-design'
   | 'science-exhibit-design'
   | 'showcase-interior-design'
+  | 'cinema-auditorium-design'
   | 'multi-angle-visual'
   | 'portrait-master'
   | 'pose-master'

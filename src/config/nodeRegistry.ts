@@ -114,6 +114,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: 'exhibition-scene-design', label: '场景设计', category: 'exhibition', description: '展馆场景设计：场景分类、整体环境参考、人物道具 @ 引用和图像生成', icon: 'Theater', color: 'cyan' },
   { type: 'science-exhibit-design', label: '科技展项设计', category: 'exhibition', description: '科技馆展项设计：LLM 提炼真实科学原理与参数，一键生成效果图、爆炸图、原理图、三视图和参数表', icon: 'Atom', color: 'cyan' },
   { type: 'showcase-interior-design', label: '柜内设计', category: 'exhibition', description: '展柜内部陈列设计：展柜尺寸、展品图与展品高度、色彩材质预设、尺寸标注和爆炸图输出', icon: 'Archive', color: 'cyan' },
+  { type: 'cinema-auditorium-design', label: '影院报告厅设计', category: 'exhibition', description: '影院、报告厅和特效影院空间设计：长宽高、银幕舞台方向、色彩材质预设，输出效果图、彩平图和系统设备原理图', icon: 'Theater', color: 'cyan' },
   { type: 'multi-angle-visual', label: '可视化多角度', category: 'toolbox', description: '可视化调节方位 / 俯仰 / 远近，支持批量角度、Prompt 模式、前后缀、镜头收藏、JSON 导入/导出与紧凑双栏 UI', icon: 'Compass', color: 'pink' },
   { type: 'portrait-master', label: '肖像大师', category: 'toolbox', description: '捏人 Prompt 设计器：五官、发型、服饰、配饰、气质神情等 9 大类词库，支持随机、锁定、权重和运行输出文本', icon: 'UserRoundCog', color: 'pink' },
   { type: 'pose-master', label: '姿势大师', category: 'toolbox', description: '人体线稿姿态编辑器：支持多人姿势、抓取移动、OpenPose/COCO 预览输出、keypoints JSON 与中英文 prompt', icon: 'PersonStanding', color: 'pink' },

@@ -133,6 +133,7 @@ import SculptureReliefDesignNode from './nodes/SculptureReliefDesignNode';
 import ExhibitionSceneDesignNode from './nodes/ExhibitionSceneDesignNode';
 import ScienceExhibitDesignNode from './nodes/ScienceExhibitDesignNode';
 import ShowcaseInteriorDesignNode from './nodes/ShowcaseInteriorDesignNode';
+import CinemaAuditoriumDesignNode from './nodes/CinemaAuditoriumDesignNode';
 import PortraitMasterNode from './nodes/PortraitMasterNode';
 import PoseMasterNode from './nodes/PoseMasterNode';
 import IdeaNode from './nodes/IdeaNode';
@@ -240,6 +241,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'exhibition-scene-design': ExhibitionSceneDesignNode,
   'science-exhibit-design': ScienceExhibitDesignNode,
   'showcase-interior-design': ShowcaseInteriorDesignNode,
+  'cinema-auditorium-design': CinemaAuditoriumDesignNode,
   'multi-angle-visual': ToolboxParamNode,
   'portrait-master': PortraitMasterNode,
   'pose-master': PoseMasterNode,
@@ -1141,6 +1143,54 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     status: 'idle',
     error: '',
   },
+  'cinema-auditorium-design': {
+    model: 'gpt-image-2',
+    apiModel: 'gpt-image-2-all',
+    aspectRatio: '16:9',
+    sizeLevel: '2K',
+    outputFormat: 'jpg',
+    dimensions: {
+      lengthMm: 24000,
+      widthMm: 16000,
+      heightMm: 7500,
+    },
+    screenStageSide: 'north',
+    venueType: 'standard-cinema',
+    capacityMode: 'auto',
+    seatCount: 120,
+    aisleMode: 'center-and-side',
+    slopeMode: 'raked-floor',
+    screenType: 'cinema-screen',
+    audioSystem: 'surround-7-1',
+    specialEffects: [],
+    outputSelection: ['render', 'color-plan', 'system-principle'],
+    colorMaterialPreset: '',
+    colorMaterial: '',
+    colorMaterialReferenceTone: '',
+    colorMaterialPriorityMode: 'frontend',
+    sourceText: '',
+    supplement: '',
+    supplementMentions: [],
+    providerSource: 'zhenzhen',
+    providerId: '',
+    providerModel: '',
+    providerParams: {},
+    seed: 0,
+    prompt: '',
+    outputText: '',
+    text: '',
+    imageUrl: '',
+    imageUrls: [],
+    urls: [],
+    cinemaAuditoriumResults: [],
+    referenceImages: [],
+    spaceReferenceImages: [],
+    colorMaterialReferenceImages: [],
+    equipmentReferenceImages: [],
+    colorPlanReferenceImage: '',
+    status: 'idle',
+    error: '',
+  },
   'elevation-prompt': {
     model: '',
     sourceText: '',
@@ -1367,6 +1417,7 @@ const EXHIBITION_IMAGE_PROVIDER_NODE_TYPES = new Set<string>([
   'exhibition-scene-design',
   'science-exhibit-design',
   'showcase-interior-design',
+  'cinema-auditorium-design',
 ]);
 
 function firstAdvancedImageProviderData(
@@ -1428,6 +1479,12 @@ function exclusiveTargetHandlesForConnection(
   ) {
     return [handle];
   }
+  if (
+    targetType === 'cinema-auditorium-design'
+    && (handle === 'space-reference' || handle === 'color-material-reference' || handle === 'equipment-reference')
+  ) {
+    return [handle];
+  }
   if (targetType === 'exhibition-style-transfer' && handle === 'style-reference') {
     return [handle];
   }
@@ -1477,6 +1534,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'exhibition-scene-design',
   'science-exhibit-design',
   'showcase-interior-design',
+  'cinema-auditorium-design',
   'remove-ai-watermark',
 ]);
 
