@@ -149,7 +149,7 @@ export function normalizeScienceExhibitDrawingSelection(value) {
     const id = normalizeScienceExhibitDrawingType(item);
     if (id !== 'render' && !out.includes(id)) out.push(id);
   }
-  return out.length ? out : SCIENCE_EXHIBIT_DEFAULT_DRAWINGS.slice();
+  return Array.isArray(value) ? out : SCIENCE_EXHIBIT_DEFAULT_DRAWINGS.slice();
 }
 
 function positiveNumber(value, fallback, min = 0, max = 999999) {

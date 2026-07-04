@@ -63,7 +63,8 @@ test('normalizers use stable defaults', () => {
   assert.equal(normalizeScienceExhibitBackground('bad'), 'white');
   assert.deepEqual(normalizeScienceExhibitDimensions({}, 'island'), dimensions);
   assert.deepEqual(normalizeScienceExhibitDrawingSelection(['exploded', 'render', 'bad']), ['exploded']);
-  assert.deepEqual(normalizeScienceExhibitDrawingSelection([]), SCIENCE_EXHIBIT_DEFAULT_DRAWINGS);
+  assert.deepEqual(normalizeScienceExhibitDrawingSelection(undefined), SCIENCE_EXHIBIT_DEFAULT_DRAWINGS);
+  assert.deepEqual(normalizeScienceExhibitDrawingSelection([]), []);
 });
 
 test('main image prompt keeps real science and parameter consistency', () => {
