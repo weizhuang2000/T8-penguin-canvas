@@ -198,28 +198,26 @@ function domeRowSeatCounts(totalSeats: number, rowCount: number): number[] {
   return counts;
 }
 
-function splitFlyingGondolaRows(totalSeats: number, rowCount: number, seatsPerPod = 8): number[] {
+function splitFlyingSuspendedRows(totalSeats: number, rowCount: number): number[] {
   const total = Math.max(1, Math.round(totalSeats));
   const rows = Math.max(2, rowCount);
-  const weights = Array.from({ length: rows }, (_, index) => (index === 0 || index === rows - 1 ? 0.82 : 1));
+  const weights = Array.from({ length: rows }, (_, index) => (index === 0 || index === rows - 1 ? 0.9 : 1));
   const sum = weights.reduce((acc, item) => acc + item, 0);
-  const counts = weights.map((weight) => Math.max(seatsPerPod, Math.round((weight / sum) * total / seatsPerPod) * seatsPerPod));
+  const counts = weights.map((weight) => Math.max(1, Math.floor((weight / sum) * total)));
   let diff = total - counts.reduce((acc, item) => acc + item, 0);
   const order = counts.map((_, index) => index).sort((a, b) => weights[b] - weights[a]);
   for (let index = 0; diff !== 0 && index < 10000; index += 1) {
     const target = order[index % order.length];
-    const step = Math.abs(diff) >= seatsPerPod ? seatsPerPod : Math.abs(diff);
     if (diff > 0) {
-      counts[target] += step;
-      diff -= step;
-    } else if (counts[target] - step >= seatsPerPod) {
-      counts[target] -= step;
-      diff += step;
+      counts[target] += 1;
+      diff -= 1;
+    } else if (counts[target] > 1) {
+      counts[target] -= 1;
+      diff += 1;
     } else {
       break;
     }
   }
-  if (diff !== 0) counts[order[0] || 0] += diff;
   return counts;
 }
 
@@ -273,8 +271,8 @@ function buildCinemaColorPlanReferenceDataUrl(params: {
 
   if (isFlyingCinemaLayout(params)) {
     const totalSeats = Math.max(1, Math.round(params.seatCount || 96));
-    const rowCount = Math.max(3, Math.min(6, Math.round(Math.sqrt(totalSeats / 8))));
-    const rowCounts = splitFlyingGondolaRows(totalSeats, rowCount, 8);
+    const rowCount = Math.max(3, Math.min(5, Math.round(Math.sqrt(totalSeats / 16))));
+    const rowCounts = splitFlyingSuspendedRows(totalSeats, rowCount);
     const stageDepth = Math.max(90, Math.round(h * 0.28));
     const loadingDepth = Math.max(70, Math.round(h * 0.12));
     const flightArea = {
@@ -315,42 +313,47 @@ function buildCinemaColorPlanReferenceDataUrl(params: {
     ctx.fillRect(flightArea.x, flightArea.y, flightArea.w, flightArea.h);
     ctx.fillStyle = '#166534';
     ctx.font = 'bold 20px sans-serif';
-    ctx.fillText(`悬挂/升降飞行座舱区 总计${totalSeats}座`, flightArea.x + 12, flightArea.y + 30);
+    ctx.fillText(`多层吊挂飞行座椅区 总计${totalSeats}座`, flightArea.x + 12, flightArea.y + 30);
 
     const rowStep = flightArea.h / Math.max(1, rowCounts.length);
     rowCounts.forEach((count, rowIndex) => {
-      const podCount = Math.max(1, Math.ceil(count / 8));
-      const podGap = Math.max(12, centerAisleWidthMm * scale * 0.45);
-      const podW = Math.max(46, Math.min(110, (flightArea.w - (podCount - 1) * podGap) / podCount));
-      const podH = Math.max(30, Math.min(58, rowStep * 0.52));
+      const seatW = Math.max(8, Math.min(18, seatWidthMm * scale));
+      const seatH = Math.max(10, Math.min(24, seatDepthMm * scale));
+      const seatGap = Math.max(3, Math.min(8, seatGapMm * scale));
+      const rowBeamH = Math.max(18, Math.min(34, rowStep * 0.22));
       const y = flightArea.y + rowStep * rowIndex + Math.max(40, rowStep * 0.28);
-      const totalPodW = podCount * podW + (podCount - 1) * podGap;
-      const startX = flightArea.x + (flightArea.w - totalPodW) / 2;
+      const rowW = count * seatW + Math.max(0, count - 1) * seatGap;
+      const startX = flightArea.x + (flightArea.w - rowW) / 2;
+      const beamPad = Math.max(18, centerAisleWidthMm * scale * 0.22);
+      const beamX = Math.max(flightArea.x + 18, startX - beamPad);
+      const beamW = Math.min(flightArea.w - 36, rowW + beamPad * 2);
       ctx.strokeStyle = '#64748b';
       ctx.lineWidth = 2;
       ctx.setLineDash([8, 8]);
       ctx.beginPath();
-      ctx.moveTo(startX, y - 16);
-      ctx.lineTo(startX + totalPodW, y - 16);
+      ctx.moveTo(beamX, y - 18);
+      ctx.lineTo(beamX + beamW, y - 18);
       ctx.stroke();
       ctx.setLineDash([]);
+      ctx.fillStyle = '#bae6fd';
+      ctx.strokeStyle = '#0284c7';
+      ctx.lineWidth = 2;
+      ctx.fillRect(beamX, y - rowBeamH / 2, beamW, rowBeamH);
+      ctx.strokeRect(beamX, y - rowBeamH / 2, beamW, rowBeamH);
       ctx.fillStyle = '#166534';
       ctx.font = 'bold 13px sans-serif';
-      ctx.fillText(`第${rowIndex + 1}排升降臂/座舱 ${count}座`, flightArea.x + 16, y - 22);
-      for (let podIndex = 0; podIndex < podCount; podIndex += 1) {
-        const x = startX + podIndex * (podW + podGap);
+      ctx.fillText(`第${rowIndex + 1}层吊挂长排座椅 ${count}座`, flightArea.x + 16, y - 26);
+      for (let seatIndex = 0; seatIndex < count; seatIndex += 1) {
+        const x = startX + seatIndex * (seatW + seatGap);
         ctx.fillStyle = '#e0f2fe';
-        ctx.fillRect(x, y, podW, podH);
+        ctx.fillRect(x, y + rowBeamH / 2 + 4, seatW, seatH);
         ctx.strokeStyle = '#0284c7';
-        ctx.strokeRect(x, y, podW, podH);
-        ctx.fillStyle = '#0f172a';
-        ctx.font = 'bold 11px sans-serif';
-        ctx.fillText('座舱', x + Math.max(6, podW / 2 - 14), y + podH / 2 + 4);
+        ctx.strokeRect(x, y + rowBeamH / 2 + 4, seatW, seatH);
         ctx.strokeStyle = '#f97316';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.moveTo(x + podW / 2, y);
-        ctx.lineTo(x + podW / 2, screenBottom + 22);
+        ctx.moveTo(x + seatW / 2, y - rowBeamH / 2);
+        ctx.lineTo(x + seatW / 2, screenBottom + 22);
         ctx.stroke();
       }
     });
@@ -377,7 +380,7 @@ function buildCinemaColorPlanReferenceDataUrl(params: {
     ctx.fillStyle = '#0f172a';
     ctx.font = '16px sans-serif';
     ctx.fillText(`飞行影院专用底图 ${lengthMm} x ${widthMm} x ${Math.max(2500, Math.round(params.heightMm || 0))} mm`, 60, canvasH - 30);
-    ctx.fillText(`悬挂座舱/升降臂 + 巨型凹弧幕 + 装载检修区`, 60, canvasH - 10);
+    ctx.fillText(`多层吊挂长排座椅/升降大臂 + 巨型凹弧幕 + 后方装载平台`, 60, canvasH - 10);
     return canvas.toDataURL('image/png');
   }
 
