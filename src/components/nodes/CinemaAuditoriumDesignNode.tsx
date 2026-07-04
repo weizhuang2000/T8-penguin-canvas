@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
-import { Image as ImageIcon, Loader2, Play, Settings2, Theater } from 'lucide-react';
+import { Image as ImageIcon, Loader2, Maximize2, Play, Settings2, Theater, X } from 'lucide-react';
 import { EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR, EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import { IMAGE_MODELS } from '../../providers/models';
 import { getElevationPromptPresets, type ElevationColorMaterialPresetItem } from '../../services/api';
@@ -133,6 +134,38 @@ function outputLabel(kind: CinemaAuditoriumOutputType): string {
   return cinemaOutputTypeMeta(kind).label;
 }
 
+function positiveNumber(value: unknown, fallback: number, min = 0): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= min ? n : fallback;
+}
+
+function normalizeLayoutMm(value: unknown, fallback: number, min = 0): number {
+  return Math.max(min, Math.round(positiveNumber(value, fallback, min)));
+}
+
+function splitSeatBanks(totalSeats: number, bankCount: number): number[] {
+  const seats = Math.max(0, Math.round(totalSeats));
+  const count = Math.max(1, bankCount);
+  const base = Math.floor(seats / count);
+  const remainder = seats % count;
+  return Array.from({ length: count }, (_, index) => base + (index < remainder ? 1 : 0));
+}
+
+function fitSeatGrid(count: number, bankW: number, bankH: number, seatW: number, seatD: number, seatGap: number, rowSpacing: number) {
+  const colPitch = Math.max(1, seatW + seatGap);
+  const rowPitch = Math.max(1, rowSpacing);
+  const maxCols = Math.max(1, Math.floor((bankW + seatGap) / colPitch));
+  const maxRows = Math.max(1, Math.floor((bankH + Math.max(0, rowPitch - seatD)) / rowPitch));
+  const idealCols = Math.max(1, Math.ceil(Math.sqrt(Math.max(1, count) * (bankW / Math.max(1, bankH)))));
+  let cols = Math.max(1, Math.min(maxCols, idealCols || maxCols));
+  let rows = Math.max(1, Math.ceil(Math.max(1, count) / cols));
+  if (rows > maxRows && maxRows > 0) {
+    cols = Math.max(1, Math.min(maxCols, Math.ceil(Math.max(1, count) / maxRows)));
+    rows = Math.max(1, Math.ceil(Math.max(1, count) / cols));
+  }
+  return { cols, rows };
+}
+
 function buildCinemaColorPlanReferenceDataUrl(params: {
   lengthMm: number;
   widthMm: number;
@@ -141,9 +174,23 @@ function buildCinemaColorPlanReferenceDataUrl(params: {
   seatCount: number;
   aisleMode: string;
   venueType: string;
+  seatWidthMm?: number;
+  seatDepthMm?: number;
+  seatGapMm?: number;
+  rowSpacingMm?: number;
+  frontClearanceMm?: number;
+  sideAisleWidthMm?: number;
+  centerAisleWidthMm?: number;
 }): string {
   const lengthMm = Math.max(3000, params.lengthMm || 24000);
   const widthMm = Math.max(3000, params.widthMm || 16000);
+  const seatWidthMm = normalizeLayoutMm(params.seatWidthMm, 550, 250);
+  const seatDepthMm = normalizeLayoutMm(params.seatDepthMm, 600, 250);
+  const seatGapMm = normalizeLayoutMm(params.seatGapMm, 80, 0);
+  const rowSpacingMm = normalizeLayoutMm(params.rowSpacingMm, 900, seatDepthMm);
+  const frontClearanceMm = normalizeLayoutMm(params.frontClearanceMm, 1600, 0);
+  const sideAisleWidthMm = normalizeLayoutMm(params.sideAisleWidthMm, 1200, 0);
+  const centerAisleWidthMm = normalizeLayoutMm(params.centerAisleWidthMm, 1200, 0);
   const side = normalizeCinemaScreenStageSide(params.screenStageSide);
   const isHorizontalStage = side === 'north' || side === 'south';
   const planW = isHorizontalStage ? widthMm : lengthMm;
@@ -221,47 +268,61 @@ function buildCinemaColorPlanReferenceDataUrl(params: {
   const totalSeats = Math.max(0, Math.round(params.seatCount || 0));
   const effectiveSeats = totalSeats || 120;
   const bankCount = params.aisleMode === 'center-and-side' || params.aisleMode === 'center-only' || params.aisleMode === 'cross-aisle' ? 2 : 1;
-  const leftSeats = bankCount === 2 ? Math.ceil(effectiveSeats / 2) : effectiveSeats;
-  const rightSeats = bankCount === 2 ? effectiveSeats - leftSeats : 0;
-  ctx.fillText(`观众席 总计${effectiveSeats}座${bankCount === 2 ? `（左${leftSeats}+右${rightSeats}）` : ''}`, seatArea.x + 12, seatArea.y + 30);
+  const bankSeats = splitSeatBanks(effectiveSeats, bankCount);
+  ctx.fillText(`观众席 总计${effectiveSeats}座${bankCount === 2 ? `（${bankSeats[0]}+${bankSeats[1]}）` : ''}`, seatArea.x + 12, seatArea.y + 30);
 
   const drawSeatBank = (bankX: number, bankY: number, bankW: number, bankH: number, count: number, label: string) => {
     if (count <= 0 || bankW <= 20 || bankH <= 36) return;
-    const cols = Math.max(1, Math.min(12, Math.ceil(Math.sqrt(count * (bankW / Math.max(1, bankH))))));
-    const rows = Math.ceil(count / cols);
-    const gap = 4;
-    const seatW = Math.max(5, Math.min(18, (bankW - gap * (cols - 1)) / cols));
-    const seatH = Math.max(5, Math.min(14, (bankH - 24 - gap * (rows - 1)) / rows));
+    const grid = fitSeatGrid(count, bankW / scale, Math.max(1, bankH - 24) / scale, seatWidthMm, seatDepthMm, seatGapMm, rowSpacingMm);
+    const cols = grid.cols;
+    const rows = grid.rows;
+    const naturalSeatW = Math.max(4, seatWidthMm * scale);
+    const naturalSeatH = Math.max(4, seatDepthMm * scale);
+    const naturalColGap = Math.max(2, seatGapMm * scale);
+    const naturalRowPitch = Math.max(naturalSeatH + 2, rowSpacingMm * scale);
+    const naturalGridW = cols * naturalSeatW + (cols - 1) * naturalColGap;
+    const naturalGridH = rows > 1 ? (rows - 1) * naturalRowPitch + naturalSeatH : naturalSeatH;
+    const fitScale = Math.min(1, bankW / Math.max(1, naturalGridW), Math.max(1, bankH - 24) / Math.max(1, naturalGridH));
+    const seatW = Math.max(3, naturalSeatW * fitScale);
+    const seatH = Math.max(3, naturalSeatH * fitScale);
+    const colGap = Math.max(1, naturalColGap * fitScale);
+    const rowPitch = Math.max(seatH + 1, naturalRowPitch * fitScale);
     ctx.fillStyle = '#166534';
     ctx.font = 'bold 13px sans-serif';
-    ctx.fillText(`${label} ${count}座`, bankX, bankY + 14);
+    ctx.fillText(`${label} ${count}座 / ${rows}排`, bankX, bankY + 14);
     ctx.strokeStyle = '#475569';
     ctx.lineWidth = 1;
+    const totalGridW = cols * seatW + (cols - 1) * colGap;
+    const totalGridH = rows > 1 ? (rows - 1) * rowPitch + seatH : seatH;
+    const startX = bankX + Math.max(0, (bankW - totalGridW) / 2);
+    const startY = bankY + 24 + Math.max(0, (bankH - 24 - totalGridH) / 2);
     for (let index = 0; index < count; index += 1) {
       const row = Math.floor(index / cols);
       const col = index % cols;
-      const x = bankX + col * (seatW + gap);
-      const y = bankY + 24 + row * (seatH + gap);
+      const x = startX + col * (seatW + colGap);
+      const y = startY + row * rowPitch;
       ctx.fillStyle = '#e5e7eb';
       ctx.fillRect(x, y, seatW, seatH);
       ctx.strokeRect(x, y, seatW, seatH);
     }
   };
-  const bankTop = seatArea.y + 48;
-  const bankHeight = Math.max(40, seatArea.h - 62);
+  const bankTop = seatArea.y + 48 + frontClearanceMm * scale;
+  const sideAislePx = sideAisleWidthMm * scale;
+  const centerAislePx = centerAisleWidthMm * scale;
+  const bankHeight = Math.max(40, seatArea.h - 62 - frontClearanceMm * scale);
   if (bankCount === 2) {
-    const bankGap = isHorizontalStage ? Math.max(24, seatArea.w * 0.08) : Math.max(24, seatArea.h * 0.08);
+    const bankGap = Math.max(16, centerAislePx);
     if (isHorizontalStage) {
-      const bankW = (seatArea.w - bankGap - 24) / 2;
-      drawSeatBank(seatArea.x + 10, bankTop, bankW, bankHeight, leftSeats, '左区');
-      drawSeatBank(seatArea.x + 14 + bankW + bankGap, bankTop, bankW, bankHeight, rightSeats, '右区');
+      const bankW = (seatArea.w - bankGap - sideAislePx * 2) / 2;
+      drawSeatBank(seatArea.x + sideAislePx, bankTop, bankW, bankHeight, bankSeats[0], '左区');
+      drawSeatBank(seatArea.x + sideAislePx + bankW + bankGap, bankTop, bankW, bankHeight, bankSeats[1], '右区');
     } else {
-      const bankH = (seatArea.h - bankGap - 62) / 2;
-      drawSeatBank(seatArea.x + 10, bankTop, seatArea.w - 20, bankH, leftSeats, '前区');
-      drawSeatBank(seatArea.x + 10, bankTop + bankH + bankGap, seatArea.w - 20, bankH, rightSeats, '后区');
+      const bankH = (seatArea.h - bankGap - 62 - frontClearanceMm * scale - sideAislePx * 2) / 2;
+      drawSeatBank(seatArea.x + sideAislePx, bankTop, seatArea.w - sideAislePx * 2, bankH, bankSeats[0], '前区');
+      drawSeatBank(seatArea.x + sideAislePx, bankTop + bankH + bankGap, seatArea.w - sideAislePx * 2, bankH, bankSeats[1], '后区');
     }
   } else {
-    drawSeatBank(seatArea.x + 10, bankTop, seatArea.w - 20, bankHeight, effectiveSeats, '全区');
+    drawSeatBank(seatArea.x + sideAislePx, bankTop, seatArea.w - sideAislePx * 2, bankHeight, effectiveSeats, '全区');
   }
 
   ctx.strokeStyle = '#f97316';
@@ -315,7 +376,60 @@ function buildCinemaColorPlanReferenceDataUrl(params: {
   ctx.font = '16px sans-serif';
   ctx.fillText(`比例底图 ${lengthMm} x ${widthMm} x ${Math.max(2500, Math.round(params.heightMm || 0))} mm`, 60, canvasH - 30);
   ctx.fillText(`方向：${CINEMA_SCREEN_STAGE_SIDES.find((item) => item.id === side)?.label || side}`, canvasW - 250, canvasH - 30);
+  ctx.fillText(`座椅 ${seatWidthMm}x${seatDepthMm}mm / 行距${rowSpacingMm}mm / 走道${sideAisleWidthMm}/${centerAisleWidthMm}mm`, 60, canvasH - 10);
   return canvas.toDataURL('image/png');
+}
+
+function CinemaPlanLayoutModal({
+  open,
+  params,
+  onClose,
+}: {
+  open: boolean;
+  params: Parameters<typeof buildCinemaColorPlanReferenceDataUrl>[0];
+  onClose: () => void;
+}) {
+  const previewUrl = useMemo(() => {
+    if (!open || typeof document === 'undefined') return '';
+    return buildCinemaColorPlanReferenceDataUrl(params);
+  }, [open, params]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose, open]);
+
+  if (!open || typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[10035] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm nodrag nopan" onMouseDown={(event) => event.stopPropagation()} onWheel={(event) => event.stopPropagation()}>
+      <section className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-white/12 bg-zinc-950 text-white shadow-2xl">
+        <header className="flex items-center gap-3 border-b border-white/10 px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold text-cyan-100">影院报告厅平面布局</div>
+            <div className="text-[10px] text-white/45">
+              {params.lengthMm} x {params.widthMm} x {params.heightMm} mm / {params.seatCount || 120} 座 / 座椅 {params.seatWidthMm || 550} x {params.seatDepthMm || 600} mm / 行距 {params.rowSpacingMm || 900} mm
+            </div>
+          </div>
+          <button type="button" className="rounded p-1.5 text-white/60 hover:bg-white/10 hover:text-white" onClick={onClose} title="关闭"><X size={16} /></button>
+        </header>
+        <main className="min-h-0 overflow-auto bg-slate-950/70 p-4">
+          <div className="flex min-h-[60vh] items-center justify-center">
+            {previewUrl ? (
+              <img src={previewUrl} className="max-h-[72vh] max-w-full rounded-lg border border-cyan-300/30 bg-white object-contain shadow-2xl" alt="影院报告厅平面布局预览" />
+            ) : (
+              <div className="rounded border border-dashed border-white/20 px-4 py-6 text-sm text-white/50">无法生成平面布局预览</div>
+            )}
+          </div>
+        </main>
+      </section>
+    </div>,
+    document.body,
+  );
 }
 
 const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
@@ -330,8 +444,16 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
   const advancedProviders = useApiKeysStore((s) => s.settings.advancedProviders || []);
   const imageAdvancedProviders = useMemo(() => advancedProvidersForNode(advancedProviders, 'image'), [advancedProviders]);
   const [colorMaterialPresets, setColorMaterialPresets] = useState<ElevationColorMaterialPresetItem[]>([]);
+  const [planLayoutOpen, setPlanLayoutOpen] = useState(false);
 
   const dimensions = normalizeCinemaDimensions(d.dimensions);
+  const seatWidthMm = normalizeLayoutMm(d.seatWidthMm, 550, 250);
+  const seatDepthMm = normalizeLayoutMm(d.seatDepthMm, 600, 250);
+  const seatGapMm = normalizeLayoutMm(d.seatGapMm, 80, 0);
+  const rowSpacingMm = normalizeLayoutMm(d.rowSpacingMm, 900, seatDepthMm);
+  const frontClearanceMm = normalizeLayoutMm(d.frontClearanceMm, 1600, 0);
+  const sideAisleWidthMm = normalizeLayoutMm(d.sideAisleWidthMm, 1200, 0);
+  const centerAisleWidthMm = normalizeLayoutMm(d.centerAisleWidthMm, 1200, 0);
   const venueType = normalizeCinemaVenueType(d.venueType);
   const screenStageSide = normalizeCinemaScreenStageSide(d.screenStageSide);
   const aisleMode = normalizeCinemaAisleMode(d.aisleMode);
@@ -387,6 +509,13 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
     capacityMode: d.capacityMode,
     seatCount: d.seatCount,
     aisleMode,
+    seatWidthMm,
+    seatDepthMm,
+    seatGapMm,
+    rowSpacingMm,
+    frontClearanceMm,
+    sideAisleWidthMm,
+    centerAisleWidthMm,
     slopeMode,
     screenType,
     mainScreenKind,
@@ -396,7 +525,7 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
     colorMaterial: d.colorMaterial,
     colorMaterialReferenceTone: d.colorMaterialReferenceTone,
     supplement: resolvedSupplement,
-  }), [audioSystem, aisleMode, colorMaterialPresetText, d.capacityMode, d.colorMaterial, d.colorMaterialReferenceTone, d.seatCount, dimensions, mainScreenKind, resolvedSupplement, screenStageSide, screenType, slopeMode, specialEffects, venueType]);
+  }), [audioSystem, aisleMode, centerAisleWidthMm, colorMaterialPresetText, d.capacityMode, d.colorMaterial, d.colorMaterialReferenceTone, d.seatCount, dimensions, frontClearanceMm, mainScreenKind, resolvedSupplement, rowSpacingMm, screenStageSide, screenType, seatDepthMm, seatGapMm, seatWidthMm, sideAisleWidthMm, slopeMode, specialEffects, venueType]);
 
   useEffect(() => {
     getElevationPromptPresets().then((presets) => setColorMaterialPresets(presets.colorMaterial || [])).catch(() => setColorMaterialPresets([]));
@@ -554,6 +683,13 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
           seatCount: Number(d.seatCount) || 0,
           aisleMode,
           venueType,
+          seatWidthMm,
+          seatDepthMm,
+          seatGapMm,
+          rowSpacingMm,
+          frontClearanceMm,
+          sideAisleWidthMm,
+          centerAisleWidthMm,
         });
         if (dataUrl) {
           update({ progress: '上传彩平比例底图...' });
@@ -572,6 +708,13 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
             capacityMode: d.capacityMode,
             seatCount: d.seatCount,
             aisleMode,
+            seatWidthMm,
+            seatDepthMm,
+            seatGapMm,
+            rowSpacingMm,
+            frontClearanceMm,
+            sideAisleWidthMm,
+            centerAisleWidthMm,
             slopeMode,
             screenType,
             mainScreenKind,
@@ -594,6 +737,13 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
             capacityMode: d.capacityMode,
             seatCount: d.seatCount,
             aisleMode,
+            seatWidthMm,
+            seatDepthMm,
+            seatGapMm,
+            rowSpacingMm,
+            frontClearanceMm,
+            sideAisleWidthMm,
+            centerAisleWidthMm,
             slopeMode,
             screenType,
             mainScreenKind,
@@ -667,11 +817,14 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
       taskCompletionSound.notifyFailure(id, 'image');
       throw error;
     }
-  }, [audioSystem, aisleMode, busy, colorMaterialPresetText, colorMaterialReferenceImages, d.capacityMode, d.colorMaterial, d.colorMaterialReferenceTone, d.seatCount, dimensions, equipmentReferenceImages, generateOneImage, id, isReadonly, mainScreenKind, outputSelection, resolvedSupplement, screenStageSide, screenType, seed, slopeMode, sourceText, spaceReferenceImages, specialEffects, summaryText, update, venueType]);
+  }, [audioSystem, aisleMode, busy, centerAisleWidthMm, colorMaterialPresetText, colorMaterialReferenceImages, d.capacityMode, d.colorMaterial, d.colorMaterialReferenceTone, d.seatCount, dimensions, equipmentReferenceImages, frontClearanceMm, generateOneImage, id, isReadonly, mainScreenKind, outputSelection, resolvedSupplement, rowSpacingMm, screenStageSide, screenType, seatDepthMm, seatGapMm, seatWidthMm, seed, sideAisleWidthMm, slopeMode, sourceText, spaceReferenceImages, specialEffects, summaryText, update, venueType]);
 
   useRunTrigger(id, runGenerate, 'image');
 
   const patchDimensions = (patch: Partial<typeof dimensions>) => update({ dimensions: normalizeCinemaDimensions({ ...dimensions, ...patch }) });
+  const patchLayoutNumber = (key: string, fallback: number, min = 0) => (value: string) => {
+    update({ [key]: normalizeLayoutMm(value, fallback, min) });
+  };
   const toggleOutput = (kind: CinemaAuditoriumOutputType) => {
     const next = selectedOutputSet.has(kind) ? outputSelection.filter((item) => item !== kind) : [...outputSelection, kind];
     update({ outputSelection: normalizeCinemaOutputSelection(next) });
@@ -683,6 +836,22 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
     update({ specialEffects: normalizeCinemaSpecialEffects(Array.from(set)) });
   };
   const results: CinemaAuditoriumResult[] = Array.isArray(d.cinemaAuditoriumResults) ? d.cinemaAuditoriumResults : [];
+  const planLayoutParams = useMemo(() => ({
+    lengthMm: dimensions.lengthMm,
+    widthMm: dimensions.widthMm,
+    heightMm: dimensions.heightMm,
+    screenStageSide,
+    seatCount: Number(d.seatCount) || 0,
+    aisleMode,
+    venueType,
+    seatWidthMm,
+    seatDepthMm,
+    seatGapMm,
+    rowSpacingMm,
+    frontClearanceMm,
+    sideAisleWidthMm,
+    centerAisleWidthMm,
+  }), [aisleMode, centerAisleWidthMm, d.seatCount, dimensions.heightMm, dimensions.lengthMm, dimensions.widthMm, frontClearanceMm, rowSpacingMm, screenStageSide, seatDepthMm, seatGapMm, seatWidthMm, sideAisleWidthMm, venueType]);
 
   return (
     <div className="w-[640px] rounded-xl border border-cyan-300/20 bg-zinc-950/95 p-3 text-white shadow-2xl shadow-cyan-950/30" data-exhibition-compact-node-type="cinema-auditorium-design">
@@ -706,22 +875,22 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
 
       {isReadonly && <div className="mb-2 rounded border border-amber-300/30 bg-amber-300/10 px-2 py-1.5 text-[10px] text-amber-100">当前画布为只读，仅可查看结果。</div>}
 
-      <div data-exhibition-compact-section="venue" className="grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-2">
+      <div data-exhibition-compact-section="venue" className="grid grid-cols-1 gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-2">
         <label data-exhibition-compact-item="venue-type" className="space-y-1 text-[10px] text-white/55">
           影院/报告厅类型
           <select className={FIELD} value={venueType} disabled={isReadonly || busy} onChange={(event) => update({ venueType: normalizeCinemaVenueType(event.target.value) })}>
             {CINEMA_AUDITORIUM_VENUE_TYPES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
           </select>
         </label>
+      </div>
+
+      <div data-exhibition-compact-section="plan-layout" className="mt-2 grid grid-cols-4 gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-2">
         <label data-exhibition-compact-item="screen-stage-side" className="space-y-1 text-[10px] text-white/55">
           银幕/舞台区方向
           <select className={FIELD} value={screenStageSide} disabled={isReadonly || busy} onChange={(event) => update({ screenStageSide: normalizeCinemaScreenStageSide(event.target.value) })}>
             {CINEMA_SCREEN_STAGE_SIDES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
           </select>
         </label>
-      </div>
-
-      <div data-exhibition-compact-section="dimensions" className="mt-2 grid grid-cols-4 gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-2">
         {[
           ['lengthMm', '长 mm'],
           ['widthMm', '宽 mm'],
@@ -736,19 +905,50 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
           座席数
           <input className={FIELD} type="number" min={0} value={Number(d.seatCount) || 0} disabled={isReadonly || busy || d.capacityMode !== 'manual'} onChange={(event) => update({ seatCount: Math.max(0, Math.round(Number(event.target.value) || 0)), capacityMode: 'manual' })} />
         </label>
-        <label data-exhibition-compact-item="seat-count" className="col-span-4 flex items-center gap-2 text-[10px] text-white/65">
-          <input type="checkbox" className="accent-cyan-300" checked={d.capacityMode !== 'manual'} disabled={isReadonly || busy} onChange={(event) => update({ capacityMode: event.target.checked ? 'auto' : 'manual' })} />
-          自动按空间尺寸推导座席密度
-        </label>
-      </div>
-
-      <div data-exhibition-compact-section="layout" className="mt-2 grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-2">
         <label data-exhibition-compact-item="aisle-mode" className="space-y-1 text-[10px] text-white/55">
           走道模式
           <select className={FIELD} value={aisleMode} disabled={isReadonly || busy} onChange={(event) => update({ aisleMode: normalizeCinemaAisleMode(event.target.value) })}>
             {CINEMA_AISLE_MODES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
           </select>
         </label>
+        <label data-exhibition-compact-item="seat-size" className="space-y-1 text-[10px] text-white/55">
+          座椅宽 mm
+          <input className={FIELD} type="number" min={250} value={seatWidthMm} disabled={isReadonly || busy} onChange={(event) => patchLayoutNumber('seatWidthMm', 550, 250)(event.target.value)} />
+        </label>
+        <label data-exhibition-compact-item="seat-size" className="space-y-1 text-[10px] text-white/55">
+          座椅深 mm
+          <input className={FIELD} type="number" min={250} value={seatDepthMm} disabled={isReadonly || busy} onChange={(event) => patchLayoutNumber('seatDepthMm', 600, 250)(event.target.value)} />
+        </label>
+        <label data-exhibition-compact-item="seat-size" className="space-y-1 text-[10px] text-white/55">
+          座椅间隙 mm
+          <input className={FIELD} type="number" min={0} value={seatGapMm} disabled={isReadonly || busy} onChange={(event) => patchLayoutNumber('seatGapMm', 80, 0)(event.target.value)} />
+        </label>
+        <label data-exhibition-compact-item="row-spacing" className="space-y-1 text-[10px] text-white/55">
+          行间距 mm
+          <input className={FIELD} type="number" min={seatDepthMm} value={rowSpacingMm} disabled={isReadonly || busy} onChange={(event) => patchLayoutNumber('rowSpacingMm', 900, seatDepthMm)(event.target.value)} />
+        </label>
+        <label data-exhibition-compact-item="front-clearance" className="space-y-1 text-[10px] text-white/55">
+          前区净距 mm
+          <input className={FIELD} type="number" min={0} value={frontClearanceMm} disabled={isReadonly || busy} onChange={(event) => patchLayoutNumber('frontClearanceMm', 1600, 0)(event.target.value)} />
+        </label>
+        <label data-exhibition-compact-item="aisle-widths" className="space-y-1 text-[10px] text-white/55">
+          侧走道宽 mm
+          <input className={FIELD} type="number" min={0} value={sideAisleWidthMm} disabled={isReadonly || busy} onChange={(event) => patchLayoutNumber('sideAisleWidthMm', 1200, 0)(event.target.value)} />
+        </label>
+        <label data-exhibition-compact-item="aisle-widths" className="space-y-1 text-[10px] text-white/55">
+          中走道宽 mm
+          <input className={FIELD} type="number" min={0} value={centerAisleWidthMm} disabled={isReadonly || busy} onChange={(event) => patchLayoutNumber('centerAisleWidthMm', 1200, 0)(event.target.value)} />
+        </label>
+        <label data-exhibition-compact-item="seat-count" className="col-span-4 flex items-center gap-2 text-[10px] text-white/65">
+          <input type="checkbox" className="accent-cyan-300" checked={d.capacityMode !== 'manual'} disabled={isReadonly || busy} onChange={(event) => update({ capacityMode: event.target.checked ? 'auto' : 'manual' })} />
+          自动按空间尺寸推导座席密度
+        </label>
+        <button data-exhibition-compact-item="plan-preview" type="button" className={`${BUTTON} col-span-4 border-cyan-300/30 bg-cyan-300/10 text-cyan-100`} onClick={() => setPlanLayoutOpen(true)}>
+          <Maximize2 size={12} /> 查看平面布局
+        </button>
+      </div>
+
+      <div data-exhibition-compact-section="layout" className="mt-2 grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-2">
         <label data-exhibition-compact-item="slope-mode" className="space-y-1 text-[10px] text-white/55">
           地坪/视线
           <select className={FIELD} value={slopeMode} disabled={isReadonly || busy} onChange={(event) => update({ slopeMode: normalizeCinemaSlopeMode(event.target.value) })}>
@@ -901,6 +1101,7 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
           <div className="rounded border border-dashed border-white/10 p-4 text-center text-[11px] text-white/35">暂无输出</div>
         )}
       </div>
+      <CinemaPlanLayoutModal open={planLayoutOpen} params={planLayoutParams} onClose={() => setPlanLayoutOpen(false)} />
     </div>
   );
 });

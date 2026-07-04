@@ -263,12 +263,20 @@ function baseCinemaContext(values = {}) {
   const effects = cinemaSpecialEffectMetas(values.specialEffects);
   const capacityMode = values.capacityMode === 'manual' ? 'manual' : 'auto';
   const seatCount = Math.max(0, Math.round(Number(values.seatCount) || 0));
+  const seatWidthMm = Math.max(250, Math.round(Number(values.seatWidthMm) || 550));
+  const seatDepthMm = Math.max(250, Math.round(Number(values.seatDepthMm) || 600));
+  const seatGapMm = Math.max(0, Math.round(Number(values.seatGapMm) || 80));
+  const rowSpacingMm = Math.max(seatDepthMm, Math.round(Number(values.rowSpacingMm) || 900));
+  const frontClearanceMm = Math.max(0, Math.round(Number(values.frontClearanceMm) || 1600));
+  const sideAisleWidthMm = Math.max(0, Math.round(Number(values.sideAisleWidthMm) || 1200));
+  const centerAisleWidthMm = Math.max(0, Math.round(Number(values.centerAisleWidthMm) || 1200));
   return [
     `空间类型：${venue.label}；${venue.prompt}`,
     `空间尺寸：${dimensionsText(values.dimensions)}。`,
     `银幕/舞台区方向：${side.label}；${side.prompt}。`,
     `座席容量：${capacityMode === 'manual' && seatCount > 0 ? `${seatCount} seats` : '按空间尺寸自动推导合理座席数'}。`,
     `走道模式：${aisle.label}；${aisle.prompt}。`,
+    `平面布局参数：座椅占地 ${seatWidthMm} x ${seatDepthMm} mm，座椅间隙 ${seatGapMm} mm，行间距 ${rowSpacingMm} mm，前区净距 ${frontClearanceMm} mm，侧走道宽 ${sideAisleWidthMm} mm，中走道宽 ${centerAisleWidthMm} mm；这些参数必须作为座位排布和通道尺度硬约束。`,
     `地坪/视线：${slope.label}；${slope.prompt}。`,
     `银幕系统：${screen.label}；${screen.prompt}。`,
     `主屏幕种类：${mainScreen.label}；${mainScreen.prompt}。`,
@@ -309,7 +317,7 @@ export function buildCinemaAuditoriumImagePrompt(values = {}) {
   const seatCount = Math.max(0, Math.round(Number(values.seatCount) || 0));
   return [
     '核心要求：生成专业影院/报告厅/特效影院空间设计主效果图，可用于方案汇报；空间尺度、银幕舞台方向、座席视线、声学材料、疏散与设备区必须可信。',
-    colorPlanReferences.length ? `彩平图是硬约束：必须严格按照彩平图推理座椅总数量、左右/前后分区、中心走道、侧走道、银幕舞台方向和控制/设备区位置；不要把单侧座位数误当成总座位数，也不要让效果图座椅数量与彩平图不符。\n${referenceOrderText(colorPlanReferences, '彩平图硬约束')}` : '',
+    colorPlanReferences.length ? `平面布局参考图是硬约束：必须严格依据该布局图推理座椅总数量、座椅占地、行间距、左右/前后分区、中心走道、侧走道、银幕舞台方向和控制/设备区位置；不要把单侧座位数误当成总座位数，也不要让效果图座椅数量与平面布局或彩平图不符。\n${referenceOrderText(colorPlanReferences, '平面布局硬约束')}` : '',
     capacityMode === 'manual' && seatCount > 0 ? `座椅数量硬约束：画面中的观众座椅总数必须约为 ${seatCount} 座；如彩平图分为左右两区，则左右两区合计才是 ${seatCount} 座，不是每侧 ${seatCount} 座。` : '',
     baseCinemaContext(values),
     colorMaterialContext(values),
@@ -318,7 +326,7 @@ export function buildCinemaAuditoriumImagePrompt(values = {}) {
     equipmentReferences.length ? `设备/座椅/舞台参考图只参考座椅、银幕、舞台、音响、灯光、放映/LED/特效设备的构成关系。\n${referenceOrderText(equipmentReferences, '设备参考', colorPlanReferences.length + spaceReferences.length + colorReferences.length)}` : '',
     allReferences.length ? `参考图总顺序：${allReferences.map((_, index) => `@img${index + 1}`).join('、')}` : '',
     values.supplement ? `补充要求：${cleanCinemaAuditoriumText(values.supplement, 3000)}` : '',
-    '画面要求：广角但不变形，能看清银幕/舞台区、观众席、墙顶地材质、声学扩散/吸音处理、灯光层次、控制室或设备入口暗示；座椅排数、左右分区、走道位置必须与彩平图一致；避免随机logo、乱码文字、不可施工悬浮结构。',
+    '画面要求：广角但不变形，能看清银幕/舞台区、观众席、墙顶地材质、声学扩散/吸音处理、灯光层次、控制室或设备入口暗示；座椅排数、左右分区、走道位置、座椅占地和行间距必须与平面布局参考图一致；避免随机logo、乱码文字、不可施工悬浮结构。',
   ].filter(Boolean).join('\n');
 }
 
@@ -343,7 +351,7 @@ export function buildCinemaAuditoriumDrawingPrompt(values = {}) {
   ].filter(Boolean).join('\n');
 
   const typeRequirements = {
-    'color-plan': '生成彩色平面图：必须保持长宽比例和银幕舞台方向，清晰标出银幕/舞台区、座席区、排距逻辑、中心/侧走道、出入口、疏散方向、控制室/机房、设备区、无障碍席位、墙体边界和功能分区色块。以给定前端比例底图为首要结构依据。',
+    'color-plan': '生成彩色平面图：必须保持长宽比例和银幕舞台方向，清晰标出银幕/舞台区、座席区、座椅占地、行间距、排距逻辑、中心/侧走道、出入口、疏散方向、控制室/机房、设备区、无障碍席位、墙体边界和功能分区色块。以给定前端平面布局底图为首要结构依据，不得增减座位总数或改变走道宽度逻辑。',
     'system-principle': '生成系统设备原理图：只做各系统设备之间的连线拓扑结构图，不需要主效果图，不需要彩色平面图，不表现空间透视、座席排布或房间平面。必须包含放映/LED/投影系统、银幕或舞台显示面、音响系统、灯光系统、控制机房、服务器/播放系统、功放/处理器、网络/信号链路、电源与弱电、动感座椅/风效/水雾/气味/震动等特效设备（如启用）、疏散报警/应急广播与检修维护节点；设备尽量以清晰图标、符号或小型 pictogram 表现，用箭头和不同线型表达视频信号、音频信号、控制信号、供电、特效联动和安全联动关系。',
   };
   const screenTopologyText = isSystemPrinciple && mainScreen.id === 'led'

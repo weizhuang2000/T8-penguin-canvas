@@ -18,6 +18,13 @@ test('cinema auditorium design node is registered across frontend and permission
   assert.match(read('src/components/Canvas.tsx'), /widthMm: 16000/);
   assert.match(read('src/components/Canvas.tsx'), /heightMm: 7500/);
   assert.match(read('src/components/Canvas.tsx'), /screenStageSide: 'north'/);
+  assert.match(read('src/components/Canvas.tsx'), /seatWidthMm: 550/);
+  assert.match(read('src/components/Canvas.tsx'), /seatDepthMm: 600/);
+  assert.match(read('src/components/Canvas.tsx'), /seatGapMm: 80/);
+  assert.match(read('src/components/Canvas.tsx'), /rowSpacingMm: 900/);
+  assert.match(read('src/components/Canvas.tsx'), /frontClearanceMm: 1600/);
+  assert.match(read('src/components/Canvas.tsx'), /sideAisleWidthMm: 1200/);
+  assert.match(read('src/components/Canvas.tsx'), /centerAisleWidthMm: 1200/);
   assert.match(read('src/components/Canvas.tsx'), /mainScreenKind: 'unspecified'/);
   assert.match(read('src/components/Canvas.tsx'), /venueType: 'standard-cinema'/);
   assert.match(read('src/components/Canvas.tsx'), /outputSelection: \['render', 'color-plan', 'system-principle'\]/);
@@ -26,8 +33,16 @@ test('cinema auditorium design node is registered across frontend and permission
   assert.match(read('src/components/NodeActionBar.tsx'), /'cinema-auditorium-design'/);
   assert.match(read('backend/src/auth/toolPermissions.js'), /'cinema-auditorium-design'/);
   assert.match(read('src/config/exhibitionCompactForm.ts'), /nodeType: 'cinema-auditorium-design'/);
+  assert.match(read('src/config/exhibitionCompactForm.ts'), /plan-layout/);
+  assert.match(read('src/config/exhibitionCompactForm.ts'), /seat-size/);
+  assert.match(read('src/config/exhibitionCompactForm.ts'), /row-spacing/);
+  assert.match(read('src/config/exhibitionCompactForm.ts'), /aisle-widths/);
   assert.match(read('src/config/exhibitionCompactForm.ts'), /main-screen-kind/);
   assert.match(read('backend/src/auth/exhibitionCompactForm.js'), /nodeType: 'cinema-auditorium-design'/);
+  assert.match(read('backend/src/auth/exhibitionCompactForm.js'), /plan-layout/);
+  assert.match(read('backend/src/auth/exhibitionCompactForm.js'), /seat-size/);
+  assert.match(read('backend/src/auth/exhibitionCompactForm.js'), /row-spacing/);
+  assert.match(read('backend/src/auth/exhibitionCompactForm.js'), /aisle-widths/);
   assert.match(read('backend/src/auth/exhibitionCompactForm.js'), /main-screen-kind/);
 });
 
@@ -42,6 +57,17 @@ test('cinema auditorium component exposes handles, shared material controls and 
   assert.match(source, /mainScreenKind/);
   assert.match(source, /normalizeCinemaMainScreenKind/);
   assert.match(source, /主屏幕种类/);
+  assert.match(source, /data-exhibition-compact-section="plan-layout"/);
+  assert.match(source, /seatWidthMm/);
+  assert.match(source, /seatDepthMm/);
+  assert.match(source, /seatGapMm/);
+  assert.match(source, /rowSpacingMm/);
+  assert.match(source, /frontClearanceMm/);
+  assert.match(source, /sideAisleWidthMm/);
+  assert.match(source, /centerAisleWidthMm/);
+  assert.match(source, /CinemaPlanLayoutModal/);
+  assert.match(source, /createPortal/);
+  assert.match(source, /setPlanLayoutOpen\(true\)/);
   assert.match(source, /ColorMaterialPresetSelect/);
   assert.match(source, /getElevationPromptPresets/);
   assert.match(source, /MentionPromptInput/);
@@ -49,6 +75,10 @@ test('cinema auditorium component exposes handles, shared material controls and 
   assert.match(source, /buildCinemaAuditoriumImagePrompt/);
   assert.match(source, /buildCinemaAuditoriumDrawingPrompt/);
   assert.match(source, /buildCinemaColorPlanReferenceDataUrl/);
+  assert.match(source, /fitSeatGrid/);
+  assert.match(source, /seatWidthMm \* scale/);
+  assert.match(source, /rowSpacingMm \* scale/);
+  assert.match(source, /sideAisleWidthMm/);
   assert.match(source, /uploadDataUrl\(dataUrl, 'cinema-color-plan-reference'\)/);
   assert.match(source, /generateExternalImage/);
   assert.match(source, /submitImageAsync/);
@@ -62,6 +92,7 @@ test('cinema auditorium output order and result fields are stable', () => {
   assert.match(source, /OUTPUT_ORDER: CinemaAuditoriumOutputType\[\] = \['color-plan', 'render', 'system-principle'\]/);
   assert.match(source, /const sequence = OUTPUT_ORDER\.filter/);
   assert.match(source, /sequence\.includes\('color-plan'\) \|\| sequence\.includes\('render'\)/);
+  assert.match(source, /seatWidthMm,\s*seatDepthMm,\s*seatGapMm,\s*rowSpacingMm,\s*frontClearanceMm,\s*sideAisleWidthMm,\s*centerAisleWidthMm/s);
   assert.match(source, /colorPlanReferenceImages: \[generatedColorPlanImage \|\| planReferenceImage\]\.filter\(Boolean\)/);
   assert.match(source, /\[generatedColorPlanImage \|\| planReferenceImage, \.\.\.spaceReferenceImages/);
   assert.match(source, /if \(kind === 'render'\) renderImage = generated\.imageUrl/);
