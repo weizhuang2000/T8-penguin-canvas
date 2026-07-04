@@ -67,6 +67,7 @@ test('cinema auditorium component exposes handles, shared material controls and 
   assert.match(source, /centerAisleWidthMm/);
   assert.match(source, /CinemaPlanLayoutModal/);
   assert.match(source, /createPortal/);
+  assert.match(source, /onPatch/);
   assert.match(source, /setPlanLayoutOpen\(true\)/);
   assert.match(source, /ColorMaterialPresetSelect/);
   assert.match(source, /getElevationPromptPresets/);
@@ -79,6 +80,7 @@ test('cinema auditorium component exposes handles, shared material controls and 
   assert.match(source, /seatWidthMm \* scale/);
   assert.match(source, /rowSpacingMm \* scale/);
   assert.match(source, /sideAisleWidthMm/);
+  assert.doesNotMatch(source, /fitScale/);
   assert.match(source, /uploadDataUrl\(dataUrl, 'cinema-color-plan-reference'\)/);
   assert.match(source, /generateExternalImage/);
   assert.match(source, /submitImageAsync/);
