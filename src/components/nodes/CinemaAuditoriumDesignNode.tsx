@@ -170,6 +170,10 @@ function isDomeCinemaLayout(params: { venueType?: string; screenType?: string; s
   return params.venueType === 'dome-cinema' || params.screenType === 'dome-screen' || params.slopeMode === 'reclined-dome';
 }
 
+function isFlyingCinemaLayout(params: { venueType?: string }): boolean {
+  return params.venueType === 'flying-theater';
+}
+
 function domeRowSeatCounts(totalSeats: number, rowCount: number): number[] {
   const total = Math.max(1, Math.round(totalSeats));
   const rows = Math.max(3, rowCount);
@@ -191,6 +195,31 @@ function domeRowSeatCounts(totalSeats: number, rowCount: number): number[] {
       break;
     }
   }
+  return counts;
+}
+
+function splitFlyingGondolaRows(totalSeats: number, rowCount: number, seatsPerPod = 8): number[] {
+  const total = Math.max(1, Math.round(totalSeats));
+  const rows = Math.max(2, rowCount);
+  const weights = Array.from({ length: rows }, (_, index) => (index === 0 || index === rows - 1 ? 0.82 : 1));
+  const sum = weights.reduce((acc, item) => acc + item, 0);
+  const counts = weights.map((weight) => Math.max(seatsPerPod, Math.round((weight / sum) * total / seatsPerPod) * seatsPerPod));
+  let diff = total - counts.reduce((acc, item) => acc + item, 0);
+  const order = counts.map((_, index) => index).sort((a, b) => weights[b] - weights[a]);
+  for (let index = 0; diff !== 0 && index < 10000; index += 1) {
+    const target = order[index % order.length];
+    const step = Math.abs(diff) >= seatsPerPod ? seatsPerPod : Math.abs(diff);
+    if (diff > 0) {
+      counts[target] += step;
+      diff -= step;
+    } else if (counts[target] - step >= seatsPerPod) {
+      counts[target] -= step;
+      diff += step;
+    } else {
+      break;
+    }
+  }
+  if (diff !== 0) counts[order[0] || 0] += diff;
   return counts;
 }
 
@@ -241,6 +270,116 @@ function buildCinemaColorPlanReferenceDataUrl(params: {
   if (!ctx) return '';
   ctx.fillStyle = '#f8fafc';
   ctx.fillRect(0, 0, canvasW, canvasH);
+
+  if (isFlyingCinemaLayout(params)) {
+    const totalSeats = Math.max(1, Math.round(params.seatCount || 96));
+    const rowCount = Math.max(3, Math.min(6, Math.round(Math.sqrt(totalSeats / 8))));
+    const rowCounts = splitFlyingGondolaRows(totalSeats, rowCount, 8);
+    const stageDepth = Math.max(90, Math.round(h * 0.28));
+    const loadingDepth = Math.max(70, Math.round(h * 0.12));
+    const flightArea = {
+      x: x0 + Math.max(28, sideAisleWidthMm * scale * 0.5),
+      y: y0 + stageDepth + 22,
+      w: w - Math.max(56, sideAisleWidthMm * scale),
+      h: h - stageDepth - loadingDepth - 44,
+    };
+    const screenTop = y0 + 28;
+    const screenBottom = y0 + stageDepth - 8;
+    const screenCenterY = screenBottom + Math.max(80, stageDepth * 0.52);
+
+    ctx.fillStyle = '#fff7ed';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 3;
+    ctx.fillRect(x0, y0, w, h);
+    ctx.strokeRect(x0, y0, w, h);
+
+    ctx.fillStyle = '#dbeafe';
+    ctx.beginPath();
+    ctx.moveTo(x0 + 28, screenBottom);
+    ctx.quadraticCurveTo(x0 + w / 2, screenTop - 18, x0 + w - 28, screenBottom);
+    ctx.lineTo(x0 + w - 28, screenBottom + 24);
+    ctx.quadraticCurveTo(x0 + w / 2, screenCenterY, x0 + 28, screenBottom + 24);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#0369a1';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(x0 + 30, screenBottom);
+    ctx.quadraticCurveTo(x0 + w / 2, screenTop - 18, x0 + w - 30, screenBottom);
+    ctx.stroke();
+    ctx.fillStyle = '#0369a1';
+    ctx.font = 'bold 22px sans-serif';
+    ctx.fillText('巨型凹弧幕/飞行视景屏', x0 + 42, y0 + 48);
+
+    ctx.fillStyle = '#dcfce7';
+    ctx.fillRect(flightArea.x, flightArea.y, flightArea.w, flightArea.h);
+    ctx.fillStyle = '#166534';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText(`悬挂/升降飞行座舱区 总计${totalSeats}座`, flightArea.x + 12, flightArea.y + 30);
+
+    const rowStep = flightArea.h / Math.max(1, rowCounts.length);
+    rowCounts.forEach((count, rowIndex) => {
+      const podCount = Math.max(1, Math.ceil(count / 8));
+      const podGap = Math.max(12, centerAisleWidthMm * scale * 0.45);
+      const podW = Math.max(46, Math.min(110, (flightArea.w - (podCount - 1) * podGap) / podCount));
+      const podH = Math.max(30, Math.min(58, rowStep * 0.52));
+      const y = flightArea.y + rowStep * rowIndex + Math.max(40, rowStep * 0.28);
+      const totalPodW = podCount * podW + (podCount - 1) * podGap;
+      const startX = flightArea.x + (flightArea.w - totalPodW) / 2;
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 8]);
+      ctx.beginPath();
+      ctx.moveTo(startX, y - 16);
+      ctx.lineTo(startX + totalPodW, y - 16);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#166534';
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillText(`第${rowIndex + 1}排升降臂/座舱 ${count}座`, flightArea.x + 16, y - 22);
+      for (let podIndex = 0; podIndex < podCount; podIndex += 1) {
+        const x = startX + podIndex * (podW + podGap);
+        ctx.fillStyle = '#e0f2fe';
+        ctx.fillRect(x, y, podW, podH);
+        ctx.strokeStyle = '#0284c7';
+        ctx.strokeRect(x, y, podW, podH);
+        ctx.fillStyle = '#0f172a';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillText('座舱', x + Math.max(6, podW / 2 - 14), y + podH / 2 + 4);
+        ctx.strokeStyle = '#f97316';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x + podW / 2, y);
+        ctx.lineTo(x + podW / 2, screenBottom + 22);
+        ctx.stroke();
+      }
+    });
+
+    ctx.fillStyle = '#c4b5fd';
+    ctx.strokeStyle = '#4c1d95';
+    ctx.lineWidth = 2;
+    const loadZone = { x: x0 + 20, y: y0 + h - loadingDepth + 10, w: w - 40, h: loadingDepth - 24 };
+    ctx.fillRect(loadZone.x, loadZone.y, loadZone.w, loadZone.h);
+    ctx.strokeRect(loadZone.x, loadZone.y, loadZone.w, loadZone.h);
+    ctx.fillStyle = '#4c1d95';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillText('装载/等候/安全束缚区', loadZone.x + 16, loadZone.y + 28);
+
+    ctx.fillStyle = '#fde68a';
+    ctx.strokeStyle = '#92400e';
+    const effectZone = { x: x0 + w - 180, y: flightArea.y + 20, w: 140, h: 82 };
+    ctx.fillRect(effectZone.x, effectZone.y, effectZone.w, effectZone.h);
+    ctx.strokeRect(effectZone.x, effectZone.y, effectZone.w, effectZone.h);
+    ctx.fillStyle = '#92400e';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillText('风/雾/气味特效', effectZone.x + 14, effectZone.y + 46);
+
+    ctx.fillStyle = '#0f172a';
+    ctx.font = '16px sans-serif';
+    ctx.fillText(`飞行影院专用底图 ${lengthMm} x ${widthMm} x ${Math.max(2500, Math.round(params.heightMm || 0))} mm`, 60, canvasH - 30);
+    ctx.fillText(`悬挂座舱/升降臂 + 巨型凹弧幕 + 装载检修区`, 60, canvasH - 10);
+    return canvas.toDataURL('image/png');
+  }
 
   if (isDomeCinemaLayout(params)) {
     const cx = x0 + w / 2;
@@ -1065,6 +1204,7 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
             update({
               venueType: nextVenueType,
               ...(nextVenueType === 'dome-cinema' ? { screenType: 'dome-screen', slopeMode: 'reclined-dome' } : {}),
+              ...(nextVenueType === 'flying-theater' ? { screenType: 'wraparound-screen', slopeMode: 'stadium-seating', audioSystem: 'show-control-audio', specialEffects: ['motion-seats', 'wind', 'water-mist', 'scent'] } : {}),
             });
           }}>
             {CINEMA_AUDITORIUM_VENUE_TYPES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
