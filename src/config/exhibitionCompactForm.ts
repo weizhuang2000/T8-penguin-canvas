@@ -407,6 +407,12 @@ export const EXHIBITION_COMPACT_FORM_DEFINITIONS: ExhibitionCompactNodeDefinitio
       { id: 'document', label: '\u6587\u6863\u5bfc\u5165' },
       { id: 'text-fields', label: '\u6587\u672c\u5b57\u6bb5' },
     ] },
+    { id: 'color-material', label: '\u8272\u5f69\u6750\u8d28', items: [
+      { id: 'preset-options', label: '\u9884\u8bbe\u9009\u9879' },
+      { id: 'material-reference', label: '\u8272\u5f69\u4e0e\u6750\u8d28\u53c2\u8003' },
+      { id: 'priority-mode', label: '\u4f18\u5148\u7ea7' },
+      { id: 'manual-input', label: '\u624b\u52a8\u8f93\u5165' },
+    ] },
     { id: 'references', label: '\u53c2\u8003\u56fe', items: [
       { id: 'environment-reference', label: '\u6574\u4f53\u73af\u5883\u53c2\u8003' },
       { id: 'people-props', label: '\u4eba\u7269\u53ca\u9053\u5177' },

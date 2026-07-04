@@ -17,6 +17,9 @@ test('exhibition scene design node is registered in frontend and permissions', (
   assert.match(read('src/components/Canvas.tsx'), /sceneCategory: 'historical-restoration'/);
   assert.match(read('src/components/Canvas.tsx'), /presentationForm: 'realistic-reconstruction'/);
   assert.match(read('src/components/Canvas.tsx'), /spatialScale: 'room-corner'/);
+  assert.match(read('src/components/Canvas.tsx'), /colorMaterialPreset: ''/);
+  assert.match(read('src/components/Canvas.tsx'), /colorMaterialPriorityMode: 'frontend'/);
+  assert.match(read('src/components/Canvas.tsx'), /colorMaterialReferenceImages: \[\]/);
   assert.match(read('src/components/Canvas.tsx'), /peoplePropsMentions: \[\]/);
   assert.match(read('src/config/portTypes.ts'), /'exhibition-scene-design': \{ inputs: \['text', 'image'\], outputs: \['image'\] \}/);
   assert.match(read('src/utils/nodePlacement.ts'), /'exhibition-scene-design': \{ w: 640, h: 760 \}/);
@@ -30,7 +33,13 @@ test('exhibition scene component exposes dedicated handles and @ mention control
   const source = read('src/components/nodes/ExhibitionSceneDesignNode.tsx');
   assert.match(source, /id="text"/);
   assert.match(source, /id="environment-reference"/);
+  assert.match(source, /id="color-material-reference"/);
   assert.match(source, /id="people-props"/);
+  assert.match(source, /EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR/);
+  assert.match(source, /ColorMaterialPresetSelect/);
+  assert.match(source, /ColorMaterialPresetEditorModal/);
+  assert.match(source, /getElevationPromptPresets/);
+  assert.match(source, /updateElevationColorMaterialPresets/);
   assert.match(source, /MentionPromptInput/);
   assert.match(source, /resolveMediaMentions/);
   assert.match(source, /peoplePropsMentions/);
@@ -53,23 +62,24 @@ test('exhibition scene text fields use stable prompt textarea for IME input', ()
   assert.doesNotMatch(source, /<input className=\{FIELD\} value=\{(?:titleText|themeText)\}/);
 });
 
-test('scene image generation passes environment then people props references in order', () => {
+test('scene image generation passes environment, color material, then people props references in order', () => {
   const source = read('src/components/nodes/ExhibitionSceneDesignNode.tsx');
-  assert.match(source, /const referenceImages = \[\.\.\.environmentReferenceImages, \.\.\.peoplePropsReferenceImages\]/);
+  assert.match(source, /const referenceImages = \[\.\.\.environmentReferenceImages, \.\.\.colorMaterialReferenceImages, \.\.\.peoplePropsReferenceImages\]/);
+  assert.match(source, /const previewReferenceImages = useMemo\(\s*\(\) => \[\.\.\.environmentReferenceImages, \.\.\.colorMaterialReferenceImages, \.\.\.peoplePropsReferenceImages\]/);
   assert.match(source, /images: referenceImages/);
   assert.match(source, /referenceImages: previewReferenceImages/);
   assert.match(source, /environmentReferenceImages/);
+  assert.match(source, /colorMaterialReferenceImages/);
   assert.match(source, /peoplePropsReferenceImages/);
-  assert.match(source, /@img\{environmentReferenceImages\.length \+ index \+ 1\}/);
-  assert.match(source, /mentionToken: `@img\$\{environmentReferenceImages\.length \+ index \+ 1\}`/);
-  assert.match(source, /\[environmentReferenceImages\.length, peoplePropsReferenceItems\]/);
-  assert.doesNotMatch(source, /color-material-reference/);
-  assert.doesNotMatch(source, /EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR/);
+  assert.match(source, /const peoplePropsImageOffset = environmentReferenceImages\.length \+ colorMaterialReferenceImages\.length/);
+  assert.match(source, /@img\{peoplePropsImageOffset \+ index \+ 1\}/);
+  assert.match(source, /mentionToken: `@img\$\{peoplePropsImageOffset \+ index \+ 1\}`/);
+  assert.match(source, /colorMaterialMentionMaterials/);
 });
 
-test('canvas connection handling keeps environment separate and allows people props multi-source', () => {
+test('canvas connection handling keeps environment and color material separate and allows people props multi-source', () => {
   const canvas = read('src/components/Canvas.tsx');
-  assert.match(canvas, /targetType === 'exhibition-scene-design'\s*&& handle === 'environment-reference'/);
+  assert.match(canvas, /targetType === 'exhibition-scene-design'\s*&& \(handle === 'environment-reference' \|\| handle === 'color-material-reference'\)/);
   assert.doesNotMatch(canvas, /targetType === 'exhibition-scene-design'\s*&& \(handle === 'environment-reference' \|\| handle === 'people-props'\)/);
 });
 
@@ -80,6 +90,11 @@ test('compact form exposes scene design sections and reference items', () => {
     assert.match(source, /nodeType: 'exhibition-scene-design'/);
     assert.match(source, /id: 'scene'/);
     assert.match(source, /id: 'language'/);
+    assert.match(source, /id: 'color-material'/);
+    assert.match(source, /id: 'preset-options'/);
+    assert.match(source, /id: 'material-reference'/);
+    assert.match(source, /id: 'priority-mode'/);
+    assert.match(source, /id: 'manual-input'/);
     assert.match(source, /id: 'references'/);
     assert.match(source, /id: 'environment-reference'/);
     assert.match(source, /id: 'people-props'/);

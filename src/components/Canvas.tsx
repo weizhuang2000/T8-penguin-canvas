@@ -1023,6 +1023,15 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     themeText: '',
     sceneText: '',
     interactionText: '',
+    colorMaterialPreset: '',
+    colorMaterial: '',
+    colorMaterialPalette: '',
+    colorMaterialPaletteMentions: [],
+    colorMaterialTextures: '',
+    colorMaterialTexturesMentions: [],
+    colorMaterialReferenceTone: '',
+    colorMaterialReferenceToneMentions: [],
+    colorMaterialPriorityMode: 'frontend',
     peoplePropsText: '',
     peoplePropsMentions: [],
     prompt: '',
@@ -1033,6 +1042,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     urls: [],
     referenceImages: [],
     environmentReferenceImages: [],
+    colorMaterialReferenceImages: [],
     peoplePropsReferenceImages: [],
     status: 'idle',
     error: '',
@@ -1399,7 +1409,7 @@ function exclusiveTargetHandlesForConnection(
   }
   if (
     targetType === 'exhibition-scene-design'
-    && handle === 'environment-reference'
+    && (handle === 'environment-reference' || handle === 'color-material-reference')
   ) {
     return [handle];
   }

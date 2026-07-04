@@ -81,13 +81,37 @@ test('people and props @img mentions are bound to reference image order', () => 
   assert.match(prompt, /顺序|椤哄簭/);
 });
 
+test('color material preset and reference image constraints enter scene prompt', () => {
+  const prompt = buildExhibitionSceneImagePrompt({
+    environmentReferenceImages: ['/files/input/env.png'],
+    colorMaterialReferenceImages: ['/files/input/color-material.png'],
+    peoplePropsReferenceImages: ['/files/input/person.png'],
+    colorMaterialPalette: 'warm bronze, deep red, low contrast',
+    colorMaterialTextures: 'brushed metal, rough stone, matte acrylic',
+    colorMaterialReferenceTone: '@img2 has warm highlight and dark matte base',
+    colorMaterialPriorityMode: 'frontend',
+    peoplePropsText: 'Use @img3 as the visitor scale reference.',
+  });
+
+  assert.match(prompt, /@img1/);
+  assert.match(prompt, /@img2/);
+  assert.match(prompt, /@img3/);
+  assert.match(prompt, /色彩与材质参考图作用/);
+  assert.match(prompt, /Color palette：warm bronze, deep red, low contrast/);
+  assert.match(prompt, /Materials\/textures：brushed metal, rough stone, matte acrylic/);
+  assert.match(prompt, /Frontend recognized color\/material tone：@img2 has warm highlight/);
+  assert.match(prompt, /Use @img3 as the visitor scale reference/);
+  assert.match(prompt, /不得复制该图的空间布局、构图、具体物体、人物、文字、logo、品牌或图案细节/);
+});
+
 test('scene people props prompt uses runtime @img order in Chinese notes', () => {
   const prompt = buildExhibitionSceneImagePrompt({
     environmentReferenceImages: ['/files/input/env.png'],
+    colorMaterialReferenceImages: ['/files/input/color.png'],
     peoplePropsReferenceImages: ['/files/input/person.png'],
-    peoplePropsText: '@img2 中的女子在探坑里考古',
+    peoplePropsText: '@img3 中的女子在探坑里考古',
   });
 
-  assert.match(prompt, /人物\/道具补充说明：@img2 中的女子在探坑里考古/);
+  assert.match(prompt, /人物\/道具补充说明：@img3 中的女子在探坑里考古/);
   assert.doesNotMatch(prompt, /@image1 中的女子/);
 });

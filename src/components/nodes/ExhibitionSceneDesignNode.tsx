@@ -1,9 +1,19 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
-import { Brain, FileText, Image as ImageIcon, Loader2, Play, Theater, Upload } from 'lucide-react';
-import { EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
+import { Brain, FileText, Image as ImageIcon, Loader2, Play, Settings2, Theater, Upload } from 'lucide-react';
+import { EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR, EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
-import { extractDocument, MAX_DOCUMENT_FILE_SIZE, MAX_DOCUMENT_FILE_SIZE_MB, type ExtractedDocument } from '../../services/api';
+import {
+  extractDocument,
+  getCurrentUser,
+  getElevationPromptPresets,
+  MAX_DOCUMENT_FILE_SIZE,
+  MAX_DOCUMENT_FILE_SIZE_MB,
+  updateElevationColorMaterialPresets,
+  type AuthUser,
+  type ElevationColorMaterialPresetItem,
+  type ExtractedDocument,
+} from '../../services/api';
 import { generateExternalImage, generateLlm, queryExternalImageStatus, queryImageStatus, submitImageAsync } from '../../services/generation';
 import {
   advancedProviderModelOptions,
@@ -37,6 +47,8 @@ import { useUpdateNodeData } from './useUpdateNodeData';
 import { useUpstreamMaterials, type Material } from './useUpstreamMaterials';
 import MentionPromptInput from './MentionPromptInput';
 import { resolveMediaMentions, type MediaMention } from './mediaMentions';
+import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
+import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
@@ -83,6 +95,12 @@ function shortFileLabel(url: string, fallback = '图像') {
   return (url.split('/').pop() || fallback).split('?')[0].slice(0, 28) || fallback;
 }
 
+function inputImageLabel(handle: string): string {
+  if (handle === 'environment-reference') return '环境参考';
+  if (handle === 'color-material-reference') return '色彩材质';
+  return '人物道具';
+}
+
 function useInputImagesByHandle(nodeId: string, handle: string): InputImageItem[] {
   const conns = useNodeConnections({ id: nodeId, handleType: 'target' });
   const sourceIds = useMemo(
@@ -104,7 +122,7 @@ function useInputImagesByHandle(nodeId: string, handle: string): InputImageItem[
           out.push({
             id: `${sourceId || 'source'}:${handle}:${index}`,
             url,
-            label: shortFileLabel(url, handle === 'environment-reference' ? '环境参考' : '人物道具'),
+            label: shortFileLabel(url, inputImageLabel(handle)),
           });
         }
       });
@@ -119,6 +137,42 @@ function llmErrorMessage(error: any) {
   return message || 'LLM 请求失败';
 }
 
+function colorMaterialTextFromPreset(preset: ElevationColorMaterialPresetItem): string {
+  return [
+    preset.label,
+    String(preset.core || '').trim(),
+    String(preset.features || '').trim(),
+    String(preset.usage || '').trim(),
+  ].filter(Boolean).join('；');
+}
+
+function colorPaletteTextFromPreset(preset: ElevationColorMaterialPresetItem): string {
+  return String(preset.core || preset.info || preset.label || '').trim();
+}
+
+function materialTexturesTextFromPreset(preset: ElevationColorMaterialPresetItem): string {
+  return String(preset.features || preset.info || preset.core || preset.label || '').trim();
+}
+
+function combineColorMaterialText(palette: string, textures: string, fallback = ''): string {
+  const parts = [String(palette || '').trim(), String(textures || '').trim()].filter(Boolean);
+  return parts.length ? parts.join('；') : String(fallback || '').trim();
+}
+
+function buildColorMaterialPresetPayload(presets: ElevationColorMaterialPresetItem[]) {
+  return presets.map((preset, index) => ({
+    id: preset.id,
+    category: preset.category,
+    label: preset.label,
+    core: preset.core || '',
+    features: preset.features || '',
+    usage: preset.usage || '',
+    negativePrompt: preset.negativePrompt || '',
+    info: preset.info || '',
+    order: index,
+  }));
+}
+
 const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
@@ -126,9 +180,16 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
   const pollAbortRef = useRef(false);
   const upstream = useUpstreamMaterials(id);
   const environmentReferenceItems = useInputImagesByHandle(id, 'environment-reference');
+  const colorMaterialReferenceItems = useInputImagesByHandle(id, 'color-material-reference');
   const peoplePropsReferenceItems = useInputImagesByHandle(id, 'people-props');
   const environmentReferenceImages = useMemo(() => environmentReferenceItems.map((item) => item.url), [environmentReferenceItems]);
+  const colorMaterialReferenceImages = useMemo(() => colorMaterialReferenceItems.map((item) => item.url), [colorMaterialReferenceItems]);
   const peoplePropsReferenceImages = useMemo(() => peoplePropsReferenceItems.map((item) => item.url), [peoplePropsReferenceItems]);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [colorMaterialPresets, setColorMaterialPresets] = useState<ElevationColorMaterialPresetItem[]>([]);
+  const [colorMaterialEditorOpen, setColorMaterialEditorOpen] = useState(false);
+  const [colorMaterialSaving, setColorMaterialSaving] = useState(false);
+  const [colorMaterialError, setColorMaterialError] = useState('');
   const activeCanvas = useCanvasStore((state) => state.canvases.find((canvas) => canvas.id === state.activeId) || null);
   const activeCanvasId = useCanvasStore((state) => state.activeId);
   const isReadonly = activeCanvas?.access?.canEdit === false;
@@ -179,17 +240,38 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
   const spatialScale = normalizeExhibitionSceneSpatialScale(d.spatialScale);
   const atmosphere = normalizeExhibitionSceneAtmosphere(d.atmosphere);
   const crowdDensity = normalizeExhibitionSceneCrowdDensity(d.crowdDensity);
+  const colorMaterialPriorityMode: 'frontend' | 'llm' = d.colorMaterialPriorityMode === 'llm' ? 'llm' : 'frontend';
+  const selectedColorMaterialPreset = colorMaterialPresets.find((preset) => preset.id === d.colorMaterialPreset) || null;
+  const hasColorMaterialReference = colorMaterialReferenceImages.length > 0;
+  const canManageTeam = currentUser?.role === 'admin' || currentUser?.role === 'manager';
   const titleText = String(d.titleText || '').trim();
   const themeText = String(d.themeText || '').trim();
   const sceneText = String(d.sceneText || '').trim();
   const interactionText = String(d.interactionText || '').trim();
   const peoplePropsText = String(d.peoplePropsText || '');
   const peoplePropsMentions: MediaMention[] = Array.isArray(d.peoplePropsMentions) ? d.peoplePropsMentions : [];
+  const colorMaterialPalette = String(d.colorMaterialPalette || '');
+  const colorMaterialTextures = String(d.colorMaterialTextures || '');
+  const colorMaterialReferenceTone = String(d.colorMaterialReferenceTone || '');
+  const colorMaterialPaletteMentions: MediaMention[] = Array.isArray(d.colorMaterialPaletteMentions) ? d.colorMaterialPaletteMentions : [];
+  const colorMaterialTexturesMentions: MediaMention[] = Array.isArray(d.colorMaterialTexturesMentions) ? d.colorMaterialTexturesMentions : [];
+  const colorMaterialReferenceToneMentions: MediaMention[] = Array.isArray(d.colorMaterialReferenceToneMentions) ? d.colorMaterialReferenceToneMentions : [];
   const sourceText = String(d.sourceText || '');
   const upstreamText = useMemo(() => upstream.texts.map((item) => item.url).join('\n\n'), [upstream.texts]);
   const effectiveSourceText = [d.useUpstream !== false ? upstreamText : '', sourceText].filter((item) => item.trim()).join('\n\n');
   const status = String(d.status || 'idle');
   const busy = ['extracting', 'generating', 'uploading'].includes(status);
+
+  const peoplePropsImageOffset = environmentReferenceImages.length + colorMaterialReferenceImages.length;
+  const colorMaterialMentionMaterials: Material[] = useMemo(() => colorMaterialReferenceItems.map((item, index) => ({
+    id: item.id,
+    kind: 'image',
+    url: item.url,
+    sourceNodeId: item.id.split(':')[0] || `scene-color-material-${index + 1}`,
+    origin: 'upstream',
+    label: item.label || `色彩/材质 ${index + 1}`,
+    mentionToken: `@img${environmentReferenceImages.length + index + 1}`,
+  })), [colorMaterialReferenceItems, environmentReferenceImages.length]);
 
   const mentionMaterials: Material[] = useMemo(() => peoplePropsReferenceItems.map((item, index) => ({
     id: item.id,
@@ -198,8 +280,20 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
     sourceNodeId: item.id.split(':')[0] || `scene-people-props-${index + 1}`,
     origin: 'upstream',
     label: item.label || `人物/道具 ${index + 1}`,
-    mentionToken: `@img${environmentReferenceImages.length + index + 1}`,
-  })), [environmentReferenceImages.length, peoplePropsReferenceItems]);
+    mentionToken: `@img${peoplePropsImageOffset + index + 1}`,
+  })), [peoplePropsImageOffset, peoplePropsReferenceItems]);
+  const resolvedColorMaterialPalette = useMemo(
+    () => resolveMediaMentions(colorMaterialPalette, colorMaterialPaletteMentions, colorMaterialMentionMaterials),
+    [colorMaterialMentionMaterials, colorMaterialPalette, colorMaterialPaletteMentions],
+  );
+  const resolvedColorMaterialTextures = useMemo(
+    () => resolveMediaMentions(colorMaterialTextures, colorMaterialTexturesMentions, colorMaterialMentionMaterials),
+    [colorMaterialMentionMaterials, colorMaterialTextures, colorMaterialTexturesMentions],
+  );
+  const resolvedColorMaterialReferenceTone = useMemo(
+    () => resolveMediaMentions(colorMaterialReferenceTone, colorMaterialReferenceToneMentions, colorMaterialMentionMaterials),
+    [colorMaterialMentionMaterials, colorMaterialReferenceTone, colorMaterialReferenceToneMentions],
+  );
   const resolvedPeoplePropsText = useMemo(
     () => resolveMediaMentions(peoplePropsText, peoplePropsMentions, mentionMaterials),
     [mentionMaterials, peoplePropsMentions, peoplePropsText],
@@ -215,16 +309,23 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
     themeText,
     sceneText,
     interactionText,
+    colorMaterial: d.colorMaterial,
+    colorMaterialPalette: resolvedColorMaterialPalette,
+    colorMaterialTextures: resolvedColorMaterialTextures,
+    colorMaterialReferenceTone: resolvedColorMaterialReferenceTone,
+    colorMaterialPriorityMode,
     peoplePropsText: resolvedPeoplePropsText,
     environmentReferenceImages,
+    colorMaterialReferenceImages,
     peoplePropsReferenceImages,
     hasEnvironmentReferenceImage: environmentReferenceImages.length > 0,
+    hasColorMaterialReferenceImage: colorMaterialReferenceImages.length > 0,
     hasPeoplePropsReferenceImage: peoplePropsReferenceImages.length > 0,
-  }), [atmosphere, crowdDensity, environmentReferenceImages, interactionText, peoplePropsReferenceImages, presentationForm, resolvedPeoplePropsText, sceneCategory, sceneText, spatialScale, themeText, titleText]);
+  }), [atmosphere, colorMaterialPriorityMode, colorMaterialReferenceImages, crowdDensity, d.colorMaterial, environmentReferenceImages, interactionText, peoplePropsReferenceImages, presentationForm, resolvedColorMaterialPalette, resolvedColorMaterialReferenceTone, resolvedColorMaterialTextures, resolvedPeoplePropsText, sceneCategory, sceneText, spatialScale, themeText, titleText]);
 
   const previewReferenceImages = useMemo(
-    () => [...environmentReferenceImages, ...peoplePropsReferenceImages],
-    [environmentReferenceImages, peoplePropsReferenceImages],
+    () => [...environmentReferenceImages, ...colorMaterialReferenceImages, ...peoplePropsReferenceImages],
+    [colorMaterialReferenceImages, environmentReferenceImages, peoplePropsReferenceImages],
   );
 
   useEffect(() => {
@@ -234,6 +335,7 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
       d.text !== previewPrompt ||
       JSON.stringify(d.referenceImages || []) !== JSON.stringify(previewReferenceImages) ||
       JSON.stringify(d.environmentReferenceImages || []) !== JSON.stringify(environmentReferenceImages) ||
+      JSON.stringify(d.colorMaterialReferenceImages || []) !== JSON.stringify(colorMaterialReferenceImages) ||
       JSON.stringify(d.peoplePropsReferenceImages || []) !== JSON.stringify(peoplePropsReferenceImages)
     ) {
       update({
@@ -242,10 +344,42 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
         text: previewPrompt,
         referenceImages: previewReferenceImages,
         environmentReferenceImages,
+        colorMaterialReferenceImages,
         peoplePropsReferenceImages,
       });
     }
-  }, [d.environmentReferenceImages, d.outputText, d.peoplePropsReferenceImages, d.prompt, d.referenceImages, d.text, environmentReferenceImages, peoplePropsReferenceImages, previewPrompt, previewReferenceImages, update]);
+  }, [colorMaterialReferenceImages, d.colorMaterialReferenceImages, d.environmentReferenceImages, d.outputText, d.peoplePropsReferenceImages, d.prompt, d.referenceImages, d.text, environmentReferenceImages, peoplePropsReferenceImages, previewPrompt, previewReferenceImages, update]);
+
+  useEffect(() => {
+    getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
+    getElevationPromptPresets()
+      .then((presets) => setColorMaterialPresets(presets.colorMaterial || []))
+      .catch(() => setColorMaterialPresets([]));
+  }, []);
+
+  useEffect(() => {
+    if (!colorMaterialEditorOpen) return;
+    setColorMaterialError('');
+  }, [colorMaterialEditorOpen, colorMaterialPresets]);
+
+  const saveColorMaterialPresetItems = async (presets: ElevationColorMaterialPresetItem[]) => {
+    if (!canManageTeam) return;
+    if (presets.length === 0) {
+      setColorMaterialError('请至少保留一条色彩与材质预设。');
+      return;
+    }
+    setColorMaterialSaving(true);
+    setColorMaterialError('');
+    try {
+      const saved = await updateElevationColorMaterialPresets(buildColorMaterialPresetPayload(presets));
+      setColorMaterialPresets(saved);
+      setColorMaterialEditorOpen(false);
+    } catch (error: any) {
+      setColorMaterialError(error?.message || '保存色彩与材质预设失败');
+    } finally {
+      setColorMaterialSaving(false);
+    }
+  };
 
   const pickDocument = useCallback(async (file?: File) => {
     if (!file || isReadonly || busy) return;
@@ -307,18 +441,25 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
       themeText,
       sceneText,
       interactionText,
+      colorMaterial: d.colorMaterial,
+      colorMaterialPalette: resolvedColorMaterialPalette,
+      colorMaterialTextures: resolvedColorMaterialTextures,
+      colorMaterialReferenceTone: resolvedColorMaterialReferenceTone,
+      colorMaterialPriorityMode,
       peoplePropsText: resolvedPeoplePropsText,
       environmentReferenceImages,
+      colorMaterialReferenceImages,
       peoplePropsReferenceImages,
       hasEnvironmentReferenceImage: environmentReferenceImages.length > 0,
+      hasColorMaterialReferenceImage: colorMaterialReferenceImages.length > 0,
       hasPeoplePropsReferenceImage: peoplePropsReferenceImages.length > 0,
     });
     pollAbortRef.current = false;
     taskCompletionSound.primeAudio();
     const runSeed = seed > 0 ? seed : randomImageSeed();
     const src = `exhibition-scene-design:${id.slice(0, 6)}`;
-    const referenceImages = [...environmentReferenceImages, ...peoplePropsReferenceImages];
-    update({ status: 'generating', progress: '提交生图...', error: '', imageUrls: [], lastPrompt: imagePrompt, lastSeed: runSeed, referenceImages, environmentReferenceImages, peoplePropsReferenceImages });
+    const referenceImages = [...environmentReferenceImages, ...colorMaterialReferenceImages, ...peoplePropsReferenceImages];
+    update({ status: 'generating', progress: '提交生图...', error: '', imageUrls: [], lastPrompt: imagePrompt, lastSeed: runSeed, referenceImages, environmentReferenceImages, colorMaterialReferenceImages, peoplePropsReferenceImages });
     try {
       logBus.info(`场景设计生图提交 seed=${runSeed} refs=${referenceImages.length}`, src);
       const historyContext = { canvasId: activeCanvasId, sourceNodeId: id, sourceNodeType: 'exhibition-scene-design', seed: runSeed, nodeTitle: '场景设计' };
@@ -415,6 +556,7 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
         text: imagePrompt,
         referenceImages,
         environmentReferenceImages,
+        colorMaterialReferenceImages,
         peoplePropsReferenceImages,
         error: '',
       });
@@ -426,7 +568,7 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`场景设计生图失败: ${msg}`, src);
       throw error;
     }
-  }, [activeCanvasId, apiModel, aspectRatio, atmosphere, busy, crowdDensity, d.providerParams, environmentReferenceImages, externalProviderModel, id, interactionText, isExternalSelected, isReadonly, modelDef.id, modelDef.paramKind, outputFormat, peoplePropsReferenceImages, presentationForm, providerSelection.provider, resolvedPeoplePropsText, sceneCategory, sceneText, seed, sizeLevel, spatialScale, themeText, titleText, update]);
+  }, [activeCanvasId, apiModel, aspectRatio, atmosphere, busy, colorMaterialPriorityMode, colorMaterialReferenceImages, crowdDensity, d.colorMaterial, d.providerParams, environmentReferenceImages, externalProviderModel, id, interactionText, isExternalSelected, isReadonly, modelDef.id, modelDef.paramKind, outputFormat, peoplePropsReferenceImages, presentationForm, providerSelection.provider, resolvedColorMaterialPalette, resolvedColorMaterialReferenceTone, resolvedColorMaterialTextures, resolvedPeoplePropsText, sceneCategory, sceneText, seed, sizeLevel, spatialScale, themeText, titleText, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -439,7 +581,8 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
       <Handle type="source" position={Position.Right} className="!border-0 t8-exhibition-handle--image" style={{ background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输出：场景设计图" />
       <Handle id="text" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 t8-exhibition-handle--text" style={{ top: '26%', background: EXHIBITION_TEXT_HANDLE_COLOR }} title="输入：上游文本资料" />
       <Handle id="environment-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 t8-exhibition-handle--image" style={{ top: '44%', background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输入：整体环境参考图" />
-      <Handle id="people-props" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 t8-exhibition-handle--image" style={{ top: '62%', background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输入：人物及道具参考图" />
+      <Handle id="color-material-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 t8-exhibition-handle--pink" style={{ top: '53%', background: EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR }} title="输入：色彩与材质参考图" />
+      <Handle id="people-props" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 t8-exhibition-handle--image" style={{ top: '64%', background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输入：人物及道具参考图" />
 
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex h-8 w-8 items-center justify-center rounded bg-cyan-300/15 text-cyan-200"><Theater size={16} /></div>
@@ -514,6 +657,136 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
           </label>
         </section>
 
+        <section data-exhibition-compact-section="color-material" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-100"><Settings2 size={13} /> 色彩与材质</div>
+            {canManageTeam && (
+              <button type="button" className={BUTTON} disabled={isReadonly || busy} onClick={() => setColorMaterialEditorOpen(true)}>
+                <Settings2 size={12} /> 编辑预设
+              </button>
+            )}
+          </div>
+          <div data-exhibition-compact-item="preset-options" className="space-y-1">
+            <ColorMaterialPresetSelect
+              className={FIELD}
+              presets={colorMaterialPresets}
+              value={d.colorMaterialPreset || ''}
+              disabled={isReadonly || busy}
+              onChange={(presetId, preset) => update({
+                colorMaterialPreset: presetId,
+                ...(preset ? {
+                  colorMaterial: colorMaterialTextFromPreset(preset),
+                  colorMaterialPalette: colorPaletteTextFromPreset(preset),
+                  colorMaterialTextures: materialTexturesTextFromPreset(preset),
+                } : {}),
+              })}
+            />
+            {selectedColorMaterialPreset?.info && (
+              <div className="rounded border border-rose-300/15 bg-rose-300/5 px-2 py-1 text-[10px] leading-snug text-rose-50/70">
+                {selectedColorMaterialPreset.info}
+              </div>
+            )}
+          </div>
+          <div data-exhibition-compact-item="material-reference" className="rounded border border-white/10 bg-black/15 p-2">
+            <div className="mb-1 text-[10px] text-white/55">色彩与材质参考图 · {colorMaterialReferenceImages.length}</div>
+            {colorMaterialReferenceImages.length ? (
+              <div className="grid grid-cols-4 gap-1.5">
+                {colorMaterialReferenceImages.slice(0, 8).map((url, index) => (
+                  <div key={url} className="relative">
+                    <img src={url} alt="" className="h-16 w-full rounded border border-white/10 object-cover" draggable={false} />
+                    <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[9px] text-rose-100">@img{environmentReferenceImages.length + index + 1}</span>
+                  </div>
+                ))}
+              </div>
+            ) : <div className="rounded border border-dashed border-white/15 p-2 text-center text-[10px] text-white/35">可连接色彩与材质参考图，仅约束色调、材质、肌理与工艺质感。</div>}
+          </div>
+          <div data-exhibition-compact-item="priority-mode" className="grid grid-cols-2 rounded border border-white/10 bg-black/20 p-0.5">
+            {[
+              { value: 'frontend', label: '预设/手动优先' },
+              { value: 'llm', label: '模型识图优先' },
+            ].map((option) => {
+              const active = colorMaterialPriorityMode === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  disabled={isReadonly || busy || (!hasColorMaterialReference && option.value === 'llm')}
+                  className={`h-7 rounded px-1 text-[10px] transition ${active ? 'bg-rose-300/20 text-rose-50' : 'text-white/45 hover:bg-white/[0.08]'} disabled:cursor-not-allowed disabled:opacity-45`}
+                  onClick={() => update({ colorMaterialPriorityMode: option.value })}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+          <div data-exhibition-compact-item="manual-input" className="grid grid-cols-2 gap-2">
+            <MentionPromptInput
+              title="色彩描述"
+              className={`${FIELD} min-h-[54px] resize-y text-[10px] leading-snug`}
+              value={colorMaterialPalette || d.colorMaterial || ''}
+              mentions={colorMaterialPaletteMentions}
+              materials={colorMaterialMentionMaterials}
+              isDark
+              isPixel={false}
+              promptTemplateKind="image"
+              placeholder="Color palette / 主色、辅助色、明暗冷暖，可输入 @ 引用色彩材质图"
+              onChange={(value, mentions) => update({
+                colorMaterialPalette: value,
+                colorMaterialPaletteMentions: mentions,
+                colorMaterial: combineColorMaterialText(value, colorMaterialTextures, d.colorMaterial || ''),
+                colorMaterialPreset: '',
+              })}
+              disabled={isReadonly || busy}
+            />
+            <MentionPromptInput
+              title="材质描述"
+              className={`${FIELD} min-h-[54px] resize-y text-[10px] leading-snug`}
+              value={colorMaterialTextures || d.colorMaterial || ''}
+              mentions={colorMaterialTexturesMentions}
+              materials={colorMaterialMentionMaterials}
+              isDark
+              isPixel={false}
+              promptTemplateKind="image"
+              placeholder="Materials/textures / 墙面、地面、展具、灯光材质，可输入 @ 引用色彩材质图"
+              onChange={(value, mentions) => update({
+                colorMaterialTextures: value,
+                colorMaterialTexturesMentions: mentions,
+                colorMaterial: combineColorMaterialText(colorMaterialPalette, value, d.colorMaterial || ''),
+                colorMaterialPreset: '',
+              })}
+              disabled={isReadonly || busy}
+            />
+          </div>
+          <MentionPromptInput
+            data-exhibition-compact-item="manual-input"
+            title="色彩与材质参考说明"
+            className={`${FIELD} min-h-[46px] resize-y text-[10px] leading-snug`}
+            value={colorMaterialReferenceTone}
+            mentions={colorMaterialReferenceToneMentions}
+            materials={colorMaterialMentionMaterials}
+            isDark
+            isPixel={false}
+            promptTemplateKind="image"
+            placeholder="补充说明参考图中需要提取的色彩、材质、肌理或灯光氛围，可输入 @ 引用"
+            onChange={(value, mentions) => update({
+              colorMaterialReferenceTone: value,
+              colorMaterialReferenceToneMentions: mentions,
+            })}
+            disabled={isReadonly || busy}
+          />
+          {canManageTeam && (
+            <ColorMaterialPresetEditorModal
+              open={colorMaterialEditorOpen}
+              presets={colorMaterialPresets}
+              saving={colorMaterialSaving || busy}
+              error={colorMaterialError}
+              title="场景设计色彩与材质预设管理"
+              onClose={() => setColorMaterialEditorOpen(false)}
+              onSave={saveColorMaterialPresetItems}
+            />
+          )}
+        </section>
+
         <section data-exhibition-compact-section="references" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} /> 参考图</div>
           <div data-exhibition-compact-item="environment-reference" className="rounded border border-white/10 bg-black/15 p-2">
@@ -531,7 +804,7 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
                 {peoplePropsReferenceImages.slice(0, 8).map((url, index) => (
                   <div key={url} className="relative">
                     <img src={url} alt="" className="h-16 w-full rounded border border-white/10 object-cover" draggable={false} />
-                    <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[9px] text-cyan-100">@img{environmentReferenceImages.length + index + 1}</span>
+                    <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[9px] text-cyan-100">@img{peoplePropsImageOffset + index + 1}</span>
                   </div>
                 ))}
               </div>

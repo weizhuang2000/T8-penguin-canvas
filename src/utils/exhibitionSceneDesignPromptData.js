@@ -170,12 +170,23 @@ export function buildExhibitionSceneImagePrompt(values = {}) {
   const sceneText = cleanExhibitionSceneText(values.sceneText, 4000);
   const interactionText = cleanExhibitionSceneText(values.interactionText, 2000);
   const peoplePropsText = cleanExhibitionSceneText(values.peoplePropsText, 3000);
+  const colorMaterial = cleanExhibitionSceneText(values.colorMaterial, 2000);
+  const colorMaterialPalette = cleanExhibitionSceneText(values.colorMaterialPalette, 1500);
+  const colorMaterialTextures = cleanExhibitionSceneText(values.colorMaterialTextures, 1500);
+  const colorMaterialReferenceTone = cleanExhibitionSceneText(values.colorMaterialReferenceTone, 1500);
+  const colorMaterialPriorityMode = values.colorMaterialPriorityMode === 'llm' ? 'llm' : 'frontend';
   const environmentImages = Array.isArray(values.environmentReferenceImages) ? values.environmentReferenceImages.filter(Boolean) : [];
+  const colorMaterialImages = Array.isArray(values.colorMaterialReferenceImages) ? values.colorMaterialReferenceImages.filter(Boolean) : [];
   const peoplePropsImages = Array.isArray(values.peoplePropsReferenceImages) ? values.peoplePropsReferenceImages.filter(Boolean) : [];
   const hasEnvironmentReference = environmentImages.length > 0 || values.hasEnvironmentReferenceImage === true;
+  const hasColorMaterialReference = colorMaterialImages.length > 0 || values.hasColorMaterialReferenceImage === true;
   const hasPeoplePropsReference = peoplePropsImages.length > 0 || values.hasPeoplePropsReferenceImage === true;
-  const allReferenceImages = [...environmentImages, ...peoplePropsImages];
-  const peoplePropsOffset = environmentImages.length;
+  const allReferenceImages = [...environmentImages, ...colorMaterialImages, ...peoplePropsImages];
+  const colorMaterialOffset = environmentImages.length;
+  const peoplePropsOffset = environmentImages.length + colorMaterialImages.length;
+  const colorMaterialOrderText = colorMaterialImages
+    .map((url, index) => `@img${colorMaterialOffset + index + 1}: 色彩与材质参考图${index + 1} = ${url}`)
+    .join('\n');
   const peoplePropsOrderText = peoplePropsImages
     .map((url, index) => `@img${peoplePropsOffset + index + 1}: 人物/道具参考 ${index + 1} = ${url}`)
     .join('\n');
@@ -186,6 +197,22 @@ export function buildExhibitionSceneImagePrompt(values = {}) {
       environmentImages.length ? referenceOrderText(environmentImages, '整体环境参考 ') : '',
     ].filter(Boolean).join('\n')
     : '未提供整体环境参考图：请根据场景分类和展陈主题自行设计完整环境。';
+
+  const colorMaterialTextBlock = [
+    hasColorMaterialReference
+      ? [
+        '色彩与材质参考图作用：只参考整体色彩体系、主辅色比例、明暗冷暖、材质类别、表面肌理、粗糙度、反射/透明度、工艺质感和灯光氛围；不得复制该图的空间布局、构图、具体物体、人物、文字、logo、品牌或图案细节。',
+        colorMaterialPriorityMode === 'llm'
+          ? 'Color/material extraction mode: let the image model infer palette and materials from the reference image.'
+          : 'Color/material extraction mode: use the preset/manual text and frontend recognized tone as priority; image is only a supporting color/material reference.',
+        colorMaterialOrderText,
+      ].filter(Boolean).join('\n')
+      : '',
+    colorMaterialPalette ? `Color palette：${colorMaterialPalette}` : '',
+    colorMaterialTextures ? `Materials/textures：${colorMaterialTextures}` : '',
+    colorMaterialReferenceTone ? `Frontend recognized color/material tone：${colorMaterialReferenceTone}` : '',
+    colorMaterial && !colorMaterialPalette && !colorMaterialTextures ? `色彩与材质要求：${colorMaterial}` : '',
+  ].filter(Boolean).join('\n');
 
   const peoplePropsTextBlock = hasPeoplePropsReference
     ? [
@@ -204,6 +231,7 @@ export function buildExhibitionSceneImagePrompt(values = {}) {
     `氛围/灯光：${atmosphere.label}。${atmosphere.prompt}。`,
     `人群密度：${crowd.label}。${crowd.prompt}。`,
     environmentText,
+    colorMaterialTextBlock,
     peoplePropsTextBlock,
     allReferenceImages.length ? `参考图总顺序：${allReferenceImages.map((_, index) => `@img${index + 1}`).join('、')}。` : '',
     titleText ? `标题文字：可将“${titleText}”作为场景标题或局部标识，但不要生成乱码。` : '标题文字：无明确标题时，不要强行生成大段文字。',

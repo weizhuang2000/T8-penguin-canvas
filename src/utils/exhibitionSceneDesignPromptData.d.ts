@@ -22,9 +22,16 @@ export interface ExhibitionSceneImagePromptValues {
   sceneText?: string;
   interactionText?: string;
   peoplePropsText?: string;
+  colorMaterial?: string;
+  colorMaterialPalette?: string;
+  colorMaterialTextures?: string;
+  colorMaterialReferenceTone?: string;
+  colorMaterialPriorityMode?: 'frontend' | 'llm';
   hasEnvironmentReferenceImage?: boolean;
+  hasColorMaterialReferenceImage?: boolean;
   hasPeoplePropsReferenceImage?: boolean;
   environmentReferenceImages?: string[];
+  colorMaterialReferenceImages?: string[];
   peoplePropsReferenceImages?: string[];
 }
 
