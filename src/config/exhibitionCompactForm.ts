@@ -491,6 +491,7 @@ export const EXHIBITION_COMPACT_FORM_DEFINITIONS: ExhibitionCompactNodeDefinitio
     { id: 'language', label: '\u8d44\u6599\u4e0e\u5206\u6790', items: [
       { id: 'document', label: '\u6587\u6863\u5bfc\u5165' },
       { id: 'llm-settings', label: 'LLM \u914d\u7f6e\u6a21\u578b' },
+      { id: 'extract-before-generate', label: '\u6bcf\u6b21\u751f\u56fe\u524d\u63d0\u70bc' },
       { id: 'text-fields', label: '\u79d1\u5b66\u5206\u6790\u5b57\u6bb5' },
     ] },
     { id: 'drawings', label: '\u56fe\u7eb8\u8f93\u51fa', items: [

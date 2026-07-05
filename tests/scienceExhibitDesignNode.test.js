@@ -19,6 +19,7 @@ test('science exhibit design node is registered across frontend and permissions'
   assert.match(read('src/components/Canvas.tsx'), /colorMaterialPreset: ''/);
   assert.match(read('src/components/Canvas.tsx'), /colorMaterialPalette: ''/);
   assert.match(read('src/components/Canvas.tsx'), /colorMaterialTextures: ''/);
+  assert.match(read('src/components/Canvas.tsx'), /extractBeforeGenerate: false/);
   assert.match(read('src/components/Canvas.tsx'), /widthMm: 2200/);
   assert.match(read('src/components/Canvas.tsx'), /estimatedPowerW: 800/);
   assert.match(read('src/components/Canvas.tsx'), /drawingSelection: \['exploded', 'principle', 'orthographic', 'parameter-table'\]/);
@@ -45,6 +46,9 @@ test('science exhibit component exposes handles, llm extraction and generation s
   assert.match(source, /buildScienceExhibitExtractPrompt/);
   assert.match(source, /scienceDomain,\s*\n\s*exhibitType,\s*\n\s*interactionMode,\s*\n\s*audience,/);
   assert.match(source, /colorMaterial:\s*colorMaterialText/);
+  assert.match(source, /extractBeforeGenerate/);
+  assert.match(source, /data-exhibition-compact-item="extract-before-generate"/);
+  assert.match(source, /runExtract\(\{ force: true \}\)/);
   assert.match(source, /buildScienceExhibitImagePrompt/);
   assert.match(source, /buildScienceExhibitDrawingPrompt/);
   assert.match(source, /normalizeScienceExhibitDimensions/);
@@ -87,6 +91,7 @@ test('compact form exposes science exhibit sections and references', () => {
     assert.match(source, /id: 'manual-input'/);
     assert.match(source, /id: 'size-input'/);
     assert.match(source, /id: 'language'/);
+    assert.match(source, /id: 'extract-before-generate'/);
     assert.match(source, /id: 'drawings'/);
     assert.match(source, /id: 'references'/);
     assert.match(source, /id: 'space-reference'/);

@@ -1127,6 +1127,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     colorMaterial: '',
     colorMaterialPalette: '',
     colorMaterialTextures: '',
+    extractBeforeGenerate: false,
     useUpstream: true,
     sourceText: '',
     documentMeta: null,

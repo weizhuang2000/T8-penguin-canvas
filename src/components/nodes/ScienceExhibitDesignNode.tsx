@@ -362,8 +362,8 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
     update({ dimensions: normalizeScienceExhibitDimensions({ ...dimensions, ...patch }, spatialScale) });
   };
 
-  const runExtract = useCallback(async (): Promise<ScienceExhibitAnalysis | null> => {
-    if (isReadonly || busy) return null;
+  const runExtract = useCallback(async (options: { force?: boolean } = {}): Promise<ScienceExhibitAnalysis | null> => {
+    if (isReadonly || (busy && !options.force)) return null;
     if (!effectiveSourceText.trim()) {
       update({ status: 'error', error: '请先输入、上传或连接上游科技展项资料' });
       return null;
@@ -544,6 +544,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
     abortRef.current = false;
     taskCompletionSound.primeAudio();
     const src = `science-exhibit-design:${id.slice(0, 6)}`;
+    const extractBeforeGenerate = d.extractBeforeGenerate === true;
     let runtimeAnalysis = analysisHasContent(analysis) ? analysis : null;
     const userReferenceImages = [...spaceReferenceImages, ...deviceReferenceImages];
     const generatedUrls: string[] = [];
@@ -554,7 +555,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
     try {
       update({
         status: 'analyzing',
-        progress: runtimeAnalysis ? '使用已有科学分析，准备生成图包...' : '准备提炼科学分析...',
+        progress: extractBeforeGenerate ? '每次生图前提炼已开启，正在刷新科学分析...' : (runtimeAnalysis ? '使用已有科学分析，准备生成图包...' : '准备提炼科学分析...'),
         error: '',
         imageUrl: '',
         imageUrls: [],
@@ -562,8 +563,8 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
         scienceExhibitResults: [],
         referenceImages: userReferenceImages,
       });
-      if (!runtimeAnalysis) {
-        runtimeAnalysis = await runExtract();
+      if (extractBeforeGenerate || !runtimeAnalysis) {
+        runtimeAnalysis = await runExtract({ force: true });
         if (!runtimeAnalysis) throw new Error('未获得科技展项科学分析');
       }
       const markdown = buildScienceExhibitParameterMarkdown({
@@ -668,7 +669,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`科技展项设计失败: ${msg}`, src);
       throw error;
     }
-  }, [analysis, audience, backgroundMode, busy, colorMaterialPalette, colorMaterialText, colorMaterialTextures, deviceReferenceImages, dimensions, drawingSelection, exhibitType, generateOneImage, hasColorMaterialPreset, id, interactionMode, isReadonly, resolvedSupplement, runExtract, scienceDomain, seed, spaceReferenceImages, spatialScale, update]);
+  }, [analysis, audience, backgroundMode, busy, colorMaterialPalette, colorMaterialText, colorMaterialTextures, d.extractBeforeGenerate, deviceReferenceImages, dimensions, drawingSelection, exhibitType, generateOneImage, hasColorMaterialPreset, id, interactionMode, isReadonly, resolvedSupplement, runExtract, scienceDomain, seed, spaceReferenceImages, spatialScale, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -834,6 +835,16 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
             <div className="flex gap-1">
               <button type="button" className={BUTTON} disabled={isReadonly || busy} onClick={() => fileRef.current?.click()}><Upload size={13} /> 上传文档</button>
               <button type="button" className={BUTTON} disabled={isReadonly || busy} onClick={() => void runExtract()}><Brain size={13} /> LLM 提炼</button>
+              <label data-exhibition-compact-item="extract-before-generate" className="inline-flex h-7 items-center gap-1 rounded border border-white/10 bg-white/[0.04] px-2 text-[10px] text-white/70">
+                <input
+                  type="checkbox"
+                  className="h-3 w-3"
+                  checked={d.extractBeforeGenerate === true}
+                  disabled={isReadonly || busy}
+                  onChange={(event) => update({ extractBeforeGenerate: event.target.checked })}
+                />
+                <span>每次生图前进行提炼</span>
+              </label>
             </div>
           </div>
           <label data-exhibition-compact-item="llm-settings" className="block space-y-1">
