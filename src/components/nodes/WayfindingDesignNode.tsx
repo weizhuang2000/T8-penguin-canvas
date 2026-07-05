@@ -1,9 +1,19 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
-import { Brain, FileText, Image as ImageIcon, Loader2, MapPinned, Play, Upload } from 'lucide-react';
+import { Brain, FileText, Image as ImageIcon, Loader2, MapPinned, Play, Settings, Upload } from 'lucide-react';
 import { EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
-import { extractDocument, MAX_DOCUMENT_FILE_SIZE, MAX_DOCUMENT_FILE_SIZE_MB, type ExtractedDocument } from '../../services/api';
+import {
+  extractDocument,
+  getCurrentUser,
+  getElevationPromptPresets,
+  MAX_DOCUMENT_FILE_SIZE,
+  MAX_DOCUMENT_FILE_SIZE_MB,
+  updateElevationColorMaterialPresets,
+  type AuthUser,
+  type ElevationColorMaterialPresetItem,
+  type ExtractedDocument,
+} from '../../services/api';
 import { generateExternalImage, generateLlm, queryExternalImageStatus, queryImageStatus, submitImageAsync } from '../../services/generation';
 import {
   advancedProviderModelOptions,
@@ -17,6 +27,8 @@ import { logBus } from '../../stores/logs';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import PromptTextarea from '../PromptTextarea';
+import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
+import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useUpstreamMaterials } from './useUpstreamMaterials';
 import {
@@ -107,6 +119,30 @@ function normalizeTextArray(value: unknown): string[] {
   return String(value || '').split(/[;\n,，、]+/).map((item) => item.trim()).filter(Boolean);
 }
 
+function colorMaterialTextFromPreset(preset: ElevationColorMaterialPresetItem | null): string {
+  if (!preset) return '';
+  return [
+    preset.label,
+    String(preset.core || '').trim(),
+    String(preset.features || '').trim(),
+    String(preset.usage || '').trim(),
+  ].filter(Boolean).join('；');
+}
+
+function buildColorMaterialPresetPayload(presets: ElevationColorMaterialPresetItem[]) {
+  return presets.map((preset, index) => ({
+    id: preset.id,
+    category: preset.category,
+    label: preset.label,
+    core: preset.core || '',
+    features: preset.features || '',
+    usage: preset.usage || '',
+    negativePrompt: preset.negativePrompt || '',
+    info: preset.info || '',
+    order: Number.isFinite(Number(preset.order)) ? Number(preset.order) : index,
+  }));
+}
+
 const WayfindingDesignNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
@@ -122,6 +158,11 @@ const WayfindingDesignNode = ({ id, data, selected }: NodeProps) => {
   const llmConfigs = useApiKeysStore((state) => state.settings.llmConfigs || state.settings.llmApiKeys) || [];
   const advancedProviders = useApiKeysStore((state) => state.settings.advancedProviders);
   const allowZhenzhenFallback = useApiKeysStore((state) => state.settings.enableZhenzhenFallback !== false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [colorMaterialPresets, setColorMaterialPresets] = useState<ElevationColorMaterialPresetItem[]>([]);
+  const [colorMaterialEditorOpen, setColorMaterialEditorOpen] = useState(false);
+  const [colorMaterialSaving, setColorMaterialSaving] = useState(false);
+  const [colorMaterialError, setColorMaterialError] = useState('');
 
   const llmConfigOptions = useMemo(() => {
     const saved = llmConfigs.filter((item) => item && (item.hasApiKey || item.apiKey || item.baseUrl || item.model));
@@ -173,12 +214,19 @@ const WayfindingDesignNode = ({ id, data, selected }: NodeProps) => {
   const routeText = String(d.routeText || '').trim();
   const signText = String(d.signText || '').trim();
   const notes = String(d.notes || '').trim();
+  const colorMaterial = String(d.colorMaterial || '').trim();
   const sourceText = String(d.sourceText || '');
   const upstreamText = useMemo(() => upstream.texts.map((item) => item.url).join('\n\n'), [upstream.texts]);
   const effectiveSourceText = [d.useUpstream !== false ? upstreamText : '', sourceText].filter((item) => item.trim()).join('\n\n');
   const referenceImages = useMemo(() => [...spaceReferenceImages, ...graphicReferenceImages], [graphicReferenceImages, spaceReferenceImages]);
   const status = String(d.status || 'idle');
   const busy = ['extracting', 'generating', 'uploading'].includes(status);
+  const canManageTeam = currentUser?.role === 'admin' || currentUser?.role === 'manager';
+  const selectedColorMaterialPreset = useMemo(
+    () => colorMaterialPresets.find((preset) => preset.id === d.colorMaterialPreset) || null,
+    [colorMaterialPresets, d.colorMaterialPreset],
+  );
+  const colorMaterialPresetText = colorMaterialTextFromPreset(selectedColorMaterialPreset);
 
   const previewPrompt = useMemo(() => buildWayfindingImagePrompt({
     outputMode,
@@ -196,10 +244,19 @@ const WayfindingDesignNode = ({ id, data, selected }: NodeProps) => {
     routeText,
     signText,
     notes,
+    colorMaterial,
+    colorMaterialPresetText,
     supplement: d.supplement,
     hasSpaceReferenceImage: spaceReferenceImages.length > 0,
     hasGraphicReferenceImage: graphicReferenceImages.length > 0,
-  }), [arrowStyle, d.supplement, destinations, dimensions, graphicReferenceImages.length, language, materialId, mountingId, museumName, notes, outputMode, projectTheme, routeText, scope, signText, signTypes, spaceReferenceImages.length, zones]);
+  }), [arrowStyle, colorMaterial, colorMaterialPresetText, d.supplement, destinations, dimensions, graphicReferenceImages.length, language, materialId, mountingId, museumName, notes, outputMode, projectTheme, routeText, scope, signText, signTypes, spaceReferenceImages.length, zones]);
+
+  useEffect(() => {
+    getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
+    getElevationPromptPresets()
+      .then((presets) => setColorMaterialPresets(presets.colorMaterial || []))
+      .catch(() => setColorMaterialPresets([]));
+  }, []);
 
   useEffect(() => {
     if (
@@ -282,6 +339,8 @@ const WayfindingDesignNode = ({ id, data, selected }: NodeProps) => {
       routeText,
       signText,
       notes,
+      colorMaterial,
+      colorMaterialPresetText,
       supplement: d.supplement,
       hasSpaceReferenceImage: spaceReferenceImages.length > 0,
       hasGraphicReferenceImage: graphicReferenceImages.length > 0,
@@ -390,7 +449,7 @@ const WayfindingDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`导视系统设计生图失败: ${msg}`, src);
       throw error;
     }
-  }, [activeCanvasId, apiModel, arrowStyle, aspectRatio, busy, d.providerParams, d.supplement, destinations, dimensions, externalProviderModel, graphicReferenceImages, id, isExternalSelected, isReadonly, language, materialId, modelDef.id, modelDef.paramKind, mountingId, museumName, notes, outputFormat, outputMode, projectTheme, providerSelection.provider, referenceImages, routeText, scope, seed, signText, signTypes, sizeLevel, spaceReferenceImages, update, zones]);
+  }, [activeCanvasId, apiModel, arrowStyle, aspectRatio, busy, colorMaterial, colorMaterialPresetText, d.providerParams, d.supplement, destinations, dimensions, externalProviderModel, graphicReferenceImages, id, isExternalSelected, isReadonly, language, materialId, modelDef.id, modelDef.paramKind, mountingId, museumName, notes, outputFormat, outputMode, projectTheme, providerSelection.provider, referenceImages, routeText, scope, seed, signText, signTypes, sizeLevel, spaceReferenceImages, update, zones]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -408,6 +467,25 @@ const WayfindingDesignNode = ({ id, data, selected }: NodeProps) => {
   };
 
   const updateListText = (key: 'zones' | 'destinations', value: string) => update({ [key]: normalizeTextArray(value) });
+
+  const saveColorMaterialPresetItems = async (presets: ElevationColorMaterialPresetItem[]) => {
+    if (!canManageTeam) return;
+    if (presets.length === 0) {
+      setColorMaterialError('请至少保留一条色彩与材质预设。');
+      return;
+    }
+    setColorMaterialSaving(true);
+    setColorMaterialError('');
+    try {
+      const saved = await updateElevationColorMaterialPresets(buildColorMaterialPresetPayload(presets));
+      setColorMaterialPresets(saved);
+      setColorMaterialEditorOpen(false);
+    } catch (error: any) {
+      setColorMaterialError(error?.message || '保存色彩与材质预设失败');
+    } finally {
+      setColorMaterialSaving(false);
+    }
+  };
 
   return (
     <div
@@ -503,6 +581,60 @@ const WayfindingDesignNode = ({ id, data, selected }: NodeProps) => {
         </section>
 
         <section data-exhibition-compact-section="style" className="grid grid-cols-2 gap-2 rounded border border-white/10 bg-white/[0.035] p-2">
+          <div data-exhibition-compact-item="preset-options" className="col-span-2 space-y-1.5 rounded border border-cyan-300/20 bg-cyan-300/[0.06] p-2">
+            <div className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="text-[11px] font-semibold text-cyan-100">色彩与材质预设</div>
+                <div className="truncate text-[9px] text-white/45">
+                  {selectedColorMaterialPreset ? `当前预设：${selectedColorMaterialPreset.label}` : `可用共享预设 ${colorMaterialPresets.length} 个`}
+                </div>
+              </div>
+              {canManageTeam && (
+                <button type="button" className={BUTTON} disabled={colorMaterialSaving || busy} onClick={() => setColorMaterialEditorOpen((open) => !open)}>
+                  <Settings size={11} />管理
+                </button>
+              )}
+            </div>
+            <ColorMaterialPresetSelect
+              className={FIELD}
+              presets={colorMaterialPresets}
+              value={d.colorMaterialPreset || ''}
+              disabled={isReadonly || busy}
+              placeholder="选择共享色彩与材质预设"
+              onChange={(presetId, preset) => update({
+                colorMaterialPreset: presetId,
+                colorMaterial: colorMaterialTextFromPreset(preset),
+              })}
+            />
+            {selectedColorMaterialPreset?.info && (
+              <div className="rounded border border-cyan-300/15 bg-cyan-300/5 px-2 py-1 text-[10px] leading-snug text-cyan-50/70">
+                {selectedColorMaterialPreset.info}
+              </div>
+            )}
+            {canManageTeam && (
+              <ColorMaterialPresetEditorModal
+                open={colorMaterialEditorOpen}
+                presets={colorMaterialPresets}
+                saving={colorMaterialSaving || busy}
+                error={colorMaterialError}
+                title="导视系统色彩与材质预设管理"
+                onClose={() => setColorMaterialEditorOpen(false)}
+                onSave={saveColorMaterialPresetItems}
+              />
+            )}
+          </div>
+          <label data-exhibition-compact-item="manual-color-material" className="col-span-2 space-y-1">
+            <span className="text-[10px] text-white/55">手动色彩与材质补充</span>
+            <PromptTextarea
+              title="扩大编辑"
+              className={`${FIELD} min-h-[46px] resize-y`}
+              value={colorMaterial}
+              disabled={isReadonly || busy}
+              readOnly={isReadonly || busy}
+              placeholder="例如：深灰铝板、低反射亚克力、暖铜色边框、浅色石材基座、博物馆低眩光质感"
+              onValueChange={(value) => update({ colorMaterial: value, colorMaterialPreset: '' })}
+            />
+          </label>
           <label data-exhibition-compact-item="material" className="space-y-1">
             <span className="text-[10px] text-white/55">材质工艺</span>
             <select className={FIELD} value={materialId} disabled={isReadonly || busy} onChange={(e) => update({ materialId: normalizeWayfindingMaterial(e.target.value) })}>

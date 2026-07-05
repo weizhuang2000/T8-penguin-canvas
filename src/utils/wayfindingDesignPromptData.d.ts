@@ -25,6 +25,30 @@ export interface WayfindingExtractResult {
   notes: string;
 }
 
+export interface WayfindingImagePromptValues {
+  outputMode?: unknown;
+  scope?: unknown;
+  signTypes?: unknown;
+  materialId?: unknown;
+  mountingId?: unknown;
+  arrowStyle?: unknown;
+  language?: unknown;
+  dimensions?: unknown;
+  museumName?: unknown;
+  projectTheme?: unknown;
+  zones?: unknown;
+  destinations?: unknown;
+  routeText?: unknown;
+  signText?: unknown;
+  notes?: unknown;
+  colorMaterial?: unknown;
+  colorMaterialPresetText?: unknown;
+  supplement?: unknown;
+  manualRequirement?: unknown;
+  hasSpaceReferenceImage?: unknown;
+  hasGraphicReferenceImage?: unknown;
+}
+
 export const WAYFINDING_OUTPUT_MODES: WayfindingOption[];
 export const WAYFINDING_SCOPE_OPTIONS: WayfindingOption[];
 export const WAYFINDING_SIGN_TYPES: WayfindingOption[];
@@ -52,4 +76,4 @@ export function wayfindingLanguageMeta(value: unknown): WayfindingOption;
 export function wayfindingDimensionsText(value: unknown): string;
 export function buildWayfindingExtractPrompt(values?: Record<string, unknown>): string;
 export function parseWayfindingExtractJson(text: string): WayfindingExtractResult;
-export function buildWayfindingImagePrompt(values?: Record<string, unknown>): string;
+export function buildWayfindingImagePrompt(values?: WayfindingImagePromptValues): string;

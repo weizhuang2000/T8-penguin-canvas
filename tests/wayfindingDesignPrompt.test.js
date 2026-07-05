@@ -76,6 +76,29 @@ test('wayfinding output modes produce distinct constraints', () => {
   assert.match(scene, /尺度关系/);
 });
 
+test('wayfinding prompt uses shared color material preset and manual supplement', () => {
+  const prompt = buildWayfindingImagePrompt({
+    colorMaterialPresetText: '深灰铝板；暖铜色边框；低反射亚克力；浅色石材基座',
+    colorMaterial: '局部导视箭头使用雾面白色丝印',
+  });
+  assert.match(prompt, /色彩与材质体系/);
+  assert.match(prompt, /共享色彩与材质预设/);
+  assert.match(prompt, /深灰铝板/);
+  assert.match(prompt, /手动色彩与材质补充/);
+  assert.match(prompt, /雾面白色丝印/);
+});
+
+test('wayfinding node includes migrated color material preset module', () => {
+  const source = read('src/components/nodes/WayfindingDesignNode.tsx');
+  assert.match(source, /getElevationPromptPresets/);
+  assert.match(source, /updateElevationColorMaterialPresets/);
+  assert.match(source, /ColorMaterialPresetSelect/);
+  assert.match(source, /ColorMaterialPresetEditorModal/);
+  assert.match(source, /data-exhibition-compact-item="preset-options"[\s\S]*色彩与材质预设/);
+  assert.match(source, /data-exhibition-compact-item="manual-color-material"/);
+  assert.match(source, /colorMaterialPresetText/);
+});
+
 test('wayfinding node is registered across frontend and permission surfaces', () => {
   assert.match(read('src/types/canvas.ts'), /\| 'exhibition-wayfinding-design'/);
   assert.match(read('src/config/nodeRegistry.ts'), /type: 'exhibition-wayfinding-design'/);
@@ -89,4 +112,6 @@ test('wayfinding node is registered across frontend and permission surfaces', ()
   assert.match(read('backend/src/auth/toolPermissions.js'), /'exhibition-wayfinding-design'/);
   assert.match(read('backend/src/auth/exhibitionCompactForm.js'), /exhibition-wayfinding-design/);
   assert.match(read('src/config/exhibitionCompactForm.ts'), /exhibition-wayfinding-design/);
+  assert.match(read('backend/src/auth/exhibitionCompactForm.js'), /exhibition-wayfinding-design[\s\S]*preset-options[\s\S]*manual-color-material/);
+  assert.match(read('src/config/exhibitionCompactForm.ts'), /exhibition-wayfinding-design[\s\S]*preset-options[\s\S]*manual-color-material/);
 });

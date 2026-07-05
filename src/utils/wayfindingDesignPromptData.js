@@ -221,7 +221,13 @@ export function buildWayfindingImagePrompt(values = {}) {
   const routeText = cleanWayfindingText(values.routeText, 2000);
   const signText = cleanWayfindingText(values.signText, 2000);
   const notes = cleanWayfindingText(values.notes, 2000);
+  const colorMaterial = cleanWayfindingText(values.colorMaterial, 2000);
+  const colorMaterialPresetText = cleanWayfindingText(values.colorMaterialPresetText, 2000);
   const manual = cleanWayfindingText(values.supplement || values.manualRequirement, 2000);
+  const colorMaterialLines = [
+    colorMaterialPresetText ? `共享色彩与材质预设：${colorMaterialPresetText}` : '',
+    colorMaterial ? `手动色彩与材质补充：${colorMaterial}` : '',
+  ].filter(Boolean).join('\n');
   const referenceText = [
     values.hasSpaceReferenceImage ? '空间/材质参考图：用于参考建筑环境、色彩、材质气质和安装场景，不直接复制无关内容。' : '',
     values.hasGraphicReferenceImage ? '标识图形参考图：仅用于参考图标线性、箭头风格、符号节奏或品牌气质，不复制具体商标或版权图形。' : '',
@@ -256,6 +262,7 @@ export function buildWayfindingImagePrompt(values = {}) {
     `标牌类型：${signTypes.map((item) => `${item.label}（${item.prompt}）`).join('；')}。`,
     `语言系统：${language.label}；${language.prompt}。`,
     `箭头/图标风格：${arrow.label}；${arrow.prompt}。`,
+    colorMaterialLines ? `色彩与材质体系：\n${colorMaterialLines}` : '',
     `材质工艺：${material.label}；${material.prompt}。`,
     `安装方式：${mounting.label}；${mounting.prompt}。`,
     `尺寸与安装高度：${dimensions}。`,

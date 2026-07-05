@@ -238,6 +238,8 @@ const EXHIBITION_COMPACT_FORM_DEFINITIONS = [
       { id: 'sign-types', label: '标牌类型' },
     ] },
     { id: 'style', label: '视觉与工艺', items: [
+      { id: 'preset-options', label: '色彩与材质预设' },
+      { id: 'manual-color-material', label: '手动色彩与材质' },
       { id: 'material', label: '材质工艺' },
       { id: 'mounting', label: '安装方式' },
       { id: 'icons-language', label: '图标与语言' },

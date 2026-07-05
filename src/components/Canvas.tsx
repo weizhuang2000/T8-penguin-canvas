@@ -1020,6 +1020,8 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     scope: 'mixed',
     signTypes: ['floor-directory', 'hanging-directional', 'wall-directional', 'gallery-room-id', 'outdoor-pylon', 'outdoor-map', 'accessible-safety'],
     materialId: 'brushed-metal',
+    colorMaterialPreset: '',
+    colorMaterial: '',
     mountingId: 'wall-mounted',
     arrowStyle: 'standard',
     language: 'zh-en',
