@@ -43,6 +43,8 @@ test('science exhibit component exposes handles, llm extraction and generation s
   assert.match(source, /colorMaterialTextFromPreset/);
   assert.match(source, /resolveMediaMentions/);
   assert.match(source, /buildScienceExhibitExtractPrompt/);
+  assert.match(source, /scienceDomain,\s*\n\s*exhibitType,\s*\n\s*interactionMode,\s*\n\s*audience,/);
+  assert.match(source, /colorMaterial:\s*colorMaterialText/);
   assert.match(source, /buildScienceExhibitImagePrompt/);
   assert.match(source, /buildScienceExhibitDrawingPrompt/);
   assert.match(source, /normalizeScienceExhibitDimensions/);

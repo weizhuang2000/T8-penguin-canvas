@@ -39,12 +39,34 @@ const dimensions = {
 };
 
 test('science exhibit extract prompt and parser cover required fields', () => {
-  const prompt = buildScienceExhibitExtractPrompt({ sourceText: 'source text' });
+  const prompt = buildScienceExhibitExtractPrompt({
+    sourceText: 'source text',
+    scienceDomain: 'engineering',
+    exhibitType: 'interactive-device',
+    interactionMode: 'turn-handle',
+    audience: 'teenagers',
+    spatialScale: 'island',
+    backgroundMode: 'white',
+    dimensions,
+    colorMaterial: '银灰金属外壳；透明亚克力防护罩',
+    colorMaterialPalette: '银灰、冷白、蓝绿色点缀',
+    colorMaterialTextures: '拉丝金属、磨砂亚克力',
+    hasColorMaterialPreset: true,
+  });
   for (const key of ['sciencePrinciple', 'keyParameters', 'interactionFlow', 'safetyMaintenance', 'drawingNotes']) {
     assert.match(prompt, new RegExp(key));
   }
   assert.match(prompt, /真实科学原理/);
   assert.match(prompt, /不要编造/);
+  assert.match(prompt, /节点设计选项/);
+  assert.match(prompt, /展项类型/);
+  assert.match(prompt, /互动方式/);
+  assert.match(prompt, /目标观众/);
+  assert.match(prompt, /科学领域/);
+  assert.match(prompt, /Color and material preset/);
+  assert.match(prompt, /Color palette/);
+  assert.match(prompt, /Materials\/textures/);
+  assert.match(prompt, /不得用这些选项替代资料中的真实科学原理/);
 
   const parsed = parseScienceExhibitExtractJson(JSON.stringify(analysis));
   assert.equal(parsed.titleText, analysis.titleText);

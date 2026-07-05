@@ -374,7 +374,20 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
         model: llmModel,
         llmKeyId: activeLlmConfig?.id,
         temperature: 0.2,
-        messages: [{ role: 'user', content: buildScienceExhibitExtractPrompt({ sourceText: effectiveSourceText, dimensions, spatialScale }) }],
+        messages: [{ role: 'user', content: buildScienceExhibitExtractPrompt({
+          sourceText: effectiveSourceText,
+          scienceDomain,
+          exhibitType,
+          interactionMode,
+          audience,
+          spatialScale,
+          backgroundMode,
+          dimensions,
+          colorMaterial: colorMaterialText,
+          colorMaterialPalette,
+          colorMaterialTextures,
+          hasColorMaterialPreset,
+        }) }],
       });
       const parsed = parseScienceExhibitExtractJson(response.content || '');
       if (!analysisHasContent(parsed)) throw new Error('LLM 未返回有效科技展项分析');
@@ -413,7 +426,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
       update({ status: 'error', error: llmErrorMessage(error), progress: '' });
       return null;
     }
-  }, [activeLlmConfig?.id, busy, colorMaterialPalette, colorMaterialText, colorMaterialTextures, dimensions, effectiveSourceText, isReadonly, llmModel, spatialScale, update]);
+  }, [activeLlmConfig?.id, audience, backgroundMode, busy, colorMaterialPalette, colorMaterialText, colorMaterialTextures, dimensions, effectiveSourceText, exhibitType, hasColorMaterialPreset, interactionMode, isReadonly, llmModel, scienceDomain, spatialScale, update]);
 
   const generateOneImage = useCallback(async ({
     kind,

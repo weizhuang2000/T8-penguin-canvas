@@ -308,9 +308,24 @@ function colorMaterialContext(values = {}, drawingType = '') {
 export function buildScienceExhibitExtractPrompt(values = {}) {
   const sourceText = cleanScienceExhibitText(values.sourceText, 50000);
   const sizeText = dimensionsText(values.dimensions, values.spatialScale);
+  const domain = scienceExhibitDomainMeta(values.scienceDomain);
+  const exhibitType = scienceExhibitTypeMeta(values.exhibitType);
+  const interaction = scienceExhibitInteractionMeta(values.interactionMode);
+  const audience = scienceExhibitAudienceMeta(values.audience);
+  const scale = scienceExhibitScaleMeta(values.spatialScale);
+  const bgText = backgroundText(values.backgroundMode);
+  const colorMaterial = colorMaterialContext(values);
   return [
     '请从科技馆/科学中心展项资料中提炼“科技展项设计”所需的真实科学分析。',
     '必须基于资料和可验证的科学常识，不要编造不可验证的科学结论、实验数据、品牌、专利或精密数值；不确定的参数用“建议范围/待工程校核”表达。',
+    '节点设计选项用于限定互动流程、装置构成、观众尺度、视觉说明和图纸约束；不得用这些选项替代资料中的真实科学原理，也不得为了匹配风格而改写科学结论。',
+    `科学领域：${domain.label}；提炼时优先寻找与 ${domain.prompt} 相关的真实原理和可控变量。`,
+    `展项类型：${exhibitType.label}；请让 mechanismDesign 和 drawingNotes 贴合 ${exhibitType.prompt}。`,
+    `互动方式：${interaction.label}；请让 interactionFlow、传感器/执行器和关键参数贴合 ${interaction.prompt}。`,
+    `目标观众：${audience.label}；请让操作高度、安全维护、说明深度和交互难度贴合 ${audience.prompt}。`,
+    `空间尺度：${scale.label}；请让结构尺度、维护方式和图纸约束贴合 ${scale.prompt}。`,
+    bgText,
+    colorMaterial,
     '输出 JSON，不要 Markdown，不要解释。',
     'JSON 结构：{"titleText":"展项名称","sciencePrinciple":"真实科学原理说明","keyParameters":[{"name":"参数名称","range":"建议范围","unit":"单位","effect":"该参数如何影响演示结果"}],"interactionFlow":"观众操作流程","mechanismDesign":"机械/电子/软件/媒体构成","safetyMaintenance":"安全、耐久、维护要点","visualBrief":"效果图视觉说明","drawingNotes":"后续爆炸图、原理图、三视图、参数表必须保持一致的结构约束"}',
     `已知尺寸基准：${sizeText}。请优先给出可执行的建议数值或建议范围，不要把参数全部写成“待工程校核”；仅对确实依赖深化设计的项标注“需工程校核”。`,
