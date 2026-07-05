@@ -965,6 +965,51 @@ export async function updateSettings(patch: Partial<ApiSettings>): Promise<void>
   });
 }
 
+// =====================
+// 节点帮助文档（按 nodeType 索引的 Markdown 字符串）
+// =====================
+export type NodeHelpMap = Record<string, string>;
+
+export async function getNodeHelps(): Promise<NodeHelpMap> {
+  const res = await request<{ success: boolean; data: NodeHelpMap }>(`${BASE}/node-help`);
+  return res.data || {};
+}
+
+export async function getNodeHelp(nodeType: string): Promise<string> {
+  const res = await request<{ success: boolean; data: { content: string } }>(`${BASE}/node-help/${encodeURIComponent(nodeType)}`);
+  return res.data?.content || '';
+}
+
+export async function saveNodeHelp(nodeType: string, content: string): Promise<void> {
+  await request(`${BASE}/node-help/${encodeURIComponent(nodeType)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ content }),
+  });
+}
+
+export async function deleteNodeHelp(nodeType: string): Promise<void> {
+  await request(`${BASE}/node-help/${encodeURIComponent(nodeType)}`, { method: 'DELETE' });
+}
+
+export async function exportNodeHelps(): Promise<{ schema: string; version: number; exportedAt: string; helps: NodeHelpMap }> {
+  const res = await request<{ success: boolean; data: { schema: string; version: number; exportedAt: string; helps: NodeHelpMap } }>(`${BASE}/node-help/export`);
+  return res.data;
+}
+
+export async function importNodeHelps(helps: NodeHelpMap, mode: 'merge' | 'replace' = 'merge'): Promise<void> {
+  await request(`${BASE}/node-help/import`, {
+    method: 'POST',
+    body: JSON.stringify({ helps, mode }),
+  });
+}
+
+export async function bulkReplaceNodeHelps(helps: NodeHelpMap): Promise<void> {
+  await request(`${BASE}/node-help/bulk`, {
+    method: 'POST',
+    body: JSON.stringify({ helps, mode: 'replace' }),
+  });
+}
+
 export interface AdvancedProviderTestResult {
   ok: boolean;
   code: string;

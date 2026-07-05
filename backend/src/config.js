@@ -53,6 +53,8 @@ const config = {
   // v1.2.10+ RH 工具节点专用数据（与 rh_apps.json 完全分开）
   RH_TOOL_CATEGORIES_FILE: path.join(DATA_ROOT, 'data', 'rh_tool_categories.json'),
   RH_TOOL_APPS_FILE: path.join(DATA_ROOT, 'data', 'rh_tool_apps.json'),
+  // 节点帮助文档（按 nodeType 索引的 Markdown 字符串）
+  NODE_HELP_FILE: path.join(DATA_ROOT, 'data', 'node_helps.json'),
   // 前端静态产物目录(打包后由 Express 同进程托管)
   FRONTEND_DIST: process.env.T8PC_FRONTEND_DIST || (IS_PACKAGED ? '' : path.join(PROJECT_DIR, 'dist')),
 

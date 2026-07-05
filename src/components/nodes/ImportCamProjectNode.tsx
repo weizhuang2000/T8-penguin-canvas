@@ -18,6 +18,7 @@ import {
   listCamOutputProjects,
   type CamOutputProject,
 } from '../../services/api';
+import NodeHelpButton from './NodeHelpButton';
 
 type ImportCamMaterialSetDetail = {
   sourceNodeId: string;
@@ -264,6 +265,7 @@ const ImportCamProjectNode = ({ id, data, selected }: NodeProps) => {
               {root}
             </div>
           </div>
+          <NodeHelpButton nodeType="import-cam-project" />
         </div>
 
         <div className="space-y-2 p-3" onMouseDown={(e) => e.stopPropagation()}>

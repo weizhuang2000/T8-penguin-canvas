@@ -50,6 +50,7 @@ import { useUpdateNodeData } from './useUpdateNodeData';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
 import MentionPromptInput from './MentionPromptInput';
 import { resolveMediaMentions, type MediaMention } from './mediaMentions';
+import NodeHelpButton from './NodeHelpButton';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
@@ -1194,6 +1195,7 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
             <div className="text-[10px] text-white/45">效果图 / 彩平图 / 系统设备原理图</div>
           </div>
         </div>
+        <NodeHelpButton nodeType="cinema-auditorium-design" />
         {busy && <Loader2 className="h-4 w-4 animate-spin text-cyan-200" />}
       </div>
 

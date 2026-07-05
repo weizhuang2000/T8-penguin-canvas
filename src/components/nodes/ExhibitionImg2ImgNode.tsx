@@ -86,6 +86,7 @@ import { useThemeStore } from '../../stores/theme';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
+import NodeHelpButton from './NodeHelpButton';
 import MentionPromptInput from './MentionPromptInput';
 import { materialMentionKey, resolveMediaMentions, type MediaMention } from './mediaMentions';
 import PromptExpandableInput from '../PromptExpandableInput';
@@ -3019,6 +3020,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
           <div className="text-sm font-semibold text-white">展陈图生图</div>
           <div className="truncate text-[10px] text-white/45">结构示意图 / 表现效果图 / 工艺版式</div>
         </div>
+        <NodeHelpButton nodeType="exhibition-img2img" />
         {busy && <Loader2 size={15} className="animate-spin text-cyan-200" />}
       </div>
 

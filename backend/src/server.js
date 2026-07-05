@@ -110,6 +110,7 @@ const parseHubRouter = require('./routes/parseHub');
 const achievementsRouter = require('./routes/achievements');
 const topazRouter = require('./routes/topaz');
 const animeTagsRouter = require('./routes/animeTags');
+const nodeHelpRouter = require('./routes/nodeHelp');
 const { registerLocalExtensions } = require('./extensions/localExtensions');
 const localHooks = require('./extensions/runtimeHooks');
 
@@ -141,6 +142,7 @@ app.use('/api/parsehub', parseHubRouter);
 app.use('/api/achievements', achievementsRouter);
 app.use('/api/topaz', topazRouter);
 app.use('/api/anime-tags', animeTagsRouter);
+app.use('/api/node-help', nodeHelpRouter);
 registerLocalExtensions(app, { config, express, logger: console, hooks: localHooks });
 
 // ========== 前端静态资源(仅打包模式) ==========

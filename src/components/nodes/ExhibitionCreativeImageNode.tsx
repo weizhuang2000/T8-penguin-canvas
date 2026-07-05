@@ -85,6 +85,7 @@ import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
 import MentionPromptInput from './MentionPromptInput';
 import { materialMentionKey, resolveMediaMentions, type MediaMention } from './mediaMentions';
+import NodeHelpButton from './NodeHelpButton';
 import PromptExpandableInput from '../PromptExpandableInput';
 import PromptTextarea from '../PromptTextarea';
 import type { Material } from './useUpstreamMaterials';
@@ -2074,6 +2075,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           <div className="text-sm font-semibold text-white">展陈创意生图</div>
           <div className="truncate text-[10px] text-white/45">单空间图 / LLM 创意 / 多次图生图</div>
         </div>
+        <NodeHelpButton nodeType="exhibition-creative-image" />
         {busy && <Loader2 size={15} className="animate-spin text-cyan-200" />}
       </div>
 

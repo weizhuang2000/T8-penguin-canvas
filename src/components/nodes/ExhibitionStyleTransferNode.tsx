@@ -40,6 +40,7 @@ import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
 import UnitPanelMaterialEditorModal from './UnitPanelMaterialEditorModal';
 import UnitPanelMaterialSelect from './UnitPanelMaterialSelect';
+import NodeHelpButton from './NodeHelpButton';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
@@ -643,6 +644,7 @@ const ExhibitionStyleTransferNode = ({ id, data, selected }: NodeProps) => {
           <div className="text-sm font-semibold text-white">风格迁移</div>
           <div className="truncate text-[10px] text-white/45">原图结构不变 / 风格色材迁移 / 图生图输出</div>
         </div>
+        <NodeHelpButton nodeType="exhibition-style-transfer" />
       </div>
 
       <div className="nodrag nopan max-h-[760px] space-y-2 overflow-y-auto p-2.5" onMouseDown={(event) => event.stopPropagation()}>

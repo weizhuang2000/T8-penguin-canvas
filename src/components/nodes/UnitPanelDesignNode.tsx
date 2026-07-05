@@ -21,6 +21,7 @@ import { useUpstreamMaterials } from './useUpstreamMaterials';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
 import UnitPanelMaterialEditorModal from './UnitPanelMaterialEditorModal';
 import UnitPanelMaterialSelect from './UnitPanelMaterialSelect';
+import NodeHelpButton from './NodeHelpButton';
 import {
   buildUnitPanelExtractPrompt,
   buildUnitPanelImagePrompt,
@@ -613,6 +614,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
           <div className="text-sm font-semibold text-white">单元板设计</div>
           <div className="truncate text-[10px] text-white/45">文本提炼 / 多语言 / 材质优先级 / 尺寸标注</div>
         </div>
+        <NodeHelpButton nodeType="unit-panel-design" />
         {busy && <Loader2 size={15} className="animate-spin text-cyan-200" />}
       </div>
 

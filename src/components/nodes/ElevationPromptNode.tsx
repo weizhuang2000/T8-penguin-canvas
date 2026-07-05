@@ -46,6 +46,7 @@ import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
+import NodeHelpButton from './NodeHelpButton';
 import PromptTextarea from '../PromptTextarea';
 import PromptExpandableInput from '../PromptExpandableInput';
 
@@ -638,6 +639,7 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
           <div className="text-sm font-semibold text-white">立面提示词</div>
           <div className="truncate text-[10px] text-white/45">文档提炼 / 彩立面排版 / 展陈工艺</div>
         </div>
+        <NodeHelpButton nodeType="elevation-prompt" />
         {busy && <Loader2 size={15} className="animate-spin text-cyan-200" />}
       </div>
 

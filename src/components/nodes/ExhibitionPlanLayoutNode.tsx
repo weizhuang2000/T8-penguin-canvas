@@ -51,6 +51,7 @@ import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useUpstreamMaterials } from './useUpstreamMaterials';
+import NodeHelpButton from './NodeHelpButton';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
@@ -767,6 +768,7 @@ const ExhibitionPlanLayoutNode = ({ id, data, selected }: NodeProps) => {
           <div className="text-sm font-semibold text-white">{isAiPlanLayout ? '平面AI布局' : '平面自动布局'}</div>
           <div className="truncate text-[10px] text-white/45">{isAiPlanLayout ? 'AI读取建筑平面 / 结构锁定 / 展陈布局叠加' : '平面图约束 / 大纲提炼 / 动线与标注控制'}</div>
         </div>
+        <NodeHelpButton nodeType={isAiPlanLayout ? 'exhibition-ai-plan-layout' : 'exhibition-plan-layout'} />
         {busy && <Loader2 size={15} className="animate-spin text-cyan-200" />}
       </div>
 

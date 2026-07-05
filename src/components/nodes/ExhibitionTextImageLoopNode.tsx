@@ -10,6 +10,7 @@ import { placeBatchNodes, rectOf, type Rect as PlacementRect } from '../../utils
 import SmartImage from '../SmartImage';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useUpstreamMaterials, type Material } from './useUpstreamMaterials';
+import NodeHelpButton from './NodeHelpButton';
 
 type LoopMode = 'serial' | 'parallel';
 type PairingMode = 'zip' | 'cycle-shorter' | 'matrix';
@@ -630,6 +631,7 @@ const ExhibitionTextImageLoopNode = ({ id, data, selected }: NodeProps) => {
           <div style={{ color: textColor, fontSize: 13, fontWeight: 800 }}>图文循环器</div>
           <div style={{ color: subColor, fontSize: 10 }}>{pairs.length} 组 · 文本 {texts.length} · 图像 {images.length}</div>
         </div>
+        <NodeHelpButton nodeType="exhibition-text-image-loop" />
         {status === 'running' && <Loader2 size={15} color={COLOR} className="animate-spin" />}
       </div>
 

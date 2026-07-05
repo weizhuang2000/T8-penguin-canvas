@@ -32,6 +32,7 @@ import { useUpstreamMaterials, type Material } from './useUpstreamMaterials';
 import SculptureReliefMaterialEditorModal from './SculptureReliefMaterialEditorModal';
 import MentionPromptInput from './MentionPromptInput';
 import { resolveMediaMentions, type MediaMention } from './mediaMentions';
+import NodeHelpButton from './NodeHelpButton';
 import {
   buildSculptureReliefExtractPrompt,
   buildSculptureReliefImagePrompt,
@@ -524,6 +525,7 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
           <div className="text-sm font-semibold text-white">雕塑/浮雕设计</div>
           <div className="truncate text-[10px] text-white/45">文案提炼 / 类型选择 / 尺寸材质 / 轮廓参考</div>
         </div>
+        <NodeHelpButton nodeType="sculpture-relief-design" />
         {busy && <Loader2 size={15} className="animate-spin text-cyan-200" />}
       </div>
 

@@ -28,6 +28,7 @@ import { logBus } from '../../stores/logs';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useUpdateNodeData } from './useUpdateNodeData';
+import NodeHelpButton from './NodeHelpButton';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
@@ -409,6 +410,7 @@ const ExhibitionLightingHeatmapNode = ({ id, data, selected }: NodeProps) => {
           <div className="text-sm font-semibold text-white">灯光热力图</div>
           <div className="truncate text-[10px] text-white/45">展陈空间 / 光照强弱 / 热力分析 / 图生图输出</div>
         </div>
+        <NodeHelpButton nodeType="exhibition-lighting-heatmap" />
       </div>
 
       <div className="nodrag nopan max-h-[760px] space-y-2 overflow-y-auto p-2.5" onMouseDown={(event) => event.stopPropagation()}>

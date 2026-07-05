@@ -31,6 +31,7 @@ import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useUpstreamMaterials } from './useUpstreamMaterials';
+import NodeHelpButton from './NodeHelpButton';
 import {
   buildWayfindingExtractPrompt,
   buildWayfindingImagePrompt,
@@ -504,6 +505,7 @@ const WayfindingDesignNode = ({ id, data, selected }: NodeProps) => {
           <div className="text-sm font-semibold text-white">导视系统设计</div>
           <div className="truncate text-[10px] text-white/45">室内外导览标牌 / 系统规范图 / 方案效果图</div>
         </div>
+        <NodeHelpButton nodeType="exhibition-wayfinding-design" />
         {busy && <Loader2 size={15} className="animate-spin text-cyan-200" />}
       </div>
 

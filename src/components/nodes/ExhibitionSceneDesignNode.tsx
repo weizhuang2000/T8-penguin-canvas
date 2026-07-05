@@ -49,6 +49,7 @@ import MentionPromptInput from './MentionPromptInput';
 import { resolveMediaMentions, type MediaMention } from './mediaMentions';
 import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
+import NodeHelpButton from './NodeHelpButton';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
@@ -590,6 +591,7 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
           <div className="text-sm font-semibold text-white">场景设计</div>
           <div className="truncate text-[10px] text-white/45">文案提炼 / 环境参考 / 人物道具 @ 引用 / 场景表现</div>
         </div>
+        <NodeHelpButton nodeType="exhibition-scene-design" />
         {busy && <Loader2 size={15} className="animate-spin text-cyan-200" />}
       </div>
 

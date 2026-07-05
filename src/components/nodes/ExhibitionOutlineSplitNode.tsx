@@ -10,6 +10,7 @@ import { useCanvasStore } from '../../stores/canvas';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useUpstreamMaterials } from './useUpstreamMaterials';
+import NodeHelpButton from './NodeHelpButton';
 import PromptTextarea from '../PromptTextarea';
 import PromptExpandableInput from '../PromptExpandableInput';
 import { materialSetItemsToData, type MaterialSetItem } from '../../utils/materialSet';
@@ -496,6 +497,7 @@ const ExhibitionOutlineSplitNode = ({ id, data, selected }: NodeProps) => {
             {segments.length || 0} 个单元 · {effectiveSourceText.trim().length} 字资料
           </div>
         </div>
+        <NodeHelpButton nodeType="exhibition-outline-split" />
         {busy ? <Loader2 size={15} className="animate-spin opacity-80" /> : <Brain size={15} className="opacity-70" />}
       </div>
 

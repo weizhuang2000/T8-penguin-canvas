@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ArrowDown, ArrowUp, Brain, ChevronDown, ChevronRight, CloudUpload, Download, ExternalLink, Eye, EyeOff, FileUp, Info, KeyRound, Loader2, Lock, MousePointer2, Plus, Save, Settings2, TestTube2, Trash2, X, FolderOpen, ServerCog, Volume2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Brain, ChevronDown, ChevronRight, CloudUpload, Download, ExternalLink, Eye, EyeOff, FileUp, Info, KeyRound, Loader2, Lock, MousePointer2, Plus, Save, Settings2, TestTube2, Trash2, X, FolderOpen, ServerCog, Volume2, HelpCircle, RotateCcw, Edit3, Eye as EyeIcon } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { useApiKeysStore, FIXED_ZHENZHEN_BASE, RH_BASE, normalizeApiSettings } from '../stores/apiKeys';
 import { taskCompletionSound as taskCompletionSoundController } from '../stores/taskCompletionSound';
 import { useThemeStore } from '../stores/theme';
 import type { AdvancedProviderConfig, AdvancedProviderProtocol, ApiSettings, CloudUploadProvider, CloudUploadTargetConfig, LlmConfig } from '../types/canvas';
-import { getRawSettings, resetTaskCompletionSound, resetTaskFailureSound, testAdvancedProvider, testCloudUploadTarget, uploadTaskCompletionSound, uploadTaskFailureSound } from '../services/api';
+import { getRawSettings, resetTaskCompletionSound, resetTaskFailureSound, testAdvancedProvider, testCloudUploadTarget, uploadTaskCompletionSound, uploadTaskFailureSound, getNodeHelps, saveNodeHelp, deleteNodeHelp, exportNodeHelps, importNodeHelps, bulkReplaceNodeHelps, type NodeHelpMap } from '../services/api';
 import { playTaskCompletionSound, playTaskFailureSound } from '../utils/taskCompletionSound';
 import { DEFAULT_LLM_MODEL } from '../providers/models';
+import { DEFAULT_NODE_HELPS } from '../config/nodeHelpDefaults';
+import { renderSimpleMarkdown } from '../utils/simpleMarkdown';
+import { clearNodeHelpCache } from './nodes/NodeHelpModal';
 import {
   advancedProviderSummary as summarizeAdvancedProviderForm,
   normalizeModelscopeLoraStrength,
@@ -97,6 +100,10 @@ const PATH_FIELDS = [
 
 const SETTINGS_BACKUP_SCHEMA = 't8-penguin-canvas-settings';
 const SETTINGS_BACKUP_VERSION = 1;
+
+// 节点帮助文档管理的节点列表（与 nodeRegistry.ts 中 exhibition 分类同步）
+const EXHIBITION_HELP_NODES = NODE_REGISTRY.filter((n) => n.category === 'exhibition' && !n.hidden);
+const NODE_HELP_STORAGE_KEY = 't8-node-helps';
 
 const ADVANCED_PROVIDER_LABELS: Record<AdvancedProviderProtocol, string> = {
   'openai-compatible': 'OpenAI',
@@ -409,6 +416,16 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     () => normalizeCanvasNodeMenuPreferenceForms(undefined),
   );
   const [nodeMenuDirty, setNodeMenuDirty] = useState(false);
+  // 节点帮助文档管理
+  const [nodeHelpOpen, setNodeHelpOpen] = useState(false);
+  const [nodeHelpMap, setNodeHelpMap] = useState<NodeHelpMap>({});
+  const [activeNodeHelpType, setActiveNodeHelpType] = useState<string>('');
+  const [nodeHelpDraft, setNodeHelpDraft] = useState<string>('');
+  const [nodeHelpDirty, setNodeHelpDirty] = useState(false);
+  const [nodeHelpView, setNodeHelpView] = useState<'edit' | 'preview'>('edit');
+  const [nodeHelpBusy, setNodeHelpBusy] = useState(false);
+  const [nodeHelpMessage, setNodeHelpMessage] = useState<string>('');
+  const nodeHelpImportFileRef = useRef<HTMLInputElement | null>(null);
   const [backupMessage, setBackupMessage] = useState<string>('');
   const [taskSoundMessage, setTaskSoundMessage] = useState<string>('');
   const [taskSoundBusy, setTaskSoundBusy] = useState(false);
@@ -472,6 +489,45 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       setZhenzhenEnabled((settings as any)?.enableZhenzhenFallback !== false);
     }
   }, [open, settings]);
+
+  // 节点帮助文档：modal 打开时加载全部节点帮助（合并后端覆盖 + 内置默认）
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setNodeHelpBusy(true);
+    setNodeHelpMessage('');
+    getNodeHelps()
+      .then((map) => {
+        if (cancelled) return;
+        const merged: NodeHelpMap = {};
+        for (const node of EXHIBITION_HELP_NODES) {
+          const custom = map[node.type];
+          merged[node.type] = custom && custom.trim() ? custom : (DEFAULT_NODE_HELPS[node.type] || '');
+        }
+        setNodeHelpMap(merged);
+        if (!activeNodeHelpType && EXHIBITION_HELP_NODES.length > 0) {
+          setActiveNodeHelpType(EXHIBITION_HELP_NODES[0].type);
+        }
+      })
+      .catch((e: any) => {
+        if (!cancelled) setNodeHelpMessage(e?.message || '加载节点帮助失败');
+      })
+      .finally(() => {
+        if (!cancelled) setNodeHelpBusy(false);
+      });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // 节点帮助文档：切换选中节点时同步草稿
+  useEffect(() => {
+    if (!activeNodeHelpType) return;
+    const current = nodeHelpMap[activeNodeHelpType] ?? '';
+    setNodeHelpDraft(current);
+    setNodeHelpDirty(false);
+    setNodeHelpView('edit');
+    setNodeHelpMessage('');
+  }, [activeNodeHelpType, nodeHelpMap]);
 
   if (!open) return null;
 
@@ -927,6 +983,121 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       setTaskFailureSoundMessage(e?.message || 'Failed to preview sound. Interact with the page and try again.');
     } finally {
       setTaskFailureSoundTesting(false);
+    }
+  };
+
+  // 节点帮助文档：保存当前编辑到后端
+  const handleSaveNodeHelp = async () => {
+    if (!activeNodeHelpType) return;
+    setNodeHelpBusy(true);
+    setNodeHelpMessage('');
+    try {
+      const content = nodeHelpDraft;
+      await saveNodeHelp(activeNodeHelpType, content);
+      setNodeHelpMap((prev) => ({ ...prev, [activeNodeHelpType]: content }));
+      setNodeHelpDirty(false);
+      clearNodeHelpCache(activeNodeHelpType);
+      setNodeHelpMessage('已保存');
+    } catch (e: any) {
+      setNodeHelpMessage(e?.message || '保存失败');
+    } finally {
+      setNodeHelpBusy(false);
+    }
+  };
+
+  // 节点帮助文档：重置为默认（删除后端覆盖）
+  const handleResetNodeHelp = async () => {
+    if (!activeNodeHelpType) return;
+    setNodeHelpBusy(true);
+    setNodeHelpMessage('');
+    try {
+      await deleteNodeHelp(activeNodeHelpType);
+      const fallback = DEFAULT_NODE_HELPS[activeNodeHelpType] || '';
+      setNodeHelpMap((prev) => ({ ...prev, [activeNodeHelpType]: fallback }));
+      setNodeHelpDraft(fallback);
+      setNodeHelpDirty(false);
+      clearNodeHelpCache(activeNodeHelpType);
+      setNodeHelpMessage('已恢复为默认');
+    } catch (e: any) {
+      setNodeHelpMessage(e?.message || '重置失败');
+    } finally {
+      setNodeHelpBusy(false);
+    }
+  };
+
+  // 节点帮助文档：清空当前编辑内容（不保存）
+  const handleClearNodeHelp = () => {
+    setNodeHelpDraft('');
+    setNodeHelpDirty(true);
+    setNodeHelpMessage('');
+  };
+
+  // 节点帮助文档：导出 JSON 备份
+  const handleExportNodeHelps = async () => {
+    setNodeHelpBusy(true);
+    setNodeHelpMessage('');
+    try {
+      const result = await exportNodeHelps();
+      const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'node-helps-backup.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      setNodeHelpMessage('已导出备份');
+    } catch (e: any) {
+      setNodeHelpMessage(e?.message || '导出失败');
+    } finally {
+      setNodeHelpBusy(false);
+    }
+  };
+
+  // 节点帮助文档：导入 JSON 备份（merge 模式）
+  const handleImportNodeHelps = async (file: File | null) => {
+    if (!file) return;
+    setNodeHelpBusy(true);
+    setNodeHelpMessage('');
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const helps: NodeHelpMap = parsed?.helps && typeof parsed.helps === 'object' ? parsed.helps : parsed;
+      await importNodeHelps(helps, 'merge');
+      const map = await getNodeHelps();
+      const merged: NodeHelpMap = {};
+      for (const node of EXHIBITION_HELP_NODES) {
+        const custom = map[node.type];
+        merged[node.type] = custom && custom.trim() ? custom : (DEFAULT_NODE_HELPS[node.type] || '');
+      }
+      setNodeHelpMap(merged);
+      clearNodeHelpCache();
+      setNodeHelpMessage('已导入备份');
+    } catch (e: any) {
+      setNodeHelpMessage(e?.message || '导入失败，请检查 JSON 格式');
+    } finally {
+      setNodeHelpBusy(false);
+      if (nodeHelpImportFileRef.current) nodeHelpImportFileRef.current.value = '';
+    }
+  };
+
+  // 节点帮助文档：恢复全部默认（清空后端所有覆盖）
+  const handleResetAllNodeHelps = async () => {
+    if (!window.confirm('确定恢复全部节点帮助为默认内容？这将清空所有自定义帮助。')) return;
+    setNodeHelpBusy(true);
+    setNodeHelpMessage('');
+    try {
+      await bulkReplaceNodeHelps({});
+      const merged: NodeHelpMap = {};
+      for (const node of EXHIBITION_HELP_NODES) {
+        merged[node.type] = DEFAULT_NODE_HELPS[node.type] || '';
+      }
+      setNodeHelpMap(merged);
+      clearNodeHelpCache();
+      setNodeHelpMessage('已恢复全部默认');
+    } catch (e: any) {
+      setNodeHelpMessage(e?.message || '恢复失败');
+    } finally {
+      setNodeHelpBusy(false);
     }
   };
 
@@ -3300,6 +3471,254 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                   </button>
                 </div>
                 {CANVAS_NODE_MENU_SCENES.map((scene) => renderNodeMenuSceneSettings(scene))}
+              </div>
+            )}
+          </div>
+
+          {/* 节点帮助文档管理 */}
+          <div className="t8-api-settings-divider pt-3 border-t">
+            <button
+              type="button"
+              onClick={() => setNodeHelpOpen((v) => !v)}
+              aria-expanded={nodeHelpOpen}
+              data-open={nodeHelpOpen}
+              className={
+                isPixel
+                  ? 't8-api-settings-toggle w-full flex items-center gap-2 px-3 py-2 px-btn'
+                  : 't8-api-settings-toggle w-full flex items-center gap-2 px-3 py-2 rounded-lg border transition'
+              }
+            >
+              <HelpCircle size={14} className="t8-api-settings-icon" />
+              <span className="text-xs font-bold shrink-0">节点帮助文档</span>
+              <span className={`hidden sm:inline text-[11px] ${hintCls}`}>编辑展陈节点标题栏 ? 按钮弹出的 Markdown 帮助内容</span>
+              <span className="ml-auto flex items-center gap-1.5">
+                {(() => {
+                  let customCount = 0;
+                  for (const node of EXHIBITION_HELP_NODES) {
+                    const cur = nodeHelpMap[node.type];
+                    if (cur && cur !== (DEFAULT_NODE_HELPS[node.type] || '')) customCount += 1;
+                  }
+                  return (
+                    <span
+                      className="t8-api-settings-badge px-1.5 py-0.5 text-[10px] rounded border"
+                      data-tone={customCount > 0 ? 'success' : 'muted'}
+                    >
+                      {customCount}/{EXHIBITION_HELP_NODES.length}
+                    </span>
+                  );
+                })()}
+              </span>
+              <span className={`flex items-center gap-1 text-[11px] ${hintCls}`}>
+                {nodeHelpOpen ? '收起' : '展开'}
+                {nodeHelpOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </span>
+            </button>
+            {!nodeHelpOpen && (
+              <div className={`text-[11px] mt-2 ${hintCls}`}>
+                用于编辑画布上展陈节点标题栏 ? 按钮弹出的帮助内容，支持 Markdown 格式，可导出/导入备份。
+              </div>
+            )}
+            {nodeHelpOpen && (
+              <div className="mt-3 space-y-3">
+                <div className="flex items-start gap-3 justify-between flex-wrap">
+                  <div className={`text-[11px] leading-relaxed ${hintCls}`}>
+                    修改后点击「保存」立即生效；「重置为默认」会删除后端覆盖并回退到内置帮助；「恢复全部默认」会清空所有自定义。
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleExportNodeHelps}
+                      disabled={nodeHelpBusy}
+                      className={
+                        isPixel
+                          ? 't8-api-settings-secondary-btn px-btn text-[11px] px-2 py-1 inline-flex items-center gap-1'
+                          : 't8-api-settings-secondary-btn rounded border px-2 py-1 text-[11px] inline-flex items-center gap-1'
+                      }
+                    >
+                      <Download size={12} /> 导出 JSON
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => nodeHelpImportFileRef.current?.click()}
+                      disabled={nodeHelpBusy}
+                      className={
+                        isPixel
+                          ? 't8-api-settings-secondary-btn px-btn text-[11px] px-2 py-1 inline-flex items-center gap-1'
+                          : 't8-api-settings-secondary-btn rounded border px-2 py-1 text-[11px] inline-flex items-center gap-1'
+                      }
+                    >
+                      <FileUp size={12} /> 导入 JSON
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetAllNodeHelps}
+                      disabled={nodeHelpBusy}
+                      className={
+                        isPixel
+                          ? 't8-api-settings-secondary-btn px-btn text-[11px] px-2 py-1 inline-flex items-center gap-1'
+                          : 't8-api-settings-secondary-btn rounded border px-2 py-1 text-[11px] inline-flex items-center gap-1'
+                      }
+                    >
+                      <RotateCcw size={12} /> 恢复全部默认
+                    </button>
+                  </div>
+                  <input
+                    ref={nodeHelpImportFileRef}
+                    type="file"
+                    accept=".json,application/json"
+                    className="hidden"
+                    onChange={(e) => handleImportNodeHelps(e.target.files?.[0] || null)}
+                  />
+                </div>
+
+                <div className="flex gap-3 flex-col md:flex-row">
+                  {/* 左侧节点列表 */}
+                  <div className={`md:w-52 shrink-0 ${isPixel ? 'border p-2' : 'rounded-lg border p-2'} max-h-[420px] overflow-y-auto`}>
+                    {EXHIBITION_HELP_NODES.map((node) => {
+                      const cur = nodeHelpMap[node.type];
+                      const isCustom = !!cur && cur !== (DEFAULT_NODE_HELPS[node.type] || '');
+                      const isActive = activeNodeHelpType === node.type;
+                      return (
+                        <button
+                          key={node.type}
+                          type="button"
+                          onClick={() => setActiveNodeHelpType(node.type)}
+                          className={
+                            isPixel
+                              ? `w-full text-left px-2 py-1.5 text-[11px] flex items-center gap-2 ${isActive ? 'bg-cyan-300/10 text-cyan-200' : ''}`
+                              : `w-full text-left px-2 py-1.5 text-[11px] rounded flex items-center gap-2 ${isActive ? 'bg-cyan-300/10 text-cyan-200' : 'hover:bg-white/[0.04]'}`
+                          }
+                        >
+                          <span
+                            className={`inline-block w-2 h-2 rounded-full shrink-0 ${isCustom ? 'bg-emerald-400' : 'bg-white/25'}`}
+                            title={isCustom ? '已自定义' : '默认'}
+                          />
+                          <span className="truncate">{node.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* 右侧编辑/预览区 */}
+                  <div className="flex-1 min-w-0 space-y-2">
+                    {(() => {
+                      const activeHelpNode = EXHIBITION_HELP_NODES.find((n) => n.type === activeNodeHelpType);
+                      const activeHelpIsCustom = !!activeNodeHelpType
+                        && !!nodeHelpMap[activeNodeHelpType]
+                        && nodeHelpMap[activeNodeHelpType] !== (DEFAULT_NODE_HELPS[activeNodeHelpType] || '');
+                      return (
+                        <>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-xs font-bold ${labelCls}`}>{activeHelpNode?.label || '未选择节点'}</span>
+                            <span
+                              className="t8-api-settings-badge px-1.5 py-0.5 text-[10px] rounded border"
+                              data-tone={activeHelpIsCustom ? 'success' : 'muted'}
+                            >
+                              {activeHelpIsCustom ? '自定义' : '默认'}
+                            </span>
+                            <div className="ml-auto flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setNodeHelpView('edit')}
+                                className={
+                                  isPixel
+                                    ? `px-btn px-2 py-1 text-[10px] inline-flex items-center gap-1 ${nodeHelpView === 'edit' ? 'bg-cyan-300/15 text-cyan-200' : ''}`
+                                    : `rounded px-2 py-1 text-[10px] border inline-flex items-center gap-1 ${nodeHelpView === 'edit' ? 'bg-cyan-300/15 text-cyan-200 border-cyan-300/40' : ''}`
+                                }
+                              >
+                                <Edit3 size={11} /> 编辑
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setNodeHelpView('preview')}
+                                className={
+                                  isPixel
+                                    ? `px-btn px-2 py-1 text-[10px] inline-flex items-center gap-1 ${nodeHelpView === 'preview' ? 'bg-cyan-300/15 text-cyan-200' : ''}`
+                                    : `rounded px-2 py-1 text-[10px] border inline-flex items-center gap-1 ${nodeHelpView === 'preview' ? 'bg-cyan-300/15 text-cyan-200 border-cyan-300/40' : ''}`
+                                }
+                              >
+                                <EyeIcon size={11} /> 预览
+                              </button>
+                            </div>
+                          </div>
+
+                          {nodeHelpView === 'edit' ? (
+                            <textarea
+                              value={nodeHelpDraft}
+                              onChange={(e) => {
+                                setNodeHelpDraft(e.target.value);
+                                setNodeHelpDirty(true);
+                              }}
+                              placeholder="在此输入 Markdown 帮助内容..."
+                              spellCheck={false}
+                              className="w-full min-h-[300px] resize-y rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] font-mono leading-relaxed text-white outline-none focus:border-cyan-300/60"
+                            />
+                          ) : (
+                            <div
+                              className={
+                                isPixel
+                                  ? 't8-api-settings-section min-h-[300px] max-h-[420px] overflow-y-auto p-2 border'
+                                  : 't8-api-settings-section min-h-[300px] max-h-[420px] overflow-y-auto p-3 rounded-lg border'
+                              }
+                            >
+                              <div className="t8-md-content">{renderSimpleMarkdown(nodeHelpDraft)}</div>
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={handleSaveNodeHelp}
+                              disabled={nodeHelpBusy || !activeNodeHelpType}
+                              className={
+                                isPixel
+                                  ? 't8-api-settings-action-btn px-btn px-2 py-1 text-[11px] inline-flex items-center gap-1'
+                                  : 't8-api-settings-action-btn rounded border px-2 py-1 text-[11px] inline-flex items-center gap-1'
+                              }
+                            >
+                              <Save size={12} /> 保存
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleResetNodeHelp}
+                              disabled={nodeHelpBusy || !activeNodeHelpType}
+                              className={
+                                isPixel
+                                  ? 't8-api-settings-secondary-btn px-btn px-2 py-1 text-[11px] inline-flex items-center gap-1'
+                                  : 't8-api-settings-secondary-btn rounded border px-2 py-1 text-[11px] inline-flex items-center gap-1'
+                              }
+                            >
+                              <RotateCcw size={12} /> 重置为默认
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleClearNodeHelp}
+                              disabled={nodeHelpBusy || !activeNodeHelpType}
+                              className={
+                                isPixel
+                                  ? 't8-api-settings-secondary-btn px-btn px-2 py-1 text-[11px] inline-flex items-center gap-1'
+                                  : 't8-api-settings-secondary-btn rounded border px-2 py-1 text-[11px] inline-flex items-center gap-1'
+                              }
+                            >
+                              <Trash2 size={12} /> 清空
+                            </button>
+                            {nodeHelpDirty && (
+                              <span className={`text-[10px] ${hintCls}`}>未保存</span>
+                            )}
+                            {nodeHelpBusy && (
+                              <Loader2 size={12} className="animate-spin text-cyan-300" />
+                            )}
+                            {nodeHelpMessage && (
+                              <span className={`text-[10px] ${nodeHelpMessage.includes('失败') ? 'text-red-400' : 'text-emerald-400'}`}>
+                                {nodeHelpMessage}
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
               </div>
             )}
           </div>
