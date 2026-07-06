@@ -321,11 +321,13 @@ export function buildCinemaAuditoriumImagePrompt(values = {}) {
   const seatCount = Math.max(0, Math.round(Number(values.seatCount) || 0));
   const isDomeCinema = values.venueType === 'dome-cinema' || values.screenType === 'dome-screen' || values.slopeMode === 'reclined-dome';
   const isFlyingCinema = values.venueType === 'flying-theater';
+  const layoutSeatSpec = cleanCinemaAuditoriumText(values.layoutSeatSpec, 2000);
   return [
     '核心要求：生成专业影院/报告厅/特效影院空间设计主效果图，可用于方案汇报；空间尺度、银幕舞台方向、座席视线、声学材料、疏散与设备区必须可信。',
     isDomeCinema ? '穹幕影院主效果图专用要求：画面顶部必须表现倒扣半圆形/半球形穹幕屏，观众仰视穹顶内容；不要生成一面普通墙面银幕或矩形影厅。地面和坐席按圆形场地组织，座椅沿圆弧成排，中间几排座椅数量最多，前后排逐渐减少，整体类似天文馆/穹幕影院。' : '',
     isFlyingCinema ? '飞行影院主效果图专用要求：必须表现飞越式多层吊挂飞行影院，不要画成普通固定座椅影厅，也不要画成零散独立小舱。画面应包含前方巨大凹弧形飞行视景屏或半包裹弧幕、后方装载平台、上方钢结构大臂/升降臂/吊挂连杆、多层长排悬挂座椅梁；观众坐在连续长排座椅上，开场后整排座椅被推送/抬升到弧幕前，脚下悬空，配合风雾气味等特效设备。' : '',
     colorPlanReferences.length ? `平面布局参考图是硬约束：必须严格依据该布局图推理座椅总数量、座椅占地、行间距、左右/前后分区、中心走道、侧走道、银幕舞台方向和控制/设备区位置；不要把单侧座位数误当成总座位数，也不要让效果图座椅数量与平面布局或彩平图不符。\n${referenceOrderText(colorPlanReferences, '平面布局硬约束')}` : '',
+    layoutSeatSpec ? `逐排座位数硬约束：${layoutSeatSpec} 必须逐排逐列严格一致；透视角度不能新增座椅，不能把每排 6 座画成 7 座，不能在左右边缘额外补座。` : '',
     capacityMode === 'manual' && seatCount > 0 ? `座椅数量硬约束：画面中的观众座椅总数必须约为 ${seatCount} 座；如彩平图分为左右两区，则左右两区合计才是 ${seatCount} 座，不是每侧 ${seatCount} 座。` : '',
     baseCinemaContext(values),
     colorMaterialContext(values),
@@ -348,6 +350,7 @@ export function buildCinemaAuditoriumDrawingPrompt(values = {}) {
   const mainScreen = cinemaMainScreenKindMeta(values.mainScreenKind);
   const isDomeCinema = values.venueType === 'dome-cinema' || values.screenType === 'dome-screen' || values.slopeMode === 'reclined-dome';
   const isFlyingCinema = values.venueType === 'flying-theater';
+  const layoutSeatSpec = cleanCinemaAuditoriumText(values.layoutSeatSpec, 2000);
   const power = estimateCinemaSystemPower(values);
   const referenceLines = [
     !isSystemPrinciple && renderImage ? `@img1: 主效果图一致性参考 = ${renderImage}` : '',
@@ -392,6 +395,7 @@ export function buildCinemaAuditoriumDrawingPrompt(values = {}) {
     flyingTopologyText,
     powerText,
     baseCinemaContext(values),
+    !isSystemPrinciple && layoutSeatSpec ? `逐排座位数硬约束：${layoutSeatSpec} 彩平图和效果图都必须保持每排数量完全一致，不得每排多画一个座位。` : '',
     colorMaterialContext(values),
     isSystemPrinciple
       ? '拓扑表达要求：以控制机房/播放服务器/中央控制为核心，向显示、音频、灯光、特效、安全与电源系统分组连线；每个设备用图标化符号表达，配短中文标签和图例，线缆关系要清楚。'

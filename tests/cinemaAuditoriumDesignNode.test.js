@@ -76,6 +76,8 @@ test('cinema auditorium component exposes handles, shared material controls and 
   assert.match(source, /buildCinemaAuditoriumImagePrompt/);
   assert.match(source, /buildCinemaAuditoriumDrawingPrompt/);
   assert.match(source, /buildCinemaColorPlanReferenceDataUrl/);
+  assert.match(source, /buildCinemaLayoutSeatSpec/);
+  assert.match(source, /rowCountText/);
   assert.match(source, /isDomeCinemaLayout/);
   assert.match(source, /isFlyingCinemaLayout/);
   assert.match(source, /domeRowSeatCounts/);
@@ -109,6 +111,8 @@ test('cinema auditorium output order and result fields are stable', () => {
   assert.match(source, /const sequence = OUTPUT_ORDER\.filter/);
   assert.match(source, /sequence\.includes\('color-plan'\) \|\| sequence\.includes\('render'\)/);
   assert.match(source, /seatWidthMm,\s*seatDepthMm,\s*seatGapMm,\s*rowSpacingMm,\s*frontClearanceMm,\s*sideAisleWidthMm,\s*centerAisleWidthMm/s);
+  assert.match(source, /const layoutSeatSpec = buildCinemaLayoutSeatSpec\(layoutParams\)/);
+  assert.match(source, /layoutSeatSpec,/);
   assert.match(source, /colorPlanReferenceImages: \[generatedColorPlanImage \|\| planReferenceImage\]\.filter\(Boolean\)/);
   assert.match(source, /\[generatedColorPlanImage \|\| planReferenceImage, \.\.\.spaceReferenceImages/);
   assert.match(source, /if \(kind === 'render'\) renderImage = generated\.imageUrl/);
@@ -134,6 +138,11 @@ test('cinema auditorium prompt presets cover special theaters and diagrams', asy
   const render = mod.buildCinemaAuditoriumImagePrompt({ capacityMode: 'manual', seatCount: 240, colorPlanReferenceImages: ['/files/output/plan.png'] });
   assert.match(render, /彩平图是硬约束|座椅总数量|不要把单侧座位数误当成总座位数/);
   assert.match(render, /合计才是 240 座|不是每侧 240 座/);
+  const rowLockedRender = mod.buildCinemaAuditoriumImagePrompt({ capacityMode: 'manual', seatCount: 18, colorPlanReferenceImages: ['/files/output/plan.png'], layoutSeatSpec: '平面布局座位结构：全区3排，逐排=6+6+6座，合计18座。' });
+  assert.match(rowLockedRender, /逐排座位数硬约束/);
+  assert.match(rowLockedRender, /每排 6 座画成 7 座|每排6座画成7座/);
+  const rowLockedPlan = mod.buildCinemaAuditoriumDrawingPrompt({ outputType: 'color-plan', layoutSeatSpec: '平面布局座位结构：全区3排，逐排=6+6+6座，合计18座。' });
+  assert.match(rowLockedPlan, /不得每排多画一个座位/);
   const domeRender = mod.buildCinemaAuditoriumImagePrompt({ venueType: 'dome-cinema', screenType: 'dome-screen', slopeMode: 'reclined-dome', capacityMode: 'manual', seatCount: 180, colorPlanReferenceImages: ['/files/output/dome-plan.png'] });
   assert.match(domeRender, /倒扣半圆形|半球形穹幕屏/);
   assert.match(domeRender, /圆形场地/);

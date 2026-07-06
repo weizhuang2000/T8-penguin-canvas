@@ -152,6 +152,15 @@ function splitSeatBanks(totalSeats: number, bankCount: number): number[] {
   return Array.from({ length: count }, (_, index) => base + (index < remainder ? 1 : 0));
 }
 
+function rowCountText(count: number, cols: number): string {
+  const safeCols = Math.max(1, cols);
+  const rows = Math.max(1, Math.ceil(Math.max(1, count) / safeCols));
+  return Array.from({ length: rows }, (_, row) => {
+    const remaining = count - row * safeCols;
+    return Math.max(0, Math.min(safeCols, remaining));
+  }).filter((item) => item > 0).join('+');
+}
+
 function fitSeatGrid(count: number, bankW: number, bankH: number, seatW: number, seatD: number, seatGap: number, rowSpacing: number) {
   const colPitch = Math.max(1, seatW + seatGap);
   const rowPitch = Math.max(1, rowSpacing);
@@ -220,6 +229,88 @@ function splitFlyingSuspendedRows(totalSeats: number, rowCount: number): number[
     }
   }
   return counts;
+}
+
+function buildCinemaLayoutSeatSpec(params: Parameters<typeof buildCinemaColorPlanReferenceDataUrl>[0]): string {
+  const lengthMm = Math.max(3000, params.lengthMm || 24000);
+  const widthMm = Math.max(3000, params.widthMm || 16000);
+  const seatWidthMm = normalizeLayoutMm(params.seatWidthMm, 550, 250);
+  const seatDepthMm = normalizeLayoutMm(params.seatDepthMm, 600, 250);
+  const seatGapMm = normalizeLayoutMm(params.seatGapMm, 80, 0);
+  const rowSpacingMm = normalizeLayoutMm(params.rowSpacingMm, 900, seatDepthMm);
+  const frontClearanceMm = normalizeLayoutMm(params.frontClearanceMm, 1600, 0);
+  const sideAisleWidthMm = normalizeLayoutMm(params.sideAisleWidthMm, 1200, 0);
+  const centerAisleWidthMm = normalizeLayoutMm(params.centerAisleWidthMm, 1200, 0);
+  const effectiveSeats = Math.max(1, Math.round(params.seatCount || 120));
+  if (isFlyingCinemaLayout(params)) {
+    const rowCount = Math.max(3, Math.min(5, Math.round(Math.sqrt(effectiveSeats / 16))));
+    const rows = splitFlyingSuspendedRows(effectiveSeats, rowCount);
+    return `飞行影院座位结构：${rows.length}层长排吊挂座椅，逐层座位数=${rows.join('+')}，合计${effectiveSeats}座；效果图不得把长排座椅画成更多座位或零散独立小舱。`;
+  }
+  if (isDomeCinemaLayout(params)) {
+    const side = normalizeCinemaScreenStageSide(params.screenStageSide);
+    const isHorizontalStage = side === 'north' || side === 'south';
+    const planW = isHorizontalStage ? widthMm : lengthMm;
+    const planH = isHorizontalStage ? lengthMm : widthMm;
+    const scale = Math.min(1400 / planW, 1400 / planH);
+    const radius = Math.max(80, Math.min(planW * scale, planH * scale) * 0.43);
+    const rowPitch = Math.max(seatDepthMm * scale + 2, rowSpacingMm * scale);
+    const rowCount = Math.max(5, Math.min(32, Math.round((radius * 1.55) / Math.max(1, rowPitch))));
+    const rows = domeRowSeatCounts(effectiveSeats, rowCount);
+    return `穹幕影院座位结构：圆弧座椅逐排座位数=${rows.join('+')}，中间排最多，前后逐渐减少，合计${effectiveSeats}座；效果图必须逐排对应，不得增减每排座椅。`;
+  }
+
+  const side = normalizeCinemaScreenStageSide(params.screenStageSide);
+  const isHorizontalStage = side === 'north' || side === 'south';
+  const planW = isHorizontalStage ? widthMm : lengthMm;
+  const planH = isHorizontalStage ? lengthMm : widthMm;
+  const scale = Math.min(1400 / planW, 1400 / planH);
+  const w = Math.round(planW * scale);
+  const h = Math.round(planH * scale);
+  const x0 = 60;
+  const y0 = 60;
+  const stageDepth = Math.max(42, Math.round((isHorizontalStage ? h : w) * 0.16));
+  const controlDepth = Math.max(32, Math.round((isHorizontalStage ? h : w) * 0.08));
+  let stage = { x: x0, y: y0, w, h: stageDepth };
+  let control = { x: x0, y: y0 + h - controlDepth, w, h: controlDepth };
+  if (side === 'south') {
+    stage = { x: x0, y: y0 + h - stageDepth, w, h: stageDepth };
+    control = { x: x0, y: y0, w, h: controlDepth };
+  } else if (side === 'east') {
+    stage = { x: x0 + w - stageDepth, y: y0, w: stageDepth, h };
+    control = { x: x0, y: y0, w: controlDepth, h };
+  } else if (side === 'west') {
+    stage = { x: x0, y: y0, w: stageDepth, h };
+    control = { x: x0 + w - controlDepth, y: y0, w: controlDepth, h };
+  }
+  const seatArea = { x: x0 + 22, y: y0 + 22, w: w - 44, h: h - 44 };
+  if (side === 'north') {
+    seatArea.y = stage.y + stage.h + 22;
+    seatArea.h = control.y - seatArea.y - 18;
+  } else if (side === 'south') {
+    seatArea.y = control.y + control.h + 18;
+    seatArea.h = stage.y - seatArea.y - 22;
+  } else if (side === 'east') {
+    seatArea.x = control.x + control.w + 18;
+    seatArea.w = stage.x - seatArea.x - 22;
+  } else if (side === 'west') {
+    seatArea.x = stage.x + stage.w + 22;
+    seatArea.w = control.x - seatArea.x - 18;
+  }
+  const bankCount = params.aisleMode === 'center-and-side' || params.aisleMode === 'center-only' || params.aisleMode === 'cross-aisle' ? 2 : 1;
+  const bankSeats = splitSeatBanks(effectiveSeats, bankCount);
+  const sideAislePx = sideAisleWidthMm * scale;
+  const centerAislePx = centerAisleWidthMm * scale;
+  const bankHeight = Math.max(40, seatArea.h - 62 - frontClearanceMm * scale);
+  const bankGap = Math.max(16, centerAislePx);
+  const specs = bankSeats.map((count, index) => {
+    const bankW = bankCount === 2 && isHorizontalStage ? (seatArea.w - bankGap - sideAislePx * 2) / 2 : seatArea.w - sideAislePx * 2;
+    const bankH = bankCount === 2 && !isHorizontalStage ? (seatArea.h - bankGap - 62 - frontClearanceMm * scale - sideAislePx * 2) / 2 : bankHeight;
+    const grid = fitSeatGrid(count, bankW / scale, Math.max(1, bankH - 24) / scale, seatWidthMm, seatDepthMm, seatGapMm, rowSpacingMm);
+    const label = bankCount === 2 ? (isHorizontalStage ? (index === 0 ? '左区' : '右区') : (index === 0 ? '前区' : '后区')) : '全区';
+    return `${label}${grid.rows}排，逐排=${rowCountText(count, grid.cols)}座`;
+  });
+  return `平面布局座位结构：${specs.join('；')}，合计${effectiveSeats}座。效果图必须逐排逐列严格对应平面布局；例如平面图每排6座，效果图也必须每排6座，禁止画成每排7座或额外增加边列。`;
 }
 
 function buildCinemaColorPlanReferenceDataUrl(params: {
@@ -555,7 +646,7 @@ function buildCinemaColorPlanReferenceDataUrl(params: {
     const rowPitch = Math.max(seatH + 2, rowSpacingMm * scale);
     ctx.fillStyle = '#166534';
     ctx.font = 'bold 13px sans-serif';
-    ctx.fillText(`${label} ${count}座 / ${rows}排`, bankX, bankY + 14);
+    ctx.fillText(`${label} ${count}座 / ${rows}排 / 每排${rowCountText(count, cols)}座`, bankX, bankY + 14);
     ctx.strokeStyle = '#475569';
     ctx.lineWidth = 1;
     const totalGridW = cols * seatW + (cols - 1) * colGap;
@@ -998,25 +1089,27 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
         cinemaAuditoriumResults: [],
         referenceImages: [...spaceReferenceImages, ...colorMaterialReferenceImages, ...equipmentReferenceImages],
       });
+      const layoutParams = {
+        lengthMm: dimensions.lengthMm,
+        widthMm: dimensions.widthMm,
+        heightMm: dimensions.heightMm,
+        screenStageSide,
+        seatCount: Number(d.seatCount) || 0,
+        aisleMode,
+        venueType,
+        screenType,
+        slopeMode,
+        seatWidthMm,
+        seatDepthMm,
+        seatGapMm,
+        rowSpacingMm,
+        frontClearanceMm,
+        sideAisleWidthMm,
+        centerAisleWidthMm,
+      };
+      const layoutSeatSpec = buildCinemaLayoutSeatSpec(layoutParams);
       if (sequence.includes('color-plan') || sequence.includes('render')) {
-        const dataUrl = buildCinemaColorPlanReferenceDataUrl({
-          lengthMm: dimensions.lengthMm,
-          widthMm: dimensions.widthMm,
-          heightMm: dimensions.heightMm,
-          screenStageSide,
-          seatCount: Number(d.seatCount) || 0,
-          aisleMode,
-          venueType,
-          screenType,
-          slopeMode,
-          seatWidthMm,
-          seatDepthMm,
-          seatGapMm,
-          rowSpacingMm,
-          frontClearanceMm,
-          sideAisleWidthMm,
-          centerAisleWidthMm,
-        });
+        const dataUrl = buildCinemaColorPlanReferenceDataUrl(layoutParams);
         if (dataUrl) {
           update({ progress: '上传彩平比例底图...' });
           planReferenceImage = await uploadDataUrl(dataUrl, 'cinema-color-plan-reference');
@@ -1041,6 +1134,7 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
             frontClearanceMm,
             sideAisleWidthMm,
             centerAisleWidthMm,
+            layoutSeatSpec,
             slopeMode,
             screenType,
             mainScreenKind,
@@ -1070,6 +1164,7 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
             frontClearanceMm,
             sideAisleWidthMm,
             centerAisleWidthMm,
+            layoutSeatSpec,
             slopeMode,
             screenType,
             mainScreenKind,
