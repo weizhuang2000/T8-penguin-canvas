@@ -223,3 +223,46 @@ test('technical drawing prompts bind later drawings to render reference', () => 
     assert.match(prompt, /待工程校核/);
   }
 });
+
+test('finished render mode drawing prompt uses only the finished image as reference', () => {
+  const parameterMarkdown = buildScienceExhibitParameterMarkdown({
+    analysis,
+    dimensions,
+    spatialScale: 'island',
+  });
+  const prompt = buildScienceExhibitDrawingPrompt({
+    drawingType: 'orthographic',
+    analysis,
+    backgroundMode: 'white',
+    dimensions,
+    spatialScale: 'island',
+    renderImage: '/files/input/finished.png',
+    previousDrawingImage: '/files/output/exploded.png',
+    userReferenceImages: ['/files/input/space.png', '/files/input/device.png'],
+    parameterMarkdown,
+    sourceText: '展项资料：风能转化演示。',
+    supplement: '补充要求：统一部件编号。',
+    finishedRenderMode: true,
+  });
+  assert.match(prompt, /唯一成品展项效果图参考/);
+  assert.match(prompt, /不使用其它参考图/);
+  assert.match(prompt, /不进行 LLM 提炼/);
+  assert.match(prompt, /仅作为数据支撑/);
+  assert.match(prompt, /展项资料/);
+  assert.match(prompt, /补充要求/);
+  assert.doesNotMatch(prompt, /用户原始参考/);
+  assert.match(prompt, /CAD/);
+  assert.match(prompt, /side elevation|left or right side projection/);
+
+  const tablePrompt = buildScienceExhibitDrawingPrompt({
+    drawingType: 'parameter-table',
+    analysis,
+    dimensions,
+    renderImage: '/files/input/finished.png',
+    parameterMarkdown,
+    finishedRenderMode: true,
+  });
+  assert.match(tablePrompt, /TABLE ONLY/);
+  assert.match(tablePrompt, /no render image/);
+  assert.match(tablePrompt, /唯一成品展项效果图参考/);
+});

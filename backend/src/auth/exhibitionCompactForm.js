@@ -324,6 +324,7 @@ const EXHIBITION_COMPACT_FORM_DEFINITIONS = [
       { id: 'parameter-table', label: '\u53c2\u6570\u8868' },
     ] },
     { id: 'references', label: '\u53c2\u8003\u56fe', items: [
+      { id: 'finished-render-reference', label: '\u6210\u54c1\u5c55\u9879\u6548\u679c\u56fe' },
       { id: 'space-reference', label: '\u6574\u4f53\u7a7a\u95f4/\u98ce\u683c\u53c2\u8003' },
       { id: 'device-reference', label: '\u88c5\u7f6e/\u7ed3\u6784\u53c2\u8003' },
     ] },

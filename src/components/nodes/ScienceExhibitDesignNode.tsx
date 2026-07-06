@@ -240,8 +240,12 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
   const upstream = useUpstreamMaterials(id);
   const spaceReferenceItems = useInputImagesByHandle(id, 'space-reference');
   const deviceReferenceItems = useInputImagesByHandle(id, 'device-reference');
+  const finishedRenderReferenceItems = useInputImagesByHandle(id, 'finished-render-reference');
   const spaceReferenceImages = useMemo(() => spaceReferenceItems.map((item) => item.url), [spaceReferenceItems]);
   const deviceReferenceImages = useMemo(() => deviceReferenceItems.map((item) => item.url), [deviceReferenceItems]);
+  const finishedRenderReferenceImages = useMemo(() => finishedRenderReferenceItems.map((item) => item.url), [finishedRenderReferenceItems]);
+  const finishedRenderImage = finishedRenderReferenceImages[0] || '';
+  const finishedRenderMode = !!finishedRenderImage;
   const activeCanvas = useCanvasStore((state) => state.canvases.find((canvas) => canvas.id === state.activeId) || null);
   const activeCanvasId = useCanvasStore((state) => state.activeId);
   const isReadonly = activeCanvas?.access?.canEdit === false;
@@ -353,7 +357,10 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
     colorMaterialPalette,
     colorMaterialTextures,
   }), [analysis, colorMaterialPalette, colorMaterialText, colorMaterialTextures, dimensions, spatialScale]);
-  const previewReferenceImages = useMemo(() => [...spaceReferenceImages, ...deviceReferenceImages], [deviceReferenceImages, spaceReferenceImages]);
+  const previewReferenceImages = useMemo(
+    () => finishedRenderMode ? [finishedRenderImage] : [...spaceReferenceImages, ...deviceReferenceImages],
+    [deviceReferenceImages, finishedRenderImage, finishedRenderMode, spaceReferenceImages],
+  );
   const previewPrompt = useMemo(() => buildScienceExhibitImagePrompt({
     scienceDomain,
     exhibitType,
@@ -402,16 +409,18 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
       d.prompt !== previewPrompt ||
       d.referenceImages?.join('|') !== previewReferenceImages.join('|') ||
       d.spaceReferenceImages?.join('|') !== spaceReferenceImages.join('|') ||
-      d.deviceReferenceImages?.join('|') !== deviceReferenceImages.join('|')
+      d.deviceReferenceImages?.join('|') !== deviceReferenceImages.join('|') ||
+      d.finishedRenderReferenceImages?.join('|') !== finishedRenderReferenceImages.join('|')
     ) {
       update({
         prompt: previewPrompt,
         referenceImages: previewReferenceImages,
         spaceReferenceImages,
         deviceReferenceImages,
+        finishedRenderReferenceImages,
       });
     }
-  }, [d.deviceReferenceImages, d.prompt, d.referenceImages, d.spaceReferenceImages, deviceReferenceImages, previewPrompt, previewReferenceImages, spaceReferenceImages, update]);
+  }, [d.deviceReferenceImages, d.finishedRenderReferenceImages, d.prompt, d.referenceImages, d.spaceReferenceImages, deviceReferenceImages, finishedRenderReferenceImages, previewPrompt, previewReferenceImages, spaceReferenceImages, update]);
 
   const pickDocument = useCallback(async (file?: File) => {
     if (!file || isReadonly || busy) return;
@@ -627,17 +636,17 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
     taskCompletionSound.primeAudio();
     const src = `science-exhibit-design:${id.slice(0, 6)}`;
     const extractBeforeGenerate = d.extractBeforeGenerate === true;
-    let runtimeAnalysis = analysisHasContent(analysis) ? analysis : null;
-    const userReferenceImages = [...spaceReferenceImages, ...deviceReferenceImages];
+    let runtimeAnalysis: ScienceExhibitAnalysis | null = finishedRenderMode ? analysis : (analysisHasContent(analysis) ? analysis : null);
+    const userReferenceImages = finishedRenderMode ? [finishedRenderImage] : [...spaceReferenceImages, ...deviceReferenceImages];
     const generatedUrls: string[] = [];
     const results: ScienceExhibitResult[] = [];
     let previousDrawingImage = '';
-    let renderImage = '';
+    let renderImage = finishedRenderMode ? finishedRenderImage : '';
     let latestTaskId = '';
     try {
       update({
         status: 'analyzing',
-        progress: extractBeforeGenerate ? '每次生图前提炼已开启，正在刷新科学分析...' : (runtimeAnalysis ? '使用已有科学分析，准备生成图包...' : '准备提炼科学分析...'),
+        progress: finishedRenderMode ? '已接入成品展项效果图，跳过 LLM 提炼和主效果图生成...' : (extractBeforeGenerate ? '每次生图前提炼已开启，正在刷新科学分析...' : (runtimeAnalysis ? '使用已有科学分析，准备生成图包...' : '准备提炼科学分析...')),
         error: '',
         imageUrl: '',
         imageUrls: [],
@@ -645,23 +654,55 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
         scienceExhibitResults: [],
         referenceImages: userReferenceImages,
       });
-      if (extractBeforeGenerate || !runtimeAnalysis) {
+      if (!finishedRenderMode && (extractBeforeGenerate || !runtimeAnalysis)) {
         runtimeAnalysis = await runExtract({ force: true });
         if (!runtimeAnalysis) throw new Error('未获得科技展项科学分析');
       }
+      const effectiveAnalysis = runtimeAnalysis || analysis;
       const markdown = buildScienceExhibitParameterMarkdown({
-        analysis: runtimeAnalysis,
+        analysis: effectiveAnalysis,
         dimensions,
         spatialScale,
         colorMaterial: colorMaterialText,
         colorMaterialPalette,
         colorMaterialTextures,
       });
-      const sequence: ScienceExhibitDrawingType[] = DRAWING_ORDER.filter((item) => item === 'render' || drawingSelection.includes(item));
+      if (finishedRenderMode) {
+        generatedUrls.push(finishedRenderImage);
+        results.push({
+          kind: 'render',
+          name: '成品展项效果图',
+          imageUrl: finishedRenderImage,
+          prompt: '成品展项效果图输入',
+          seed: seed > 0 ? seed : 0,
+          taskId: '',
+        });
+      }
+      const sequence: ScienceExhibitDrawingType[] = DRAWING_ORDER.filter((item) => finishedRenderMode ? item !== 'render' && drawingSelection.includes(item) : item === 'render' || drawingSelection.includes(item));
+      if (sequence.length === 0) {
+        update({
+          status: 'success',
+          progress: '100%',
+          imageUrl: finishedRenderImage,
+          imageUrls: generatedUrls.slice(),
+          urls: generatedUrls.slice(),
+          scienceExhibitResults: results.slice(),
+          outputText: markdown,
+          text: markdown,
+          analysis: effectiveAnalysis,
+          referenceImages: userReferenceImages,
+          spaceReferenceImages,
+          deviceReferenceImages,
+          finishedRenderReferenceImages,
+          error: '',
+        });
+        taskCompletionSound.notifyComplete(id, 'image');
+        return;
+      }
       for (let index = 0; index < sequence.length; index += 1) {
         if (abortRef.current) throw new Error('任务已取消');
         const kind = sequence[index];
-        const runSeed = index === 0 && seed > 0 ? seed : randomImageSeed();
+        const runSeed = !finishedRenderMode && index === 0 && seed > 0 ? seed : randomImageSeed();
         const statusKey = `generating-${kind}`;
         const outputTitle = drawingLabel(kind);
         const prompt = kind === 'render'
@@ -673,7 +714,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
             spatialScale,
             backgroundMode,
             dimensions,
-            analysis: runtimeAnalysis,
+            analysis: effectiveAnalysis,
             spaceReferenceImages,
             deviceReferenceImages,
             supplement: resolvedSupplement,
@@ -689,14 +730,17 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
           })
           : buildScienceExhibitDrawingPrompt({
             drawingType: kind,
-            analysis: runtimeAnalysis,
+            analysis: effectiveAnalysis,
             backgroundMode,
             dimensions,
             spatialScale,
             renderImage,
             previousDrawingImage,
-            userReferenceImages,
+            userReferenceImages: finishedRenderMode ? [] : userReferenceImages,
             parameterMarkdown: markdown,
+            sourceText: effectiveSourceText,
+            supplement: resolvedSupplement,
+            finishedRenderMode,
             colorMaterial: colorMaterialText,
             colorMaterialPalette,
             colorMaterialTextures,
@@ -704,7 +748,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
           });
         const images = kind === 'render'
           ? userReferenceImages
-          : [renderImage, previousDrawingImage, ...userReferenceImages].filter(Boolean);
+          : (finishedRenderMode ? [finishedRenderImage, previousDrawingImage] : [renderImage, previousDrawingImage, ...userReferenceImages]).filter(Boolean);
         update({
           status: statusKey,
           progress: `提交 ${index + 1}/${sequence.length} · ${outputTitle}`,
@@ -738,10 +782,11 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
           prompt,
           outputText: markdown,
           text: markdown,
-          analysis: runtimeAnalysis,
+          analysis: effectiveAnalysis,
           referenceImages: userReferenceImages,
           spaceReferenceImages,
           deviceReferenceImages,
+          finishedRenderReferenceImages,
           taskId: latestTaskId,
           error: '',
         });
@@ -756,7 +801,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`科技展项设计失败: ${msg}`, src);
       throw error;
     }
-  }, [analysis, audience, audienceOptions, backgroundMode, busy, colorMaterialPalette, colorMaterialText, colorMaterialTextures, d.extractBeforeGenerate, deviceReferenceImages, dimensions, domainOptions, drawingSelection, exhibitType, generateOneImage, hasColorMaterialPreset, id, interactionMode, interactionOptions, isReadonly, resolvedSupplement, runExtract, scaleOptions, scienceDomain, seed, spaceReferenceImages, spatialScale, typeOptions, update]);
+  }, [analysis, audience, audienceOptions, backgroundMode, busy, colorMaterialPalette, colorMaterialText, colorMaterialTextures, d.extractBeforeGenerate, deviceReferenceImages, dimensions, domainOptions, drawingSelection, effectiveSourceText, exhibitType, finishedRenderImage, finishedRenderMode, finishedRenderReferenceImages, generateOneImage, hasColorMaterialPreset, id, interactionMode, interactionOptions, isReadonly, resolvedSupplement, runExtract, scaleOptions, scienceDomain, seed, spaceReferenceImages, spatialScale, typeOptions, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -814,6 +859,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
       <Handle id="text" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 t8-exhibition-handle--text" style={{ top: '24%', background: EXHIBITION_TEXT_HANDLE_COLOR }} title="输入：科技展项资料" />
       <Handle id="space-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 t8-exhibition-handle--image" style={{ top: '44%', background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输入：整体空间/风格参考图" />
       <Handle id="device-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 t8-exhibition-handle--image" style={{ top: '64%', background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输入：装置/结构参考图" />
+      <Handle id="finished-render-reference" type="target" position={Position.Left} className="!h-3 !w-3 !border-0 t8-exhibition-handle--image" style={{ top: '82%', background: EXHIBITION_IMAGE_HANDLE_COLOR }} title="输入：成品展项效果图" />
 
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex h-8 w-8 items-center justify-center rounded bg-cyan-300/15 text-cyan-200"><Atom size={16} /></div>
@@ -973,6 +1019,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
               </label>
             </div>
           </div>
+          {finishedRenderMode && <div className="rounded border border-cyan-300/20 bg-cyan-300/10 px-2 py-1.5 text-[10px] text-cyan-100">成品图模式下，“每次生图前进行提炼”不生效；运行时只用成品展项效果图生成所选配套图纸。</div>}
           <label data-exhibition-compact-item="llm-settings" className="block space-y-1">
             <span className="text-[10px] text-white/55">LLM 配置模型</span>
             <select
@@ -1033,6 +1080,10 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
 
         <section data-exhibition-compact-section="references" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} /> 参考图</div>
+          <div data-exhibition-compact-item="finished-render-reference" className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
+            <div className="mb-1 text-[10px] text-cyan-100">成品展项效果图 · {finishedRenderReferenceImages.length}</div>
+            {finishedRenderReferenceImages.length ? <div className="grid grid-cols-4 gap-1.5">{finishedRenderReferenceImages.slice(0, 4).map((url) => <img key={url} src={url} alt="" className="h-16 w-full rounded border border-cyan-200/20 object-cover" draggable={false} />)}</div> : <div className="rounded border border-dashed border-cyan-200/20 p-2 text-center text-[10px] text-cyan-100/55">接入后跳过 LLM 提炼和主效果图，只生成爆炸图、原理图、三视图、参数表等配套图纸。</div>}
+          </div>
           <div data-exhibition-compact-item="space-reference" className="rounded border border-white/10 bg-black/15 p-2">
             <div className="mb-1 text-[10px] text-white/55">整体空间/风格参考 · {spaceReferenceImages.length}</div>
             {spaceReferenceImages.length ? <div className="grid grid-cols-4 gap-1.5">{spaceReferenceImages.slice(0, 8).map((url) => <img key={url} src={url} alt="" className="h-16 w-full rounded border border-white/10 object-cover" draggable={false} />)}</div> : <div className="rounded border border-dashed border-white/15 p-2 text-center text-[10px] text-white/35">可连接空间、风格或展厅环境参考图。</div>}

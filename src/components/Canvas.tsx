@@ -1548,7 +1548,7 @@ function exclusiveTargetHandlesForConnection(
   }
   if (
     targetType === 'science-exhibit-design'
-    && (handle === 'space-reference' || handle === 'device-reference')
+    && (handle === 'space-reference' || handle === 'device-reference' || handle === 'finished-render-reference')
   ) {
     return [handle];
   }

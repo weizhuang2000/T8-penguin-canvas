@@ -36,6 +36,8 @@ test('science exhibit component exposes handles, llm extraction and generation s
   assert.match(source, /id="text"/);
   assert.match(source, /id="space-reference"/);
   assert.match(source, /id="device-reference"/);
+  assert.match(source, /id="finished-render-reference"/);
+  assert.match(source, /useInputImagesByHandle\(id, 'finished-render-reference'\)/);
   assert.match(source, /id="text-output"/);
   assert.match(source, /PromptTextarea/);
   assert.match(source, /MentionPromptInput/);
@@ -53,6 +55,7 @@ test('science exhibit component exposes handles, llm extraction and generation s
   assert.match(source, /extractBeforeGenerate/);
   assert.match(source, /data-exhibition-compact-item="extract-before-generate"/);
   assert.match(source, /runExtract\(\{ force: true \}\)/);
+  assert.match(source, /!finishedRenderMode && \(extractBeforeGenerate \|\| !runtimeAnalysis\)/);
   assert.match(source, /buildScienceExhibitImagePrompt/);
   assert.match(source, /buildScienceExhibitDrawingPrompt/);
   assert.match(source, /normalizeScienceExhibitDimensions/);
@@ -75,6 +78,10 @@ test('science exhibit generation preserves fixed drawing order and output text',
   const source = read('src/components/nodes/ScienceExhibitDesignNode.tsx');
   assert.match(source, /DRAWING_ORDER: ScienceExhibitDrawingType\[\] = \['render', 'exploded', 'principle', 'orthographic', 'parameter-table'\]/);
   assert.match(source, /const sequence: ScienceExhibitDrawingType\[\] = DRAWING_ORDER\.filter/);
+  assert.match(source, /finishedRenderMode \? item !== 'render' && drawingSelection\.includes\(item\) : item === 'render'/);
+  assert.match(source, /prompt: '成品展项效果图输入'/);
+  assert.match(source, /finishedRenderMode \? \[finishedRenderImage, previousDrawingImage\] : \[renderImage, previousDrawingImage, \.\.\.userReferenceImages\]/);
+  assert.match(source, /userReferenceImages: finishedRenderMode \? \[\] : userReferenceImages/);
   assert.match(source, /renderImage = generated\.imageUrl/);
   assert.match(source, /previousDrawingImage = generated\.imageUrl/);
   assert.match(source, /scienceExhibitResults: results\.slice\(\)/);
@@ -100,6 +107,7 @@ test('compact form exposes science exhibit sections and references', () => {
     assert.match(source, /id: 'extract-before-generate'/);
     assert.match(source, /id: 'drawings'/);
     assert.match(source, /id: 'references'/);
+    assert.match(source, /id: 'finished-render-reference'/);
     assert.match(source, /id: 'space-reference'/);
     assert.match(source, /id: 'device-reference'/);
     assert.match(source, /id: 'parameter-table'/);

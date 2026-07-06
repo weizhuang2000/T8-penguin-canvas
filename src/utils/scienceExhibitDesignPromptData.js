@@ -484,9 +484,12 @@ export function buildScienceExhibitDrawingPrompt(values = {}) {
   const bgText = backgroundText(values.backgroundMode, drawing.id);
   const renderImage = cleanScienceExhibitText(values.renderImage, 1000);
   const previousDrawingImage = cleanScienceExhibitText(values.previousDrawingImage, 1000);
-  const userReferences = Array.isArray(values.userReferenceImages) ? values.userReferenceImages.filter(Boolean) : [];
+  const finishedRenderMode = values.finishedRenderMode === true;
+  const sourceText = cleanScienceExhibitText(values.sourceText, 4000);
+  const supplement = cleanScienceExhibitText(values.supplement, 2500);
+  const userReferences = finishedRenderMode ? [] : (Array.isArray(values.userReferenceImages) ? values.userReferenceImages.filter(Boolean) : []);
   const referenceLines = [
-    renderImage ? `@img1: 主效果图一致性参考 = ${renderImage}` : '',
+    renderImage ? `@img1: ${finishedRenderMode ? '唯一成品展项效果图参考' : '主效果图一致性参考'} = ${renderImage}` : '',
     previousDrawingImage ? `@img2: 上一张技术图纸一致性参考 = ${previousDrawingImage}` : '',
     userReferences.length ? referenceOrderText(userReferences, '用户原始参考', (renderImage ? 1 : 0) + (previousDrawingImage ? 1 : 0)) : '',
   ].filter(Boolean).join('\n');
@@ -505,11 +508,14 @@ export function buildScienceExhibitDrawingPrompt(values = {}) {
     typeRequirements[drawing.id] || drawing.prompt,
     drawing.id === 'parameter-table' ? '参数表一致性说明：可以读取 @img1 主效果图和其它参考图来提取名称、材质和结构信息，但最终画面只允许输出纯表格，不得把任何参考图、效果图、三视图或设备图形画进参数表。' : '',
     `尺寸设置：${dimensionText}。三视图、爆炸图、原理图和参数表中的外形尺寸、操作高度、安全净距、维护净距和功率估算必须沿用这些实际值。`,
-    '一致性参考：后续图纸必须以 @img1 主效果图为首要依据；若有 @img2，则用于保持上一张图纸中的部件命名和结构编号一致。',
+    finishedRenderMode
+      ? '成品图纸模式：@img1 是唯一成品展项效果图参考，必须保持其外观、结构、部件位置、比例、色彩和材质一致；不使用其它参考图，不混入整体空间/风格参考图或装置/结构参考图；不进行 LLM 提炼，只使用当前资料输入、科学分析字段、参数 Markdown 作为文字数据支撑。'
+      : '一致性参考：后续图纸必须以 @img1 主效果图为首要依据；若有 @img2，则用于保持上一张图纸中的部件命名和结构编号一致。',
     referenceLines,
     analysisText(analysis),
     colorMaterialContext(values, drawing.id),
     values.parameterMarkdown ? `参数表 Markdown 文本依据：\n${cleanScienceExhibitText(values.parameterMarkdown, 5000)}` : '',
+    (sourceText || supplement) ? `资料与补充要求（仅作为数据支撑，不替代科学分析）：\n${[sourceText, supplement].filter(Boolean).join('\n')}` : '',
     '表现要求：白底或深浅清晰的技术制图风格，线条清楚，层级明确，文字只用短中文标签和可信参数，不生成长篇乱码；所有参数标注为建议范围或待工程校核，不伪造精密工程数据。',
   ].filter(Boolean).join('\n');
 }
