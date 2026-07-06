@@ -72,7 +72,6 @@ export type NodeType =
   | 'exhibition-creative-image'
   | 'exhibition-text-image-loop'
   | 'exhibition-outline-split'
-  | 'exhibition-plan-layout'
   | 'exhibition-ai-plan-layout'
   | 'unit-panel-design'
   | 'sculpture-relief-design'

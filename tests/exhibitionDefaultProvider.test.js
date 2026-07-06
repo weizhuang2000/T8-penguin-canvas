@@ -18,7 +18,6 @@ test('new exhibition image generation nodes default to first advanced image prov
     'exhibition-lighting-heatmap',
     'exhibition-creative-image',
     'exhibition-render-to-elevation',
-    'exhibition-plan-layout',
     'exhibition-ai-plan-layout',
     'unit-panel-design',
     'showcase-interior-design',

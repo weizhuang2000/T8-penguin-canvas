@@ -107,7 +107,6 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: 'exhibition-render-to-elevation', label: '效果图转立面', category: 'exhibition', description: '接入效果图和立面文本，LLM 识别立面1/2/3并逐张生成独立立面图', icon: 'PanelsTopLeft', color: 'cyan' },
   { type: 'exhibition-text-image-loop', label: '图文循环器', category: 'exhibition', description: '同步接入文本和图像素材集，按一一配对 / 短集循环 / 全组合驱动下游展陈生图节点', icon: 'Repeat2', color: 'cyan' },
   { type: 'exhibition-outline-split', label: '展陈大纲拆分', category: 'exhibition', description: '读取展陈资料文档，按指定单元数或自动模式拆分大纲并提炼总结，输出多段文本', icon: 'ListTree', color: 'cyan' },
-  { type: 'exhibition-plan-layout', label: '平面自动布局', category: 'exhibition', description: '根据建筑平面图和展陈大纲自动生成展陈平面布局图，支持动线、标注和说明文字开关', icon: 'Map', color: 'cyan' },
   { type: 'exhibition-ai-plan-layout', label: '平面AI布局', category: 'exhibition', description: 'LLM 读取原始建筑平面图并结合文本大纲生成展陈平面布局，默认锁定原墙体、柱子和门洞结构', icon: 'Sparkles', color: 'cyan' },
   { type: 'unit-panel-design', label: '单元板设计', category: 'exhibition', description: '生成单元板/整套板式设计图：两级文字提炼、多语言排序、材质选择、色材参考和尺寸标注', icon: 'PanelsTopLeft', color: 'cyan' },
   { type: 'sculpture-relief-design', label: '雕塑/浮雕设计', category: 'exhibition', description: '展陈雕塑与浮雕设计：文案提炼、类型选择、尺寸材质控制和参考图案轮廓约束', icon: 'Landmark', color: 'cyan' },

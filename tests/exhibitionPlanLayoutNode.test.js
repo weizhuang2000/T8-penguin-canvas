@@ -8,12 +8,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 
-test('exhibition plan layout node is registered across frontend and permissions', () => {
-  assert.match(read('src/types/canvas.ts'), /\| 'exhibition-plan-layout'/);
-  assert.match(read('src/config/nodeRegistry.ts'), /type: 'exhibition-plan-layout'/);
-  assert.match(read('src/config/nodeRegistry.ts'), /平面自动布局/);
-  assert.match(read('src/components/Canvas.tsx'), /ExhibitionPlanLayoutNode/);
-  assert.match(read('src/components/Canvas.tsx'), /'exhibition-plan-layout': ExhibitionPlanLayoutNode/);
+test('exhibition plan layout node is no longer exposed as an independent node', () => {
+  assert.doesNotMatch(read('src/types/canvas.ts'), /\| 'exhibition-plan-layout'/);
+  assert.doesNotMatch(read('src/config/nodeRegistry.ts'), /type: 'exhibition-plan-layout'/);
+  assert.doesNotMatch(read('src/components/Canvas.tsx'), /'exhibition-plan-layout':/);
+  assert.doesNotMatch(read('src/components/NodeActionBar.tsx'), /'exhibition-plan-layout'/);
+  assert.doesNotMatch(read('src/config/portTypes.ts'), /'exhibition-plan-layout': \{ inputs: \['text', 'image'\], outputs: \['image', 'text'\] \}/);
+  assert.doesNotMatch(read('src/config/exhibitionCompactForm.ts'), /nodeType: 'exhibition-plan-layout'/);
+  assert.doesNotMatch(read('src/config/nodeHelpDefaults.ts'), /'exhibition-plan-layout':/);
+  assert.doesNotMatch(read('backend/src/auth/toolPermissions.js'), /'exhibition-plan-layout'/);
+  assert.doesNotMatch(read('backend/src/auth/exhibitionCompactForm.js'), /nodeType: 'exhibition-plan-layout'/);
+  assert.doesNotMatch(read('backend/src/routes/nodeHelp.js'), /'exhibition-plan-layout'/);
+  assert.match(read('src/components/Canvas.tsx'), /'exhibition-ai-plan-layout': ExhibitionAiPlanLayoutNode/);
   assert.match(read('src/components/Canvas.tsx'), /layoutPresetId: 'balanced'/);
   assert.match(read('src/components/Canvas.tsx'), /planInterpretation: ''/);
   assert.match(read('src/components/Canvas.tsx'), /insertItems: \['large-sculpture'/);
@@ -22,12 +28,9 @@ test('exhibition plan layout node is registered across frontend and permissions'
   assert.match(read('src/components/Canvas.tsx'), /showLabels: true/);
   assert.match(read('src/components/Canvas.tsx'), /showDescriptions: true/);
   assert.match(read('src/components/Canvas.tsx'), /structureLock: true/);
-  assert.match(read('src/components/NodeActionBar.tsx'), /'exhibition-plan-layout'/);
-  assert.match(read('src/config/portTypes.ts'), /'exhibition-plan-layout': \{ inputs: \['text', 'image'\], outputs: \['image', 'text'\] \}/);
-  assert.match(read('backend/src/auth/toolPermissions.js'), /'exhibition-plan-layout'/);
 });
 
-test('exhibition plan layout node wires llm and image generation providers', () => {
+test('exhibition plan layout shared implementation wires llm and image generation providers', () => {
   const source = read('src/components/nodes/ExhibitionPlanLayoutNode.tsx');
   assert.match(source, /generateLlm/);
   assert.match(source, /advancedProvidersForNode\(advancedProviders, 'image'\)/);
@@ -63,7 +66,7 @@ test('exhibition plan layout node wires llm and image generation providers', () 
   assert.doesNotMatch(source, /hasStyleReferenceImage/);
 });
 
-test('exhibition plan layout presets use independent editable prompt-library endpoints', () => {
+test('exhibition plan layout presets still use independent editable prompt-library endpoints', () => {
   const source = read('src/components/nodes/ExhibitionPlanLayoutNode.tsx');
   assert.match(source, /getCurrentUser/);
   assert.match(source, /canManageTeam/);

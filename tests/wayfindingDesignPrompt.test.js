@@ -96,6 +96,9 @@ test('wayfinding output page rules resolve stable counts', () => {
   assert.equal(resolveWayfindingOutputPages({ outputMode: 'signage-set', scope: 'indoor', signTypes: ['floor-directory'] }).length, 3);
   assert.equal(resolveWayfindingOutputPages({ outputMode: 'system-board', scope: 'mixed', signTypes: WAYFINDING_SIGN_TYPES.map((item) => item.id) }).length, 4);
   assert.equal(resolveWayfindingOutputPages({ outputPageMode: 'fixed', outputPageCount: 6 }).length, 6);
+  const mixedPages = resolveWayfindingOutputPages({ outputMode: 'scene-render', scope: 'mixed', signTypes: WAYFINDING_SIGN_TYPES.map((item) => item.id) });
+  assert.notEqual(mixedPages[0].focus, mixedPages[1].focus);
+  assert.notDeepEqual(mixedPages[0].signTypeIds, mixedPages[1].signTypeIds);
 });
 
 test('wayfinding page prompt includes mode, page number and title', () => {
@@ -109,6 +112,9 @@ test('wayfinding page prompt includes mode, page number and title', () => {
   });
   assert.match(fixed, /输出页面控制：指定页数，共 5 页/);
   assert.match(fixed, /当前页面：第 2 页 \/ 共 5 页：标牌家族与版式规范/);
+  assert.match(fixed, /本页内容边界/);
+  assert.match(fixed, /本页重点标牌类型/);
+  assert.match(fixed, /不要重复生成完整导视系统/);
   assert.match(fixed, /本次只生成当前页面/);
 
   const auto = buildWayfindingImagePrompt({ outputMode: 'scene-render', outputPageMode: 'auto', scope: 'indoor' });

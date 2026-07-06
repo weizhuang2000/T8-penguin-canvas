@@ -325,12 +325,6 @@ export const EXHIBITION_COMPACT_FORM_DEFINITIONS: ExhibitionCompactNodeDefinitio
     { id: 'output', label: '\u8f93\u51fa\u683c\u5f0f', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
     { id: 'result', label: '\u62c6\u5206\u7ed3\u679c', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
   ] },
-  { nodeType: 'exhibition-plan-layout', label: '\u5e73\u9762\u81ea\u52a8\u5e03\u5c40', sections: [
-    { id: 'input', label: '\u8f93\u5165\u7d20\u6750', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
-    { id: 'layout', label: '\u5e03\u5c40\u7b56\u7565', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
-    { id: 'model', label: '\u6a21\u578b\u53c2\u6570', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
-    { id: 'result', label: '\u7ed3\u679c\u9884\u89c8', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
-  ] },
   { nodeType: 'exhibition-ai-plan-layout', label: '平面AI布局', sections: [
     { id: 'input', label: '输入素材', items: [{ id: 'main', label: '主控件' }] },
     { id: 'layout', label: 'AI布局策略', items: [{ id: 'main', label: '主控件' }] },

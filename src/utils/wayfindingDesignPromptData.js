@@ -84,6 +84,62 @@ const PAGE_TITLES = {
   'signage-set': ['导视标牌家族总览', '室内导视组合', '室外与服务导视组合', '无障碍与安全导视组合', '材质与安装组合', '完整系统应用汇总'],
 };
 
+const INDOOR_SIGN_TYPE_IDS = ['floor-directory', 'hanging-directional', 'wall-directional', 'gallery-room-id', 'gallery-map', 'object-label-aid'];
+const OUTDOOR_SIGN_TYPE_IDS = ['outdoor-pylon', 'entrance-identity', 'outdoor-map', 'parking-service'];
+const SUPPORT_SIGN_TYPE_IDS = ['accessible-safety'];
+
+function intersectSignTypes(selected, ids) {
+  const picked = ids.filter((id) => selected.includes(id));
+  return picked.length ? picked : selected.slice(0, 3);
+}
+
+function pageFocusFor(outputMode, index, total, signTypeIds) {
+  const signText = signTypeIds.map((id) => wayfindingSignTypeMeta(id).label).join('、');
+  if (outputMode === 'scene-render') {
+    return [
+      '本页只表现室外到达、入口广场、建筑入口或停车到入口的导视场景。',
+      '本页只表现室内大厅、楼层索引、走廊动线与展厅入口导视场景。',
+      '本页只表现服务设施、无障碍路线、卫生间、电梯或安全疏散导视场景。',
+      '本页只表现室内外转换节点或综合动线节点，不重复前几页完整内容。',
+      '本页只表现材质、灯光、安装细节的近景效果。',
+      '本页只表现连续导览体验中的关键转折点。',
+    ][index - 1] || `本页只表现第 ${index}/${total} 页指定场景。`;
+  }
+  if (outputMode === 'single-sign') {
+    return `本页只深化一个标牌类型：${signText || '当前选定标牌'}，不要同时生成完整标牌家族。`;
+  }
+  if (outputMode === 'signage-set') {
+    return [
+      '本页只做整套标牌家族的目录式总览，控制数量，不展开场景渲染。',
+      '本页只展示室内导视组合与版式关系。',
+      '本页只展示室外与服务导视组合。',
+      '本页只展示无障碍与安全导视组合。',
+      '本页只展示材质与安装方式组合。',
+      '本页只做完整系统应用汇总，不重复单页细节。',
+    ][index - 1] || `本页只展示第 ${index}/${total} 页标牌组合。`;
+  }
+  return [
+    '本页只建立导视系统总览规范：视觉基因、网格、字体、色彩、图标和箭头规则。',
+    '本页只展开标牌家族与版式规范：不同牌型的信息层级、排版、比例关系。',
+    '本页只展示室内外应用、安装方式与空间关系。',
+    '本页只补充无障碍、安全疏散与公共服务导视规范。',
+    '本页只展示材质工艺、结构厚度、连接节点与耐久性细节。',
+    '本页只校验动线信息层级、目的地命名与跨页一致性。',
+  ][index - 1] || `本页只表现第 ${index}/${total} 页规范内容。`;
+}
+
+function signTypeIdsForPage(outputMode, scope, selected, index, total) {
+  if (outputMode === 'single-sign') return [selected[(index - 1) % selected.length]].filter(Boolean);
+  if (index === 1 && outputMode === 'system-board') return selected.slice(0, Math.min(4, selected.length));
+  if (scope === 'indoor') return intersectSignTypes(selected, INDOOR_SIGN_TYPE_IDS);
+  if (scope === 'outdoor') return intersectSignTypes(selected, OUTDOOR_SIGN_TYPE_IDS);
+  if (index === 1) return outputMode === 'scene-render' ? intersectSignTypes(selected, OUTDOOR_SIGN_TYPE_IDS) : selected.slice(0, Math.min(4, selected.length));
+  if (index === 2) return intersectSignTypes(selected, INDOOR_SIGN_TYPE_IDS);
+  if (index === 3) return intersectSignTypes(selected, OUTDOOR_SIGN_TYPE_IDS);
+  if (index === 4) return intersectSignTypes(selected, SUPPORT_SIGN_TYPE_IDS);
+  return selected.slice(Math.max(0, selected.length - 3));
+}
+
 export function cleanWayfindingText(value, max = 12000) {
   return String(value || '').replace(/\r\n?/g, '\n').trim().slice(0, max);
 }
@@ -210,6 +266,8 @@ export function resolveWayfindingOutputPages(values = {}) {
     index: index + 1,
     total,
     title: titles[index] || `Wayfinding page ${index + 1}`,
+    signTypeIds: signTypeIdsForPage(outputMode, scope, signTypes, index + 1, total),
+    focus: pageFocusFor(outputMode, index + 1, total, signTypeIdsForPage(outputMode, scope, signTypes, index + 1, total)),
   }));
 }
 
@@ -279,14 +337,18 @@ export function buildWayfindingImagePrompt(values = {}) {
   const pages = resolveWayfindingOutputPages({ ...values, outputMode: outputMode.id, scope: scope.id, signTypes: signTypes.map((item) => item.id), outputPageMode, outputPageCount });
   const totalPages = Math.min(MAX_WAYFINDING_OUTPUT_PAGES, Math.max(1, Math.round(Number(values.totalPages) || pages.length)));
   const pageIndex = Math.min(totalPages, Math.max(1, Math.round(Number(values.pageIndex) || 1)));
-  const pageTitle = cleanWayfindingText(values.pageTitle, 120) || pages.find((page) => page.index === pageIndex)?.title || `导视系统第${pageIndex}页`;
+  const currentPage = pages.find((page) => page.index === pageIndex) || pages[0] || { index: pageIndex, total: totalPages, title: `Wayfinding page ${pageIndex}`, focus: '', signTypeIds: signTypes.map((item) => item.id) };
+  const pageTitle = cleanWayfindingText(values.pageTitle, 120) || currentPage.title || `导视系统第${pageIndex}页`;
+  const pageFocus = cleanWayfindingText(values.pageFocus, 800) || currentPage.focus || '本页只表现当前页面主题对应的导视内容。';
+  const pageSignTypes = normalizeWayfindingSignTypes(values.pageSignTypes || currentPage.signTypeIds || signTypes.map((item) => item.id)).map(wayfindingSignTypeMeta);
   const pageModeText = outputPageMode === 'fixed'
     ? `输出页面控制：指定页数，共 ${totalPages} 页。`
     : `输出页面控制：自动分页，共 ${totalPages} 页，必须覆盖完整导视系统。`;
   const pageConstraint = [
     pageModeText,
     `当前页面：第 ${pageIndex} 页 / 共 ${totalPages} 页：${pageTitle}`,
-    '分页要求：本次只生成当前页面，不要把其它页面压缩到同一张图；各页保持同一套导视视觉系统、色彩材质和图标语言。',
+    `本页内容边界：${pageFocus}`,
+    '分页要求：本次只生成当前页面指定的内容模块，不要把其它页面内容压缩到同一张图，也不要在每一页重复生成完整导视系统；各页保持同一套导视视觉系统、色彩材质和图标语言。',
   ].join('\n');
   const colorMaterialLines = [
     colorMaterialPresetText ? `共享色彩与材质预设：${colorMaterialPresetText}` : '',
@@ -324,7 +386,9 @@ export function buildWayfindingImagePrompt(values = {}) {
     routeText ? `导览动线：${routeText}` : '',
     signText ? `上牌文字：${signText}` : '',
     notes ? `设计注意事项：${notes}` : '',
-    `标牌类型：${signTypes.map((item) => `${item.label}（${item.prompt}）`).join('；')}。`,
+    `本页重点标牌类型：${pageSignTypes.map((item) => `${item.label}（${item.prompt}）`).join('；')}。`,
+    '其它已选标牌类型只作为跨页系统参考，本页不要全部展开、不要重复生成完整导视系统。',
+    `跨页完整标牌清单（仅用于保持系统一致性，不代表本页都要展开）：${signTypes.map((item) => `${item.label}（${item.prompt}）`).join('；')}。`,
     `语言系统：${language.label}；${language.prompt}。`,
     `箭头/图标风格：${arrow.label}；${arrow.prompt}。`,
     colorMaterialLines ? `色彩与材质体系：\n${colorMaterialLines}` : '',

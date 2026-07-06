@@ -32,6 +32,8 @@ export interface WayfindingImagePromptValues {
   outputPageCount?: unknown;
   pageIndex?: unknown;
   pageTitle?: unknown;
+  pageFocus?: unknown;
+  pageSignTypes?: unknown;
   totalPages?: unknown;
   scope?: unknown;
   signTypes?: unknown;
@@ -59,6 +61,8 @@ export interface WayfindingOutputPage {
   index: number;
   total: number;
   title: string;
+  focus: string;
+  signTypeIds: string[];
 }
 
 export const WAYFINDING_OUTPUT_MODES: WayfindingOption[];
