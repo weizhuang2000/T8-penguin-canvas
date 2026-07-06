@@ -9,6 +9,7 @@ import {
   normalizeWayfindingScope,
   normalizeWayfindingSignTypes,
   parseWayfindingExtractJson,
+  resolveWayfindingOutputPages,
   WAYFINDING_SIGN_TYPES,
 } from '../src/utils/wayfindingDesignPromptData.js';
 
@@ -88,6 +89,33 @@ test('wayfinding prompt uses shared color material preset and manual supplement'
   assert.match(prompt, /雾面白色丝印/);
 });
 
+test('wayfinding output page rules resolve stable counts', () => {
+  assert.equal(resolveWayfindingOutputPages({ outputMode: 'system-board', scope: 'indoor', signTypes: ['floor-directory'] }).length, 3);
+  assert.equal(resolveWayfindingOutputPages({ outputMode: 'scene-render', scope: 'indoor', signTypes: ['floor-directory'] }).length, 2);
+  assert.equal(resolveWayfindingOutputPages({ outputMode: 'single-sign', scope: 'mixed', signTypes: WAYFINDING_SIGN_TYPES.map((item) => item.id) }).length, 1);
+  assert.equal(resolveWayfindingOutputPages({ outputMode: 'signage-set', scope: 'indoor', signTypes: ['floor-directory'] }).length, 3);
+  assert.equal(resolveWayfindingOutputPages({ outputMode: 'system-board', scope: 'mixed', signTypes: WAYFINDING_SIGN_TYPES.map((item) => item.id) }).length, 4);
+  assert.equal(resolveWayfindingOutputPages({ outputPageMode: 'fixed', outputPageCount: 6 }).length, 6);
+});
+
+test('wayfinding page prompt includes mode, page number and title', () => {
+  const fixed = buildWayfindingImagePrompt({
+    outputMode: 'system-board',
+    outputPageMode: 'fixed',
+    outputPageCount: 5,
+    pageIndex: 2,
+    pageTitle: '标牌家族与版式规范',
+    totalPages: 5,
+  });
+  assert.match(fixed, /输出页面控制：指定页数，共 5 页/);
+  assert.match(fixed, /当前页面：第 2 页 \/ 共 5 页：标牌家族与版式规范/);
+  assert.match(fixed, /本次只生成当前页面/);
+
+  const auto = buildWayfindingImagePrompt({ outputMode: 'scene-render', outputPageMode: 'auto', scope: 'indoor' });
+  assert.match(auto, /输出页面控制：自动分页，共 2 页/);
+  assert.match(auto, /当前页面：第 1 页 \/ 共 2 页：入口与到达场景/);
+});
+
 test('wayfinding node includes migrated color material preset module', () => {
   const source = read('src/components/nodes/WayfindingDesignNode.tsx');
   assert.match(source, /getElevationPromptPresets/);
@@ -96,6 +124,9 @@ test('wayfinding node includes migrated color material preset module', () => {
   assert.match(source, /ColorMaterialPresetEditorModal/);
   assert.match(source, /data-exhibition-compact-item="preset-options"[\s\S]*色彩与材质预设/);
   assert.match(source, /data-exhibition-compact-item="manual-color-material"/);
+  assert.match(source, /data-exhibition-compact-item="page-control"/);
+  assert.match(source, /WAYFINDING_OUTPUT_PAGE_OPTIONS/);
+  assert.match(source, /resolvedOutputPageCount/);
   assert.match(source, /colorMaterialPresetText/);
 });
 
@@ -106,6 +137,7 @@ test('wayfinding node is registered across frontend and permission surfaces', ()
   assert.match(read('src/config/portTypes.ts'), /'exhibition-wayfinding-design': \{ inputs: \['text', 'image'\], outputs: \['image', 'text'\] \}/);
   assert.match(read('src/components/Canvas.tsx'), /import WayfindingDesignNode/);
   assert.match(read('src/components/Canvas.tsx'), /'exhibition-wayfinding-design': WayfindingDesignNode/);
+  assert.match(read('src/components/Canvas.tsx'), /outputPageMode: 'auto'[\s\S]*outputPageCount: 3[\s\S]*resolvedOutputPageCount: 0/);
   assert.match(read('src/components/NodeActionBar.tsx'), /'exhibition-wayfinding-design'/);
   assert.match(read('src/components/nodes/ExhibitionTextImageLoopNode.tsx'), /'exhibition-wayfinding-design'/);
   assert.match(read('src/utils/nodePlacement.ts'), /'exhibition-wayfinding-design': \{ w: 640, h: 760 \}/);
@@ -114,4 +146,6 @@ test('wayfinding node is registered across frontend and permission surfaces', ()
   assert.match(read('src/config/exhibitionCompactForm.ts'), /exhibition-wayfinding-design/);
   assert.match(read('backend/src/auth/exhibitionCompactForm.js'), /exhibition-wayfinding-design[\s\S]*preset-options[\s\S]*manual-color-material/);
   assert.match(read('src/config/exhibitionCompactForm.ts'), /exhibition-wayfinding-design[\s\S]*preset-options[\s\S]*manual-color-material/);
+  assert.match(read('backend/src/auth/exhibitionCompactForm.js'), /exhibition-wayfinding-design[\s\S]*page-control/);
+  assert.match(read('src/config/exhibitionCompactForm.ts'), /exhibition-wayfinding-design[\s\S]*page-control/);
 });

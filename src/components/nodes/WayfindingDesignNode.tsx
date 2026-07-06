@@ -41,14 +41,18 @@ import {
   normalizeWayfindingMaterial,
   normalizeWayfindingMounting,
   normalizeWayfindingOutputMode,
+  normalizeWayfindingOutputPageCount,
+  normalizeWayfindingOutputPageMode,
   normalizeWayfindingScope,
   normalizeWayfindingSignTypes,
   parseWayfindingExtractJson,
+  resolveWayfindingOutputPages,
   WAYFINDING_ARROW_STYLES,
   WAYFINDING_LANGUAGES,
   WAYFINDING_MATERIALS,
   WAYFINDING_MOUNTING_OPTIONS,
   WAYFINDING_OUTPUT_MODES,
+  WAYFINDING_OUTPUT_PAGE_OPTIONS,
   WAYFINDING_SCOPE_OPTIONS,
   WAYFINDING_SIGN_TYPES,
   type WayfindingDimensions,
@@ -201,6 +205,8 @@ const WayfindingDesignNode = ({ id, data, selected }: NodeProps) => {
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
 
   const outputMode = normalizeWayfindingOutputMode(d.outputMode);
+  const outputPageMode = normalizeWayfindingOutputPageMode(d.outputPageMode);
+  const outputPageCount = normalizeWayfindingOutputPageCount(d.outputPageCount);
   const scope = normalizeWayfindingScope(d.scope);
   const signTypes = normalizeWayfindingSignTypes(d.signTypes);
   const materialId = normalizeWayfindingMaterial(d.materialId);
@@ -228,9 +234,20 @@ const WayfindingDesignNode = ({ id, data, selected }: NodeProps) => {
     [colorMaterialPresets, d.colorMaterialPreset],
   );
   const colorMaterialPresetText = colorMaterialTextFromPreset(selectedColorMaterialPreset);
+  const outputPages = useMemo(
+    () => resolveWayfindingOutputPages({ outputMode, outputPageMode, outputPageCount, scope, signTypes }),
+    [outputMode, outputPageCount, outputPageMode, scope, signTypes],
+  );
+  const resolvedOutputPageCount = outputPages.length;
+  const firstOutputPage = outputPages[0] || { index: 1, total: 1, title: '导视系统总览规范图' };
 
   const previewPrompt = useMemo(() => buildWayfindingImagePrompt({
     outputMode,
+    outputPageMode,
+    outputPageCount,
+    pageIndex: firstOutputPage.index,
+    pageTitle: firstOutputPage.title,
+    totalPages: resolvedOutputPageCount,
     scope,
     signTypes,
     materialId,
@@ -250,7 +267,7 @@ const WayfindingDesignNode = ({ id, data, selected }: NodeProps) => {
     supplement: d.supplement,
     hasSpaceReferenceImage: spaceReferenceImages.length > 0,
     hasGraphicReferenceImage: graphicReferenceImages.length > 0,
-  }), [arrowStyle, colorMaterial, colorMaterialPresetText, d.supplement, destinations, dimensions, graphicReferenceImages.length, language, materialId, mountingId, museumName, notes, outputMode, projectTheme, routeText, scope, signText, signTypes, spaceReferenceImages.length, zones]);
+  }), [arrowStyle, colorMaterial, colorMaterialPresetText, d.supplement, destinations, dimensions, firstOutputPage.index, firstOutputPage.title, graphicReferenceImages.length, language, materialId, mountingId, museumName, notes, outputMode, outputPageCount, outputPageMode, projectTheme, resolvedOutputPageCount, routeText, scope, signText, signTypes, spaceReferenceImages.length, zones]);
 
   useEffect(() => {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
@@ -264,13 +281,14 @@ const WayfindingDesignNode = ({ id, data, selected }: NodeProps) => {
       d.prompt !== previewPrompt ||
       d.outputText !== previewPrompt ||
       d.text !== previewPrompt ||
+      d.resolvedOutputPageCount !== resolvedOutputPageCount ||
       JSON.stringify(d.referenceImages || []) !== JSON.stringify(referenceImages) ||
       JSON.stringify(d.spaceReferenceImages || []) !== JSON.stringify(spaceReferenceImages) ||
       JSON.stringify(d.graphicReferenceImages || []) !== JSON.stringify(graphicReferenceImages)
     ) {
-      update({ prompt: previewPrompt, outputText: previewPrompt, text: previewPrompt, referenceImages, spaceReferenceImages, graphicReferenceImages });
+      update({ prompt: previewPrompt, outputText: previewPrompt, text: previewPrompt, resolvedOutputPageCount, referenceImages, spaceReferenceImages, graphicReferenceImages });
     }
-  }, [d.graphicReferenceImages, d.outputText, d.prompt, d.referenceImages, d.spaceReferenceImages, d.text, graphicReferenceImages, previewPrompt, referenceImages, spaceReferenceImages, update]);
+  }, [d.graphicReferenceImages, d.outputText, d.prompt, d.referenceImages, d.resolvedOutputPageCount, d.spaceReferenceImages, d.text, graphicReferenceImages, previewPrompt, referenceImages, resolvedOutputPageCount, spaceReferenceImages, update]);
 
   const pickDocument = useCallback(async (file?: File) => {
     if (!file || isReadonly || busy) return;
@@ -322,7 +340,7 @@ const WayfindingDesignNode = ({ id, data, selected }: NodeProps) => {
     }
   }, [activeLlmConfig?.id, busy, destinations, effectiveSourceText, isReadonly, llmModel, museumName, notes, projectTheme, routeText, signText, update, zones]);
 
-  const runGenerate = useCallback(async () => {
+  const runGenerateSinglePage = useCallback(async () => {
     if (isReadonly || busy) return;
     const imagePrompt = buildWayfindingImagePrompt({
       outputMode,
@@ -452,6 +470,173 @@ const WayfindingDesignNode = ({ id, data, selected }: NodeProps) => {
     }
   }, [activeCanvasId, apiModel, arrowStyle, aspectRatio, busy, colorMaterial, colorMaterialPresetText, d.providerParams, d.supplement, destinations, dimensions, externalProviderModel, graphicReferenceImages, id, isExternalSelected, isReadonly, language, materialId, modelDef.id, modelDef.paramKind, mountingId, museumName, notes, outputFormat, outputMode, projectTheme, providerSelection.provider, referenceImages, routeText, scope, seed, signText, signTypes, sizeLevel, spaceReferenceImages, update, zones]);
 
+  const runGenerate = useCallback(async () => {
+    if (isReadonly || busy) return;
+    const buildPagePrompt = (page: { index: number; total: number; title: string }) => buildWayfindingImagePrompt({
+      outputMode,
+      outputPageMode,
+      outputPageCount,
+      pageIndex: page.index,
+      pageTitle: page.title,
+      totalPages: resolvedOutputPageCount,
+      scope,
+      signTypes,
+      materialId,
+      mountingId,
+      arrowStyle,
+      language,
+      dimensions,
+      museumName,
+      projectTheme,
+      zones,
+      destinations,
+      routeText,
+      signText,
+      notes,
+      colorMaterial,
+      colorMaterialPresetText,
+      supplement: d.supplement,
+      hasSpaceReferenceImage: spaceReferenceImages.length > 0,
+      hasGraphicReferenceImage: graphicReferenceImages.length > 0,
+    });
+    const prompts = outputPages.map(buildPagePrompt);
+    const joinedPrompt = prompts.join('\n\n---\n\n');
+    pollAbortRef.current = false;
+    taskCompletionSound.primeAudio();
+    const runSeed = seed > 0 ? seed : randomImageSeed();
+    const src = `exhibition-wayfinding-design:${id.slice(0, 6)}`;
+    update({
+      status: 'generating',
+      progress: `提交生图... 0/${resolvedOutputPageCount} 页`,
+      error: '',
+      imageUrls: [],
+      urls: [],
+      resolvedOutputPageCount,
+      lastPrompt: joinedPrompt,
+      lastSeed: runSeed,
+      referenceImages,
+      spaceReferenceImages,
+      graphicReferenceImages,
+    });
+    try {
+      logBus.info(`Wayfinding generation submit seed=${runSeed}, pages=${resolvedOutputPageCount}`, src);
+      const allUrls: string[] = [];
+      for (const page of outputPages) {
+        const pagePrompt = buildPagePrompt(page);
+        const pageSeed = ((runSeed + page.index - 2) % MAX_IMAGE_SEED) + 1;
+        const historyContext = {
+          canvasId: activeCanvasId,
+          sourceNodeId: id,
+          sourceNodeType: 'exhibition-wayfinding-design',
+          seed: pageSeed,
+          nodeTitle: `导视系统设计 ${page.index}/${resolvedOutputPageCount}`,
+        };
+        let pageUrls: string[] = [];
+        update({ progress: `第 ${page.index}/${resolvedOutputPageCount} 页生成中：${page.title}` });
+        if (isExternalSelected && providerSelection.provider) {
+          if (!externalProviderModel) throw new Error('扩展平台未配置可用图像模型');
+          const size = externalImageSizeFor(aspectRatio, sizeLevel);
+          let res = await generateExternalImage({
+            providerId: providerSelection.provider.id,
+            providerModel: externalProviderModel,
+            model: externalProviderModel,
+            prompt: pagePrompt,
+            size,
+            aspect_ratio: aspectRatio,
+            image_size: sizeLevel,
+            images: referenceImages,
+            outputFormat,
+            seed: pageSeed,
+            n: 1,
+            providerParams: {
+              ...(d.providerParams || {}),
+              aspect_ratio: aspectRatio,
+              aspectRatio,
+              image_size: sizeLevel,
+              imageSize: sizeLevel,
+            },
+            historyContext,
+            async: true,
+          });
+          if (res.taskId && !res.imageUrls?.length && (res.code === 'running' || res.status === 'running')) {
+            const pollingTaskId = res.taskId;
+            for (let index = 0; index < EXTERNAL_IMAGE_MAX_POLLS; index += 1) {
+              if (pollAbortRef.current) throw new Error('任务已取消');
+              await new Promise((resolve) => setTimeout(resolve, EXTERNAL_IMAGE_POLL_INTERVAL_MS));
+              res = await queryExternalImageStatus({ providerId: providerSelection.provider.id, taskId: pollingTaskId, providerModel: externalProviderModel, outputFormat, historyContext });
+              update({ taskId: pollingTaskId, progress: `第 ${page.index}/${resolvedOutputPageCount} 页 ${Math.min(99, Math.round(((index + 1) / EXTERNAL_IMAGE_MAX_POLLS) * 100))}%` });
+              if (res.imageUrls?.length || (res.code && res.code !== 'running')) break;
+            }
+          }
+          pageUrls = res.imageUrls || [];
+        } else {
+          const submit = await submitImageAsync({
+            model: modelDef.id,
+            apiModel,
+            paramKind: modelDef.paramKind,
+            prompt: pagePrompt,
+            aspect_ratio: aspectRatio,
+            image_size: sizeLevel,
+            images: referenceImages,
+            n: 1,
+            outputFormat,
+            seed: pageSeed,
+            historyContext,
+          });
+          pageUrls = submit.urls || [];
+          if (!submit.sync) {
+            if (!submit.taskId) throw new Error('未获取到任务 ID');
+            let lastProgress = submit.progress || '5%';
+            update({ taskId: submit.taskId, progress: `第 ${page.index}/${resolvedOutputPageCount} 页 ${lastProgress}` });
+            for (let index = 0; index < 1800; index += 1) {
+              if (pollAbortRef.current) throw new Error('任务已取消');
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+              const q = await queryImageStatus(submit.taskId, apiModel, outputFormat, historyContext);
+              if (q.progress && q.progress !== lastProgress) {
+                lastProgress = q.progress;
+                update({ progress: `第 ${page.index}/${resolvedOutputPageCount} 页 ${q.progress}` });
+              }
+              const statusText = String(q.status || '').toLowerCase();
+              if (statusText === 'completed' || statusText === 'success' || statusText === 'done') {
+                pageUrls = q.urls || [];
+                break;
+              }
+              if (statusText === 'failed' || statusText === 'failure' || statusText === 'error') throw new Error(q.error || '任务失败');
+            }
+          }
+        }
+        if (!pageUrls.length) throw new Error(`第 ${page.index} 页任务完成但未返回图片`);
+        for (const url of pageUrls) {
+          if (url && !allUrls.includes(url)) allUrls.push(url);
+        }
+        update({ imageUrl: allUrls[0], imageUrls: allUrls, urls: allUrls, progress: `已完成 ${page.index}/${resolvedOutputPageCount} 页` });
+      }
+      if (!allUrls.length) throw new Error('任务完成但未返回图片');
+      update({
+        status: 'success',
+        progress: '100%',
+        imageUrl: allUrls[0],
+        imageUrls: allUrls,
+        urls: allUrls,
+        prompt: joinedPrompt,
+        outputText: joinedPrompt,
+        text: joinedPrompt,
+        resolvedOutputPageCount,
+        referenceImages,
+        spaceReferenceImages,
+        graphicReferenceImages,
+        error: '',
+      });
+      logBus.success(`Wayfinding generation completed: ${allUrls.length} images`, src);
+      taskCompletionSound.notifyComplete(id, 'image');
+    } catch (error: any) {
+      const msg = error?.message || '生成失败';
+      update({ status: 'error', error: msg, progress: '' });
+      logBus.error(`Wayfinding generation failed: ${msg}`, src);
+      throw error;
+    }
+  }, [activeCanvasId, apiModel, arrowStyle, aspectRatio, busy, colorMaterial, colorMaterialPresetText, d.providerParams, d.supplement, destinations, dimensions, externalProviderModel, graphicReferenceImages.length, id, isExternalSelected, isReadonly, language, materialId, modelDef.id, modelDef.paramKind, mountingId, museumName, notes, outputFormat, outputMode, outputPageCount, outputPageMode, outputPages, projectTheme, providerSelection.provider, referenceImages, resolvedOutputPageCount, routeText, scope, seed, signText, signTypes, sizeLevel, spaceReferenceImages, update, zones]);
+
   useRunTrigger(id, runGenerate, 'image');
 
   const updateDimension = (key: keyof WayfindingDimensions, value: string) => {
@@ -548,6 +733,21 @@ const WayfindingDesignNode = ({ id, data, selected }: NodeProps) => {
             <select className={FIELD} value={scope} disabled={isReadonly || busy} onChange={(e) => update({ scope: normalizeWayfindingScope(e.target.value) })}>
               {WAYFINDING_SCOPE_OPTIONS.map((item: WayfindingOption) => <option key={item.id} value={item.id}>{item.label}</option>)}
             </select>
+          </label>
+          <label data-exhibition-compact-item="page-control" className="col-span-2 space-y-1">
+            <span className="text-[10px] text-white/55">输出页面</span>
+            <select
+              className={FIELD}
+              value={outputPageMode === 'auto' ? 'auto' : String(outputPageCount)}
+              disabled={isReadonly || busy}
+              onChange={(e) => {
+                if (e.target.value === 'auto') update({ outputPageMode: 'auto' });
+                else update({ outputPageMode: 'fixed', outputPageCount: normalizeWayfindingOutputPageCount(e.target.value) });
+              }}
+            >
+              {WAYFINDING_OUTPUT_PAGE_OPTIONS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+            </select>
+            <div className="text-[10px] text-white/40">{outputPageMode === 'auto' ? `自动分页：预计 ${resolvedOutputPageCount} 页` : `固定输出：${resolvedOutputPageCount} 页`}</div>
           </label>
           <label data-exhibition-compact-item="text-fields" className="space-y-1">
             <span className="text-[10px] text-white/55">场馆名称</span>

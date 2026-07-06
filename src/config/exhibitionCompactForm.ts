@@ -408,6 +408,7 @@ export const EXHIBITION_COMPACT_FORM_DEFINITIONS: ExhibitionCompactNodeDefinitio
     ] },
     { id: 'system', label: '系统内容', items: [
       { id: 'mode-scope', label: '模式与范围' },
+      { id: 'page-control', label: '输出页面' },
       { id: 'text-fields', label: '文本字段' },
     ] },
     { id: 'signage', label: '标牌类型', items: [

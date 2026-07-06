@@ -5,6 +5,18 @@ export const WAYFINDING_OUTPUT_MODES = [
   { id: 'signage-set', label: '整套导视板式', prompt: 'a coordinated set of museum wayfinding signs presented as a family, including indoor and outdoor sign types' },
 ];
 
+export const WAYFINDING_OUTPUT_PAGE_OPTIONS = [
+  { id: 'auto', label: '自动分页', mode: 'auto', count: 0 },
+  { id: '1', label: '1页', mode: 'fixed', count: 1 },
+  { id: '2', label: '2页', mode: 'fixed', count: 2 },
+  { id: '3', label: '3页', mode: 'fixed', count: 3 },
+  { id: '4', label: '4页', mode: 'fixed', count: 4 },
+  { id: '5', label: '5页', mode: 'fixed', count: 5 },
+  { id: '6', label: '6页', mode: 'fixed', count: 6 },
+];
+
+export const MAX_WAYFINDING_OUTPUT_PAGES = 6;
+
 export const WAYFINDING_SCOPE_OPTIONS = [
   { id: 'mixed', label: '室内+室外', prompt: 'cover both indoor and outdoor museum wayfinding scenarios, with consistent visual identity across exterior arrival, lobby, galleries, corridors, and service areas' },
   { id: 'indoor', label: '室内', prompt: 'focus on indoor museum wayfinding: lobby, atrium, gallery entries, corridors, elevators, stairs, service facilities, emergency and accessible routes' },
@@ -65,6 +77,13 @@ const MOUNTING_IDS = new Set(WAYFINDING_MOUNTING_OPTIONS.map((item) => item.id))
 const ARROW_IDS = new Set(WAYFINDING_ARROW_STYLES.map((item) => item.id));
 const LANGUAGE_IDS = new Set(WAYFINDING_LANGUAGES.map((item) => item.id));
 
+const PAGE_TITLES = {
+  'system-board': ['导视系统总览规范图', '标牌家族与版式规范', '室内外应用与安装关系', '无障碍与安全导视补充', '材质工艺与节点细节', '动线信息层级校验'],
+  'scene-render': ['入口与到达场景', '室内动线与展厅导视', '服务与无障碍导视', '综合节点场景', '材质灯光与安装细节', '连续导览体验场景'],
+  'single-sign': ['单个标牌深化设计图', '单牌材质与安装细节', '单牌版式与信息层级', '单牌场景应用', '单牌工艺节点', '单牌规范校验'],
+  'signage-set': ['导视标牌家族总览', '室内导视组合', '室外与服务导视组合', '无障碍与安全导视组合', '材质与安装组合', '完整系统应用汇总'],
+};
+
 export function cleanWayfindingText(value, max = 12000) {
   return String(value || '').replace(/\r\n?/g, '\n').trim().slice(0, max);
 }
@@ -76,6 +95,16 @@ function normalizeId(value, options, fallback) {
 
 export function normalizeWayfindingOutputMode(value) {
   return normalizeId(value, OUTPUT_MODE_IDS, 'system-board');
+}
+
+export function normalizeWayfindingOutputPageMode(value) {
+  return String(value || '').trim() === 'fixed' ? 'fixed' : 'auto';
+}
+
+export function normalizeWayfindingOutputPageCount(value) {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n)) return 3;
+  return Math.min(MAX_WAYFINDING_OUTPUT_PAGES, Math.max(1, n));
 }
 
 export function normalizeWayfindingScope(value) {
@@ -163,6 +192,27 @@ export function wayfindingDimensionsText(value) {
   return `宽 ${d.widthMm} mm x 高 ${d.heightMm} mm x 厚/深 ${d.depthMm} mm，建议安装中心高度 ${d.installHeightMm} mm`;
 }
 
+export function resolveWayfindingOutputPages(values = {}) {
+  const outputMode = normalizeWayfindingOutputMode(values.outputMode);
+  const scope = normalizeWayfindingScope(values.scope);
+  const signTypes = normalizeWayfindingSignTypes(values.signTypes);
+  const pageMode = normalizeWayfindingOutputPageMode(values.outputPageMode);
+  const fixedCount = normalizeWayfindingOutputPageCount(values.outputPageCount);
+  let total = fixedCount;
+  if (pageMode === 'auto') {
+    total = outputMode === 'scene-render' ? 2 : outputMode === 'single-sign' ? 1 : 3;
+    const needsExpandedCoverage = signTypes.length >= 7 || scope === 'mixed';
+    if (needsExpandedCoverage && outputMode !== 'single-sign') total = Math.min(4, Math.max(total, total + 1));
+  }
+  total = Math.min(MAX_WAYFINDING_OUTPUT_PAGES, Math.max(1, total));
+  const titles = PAGE_TITLES[outputMode] || PAGE_TITLES['system-board'];
+  return Array.from({ length: total }, (_, index) => ({
+    index: index + 1,
+    total,
+    title: titles[index] || `Wayfinding page ${index + 1}`,
+  }));
+}
+
 export function buildWayfindingExtractPrompt(values = {}) {
   const sourceText = cleanWayfindingText(values.sourceText, 50000);
   return [
@@ -224,6 +274,20 @@ export function buildWayfindingImagePrompt(values = {}) {
   const colorMaterial = cleanWayfindingText(values.colorMaterial, 2000);
   const colorMaterialPresetText = cleanWayfindingText(values.colorMaterialPresetText, 2000);
   const manual = cleanWayfindingText(values.supplement || values.manualRequirement, 2000);
+  const outputPageMode = normalizeWayfindingOutputPageMode(values.outputPageMode);
+  const outputPageCount = normalizeWayfindingOutputPageCount(values.outputPageCount);
+  const pages = resolveWayfindingOutputPages({ ...values, outputMode: outputMode.id, scope: scope.id, signTypes: signTypes.map((item) => item.id), outputPageMode, outputPageCount });
+  const totalPages = Math.min(MAX_WAYFINDING_OUTPUT_PAGES, Math.max(1, Math.round(Number(values.totalPages) || pages.length)));
+  const pageIndex = Math.min(totalPages, Math.max(1, Math.round(Number(values.pageIndex) || 1)));
+  const pageTitle = cleanWayfindingText(values.pageTitle, 120) || pages.find((page) => page.index === pageIndex)?.title || `导视系统第${pageIndex}页`;
+  const pageModeText = outputPageMode === 'fixed'
+    ? `输出页面控制：指定页数，共 ${totalPages} 页。`
+    : `输出页面控制：自动分页，共 ${totalPages} 页，必须覆盖完整导视系统。`;
+  const pageConstraint = [
+    pageModeText,
+    `当前页面：第 ${pageIndex} 页 / 共 ${totalPages} 页：${pageTitle}`,
+    '分页要求：本次只生成当前页面，不要把其它页面压缩到同一张图；各页保持同一套导视视觉系统、色彩材质和图标语言。',
+  ].join('\n');
   const colorMaterialLines = [
     colorMaterialPresetText ? `共享色彩与材质预设：${colorMaterialPresetText}` : '',
     colorMaterial ? `手动色彩与材质补充：${colorMaterial}` : '',
@@ -251,6 +315,7 @@ export function buildWayfindingImagePrompt(values = {}) {
     `空间范围：${scope.label}；${scope.prompt}。`,
     scopeConstraint,
     outputConstraint,
+    pageConstraint,
     '核心要求：生成专业、克制、可落地的博物馆导视设计系统；信息层级清晰，方向箭头准确，图标统一，材料真实，尺度可信。',
     museumName ? `场馆名称：${museumName}` : '场馆名称：未指定，请使用中性的博物馆导视占位名称，避免随机品牌 logo。',
     projectTheme ? `项目主题：${projectTheme}` : '',
