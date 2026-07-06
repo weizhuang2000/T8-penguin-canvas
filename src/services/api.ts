@@ -511,6 +511,17 @@ export interface ElevationPromptPresetMap {
   crafts: ElevationCraftPresetItem[];
 }
 
+export type ScienceExhibitPresetGroup = 'domains' | 'types' | 'interactions' | 'audiences' | 'scales';
+
+export interface ScienceExhibitOptionPresetItem {
+  id: string;
+  label: string;
+  prompt: string;
+  order: number;
+}
+
+export type ScienceExhibitPromptPresetMap = Record<ScienceExhibitPresetGroup, ScienceExhibitOptionPresetItem[]>;
+
 export interface ExhibitionCreativeInsertPresetItem {
   id: string;
   category?: string;
@@ -708,6 +719,25 @@ export async function updateElevationCraftPresets(
 ): Promise<ElevationCraftPresetItem[]> {
   const res = await request<{ success: boolean; data: ElevationCraftPresetItem[] }>(
     `${BASE}/prompt-library/elevation/presets/crafts`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ presets }),
+    },
+  );
+  return res.data || [];
+}
+
+export async function getScienceExhibitPromptPresets(): Promise<ScienceExhibitPromptPresetMap> {
+  const res = await request<{ success: boolean; data: ScienceExhibitPromptPresetMap }>(`${BASE}/prompt-library/science-exhibit/presets`);
+  return res.data || { domains: [], types: [], interactions: [], audiences: [], scales: [] };
+}
+
+export async function updateScienceExhibitPromptPresets(
+  group: ScienceExhibitPresetGroup,
+  presets: Array<Pick<ScienceExhibitOptionPresetItem, 'label' | 'prompt'> & Partial<Pick<ScienceExhibitOptionPresetItem, 'id' | 'order'>>>,
+): Promise<ScienceExhibitOptionPresetItem[]> {
+  const res = await request<{ success: boolean; data: ScienceExhibitOptionPresetItem[] }>(
+    `${BASE}/prompt-library/science-exhibit/presets/${group}`,
     {
       method: 'PUT',
       body: JSON.stringify({ presets }),

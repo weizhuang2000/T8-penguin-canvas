@@ -1,9 +1,23 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
-import { Atom, Brain, FileText, Image as ImageIcon, Loader2, Play, Upload } from 'lucide-react';
+import { Atom, Brain, FileText, Image as ImageIcon, Loader2, Pencil, Play, Upload } from 'lucide-react';
 import { EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
-import { extractDocument, getElevationPromptPresets, MAX_DOCUMENT_FILE_SIZE, MAX_DOCUMENT_FILE_SIZE_MB, type ElevationColorMaterialPresetItem, type ExtractedDocument } from '../../services/api';
+import {
+  extractDocument,
+  getCurrentUser,
+  getElevationPromptPresets,
+  getScienceExhibitPromptPresets,
+  MAX_DOCUMENT_FILE_SIZE,
+  MAX_DOCUMENT_FILE_SIZE_MB,
+  updateScienceExhibitPromptPresets,
+  type AuthUser,
+  type ElevationColorMaterialPresetItem,
+  type ExtractedDocument,
+  type ScienceExhibitOptionPresetItem,
+  type ScienceExhibitPresetGroup,
+  type ScienceExhibitPromptPresetMap,
+} from '../../services/api';
 import { generateExternalImage, generateLlm, queryExternalImageStatus, queryImageStatus, submitImageAsync } from '../../services/generation';
 import {
   advancedProviderModelOptions,
@@ -47,6 +61,7 @@ import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import PromptTextarea from '../PromptTextarea';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
+import ScienceExhibitOptionEditorModal from './ScienceExhibitOptionEditorModal';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useUpstreamMaterials, type Material } from './useUpstreamMaterials';
 import MentionPromptInput from './MentionPromptInput';
@@ -62,6 +77,14 @@ const INTERNAL_IMAGE_MAX_POLLS = 1800;
 const INTERNAL_IMAGE_POLL_INTERVAL_MS = 2000;
 const NEXT_DRAWING_SETTLE_MS = 1200;
 const DRAWING_ORDER: ScienceExhibitDrawingType[] = ['render', 'exploded', 'principle', 'orthographic', 'parameter-table'];
+const SCIENCE_EXHIBIT_OPTION_GROUPS: ScienceExhibitPresetGroup[] = ['domains', 'types', 'interactions', 'audiences', 'scales'];
+const EMPTY_SCIENCE_EXHIBIT_PRESETS: ScienceExhibitPromptPresetMap = {
+  domains: [],
+  types: [],
+  interactions: [],
+  audiences: [],
+  scales: [],
+};
 
 interface InputImageItem {
   id: string;
@@ -179,12 +202,41 @@ function combineColorMaterialText(palette: string, textures: string, fallback = 
   return parts.length ? parts.join('; ') : String(fallback || '').trim();
 }
 
+function scienceOptionList(items: ScienceExhibitOptionPresetItem[] | undefined, fallback: ScienceExhibitOption[]): ScienceExhibitOption[] {
+  const list = Array.isArray(items) && items.length > 0 ? items : fallback;
+  const normalized = list
+    .map((item, index) => ({
+      id: String(item.id || '').trim(),
+      label: String(item.label || '').trim(),
+      prompt: String(item.prompt || '').trim(),
+      order: Number.isFinite(Number((item as any).order)) ? Number((item as any).order) : index,
+    }))
+    .filter((item) => item.id && item.label && item.prompt)
+    .sort((a, b) => a.order - b.order)
+    .map((item, index) => ({ ...item, order: index }));
+  return normalized.length ? normalized : fallback;
+}
+
+function sciencePresetItems(options: ScienceExhibitOption[]): ScienceExhibitOptionPresetItem[] {
+  return options.map((item, index) => ({
+    id: item.id,
+    label: item.label,
+    prompt: item.prompt,
+    order: Number.isFinite(Number((item as any).order)) ? Number((item as any).order) : index,
+  }));
+}
+
 const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
   const fileRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef(false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [colorMaterialPresets, setColorMaterialPresets] = useState<ElevationColorMaterialPresetItem[]>([]);
+  const [scienceOptionPresets, setScienceOptionPresets] = useState<ScienceExhibitPromptPresetMap>(EMPTY_SCIENCE_EXHIBIT_PRESETS);
+  const [optionEditorOpen, setOptionEditorOpen] = useState(false);
+  const [optionSaving, setOptionSaving] = useState(false);
+  const [optionError, setOptionError] = useState('');
   const upstream = useUpstreamMaterials(id);
   const spaceReferenceItems = useInputImagesByHandle(id, 'space-reference');
   const deviceReferenceItems = useInputImagesByHandle(id, 'device-reference');
@@ -235,11 +287,17 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
 
-  const scienceDomain = normalizeScienceExhibitDomain(d.scienceDomain);
-  const exhibitType = normalizeScienceExhibitType(d.exhibitType);
-  const interactionMode = normalizeScienceExhibitInteraction(d.interactionMode);
-  const audience = normalizeScienceExhibitAudience(d.audience);
-  const spatialScale = normalizeScienceExhibitScale(d.spatialScale);
+  const domainOptions = useMemo(() => scienceOptionList(scienceOptionPresets.domains, SCIENCE_EXHIBIT_DOMAINS), [scienceOptionPresets.domains]);
+  const typeOptions = useMemo(() => scienceOptionList(scienceOptionPresets.types, SCIENCE_EXHIBIT_TYPES), [scienceOptionPresets.types]);
+  const interactionOptions = useMemo(() => scienceOptionList(scienceOptionPresets.interactions, SCIENCE_EXHIBIT_INTERACTIONS), [scienceOptionPresets.interactions]);
+  const audienceOptions = useMemo(() => scienceOptionList(scienceOptionPresets.audiences, SCIENCE_EXHIBIT_AUDIENCES), [scienceOptionPresets.audiences]);
+  const scaleOptions = useMemo(() => scienceOptionList(scienceOptionPresets.scales, SCIENCE_EXHIBIT_SCALES), [scienceOptionPresets.scales]);
+  const scienceDomain = normalizeScienceExhibitDomain(d.scienceDomain, domainOptions);
+  const exhibitType = normalizeScienceExhibitType(d.exhibitType, typeOptions);
+  const interactionMode = normalizeScienceExhibitInteraction(d.interactionMode, interactionOptions);
+  const audience = normalizeScienceExhibitAudience(d.audience, audienceOptions);
+  const spatialScale = normalizeScienceExhibitScale(d.spatialScale, scaleOptions);
+  const canManageScienceOptions = currentUser?.role === 'admin' || currentUser?.role === 'manager';
   const backgroundMode = normalizeScienceExhibitBackground(d.backgroundMode);
   const dimensions = useMemo(() => normalizeScienceExhibitDimensions(d.dimensions, spatialScale), [d.dimensions, spatialScale]);
   const drawingSelection = useMemo(() => normalizeScienceExhibitDrawingSelection(d.drawingSelection), [d.drawingSelection]);
@@ -312,13 +370,32 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
     colorMaterialPalette,
     colorMaterialTextures,
     hasColorMaterialPreset,
-  }), [analysis, audience, backgroundMode, colorMaterialPalette, colorMaterialText, colorMaterialTextures, deviceReferenceImages, dimensions, exhibitType, hasColorMaterialPreset, interactionMode, resolvedSupplement, scienceDomain, spaceReferenceImages, spatialScale]);
+    domainOptions,
+    typeOptions,
+    interactionOptions,
+    audienceOptions,
+    scaleOptions,
+  }), [analysis, audience, audienceOptions, backgroundMode, colorMaterialPalette, colorMaterialText, colorMaterialTextures, deviceReferenceImages, dimensions, domainOptions, exhibitType, hasColorMaterialPreset, interactionMode, interactionOptions, resolvedSupplement, scaleOptions, scienceDomain, spaceReferenceImages, spatialScale, typeOptions]);
 
   useEffect(() => {
+    getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
     getElevationPromptPresets()
       .then((presets) => setColorMaterialPresets(presets.colorMaterial || []))
       .catch(() => setColorMaterialPresets([]));
+    getScienceExhibitPromptPresets()
+      .then((presets) => setScienceOptionPresets(presets || EMPTY_SCIENCE_EXHIBIT_PRESETS))
+      .catch(() => setScienceOptionPresets(EMPTY_SCIENCE_EXHIBIT_PRESETS));
   }, []);
+
+  useEffect(() => {
+    const patch: Record<string, string> = {};
+    if (d.scienceDomain !== scienceDomain) patch.scienceDomain = scienceDomain;
+    if (d.exhibitType !== exhibitType) patch.exhibitType = exhibitType;
+    if (d.interactionMode !== interactionMode) patch.interactionMode = interactionMode;
+    if (d.audience !== audience) patch.audience = audience;
+    if (d.spatialScale !== spatialScale) patch.spatialScale = spatialScale;
+    if (Object.keys(patch).length) update(patch);
+  }, [audience, d.audience, d.exhibitType, d.interactionMode, d.scienceDomain, d.spatialScale, exhibitType, interactionMode, scienceDomain, spatialScale, update]);
 
   useEffect(() => {
     if (
@@ -387,6 +464,11 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
           colorMaterialPalette,
           colorMaterialTextures,
           hasColorMaterialPreset,
+          domainOptions,
+          typeOptions,
+          interactionOptions,
+          audienceOptions,
+          scaleOptions,
         }) }],
       });
       const parsed = parseScienceExhibitExtractJson(response.content || '');
@@ -426,7 +508,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
       update({ status: 'error', error: llmErrorMessage(error), progress: '' });
       return null;
     }
-  }, [activeLlmConfig?.id, audience, backgroundMode, busy, colorMaterialPalette, colorMaterialText, colorMaterialTextures, dimensions, effectiveSourceText, exhibitType, hasColorMaterialPreset, interactionMode, isReadonly, llmModel, scienceDomain, spatialScale, update]);
+  }, [activeLlmConfig?.id, audience, audienceOptions, backgroundMode, busy, colorMaterialPalette, colorMaterialText, colorMaterialTextures, dimensions, domainOptions, effectiveSourceText, exhibitType, hasColorMaterialPreset, interactionMode, interactionOptions, isReadonly, llmModel, scaleOptions, scienceDomain, spatialScale, typeOptions, update]);
 
   const generateOneImage = useCallback(async ({
     kind,
@@ -599,6 +681,11 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
             colorMaterialPalette,
             colorMaterialTextures,
             hasColorMaterialPreset,
+            domainOptions,
+            typeOptions,
+            interactionOptions,
+            audienceOptions,
+            scaleOptions,
           })
           : buildScienceExhibitDrawingPrompt({
             drawingType: kind,
@@ -669,7 +756,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`科技展项设计失败: ${msg}`, src);
       throw error;
     }
-  }, [analysis, audience, backgroundMode, busy, colorMaterialPalette, colorMaterialText, colorMaterialTextures, d.extractBeforeGenerate, deviceReferenceImages, dimensions, drawingSelection, exhibitType, generateOneImage, hasColorMaterialPreset, id, interactionMode, isReadonly, resolvedSupplement, runExtract, scienceDomain, seed, spaceReferenceImages, spatialScale, update]);
+  }, [analysis, audience, audienceOptions, backgroundMode, busy, colorMaterialPalette, colorMaterialText, colorMaterialTextures, d.extractBeforeGenerate, deviceReferenceImages, dimensions, domainOptions, drawingSelection, exhibitType, generateOneImage, hasColorMaterialPreset, id, interactionMode, interactionOptions, isReadonly, resolvedSupplement, runExtract, scaleOptions, scienceDomain, seed, spaceReferenceImages, spatialScale, typeOptions, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -681,6 +768,40 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
     else next.add(kind);
     update({ drawingSelection: normalizeScienceExhibitDrawingSelection(Array.from(next)) });
   };
+
+  const saveScienceOptions = useCallback(async (group: ScienceExhibitPresetGroup, presets: ScienceExhibitOptionPresetItem[]) => {
+    if (!canManageScienceOptions || isReadonly) return;
+    setOptionSaving(true);
+    setOptionError('');
+    try {
+      const saved = await updateScienceExhibitPromptPresets(group, presets);
+      const nextPresets = { ...scienceOptionPresets, [group]: saved };
+      setScienceOptionPresets(nextPresets);
+      const nextOptions = scienceOptionList(saved, {
+        domains: SCIENCE_EXHIBIT_DOMAINS,
+        types: SCIENCE_EXHIBIT_TYPES,
+        interactions: SCIENCE_EXHIBIT_INTERACTIONS,
+        audiences: SCIENCE_EXHIBIT_AUDIENCES,
+        scales: SCIENCE_EXHIBIT_SCALES,
+      }[group]);
+      const keyByGroup: Record<ScienceExhibitPresetGroup, string> = {
+        domains: 'scienceDomain',
+        types: 'exhibitType',
+        interactions: 'interactionMode',
+        audiences: 'audience',
+        scales: 'spatialScale',
+      };
+      const currentValue = String(d[keyByGroup[group]] || '');
+      if (!nextOptions.some((item) => item.id === currentValue)) {
+        update({ [keyByGroup[group]]: nextOptions[0]?.id || '' });
+      }
+    } catch (error: any) {
+      setOptionError(error?.message || '保存科技展项设计选项失败');
+      throw error;
+    } finally {
+      setOptionSaving(false);
+    }
+  }, [canManageScienceOptions, d, isReadonly, scienceOptionPresets, update]);
 
   return (
     <div
@@ -709,12 +830,17 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
         {d.error && <div className="rounded border border-red-300/25 bg-red-400/10 px-2 py-1.5 text-[10px] text-red-200">{d.error}</div>}
 
         <section data-exhibition-compact-section="science" className="grid grid-cols-3 gap-2 rounded border border-white/10 bg-white/[0.035] p-2">
+          {canManageScienceOptions && (
+            <div className="col-span-3 flex justify-end">
+              <button data-exhibition-compact-item="option-editor" type="button" className={BUTTON} disabled={isReadonly || busy} onClick={() => setOptionEditorOpen(true)}><Pencil size={13} /> 编辑选项</button>
+            </div>
+          )}
           {[
-            ['scienceDomain', '科学领域', scienceDomain, SCIENCE_EXHIBIT_DOMAINS, normalizeScienceExhibitDomain],
-            ['exhibitType', '展项类型', exhibitType, SCIENCE_EXHIBIT_TYPES, normalizeScienceExhibitType],
-            ['interactionMode', '互动方式', interactionMode, SCIENCE_EXHIBIT_INTERACTIONS, normalizeScienceExhibitInteraction],
-            ['audience', '目标观众', audience, SCIENCE_EXHIBIT_AUDIENCES, normalizeScienceExhibitAudience],
-            ['spatialScale', '空间尺度', spatialScale, SCIENCE_EXHIBIT_SCALES, normalizeScienceExhibitScale],
+            ['scienceDomain', '科学领域', scienceDomain, domainOptions, (raw: string) => normalizeScienceExhibitDomain(raw, domainOptions)],
+            ['exhibitType', '展项类型', exhibitType, typeOptions, (raw: string) => normalizeScienceExhibitType(raw, typeOptions)],
+            ['interactionMode', '互动方式', interactionMode, interactionOptions, (raw: string) => normalizeScienceExhibitInteraction(raw, interactionOptions)],
+            ['audience', '目标观众', audience, audienceOptions, (raw: string) => normalizeScienceExhibitAudience(raw, audienceOptions)],
+            ['spatialScale', '空间尺度', spatialScale, scaleOptions, (raw: string) => normalizeScienceExhibitScale(raw, scaleOptions)],
             ['backgroundMode', '背景', backgroundMode, SCIENCE_EXHIBIT_BACKGROUNDS, normalizeScienceExhibitBackground],
           ].map(([key, label, value, options, normalize]) => (
             <label key={String(key)} data-exhibition-compact-item={String(key) === 'backgroundMode' ? 'background-mode' : 'parameter-input'} className="space-y-1">
@@ -1003,6 +1129,22 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
           <div className="max-h-44 overflow-y-auto whitespace-pre-wrap break-words text-[10px] leading-relaxed text-white/72">{previewPrompt}</div>
         </section>
       </div>
+      {canManageScienceOptions && (
+        <ScienceExhibitOptionEditorModal
+          open={optionEditorOpen}
+          presets={{
+            domains: sciencePresetItems(domainOptions),
+            types: sciencePresetItems(typeOptions),
+            interactions: sciencePresetItems(interactionOptions),
+            audiences: sciencePresetItems(audienceOptions),
+            scales: sciencePresetItems(scaleOptions),
+          }}
+          saving={optionSaving}
+          error={optionError}
+          onClose={() => setOptionEditorOpen(false)}
+          onSave={saveScienceOptions}
+        />
+      )}
     </div>
   );
 };

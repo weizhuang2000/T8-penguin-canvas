@@ -40,7 +40,11 @@ test('science exhibit component exposes handles, llm extraction and generation s
   assert.match(source, /PromptTextarea/);
   assert.match(source, /MentionPromptInput/);
   assert.match(source, /ColorMaterialPresetSelect/);
+  assert.match(source, /ScienceExhibitOptionEditorModal/);
   assert.match(source, /getElevationPromptPresets/);
+  assert.match(source, /getScienceExhibitPromptPresets/);
+  assert.match(source, /updateScienceExhibitPromptPresets/);
+  assert.match(source, /getCurrentUser/);
   assert.match(source, /colorMaterialTextFromPreset/);
   assert.match(source, /resolveMediaMentions/);
   assert.match(source, /buildScienceExhibitExtractPrompt/);
@@ -56,6 +60,7 @@ test('science exhibit component exposes handles, llm extraction and generation s
   assert.match(source, /SCIENCE_EXHIBIT_BACKGROUNDS/);
   assert.match(source, /data-exhibition-compact-item=\{String\(key\) === 'backgroundMode' \? 'background-mode' : 'parameter-input'\}/);
   assert.match(source, /data-exhibition-compact-section="dimensions"/);
+  assert.match(source, /data-exhibition-compact-item="option-editor"/);
   assert.match(source, /data-exhibition-compact-section="color-material"/);
   assert.match(source, /data-exhibition-compact-item="preset-select"/);
   assert.match(source, /data-exhibition-compact-item="size-input"/);
@@ -84,6 +89,7 @@ test('compact form exposes science exhibit sections and references', () => {
     const source = read(file);
     assert.match(source, /nodeType: 'science-exhibit-design'/);
     assert.match(source, /id: 'science'/);
+    assert.match(source, /id: 'option-editor'/);
     assert.match(source, /id: 'background-mode'/);
     assert.match(source, /id: 'dimensions'/);
     assert.match(source, /id: 'color-material'/);

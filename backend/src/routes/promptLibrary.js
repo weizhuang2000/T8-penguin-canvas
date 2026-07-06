@@ -17,6 +17,7 @@ const AI_PLAN_LAYOUT_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibi
 const RECOLOR_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition_recolor.json');
 const UNIT_PANEL_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_unit_panel.json');
 const SCULPTURE_RELIEF_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_sculpture_relief.json');
+const SCIENCE_EXHIBIT_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_science_exhibit.json');
 const DIMENSIONS = new Set([
   'spaceType',
   'functionalZones',
@@ -129,6 +130,51 @@ const DEFAULT_ELEVATION_CRAFT_PRESETS = [
   { id: 'showcase-niche', label: '展柜/壁龛', prompt: '嵌墙展柜或壁龛，重点照明准确，尺度可信' },
   { id: 'wayfinding', label: '导视标识', prompt: '统一的导视标识系统，编号与方向信息清晰' },
 ].map((item, index) => ({ ...item, order: index }));
+
+const DEFAULT_SCIENCE_EXHIBIT_PROMPT_PRESETS = {
+  domains: [
+    { id: 'physics', label: '物理科学', prompt: 'force, motion, optics, electricity, magnetism, wave or energy conversion principle' },
+    { id: 'life-science', label: '生命科学', prompt: 'biology, human body, ecology, genetics or microscopic life science principle' },
+    { id: 'earth-space', label: '地球与宇宙', prompt: 'geology, climate, astronomy, planetary motion or earth system principle' },
+    { id: 'engineering', label: '工程技术', prompt: 'mechanical, robotics, automation, materials, manufacturing or civil engineering principle' },
+    { id: 'information', label: '信息科技', prompt: 'computing, AI, sensing, communication, data visualization or cyber-physical system principle' },
+    { id: 'chemistry', label: '化学与材料', prompt: 'chemical reaction, molecular structure, material property or energy storage principle' },
+  ],
+  types: [
+    { id: 'interactive-device', label: '互动机械展项', prompt: 'hands-on mechanical or electromechanical interactive exhibit with visible operating parts' },
+    { id: 'digital-installation', label: '数字互动展项', prompt: 'digital media exhibit with screens, projection, sensors and real-time feedback' },
+    { id: 'demonstration-model', label: '原理演示模型', prompt: 'principle demonstration model with clear cause-effect visualization' },
+    { id: 'immersive-theater', label: '沉浸式科普剧场', prompt: 'immersive science theater with spatial media, narration and audience participation' },
+    { id: 'experiment-station', label: '实验操作台', prompt: 'visitor experiment station with durable controls, instruments and observation area' },
+    { id: 'large-landmark', label: '大型标志展项', prompt: 'large iconic science exhibit as a gallery landmark, visible from distance' },
+  ],
+  interactions: [
+    { id: 'turn-handle', label: '手摇/转动', prompt: 'visitor turns a wheel, crank or handle and sees immediate physical feedback' },
+    { id: 'touch-screen', label: '触控选择', prompt: 'visitor selects parameters on a touchscreen and observes visualized results' },
+    { id: 'sensor-trigger', label: '感应触发', prompt: 'motion, proximity, light or pressure sensors trigger exhibit response' },
+    { id: 'multi-user', label: '多人协作', prompt: 'several visitors cooperate or compete to change exhibit state' },
+    { id: 'physical-experiment', label: '实体实验', prompt: 'visitor manipulates real objects, samples, airflow, water, light or magnetic elements' },
+    { id: 'mixed-reality', label: '虚实融合', prompt: 'physical exhibit combined with AR, projection mapping or digital overlay' },
+  ],
+  audiences: [
+    { id: 'children', label: '儿童启蒙', prompt: 'simple robust interaction, low height, clear safety edges, playful but scientifically accurate' },
+    { id: 'family', label: '亲子家庭', prompt: 'multi-level explanation, parent-child cooperation, strong visibility and low operation difficulty' },
+    { id: 'teenagers', label: '青少年探究', prompt: 'parameter exploration, measurable results, challenge and inquiry-based learning' },
+    { id: 'general', label: '公众科普', prompt: 'legible science interpretation, intuitive operation and strong exhibition appeal' },
+    { id: 'professional', label: '专业研学', prompt: 'more technical labels, quantitative parameters and deeper mechanism explanation' },
+  ],
+  scales: [
+    { id: 'tabletop', label: '桌面操作', prompt: 'tabletop exhibit, close viewing distance, compact mechanism and durable controls' },
+    { id: 'wall-bay', label: '墙面展项', prompt: 'wall-integrated exhibit bay with graphics, screens, devices and maintenance access' },
+    { id: 'island', label: '岛台展项', prompt: 'freestanding island exhibit allowing visitors around multiple sides' },
+    { id: 'room', label: '小型展厅', prompt: 'room-scale exhibit with circulation, overhead media and multiple interaction zones' },
+    { id: 'hall-landmark', label: '大厅标志物', prompt: 'large hall landmark exhibit with strong silhouette, safety boundary and queue area' },
+  ],
+};
+for (const key of Object.keys(DEFAULT_SCIENCE_EXHIBIT_PROMPT_PRESETS)) {
+  DEFAULT_SCIENCE_EXHIBIT_PROMPT_PRESETS[key] = DEFAULT_SCIENCE_EXHIBIT_PROMPT_PRESETS[key].map((item, index) => ({ ...item, order: index }));
+}
+const SCIENCE_EXHIBIT_PRESET_GROUPS = new Set(['domains', 'types', 'interactions', 'audiences', 'scales']);
 
 const EXHIBITION_CREATIVE_INSERT_CATEGORIES = new Set(['装饰', '多媒体', '艺术品', '展陈', '展柜', '展台', '顶部', '其它']);
 
@@ -1010,6 +1056,63 @@ function writeSculptureReliefDb(db) {
   );
 }
 
+function normalizeScienceExhibitOptionPresetList(value, fallback = []) {
+  const source = Array.isArray(value) && value.length > 0 ? value : fallback;
+  const used = new Set();
+  return source
+    .map((raw, index) => {
+      const label = safeText(raw?.label, 120);
+      const prompt = safeText(raw?.prompt, 1600);
+      if (!label || !prompt) return null;
+      let id = safeText(raw?.id, 96).replace(/[^a-zA-Z0-9_-]/g, '');
+      if (!id) id = `option_${index + 1}`;
+      while (used.has(id)) id = `${id}_${index + 1}`;
+      used.add(id);
+      return {
+        id,
+        label,
+        prompt,
+        order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 80)
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+    .map((item, index) => ({ ...item, order: index }));
+}
+
+function normalizeScienceExhibitPromptPresetMap(value = {}) {
+  const out = {};
+  for (const key of SCIENCE_EXHIBIT_PRESET_GROUPS) {
+    out[key] = normalizeScienceExhibitOptionPresetList(
+      value?.[key],
+      DEFAULT_SCIENCE_EXHIBIT_PROMPT_PRESETS[key],
+    );
+  }
+  return out;
+}
+
+function readScienceExhibitDb() {
+  try {
+    if (!fs.existsSync(SCIENCE_EXHIBIT_DB_FILE)) {
+      return normalizeScienceExhibitPromptPresetMap(DEFAULT_SCIENCE_EXHIBIT_PROMPT_PRESETS);
+    }
+    const raw = JSON.parse(fs.readFileSync(SCIENCE_EXHIBIT_DB_FILE, 'utf-8'));
+    return normalizeScienceExhibitPromptPresetMap(raw);
+  } catch {
+    return normalizeScienceExhibitPromptPresetMap(DEFAULT_SCIENCE_EXHIBIT_PROMPT_PRESETS);
+  }
+}
+
+function writeScienceExhibitDb(db) {
+  fs.mkdirSync(path.dirname(SCIENCE_EXHIBIT_DB_FILE), { recursive: true });
+  fs.writeFileSync(
+    SCIENCE_EXHIBIT_DB_FILE,
+    JSON.stringify(normalizeScienceExhibitPromptPresetMap(db), null, 2),
+    'utf-8',
+  );
+}
+
 function publicItem(item) {
   return {
     id: safeText(item.id, 96),
@@ -1155,6 +1258,26 @@ router.put('/elevation/presets/crafts', (req, res) => {
   const db = readElevationDb();
   const presets = normalizeElevationCraftPresetList(req.body?.presets);
   writeElevationDb({ ...db, craftPresets: presets });
+  res.json({ success: true, data: presets });
+});
+
+router.get('/science-exhibit/presets', (_req, res) => {
+  res.json({ success: true, data: readScienceExhibitDb() });
+});
+
+router.put('/science-exhibit/presets/:group', (req, res) => {
+  const user = req.user;
+  if (!isAdminRole(user?.role)) {
+    return res.status(403).json({ success: false, error: '只有系统管理员或经理可以维护科技展项设计选项' });
+  }
+  const group = safeText(req.params.group, 80);
+  if (!SCIENCE_EXHIBIT_PRESET_GROUPS.has(group)) {
+    return res.status(400).json({ success: false, error: '无效的科技展项设计选项分组' });
+  }
+  const db = readScienceExhibitDb();
+  const presets = normalizeScienceExhibitOptionPresetList(req.body?.presets, DEFAULT_SCIENCE_EXHIBIT_PROMPT_PRESETS[group]);
+  const next = { ...db, [group]: presets };
+  writeScienceExhibitDb(next);
   res.json({ success: true, data: presets });
 });
 

@@ -122,6 +122,47 @@ test('main image prompt keeps real science and parameter consistency', () => {
   assert.match(prompt, /叶片角度/);
 });
 
+test('science exhibit prompts use dynamic option definitions when provided', () => {
+  const domainOptions = [{ id: 'custom-domain', label: '自定义科学领域', prompt: 'custom verified principle family', order: 0 }];
+  const typeOptions = [{ id: 'custom-type', label: '自定义展项类型', prompt: 'custom exhibit mechanism type', order: 0 }];
+  const interactionOptions = [{ id: 'custom-interaction', label: '自定义互动方式', prompt: 'custom visitor interaction behavior', order: 0 }];
+  const audienceOptions = [{ id: 'custom-audience', label: '自定义目标观众', prompt: 'custom audience learning depth', order: 0 }];
+  const scaleOptions = [{ id: 'custom-scale', label: '自定义空间尺度', prompt: 'custom spatial installation scale', order: 0 }];
+
+  const extractPrompt = buildScienceExhibitExtractPrompt({
+    sourceText: 'source text',
+    scienceDomain: 'custom-domain',
+    exhibitType: 'custom-type',
+    interactionMode: 'custom-interaction',
+    audience: 'custom-audience',
+    spatialScale: 'custom-scale',
+    domainOptions,
+    typeOptions,
+    interactionOptions,
+    audienceOptions,
+    scaleOptions,
+  });
+  assert.match(extractPrompt, /自定义科学领域/);
+  assert.match(extractPrompt, /custom exhibit mechanism type/);
+  assert.match(extractPrompt, /custom visitor interaction behavior/);
+
+  const imagePrompt = buildScienceExhibitImagePrompt({
+    scienceDomain: 'custom-domain',
+    exhibitType: 'custom-type',
+    interactionMode: 'custom-interaction',
+    audience: 'custom-audience',
+    spatialScale: 'custom-scale',
+    analysis,
+    domainOptions,
+    typeOptions,
+    interactionOptions,
+    audienceOptions,
+    scaleOptions,
+  });
+  assert.match(imagePrompt, /自定义空间尺度/);
+  assert.match(imagePrompt, /custom audience learning depth/);
+});
+
 test('technical drawing prompts bind later drawings to render reference', () => {
   const parameterMarkdown = buildScienceExhibitParameterMarkdown({
     analysis,

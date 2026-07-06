@@ -110,28 +110,47 @@ function normalizeId(value, options, fallback) {
   return options.some((item) => item.id === id) ? id : fallback;
 }
 
+function normalizeOptionList(value, fallback) {
+  const source = Array.isArray(value) && value.length > 0 ? value : fallback;
+  const out = source
+    .map((item) => ({
+      id: cleanScienceExhibitText(item?.id, 96).replace(/[^a-zA-Z0-9_-]/g, ''),
+      label: cleanScienceExhibitText(item?.label, 120),
+      prompt: cleanScienceExhibitText(item?.prompt, 1600),
+      order: Number.isFinite(Number(item?.order)) ? Number(item.order) : 0,
+    }))
+    .filter((item) => item.id && item.label && item.prompt)
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+  return out.length ? out.map((item, index) => ({ ...item, order: index })) : fallback;
+}
+
 export function cleanScienceExhibitText(value, limit = 4000) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, limit);
 }
 
-export function normalizeScienceExhibitDomain(value) {
-  return normalizeId(value, SCIENCE_EXHIBIT_DOMAINS, SCIENCE_EXHIBIT_DOMAINS[0].id);
+export function normalizeScienceExhibitDomain(value, options = SCIENCE_EXHIBIT_DOMAINS) {
+  const list = normalizeOptionList(options, SCIENCE_EXHIBIT_DOMAINS);
+  return normalizeId(value, list, list[0].id);
 }
 
-export function normalizeScienceExhibitType(value) {
-  return normalizeId(value, SCIENCE_EXHIBIT_TYPES, SCIENCE_EXHIBIT_TYPES[0].id);
+export function normalizeScienceExhibitType(value, options = SCIENCE_EXHIBIT_TYPES) {
+  const list = normalizeOptionList(options, SCIENCE_EXHIBIT_TYPES);
+  return normalizeId(value, list, list[0].id);
 }
 
-export function normalizeScienceExhibitInteraction(value) {
-  return normalizeId(value, SCIENCE_EXHIBIT_INTERACTIONS, SCIENCE_EXHIBIT_INTERACTIONS[0].id);
+export function normalizeScienceExhibitInteraction(value, options = SCIENCE_EXHIBIT_INTERACTIONS) {
+  const list = normalizeOptionList(options, SCIENCE_EXHIBIT_INTERACTIONS);
+  return normalizeId(value, list, list[0].id);
 }
 
-export function normalizeScienceExhibitAudience(value) {
-  return normalizeId(value, SCIENCE_EXHIBIT_AUDIENCES, SCIENCE_EXHIBIT_AUDIENCES[3].id);
+export function normalizeScienceExhibitAudience(value, options = SCIENCE_EXHIBIT_AUDIENCES) {
+  const list = normalizeOptionList(options, SCIENCE_EXHIBIT_AUDIENCES);
+  return normalizeId(value, list, list.find((item) => item.id === 'general')?.id || list[0].id);
 }
 
-export function normalizeScienceExhibitScale(value) {
-  return normalizeId(value, SCIENCE_EXHIBIT_SCALES, SCIENCE_EXHIBIT_SCALES[2].id);
+export function normalizeScienceExhibitScale(value, options = SCIENCE_EXHIBIT_SCALES) {
+  const list = normalizeOptionList(options, SCIENCE_EXHIBIT_SCALES);
+  return normalizeId(value, list, list.find((item) => item.id === 'island')?.id || list[0].id);
 }
 
 export function normalizeScienceExhibitDrawingType(value) {
@@ -173,29 +192,34 @@ export function normalizeScienceExhibitDimensions(value = {}, scaleValue) {
   };
 }
 
-export function scienceExhibitDomainMeta(value) {
-  const id = normalizeScienceExhibitDomain(value);
-  return SCIENCE_EXHIBIT_DOMAINS.find((item) => item.id === id) || SCIENCE_EXHIBIT_DOMAINS[0];
+export function scienceExhibitDomainMeta(value, options = SCIENCE_EXHIBIT_DOMAINS) {
+  const list = normalizeOptionList(options, SCIENCE_EXHIBIT_DOMAINS);
+  const id = normalizeScienceExhibitDomain(value, list);
+  return list.find((item) => item.id === id) || list[0];
 }
 
-export function scienceExhibitTypeMeta(value) {
-  const id = normalizeScienceExhibitType(value);
-  return SCIENCE_EXHIBIT_TYPES.find((item) => item.id === id) || SCIENCE_EXHIBIT_TYPES[0];
+export function scienceExhibitTypeMeta(value, options = SCIENCE_EXHIBIT_TYPES) {
+  const list = normalizeOptionList(options, SCIENCE_EXHIBIT_TYPES);
+  const id = normalizeScienceExhibitType(value, list);
+  return list.find((item) => item.id === id) || list[0];
 }
 
-export function scienceExhibitInteractionMeta(value) {
-  const id = normalizeScienceExhibitInteraction(value);
-  return SCIENCE_EXHIBIT_INTERACTIONS.find((item) => item.id === id) || SCIENCE_EXHIBIT_INTERACTIONS[0];
+export function scienceExhibitInteractionMeta(value, options = SCIENCE_EXHIBIT_INTERACTIONS) {
+  const list = normalizeOptionList(options, SCIENCE_EXHIBIT_INTERACTIONS);
+  const id = normalizeScienceExhibitInteraction(value, list);
+  return list.find((item) => item.id === id) || list[0];
 }
 
-export function scienceExhibitAudienceMeta(value) {
-  const id = normalizeScienceExhibitAudience(value);
-  return SCIENCE_EXHIBIT_AUDIENCES.find((item) => item.id === id) || SCIENCE_EXHIBIT_AUDIENCES[3];
+export function scienceExhibitAudienceMeta(value, options = SCIENCE_EXHIBIT_AUDIENCES) {
+  const list = normalizeOptionList(options, SCIENCE_EXHIBIT_AUDIENCES);
+  const id = normalizeScienceExhibitAudience(value, list);
+  return list.find((item) => item.id === id) || list.find((item) => item.id === 'general') || list[0];
 }
 
-export function scienceExhibitScaleMeta(value) {
-  const id = normalizeScienceExhibitScale(value);
-  return SCIENCE_EXHIBIT_SCALES.find((item) => item.id === id) || SCIENCE_EXHIBIT_SCALES[2];
+export function scienceExhibitScaleMeta(value, options = SCIENCE_EXHIBIT_SCALES) {
+  const list = normalizeOptionList(options, SCIENCE_EXHIBIT_SCALES);
+  const id = normalizeScienceExhibitScale(value, list);
+  return list.find((item) => item.id === id) || list.find((item) => item.id === 'island') || list[0];
 }
 
 export function scienceExhibitDrawingMeta(value) {
@@ -308,11 +332,11 @@ function colorMaterialContext(values = {}, drawingType = '') {
 export function buildScienceExhibitExtractPrompt(values = {}) {
   const sourceText = cleanScienceExhibitText(values.sourceText, 50000);
   const sizeText = dimensionsText(values.dimensions, values.spatialScale);
-  const domain = scienceExhibitDomainMeta(values.scienceDomain);
-  const exhibitType = scienceExhibitTypeMeta(values.exhibitType);
-  const interaction = scienceExhibitInteractionMeta(values.interactionMode);
-  const audience = scienceExhibitAudienceMeta(values.audience);
-  const scale = scienceExhibitScaleMeta(values.spatialScale);
+  const domain = scienceExhibitDomainMeta(values.scienceDomain, values.domainOptions);
+  const exhibitType = scienceExhibitTypeMeta(values.exhibitType, values.typeOptions);
+  const interaction = scienceExhibitInteractionMeta(values.interactionMode, values.interactionOptions);
+  const audience = scienceExhibitAudienceMeta(values.audience, values.audienceOptions);
+  const scale = scienceExhibitScaleMeta(values.spatialScale, values.scaleOptions);
   const bgText = backgroundText(values.backgroundMode);
   const colorMaterial = colorMaterialContext(values);
   return [
@@ -420,11 +444,11 @@ function analysisText(analysis) {
 }
 
 export function buildScienceExhibitImagePrompt(values = {}) {
-  const domain = scienceExhibitDomainMeta(values.scienceDomain);
-  const exhibitType = scienceExhibitTypeMeta(values.exhibitType);
-  const interaction = scienceExhibitInteractionMeta(values.interactionMode);
-  const audience = scienceExhibitAudienceMeta(values.audience);
-  const scale = scienceExhibitScaleMeta(values.spatialScale);
+  const domain = scienceExhibitDomainMeta(values.scienceDomain, values.domainOptions);
+  const exhibitType = scienceExhibitTypeMeta(values.exhibitType, values.typeOptions);
+  const interaction = scienceExhibitInteractionMeta(values.interactionMode, values.interactionOptions);
+  const audience = scienceExhibitAudienceMeta(values.audience, values.audienceOptions);
+  const scale = scienceExhibitScaleMeta(values.spatialScale, values.scaleOptions);
   const analysis = normalizeScienceExhibitAnalysis(values.analysis || {});
   const dimensionText = dimensionsText(values.dimensions, values.spatialScale);
   const bgText = backgroundText(values.backgroundMode);
