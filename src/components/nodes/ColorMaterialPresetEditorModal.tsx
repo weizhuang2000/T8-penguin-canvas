@@ -170,6 +170,11 @@ export default function ColorMaterialPresetEditorModal({
     [sourceDrafts],
   );
 
+  const allCategories = useMemo(
+    () => Array.from(new Set([DEFAULT_CATEGORY, ...drafts.map((item) => normalizeCategory(item.category))])),
+    [drafts],
+  );
+
   const visibleDrafts = useMemo(
     () => activeCategory === 'all' ? sourceDrafts : sourceDrafts.filter((preset) => normalizeCategory(preset.category) === activeCategory),
     [activeCategory, sourceDrafts],
@@ -192,7 +197,7 @@ export default function ColorMaterialPresetEditorModal({
   };
 
   const addUserPreset = () => {
-    const category = activeCategory === 'all' ? DEFAULT_CATEGORY : activeCategory;
+    const category = activeCategory !== 'all' && allCategories.includes(activeCategory) ? activeCategory : DEFAULT_CATEGORY;
     const draft = makeDraft({
       source: 'user',
       scope: 'personal',
@@ -210,6 +215,10 @@ export default function ColorMaterialPresetEditorModal({
   const saveUserPreset = async (preset: DraftPreset) => {
     if (!preset.label.trim()) {
       setLocalError('请填写预设名称。');
+      return;
+    }
+    if (!allCategories.includes(normalizeCategory(preset.category))) {
+      setLocalError('分类只能从当前已有分类中选择。');
       return;
     }
     setLocalError('');
@@ -281,7 +290,21 @@ export default function ColorMaterialPresetEditorModal({
           <option value="personal">仅自己</option>
           <option value="team">所有人</option>
         </select>
-        <input className={FIELD} value={preset.category} disabled={!editable || busy} onChange={(event) => updateDraft(preset.draftId, { category: event.target.value })} />
+        {preset.source === 'user' ? (
+          <select
+            className={FIELD}
+            value={normalizeCategory(preset.category)}
+            disabled={!editable || busy}
+            onChange={(event) => updateDraft(preset.draftId, { category: event.target.value })}
+            title="用户预设只能选择当前已有分类"
+          >
+            {allCategories.map((category) => (
+              <option key={category} value={category}>{category}</option>
+            ))}
+          </select>
+        ) : (
+          <input className={FIELD} value={preset.category} disabled={!editable || busy} onChange={(event) => updateDraft(preset.draftId, { category: event.target.value })} />
+        )}
         <input className={FIELD} value={preset.label} disabled={!editable || busy} onChange={(event) => updateDraft(preset.draftId, { label: event.target.value })} />
         <textarea className={`${FIELD} min-h-[58px] resize-y`} value={preset.core || ''} disabled={!editable || busy} onChange={(event) => updateDraft(preset.draftId, { core: event.target.value })} />
         <textarea className={`${FIELD} min-h-[58px] resize-y`} value={preset.features || ''} disabled={!editable || busy} onChange={(event) => updateDraft(preset.draftId, { features: event.target.value })} />

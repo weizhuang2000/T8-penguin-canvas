@@ -29,6 +29,8 @@ test('color material editor separates user presets from system presets', () => {
   assert.match(modal, /source === 'system'/);
   assert.match(modal, /value="personal"/);
   assert.match(modal, /value="team"/);
+  assert.match(modal, /allCategories/);
+  assert.match(modal, /用户预设只能选择当前已有分类/);
   assert.match(modal, /canEdit !== false/);
   assert.match(modal, /canDelete !== false/);
   assert.match(modal, /onRefresh/);

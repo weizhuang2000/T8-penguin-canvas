@@ -447,13 +447,30 @@ function visibleElevationUserPresets(items, user) {
     .map((item) => publicElevationUserPreset(item, user));
 }
 
-function normalizeIncomingElevationUserPreset(body, user, previous) {
+function elevationColorMaterialCategorySet(db, user) {
+  const categories = new Set(
+    normalizeElevationPresetList(db?.colorMaterialPresets)
+      .map((item) => item.category)
+      .filter(Boolean),
+  );
+  for (const item of visibleElevationUserPresets(db?.colorMaterialUserPresets, user)) {
+    if (item.category) categories.add(item.category);
+  }
+  categories.add('默认');
+  return categories;
+}
+
+function normalizeIncomingElevationUserPreset(body, user, previous, allowedCategories) {
   const scope = safeText(body?.scope || previous?.scope || 'personal', 16);
   if (scope !== 'team' && scope !== 'personal') {
     return { error: '色材预设范围必须是 personal 或 team' };
   }
   const label = safeText(body?.label || previous?.label, 120);
   if (!label) return { error: '色材预设名称不能为空' };
+  const category = safeText(body?.category || previous?.category, 80) || '默认';
+  if (allowedCategories && !allowedCategories.has(category)) {
+    return { error: '色材预设分类只能从当前已有分类中选择' };
+  }
   const splitInfo = splitElevationPresetInfo(body?.info || previous?.info);
   const core = safeText(body?.core, 1200) || (previous ? safeText(previous.core, 1200) : splitInfo.core);
   const features = safeText(body?.features, 1600) || (previous ? safeText(previous.features, 1600) : splitInfo.features);
@@ -464,7 +481,7 @@ function normalizeIncomingElevationUserPreset(body, user, previous) {
       ...(previous || {}),
       source: 'user',
       scope,
-      category: safeText(body?.category || previous?.category, 80) || '默认',
+      category,
       label,
       core,
       features,
@@ -1370,11 +1387,11 @@ router.put('/elevation/presets/colorMaterial', (req, res) => {
 
 router.post('/elevation/presets/colorMaterial/user', (req, res) => {
   const user = req.user;
-  const normalized = normalizeIncomingElevationUserPreset(req.body || {}, user, null);
+  const db = readElevationDb();
+  const normalized = normalizeIncomingElevationUserPreset(req.body || {}, user, null, elevationColorMaterialCategorySet(db, user));
   if (normalized.error) {
     return res.status(normalized.status || 400).json({ success: false, error: normalized.error });
   }
-  const db = readElevationDb();
   const ts = now();
   const item = {
     ...normalized.item,
@@ -1397,7 +1414,7 @@ router.put('/elevation/presets/colorMaterial/user/:id', (req, res) => {
   if (!userCanManageElevationUserPreset(user, previous)) {
     return res.status(403).json({ success: false, error: '无权限维护此色彩材质预设' });
   }
-  const normalized = normalizeIncomingElevationUserPreset(req.body || {}, user, previous);
+  const normalized = normalizeIncomingElevationUserPreset(req.body || {}, user, previous, elevationColorMaterialCategorySet(db, user));
   if (normalized.error) {
     return res.status(normalized.status || 400).json({ success: false, error: normalized.error });
   }

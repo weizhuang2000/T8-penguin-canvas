@@ -371,7 +371,7 @@ test('elevation color material user presets honor visibility and ownership', asy
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       scope: 'personal',
-      category: 'Alice',
+      category: '默认',
       label: 'Alice private color',
       core: 'private core',
       features: 'private features',
@@ -388,7 +388,7 @@ test('elevation color material user presets honor visibility and ownership', asy
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       scope: 'team',
-      category: 'Shared',
+      category: '默认',
       label: 'Alice shared color',
       core: 'shared core',
       features: 'shared features',
@@ -397,6 +397,18 @@ test('elevation color material user presets honor visibility and ownership', asy
   }).then((res) => res.json());
   assert.equal(teamPreset.success, true);
   assert.equal(teamPreset.data.scope, 'team');
+
+  const deniedNewCategory = await fetch(`${aliceBase}/api/prompt-library/elevation/presets/colorMaterial/user`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      scope: 'personal',
+      category: 'Alice 新分类',
+      label: 'Alice cannot add category',
+      core: 'category denied',
+    }),
+  });
+  assert.equal(deniedNewCategory.status, 400);
 
   const aliceList = await fetch(`${aliceBase}/api/prompt-library/elevation/presets`).then((res) => res.json());
   assert.equal(aliceList.success, true);
