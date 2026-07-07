@@ -680,7 +680,7 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
         <section data-exhibition-compact-section="color-material" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-100"><Settings2 size={13} /> 色彩与材质</div>
-            {canManageTeam && (
+            {currentUser && (
               <button type="button" className={BUTTON} disabled={isReadonly || busy} onClick={() => setColorMaterialEditorOpen(true)}>
                 <Settings2 size={12} /> 编辑预设
               </button>
@@ -794,7 +794,7 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
             })}
             disabled={isReadonly || busy}
           />
-          {canManageTeam && (
+          {currentUser && (
             <ColorMaterialPresetEditorModal
               open={colorMaterialEditorOpen}
               presets={colorMaterialPresets}
@@ -803,6 +803,8 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
               title="场景设计色彩与材质预设管理"
               onClose={() => setColorMaterialEditorOpen(false)}
               onSave={saveColorMaterialPresetItems}
+              canManageSystem={canManageTeam}
+              onRefresh={setColorMaterialPresets}
             />
           )}
         </section>

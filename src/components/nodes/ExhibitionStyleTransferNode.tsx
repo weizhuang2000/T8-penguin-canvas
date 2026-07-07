@@ -700,7 +700,7 @@ const ExhibitionStyleTransferNode = ({ id, data, selected }: NodeProps) => {
             <div className="space-y-2 rounded border border-white/10 bg-black/15 p-2">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-semibold text-cyan-100">色彩与材质预设</span>
-                {canManageTeam && (
+                {currentUser && (
                   <button type="button" className={`${BUTTON} ml-auto`} disabled={colorMaterialSaving || busy} onClick={() => setColorMaterialOpen(true)}>
                     <Settings size={11} /> 编辑
                   </button>
@@ -842,6 +842,8 @@ const ExhibitionStyleTransferNode = ({ id, data, selected }: NodeProps) => {
         title="风格迁移色彩与材质预设管理"
         onClose={() => setColorMaterialOpen(false)}
         onSave={saveColorMaterialPresetItems}
+        canManageSystem={canManageTeam}
+        onRefresh={setColorMaterialPresets}
       />
       <UnitPanelMaterialEditorModal
         open={materialsOpen}

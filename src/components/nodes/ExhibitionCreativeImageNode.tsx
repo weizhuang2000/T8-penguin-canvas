@@ -2286,7 +2286,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               <span className="min-w-0 flex-1 truncate text-[9px] text-white/40">
                 {hasColorMaterialPreset ? '预设已接管 Color palette 与 Materials/textures' : '参与 LLM 创意描述和最终生图 Prompt'}
               </span>
-              {canManageTeam && (
+              {currentUser && (
                 <button
                   type="button"
                   className={BUTTON}
@@ -2355,7 +2355,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                 {hasColorMaterialPreset ? '色彩与材质预设已接管，参考图识别不参与 Color palette 和 Materials/textures。' : '已由接入的色彩与材质参考图接管'}
               </div>
             )}
-            {canManageTeam && (
+            {currentUser && (
               <ColorMaterialPresetEditorModal
                 open={colorMaterialEditorOpen}
                 presets={colorMaterialPresets}
@@ -2366,6 +2366,8 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                 texturesLabel="Materials/textures"
                 onClose={() => setColorMaterialEditorOpen(false)}
                 onSave={saveColorMaterialPresetItems}
+                canManageSystem={canManageTeam}
+                onRefresh={setColorMaterialPresets}
               />
             )}
               <MentionPromptInput

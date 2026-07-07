@@ -1883,10 +1883,11 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
               </div>
               <div>
                 <label className="text-[10px] text-white/50 block mb-1" title="排除词">--no</label>
-                <input
-                  type="text"
+                <PromptTextarea
+                  compact
+                  title="MJ 排除词"
                   value={mjNo}
-                  onChange={(e) => update({ mjNo: e.target.value })}
+                  onValueChange={(value) => update({ mjNo: value })}
                   placeholder="text, blurry"
                   style={{ background: '#18181b', color: '#ffffff' }}
                   className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"

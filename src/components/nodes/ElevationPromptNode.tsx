@@ -1023,12 +1023,17 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
               });
             }}
           />
+          {currentUser && (
+            <button type="button" className={`${BUTTON} mt-1`} disabled={isReadonly || presetSaving} onClick={() => setPresetEditorOpen(true)}>
+              <Settings size={11} /> 管理色彩材质预设
+            </button>
+          )}
           {selectedColorMaterialPreset?.info && (
             <div className="mt-1 rounded border border-cyan-300/15 bg-cyan-300/10 px-2 py-1 text-[10px] leading-relaxed text-cyan-50/75">
               {selectedColorMaterialPreset.info}
             </div>
           )}
-          {canManageTeam && (
+          {currentUser && (
             <ColorMaterialPresetEditorModal
               open={presetEditorOpen}
               presets={colorMaterialPresets}
@@ -1037,6 +1042,8 @@ const ElevationPromptNode = ({ id, data, selected }: NodeProps) => {
               title="立面色彩与材质预设管理"
               onClose={() => setPresetEditorOpen(false)}
               onSave={saveColorMaterialPresetItems}
+              canManageSystem={canManageTeam}
+              onRefresh={setColorMaterialPresets}
             />
           )}
           <PromptTextarea compact title="扩大编辑" className={`${FIELD} mt-1 min-h-[46px] resize-y`} value={d.colorMaterial || ''} disabled={isReadonly} placeholder="色彩与材质体系" onValueChange={(value) => update({ colorMaterial: value, colorMaterialPreset: '' })}

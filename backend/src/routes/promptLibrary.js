@@ -368,6 +368,116 @@ function normalizeElevationPresetList(value) {
     .map((item, index) => ({ ...item, order: index }));
 }
 
+function normalizeElevationUserPresetList(value) {
+  const source = Array.isArray(value) ? value : [];
+  const used = new Set();
+  return source
+    .map((raw, index) => {
+      const label = safeText(raw?.label, 120);
+      if (!label) return null;
+      let id = safeText(raw?.id, 96).replace(/[^a-zA-Z0-9_-]/g, '');
+      if (!id) id = `color_material_${index + 1}`;
+      while (used.has(id)) id = `${id}_${index + 1}`;
+      used.add(id);
+      const splitInfo = splitElevationPresetInfo(raw?.info);
+      const core = safeText(raw?.core, 1200) || splitInfo.core;
+      const features = safeText(raw?.features, 1600) || splitInfo.features;
+      const usage = safeText(raw?.usage, 1200) || splitInfo.usage;
+      const category = safeText(raw?.category || raw?.group || raw?.type, 80) || '默认';
+      const negativePrompt = safeText(raw?.negativePrompt || raw?.negative || raw?.avoid, 1200) || DEFAULT_COLOR_MATERIAL_NEGATIVE_PROMPT;
+      const scope = raw?.scope === 'team' ? 'team' : 'personal';
+      const ownerUserId = safeText(raw?.ownerUserId, 96);
+      if (!ownerUserId) return null;
+      return {
+        id,
+        source: 'user',
+        scope,
+        ownerUserId,
+        ownerName: safeText(raw?.ownerName, 120),
+        category,
+        label,
+        core,
+        features,
+        usage,
+        negativePrompt,
+        info: safeText(raw?.info, 4000) || [core && `核心：${core}`, features && `特征：${features}`, usage && `适用：${usage}`].filter(Boolean).join(''),
+        order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,
+        createdAt: Number(raw?.createdAt) || 0,
+        updatedAt: Number(raw?.updatedAt) || 0,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => (a.order || 0) - (b.order || 0) || (b.updatedAt || 0) - (a.updatedAt || 0))
+    .map((item, index) => ({ ...item, order: index }));
+}
+
+function userCanManageElevationUserPreset(user, item) {
+  if (!user || !item) return false;
+  return isAdminRole(user.role) || String(item.ownerUserId) === String(user.id);
+}
+
+function publicElevationSystemPreset(item, user) {
+  const canManage = isAdminRole(user?.role);
+  return {
+    ...item,
+    source: 'system',
+    scope: 'team',
+    ownerUserId: '',
+    ownerName: 'System',
+    canEdit: canManage,
+    canDelete: canManage,
+  };
+}
+
+function publicElevationUserPreset(item, user) {
+  const canManage = userCanManageElevationUserPreset(user, item);
+  return {
+    ...item,
+    source: 'user',
+    canEdit: canManage,
+    canDelete: canManage,
+  };
+}
+
+function visibleElevationUserPresets(items, user) {
+  const admin = isAdminRole(user?.role);
+  const userId = String(user?.id || '');
+  return normalizeElevationUserPresetList(items)
+    .filter((item) => admin || item.scope === 'team' || item.ownerUserId === userId)
+    .map((item) => publicElevationUserPreset(item, user));
+}
+
+function normalizeIncomingElevationUserPreset(body, user, previous) {
+  const scope = safeText(body?.scope || previous?.scope || 'personal', 16);
+  if (scope !== 'team' && scope !== 'personal') {
+    return { error: '色材预设范围必须是 personal 或 team' };
+  }
+  const label = safeText(body?.label || previous?.label, 120);
+  if (!label) return { error: '色材预设名称不能为空' };
+  const splitInfo = splitElevationPresetInfo(body?.info || previous?.info);
+  const core = safeText(body?.core, 1200) || (previous ? safeText(previous.core, 1200) : splitInfo.core);
+  const features = safeText(body?.features, 1600) || (previous ? safeText(previous.features, 1600) : splitInfo.features);
+  const usage = safeText(body?.usage, 1200) || (previous ? safeText(previous.usage, 1200) : splitInfo.usage);
+  const info = safeText(body?.info, 4000) || [core && `核心：${core}`, features && `特征：${features}`, usage && `适用：${usage}`].filter(Boolean).join('');
+  return {
+    item: {
+      ...(previous || {}),
+      source: 'user',
+      scope,
+      category: safeText(body?.category || previous?.category, 80) || '默认',
+      label,
+      core,
+      features,
+      usage,
+      negativePrompt: safeText(body?.negativePrompt || previous?.negativePrompt, 1200) || DEFAULT_COLOR_MATERIAL_NEGATIVE_PROMPT,
+      info,
+      order: Number.isFinite(Number(body?.order)) ? Number(body.order) : Number(previous?.order) || 0,
+      ownerUserId: previous?.ownerUserId || String(user.id),
+      ownerName: previous?.ownerName || safeText(user.name || user.username || user.id, 120),
+    },
+  };
+}
+
 function normalizeElevationCraftPresetList(value) {
   const source = Array.isArray(value) && value.length > 0 ? value : DEFAULT_ELEVATION_CRAFT_PRESETS;
   const used = new Set();
@@ -797,17 +907,20 @@ function readElevationDb() {
     if (!fs.existsSync(ELEVATION_DB_FILE)) {
       return {
         colorMaterialPresets: normalizeElevationPresetList(DEFAULT_ELEVATION_COLOR_MATERIAL_PRESETS),
+        colorMaterialUserPresets: [],
         craftPresets: normalizeElevationCraftPresetList(DEFAULT_ELEVATION_CRAFT_PRESETS),
       };
     }
     const raw = JSON.parse(fs.readFileSync(ELEVATION_DB_FILE, 'utf-8'));
     return {
       colorMaterialPresets: normalizeElevationPresetList(raw?.colorMaterialPresets),
+      colorMaterialUserPresets: normalizeElevationUserPresetList(raw?.colorMaterialUserPresets),
       craftPresets: normalizeElevationCraftPresetList(raw?.craftPresets),
     };
   } catch {
     return {
       colorMaterialPresets: normalizeElevationPresetList(DEFAULT_ELEVATION_COLOR_MATERIAL_PRESETS),
+      colorMaterialUserPresets: [],
       craftPresets: normalizeElevationCraftPresetList(DEFAULT_ELEVATION_CRAFT_PRESETS),
     };
   }
@@ -819,6 +932,7 @@ function writeElevationDb(db) {
     ELEVATION_DB_FILE,
     JSON.stringify({
       colorMaterialPresets: normalizeElevationPresetList(db?.colorMaterialPresets),
+      colorMaterialUserPresets: normalizeElevationUserPresetList(db?.colorMaterialUserPresets),
       craftPresets: normalizeElevationCraftPresetList(db?.craftPresets),
     }, null, 2),
     'utf-8',
@@ -1228,12 +1342,16 @@ router.put('/exhibition/presets/:dimension', (req, res) => {
   res.json({ success: true, data: presets });
 });
 
-router.get('/elevation/presets', (_req, res) => {
+router.get('/elevation/presets', (req, res) => {
+  const user = req.user;
   const db = readElevationDb();
+  const systemColorMaterial = normalizeElevationPresetList(db.colorMaterialPresets)
+    .map((item) => publicElevationSystemPreset(item, user));
+  const userColorMaterial = visibleElevationUserPresets(db.colorMaterialUserPresets, user);
   res.json({
     success: true,
     data: {
-      colorMaterial: normalizeElevationPresetList(db.colorMaterialPresets),
+      colorMaterial: [...systemColorMaterial, ...userColorMaterial],
       crafts: normalizeElevationCraftPresetList(db.craftPresets),
     },
   });
@@ -1248,6 +1366,68 @@ router.put('/elevation/presets/colorMaterial', (req, res) => {
   const db = readElevationDb();
   writeElevationDb({ ...db, colorMaterialPresets: presets });
   res.json({ success: true, data: presets });
+});
+
+router.post('/elevation/presets/colorMaterial/user', (req, res) => {
+  const user = req.user;
+  const normalized = normalizeIncomingElevationUserPreset(req.body || {}, user, null);
+  if (normalized.error) {
+    return res.status(normalized.status || 400).json({ success: false, error: normalized.error });
+  }
+  const db = readElevationDb();
+  const ts = now();
+  const item = {
+    ...normalized.item,
+    id: genId(),
+    createdAt: ts,
+    updatedAt: ts,
+  };
+  const userPresets = normalizeElevationUserPresetList([...(db.colorMaterialUserPresets || []), item]);
+  writeElevationDb({ ...db, colorMaterialUserPresets: userPresets });
+  res.json({ success: true, data: publicElevationUserPreset(item, user) });
+});
+
+router.put('/elevation/presets/colorMaterial/user/:id', (req, res) => {
+  const user = req.user;
+  const db = readElevationDb();
+  const userPresets = normalizeElevationUserPresetList(db.colorMaterialUserPresets);
+  const idx = userPresets.findIndex((item) => item.id === req.params.id);
+  if (idx < 0) return res.status(404).json({ success: false, error: '色彩材质预设不存在' });
+  const previous = userPresets[idx];
+  if (!userCanManageElevationUserPreset(user, previous)) {
+    return res.status(403).json({ success: false, error: '无权限维护此色彩材质预设' });
+  }
+  const normalized = normalizeIncomingElevationUserPreset(req.body || {}, user, previous);
+  if (normalized.error) {
+    return res.status(normalized.status || 400).json({ success: false, error: normalized.error });
+  }
+  const next = {
+    ...previous,
+    ...normalized.item,
+    ownerUserId: previous.ownerUserId,
+    ownerName: previous.ownerName,
+    createdAt: previous.createdAt,
+    updatedAt: now(),
+  };
+  userPresets[idx] = next;
+  writeElevationDb({ ...db, colorMaterialUserPresets: userPresets });
+  res.json({ success: true, data: publicElevationUserPreset(next, user) });
+});
+
+router.delete('/elevation/presets/colorMaterial/user/:id', (req, res) => {
+  const user = req.user;
+  const db = readElevationDb();
+  const userPresets = normalizeElevationUserPresetList(db.colorMaterialUserPresets);
+  const item = userPresets.find((entry) => entry.id === req.params.id);
+  if (!item) return res.status(404).json({ success: false, error: '色彩材质预设不存在' });
+  if (!userCanManageElevationUserPreset(user, item)) {
+    return res.status(403).json({ success: false, error: '无权限维护此色彩材质预设' });
+  }
+  writeElevationDb({
+    ...db,
+    colorMaterialUserPresets: userPresets.filter((entry) => entry.id !== req.params.id),
+  });
+  res.json({ success: true, data: null });
 });
 
 router.put('/elevation/presets/crafts', (req, res) => {

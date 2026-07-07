@@ -488,6 +488,12 @@ export type ExhibitionPromptPresetMap = Partial<Record<ExhibitionPromptDimension
 
 export interface ElevationColorMaterialPresetItem {
   id: string;
+  source?: 'system' | 'user';
+  scope?: 'personal' | 'team';
+  ownerUserId?: string;
+  ownerName?: string;
+  canEdit?: boolean;
+  canDelete?: boolean;
   category: string;
   label: string;
   core?: string;
@@ -497,6 +503,10 @@ export interface ElevationColorMaterialPresetItem {
   info: string;
   order: number;
 }
+
+export type ElevationColorMaterialUserPresetPayload =
+  Pick<ElevationColorMaterialPresetItem, 'label'> &
+  Partial<Pick<ElevationColorMaterialPresetItem, 'scope' | 'category' | 'core' | 'features' | 'usage' | 'negativePrompt' | 'info' | 'order'>>;
 
 export interface ElevationCraftPresetItem {
   id: string;
@@ -712,6 +722,39 @@ export async function updateElevationColorMaterialPresets(
     },
   );
   return res.data || [];
+}
+
+export async function createElevationColorMaterialUserPreset(
+  preset: ElevationColorMaterialUserPresetPayload,
+): Promise<ElevationColorMaterialPresetItem> {
+  const res = await request<{ success: boolean; data: ElevationColorMaterialPresetItem }>(
+    `${BASE}/prompt-library/elevation/presets/colorMaterial/user`,
+    {
+      method: 'POST',
+      body: JSON.stringify(preset),
+    },
+  );
+  return res.data;
+}
+
+export async function updateElevationColorMaterialUserPreset(
+  id: string,
+  preset: ElevationColorMaterialUserPresetPayload,
+): Promise<ElevationColorMaterialPresetItem> {
+  const res = await request<{ success: boolean; data: ElevationColorMaterialPresetItem }>(
+    `${BASE}/prompt-library/elevation/presets/colorMaterial/user/${encodeURIComponent(id)}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(preset),
+    },
+  );
+  return res.data;
+}
+
+export async function deleteElevationColorMaterialUserPreset(id: string): Promise<void> {
+  await request(`${BASE}/prompt-library/elevation/presets/colorMaterial/user/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
 }
 
 export async function updateElevationCraftPresets(

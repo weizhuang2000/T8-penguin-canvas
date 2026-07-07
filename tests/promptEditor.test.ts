@@ -52,12 +52,16 @@ test('mention prompt input keeps media mentions in expanded editor', () => {
   assert.match(mention, /if \(isImeCompositionInput\(event\.nativeEvent\)\) composingRef\.current = true/);
   assert.match(mention, /const nativeEvent = event\?\.nativeEvent/);
   assert.match(mention, /Some Chromium IME paths leave the component in a composing state/);
-  assert.match(mention, /if \(composingRef\.current\) \{[\s\S]*composingRef\.current = false;/);
   assert.match(mention, /const flushEditorToData = \(\) =>/);
-  assert.match(mention, /onBlur=\{\(\) => \{\s*composingRef\.current = false;\s*flushEditorToData\(\)/);
+  assert.match(mention, /const finishComposition = \(delayMs = 16\) =>/);
+  assert.match(mention, /compositionFinishTimerRef/);
+  assert.match(mention, /composingRef\.current = false;[\s\S]*const flushed = flushEditorToData\(\)/);
+  assert.match(mention, /onCompositionEnd=\{\(\) => \{\s*finishComposition\(\);/);
+  assert.match(mention, /onBlur=\{\(\) => \{[\s\S]*if \(composingRef\.current\) \{\s*finishComposition\(\);/);
+  assert.doesNotMatch(mention, /onBlur=\{\(\) => \{\s*composingRef\.current = false;\s*flushEditorToData\(\)/);
   assert.match(mention, /zIndex:\s*expandable \? 10050 : 10120/);
-  assert.match(mention, /height:\s*expandable \? style\?\.height : '100%'/);
-  assert.match(mention, /minHeight:\s*expandable \? \(style\?\.minHeight \?\? 56\) : '100%'/);
+  assert.match(mention, /height:\s*fillLayout \? '100%' : style\?\.height/);
+  assert.match(mention, /minHeight:\s*fillLayout \? 0 : \(style\?\.minHeight \?\? 56\)/);
   assert.match(mention, /'display:inline-block'/);
   assert.match(mention, /'width:24px'/);
   assert.match(mention, /'height:24px'/);
@@ -111,6 +115,8 @@ test('core generation nodes use expanded prompt editing', () => {
   assert.match(image, /title="ComfyUI 正向 Prompt"/);
   assert.match(image, /title="ComfyUI 负向 Prompt"/);
   assert.match(image, /title="图像扩展模型 System Prompt"/);
+  assert.match(image, /title="MJ 排除词"/);
+  assert.match(image, /value=\{mjNo\}[\s\S]*onValueChange=\{\(value\) => update\(\{ mjNo: value \}\)\}/);
 
   assert.match(video, /title="视频 Prompt"/);
   assert.match(seedance, /title="SD2\.0 Prompt"/);

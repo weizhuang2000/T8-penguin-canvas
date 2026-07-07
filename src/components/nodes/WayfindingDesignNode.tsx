@@ -795,7 +795,7 @@ const WayfindingDesignNode = ({ id, data, selected }: NodeProps) => {
                   {selectedColorMaterialPreset ? `当前预设：${selectedColorMaterialPreset.label}` : `可用共享预设 ${colorMaterialPresets.length} 个`}
                 </div>
               </div>
-              {canManageTeam && (
+              {currentUser && (
                 <button type="button" className={BUTTON} disabled={colorMaterialSaving || busy} onClick={() => setColorMaterialEditorOpen((open) => !open)}>
                   <Settings size={11} />管理
                 </button>
@@ -817,7 +817,7 @@ const WayfindingDesignNode = ({ id, data, selected }: NodeProps) => {
                 {selectedColorMaterialPreset.info}
               </div>
             )}
-            {canManageTeam && (
+            {currentUser && (
               <ColorMaterialPresetEditorModal
                 open={colorMaterialEditorOpen}
                 presets={colorMaterialPresets}
@@ -826,6 +826,8 @@ const WayfindingDesignNode = ({ id, data, selected }: NodeProps) => {
                 title="导视系统色彩与材质预设管理"
                 onClose={() => setColorMaterialEditorOpen(false)}
                 onSave={saveColorMaterialPresetItems}
+                canManageSystem={canManageTeam}
+                onRefresh={setColorMaterialPresets}
               />
             )}
           </div>

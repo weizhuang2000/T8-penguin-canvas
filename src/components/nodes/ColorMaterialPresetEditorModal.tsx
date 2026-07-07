@@ -1,14 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CheckSquare, FolderPlus, Plus, Save, Square, Trash2, X } from 'lucide-react';
-import type { ElevationColorMaterialPresetItem } from '../../services/api';
+import { Globe2, Lock, Plus, Save, Trash2, X } from 'lucide-react';
+import type { ElevationColorMaterialPresetItem, ElevationColorMaterialUserPresetPayload } from '../../services/api';
+import {
+  createElevationColorMaterialUserPreset,
+  deleteElevationColorMaterialUserPreset,
+  updateElevationColorMaterialUserPreset,
+} from '../../services/api';
 
 const DEFAULT_CATEGORY = '默认';
-const DEFAULT_NEGATIVE_PROMPT = '可读错字、乱码文字不符合物理特性的结构和光线';
+const DEFAULT_NEGATIVE_PROMPT = '可读错字、乱码文字、不符合物理特性的结构和光线';
 const FIELD = 'w-full rounded border border-white/10 bg-black/25 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
 
-type DraftPreset = ElevationColorMaterialPresetItem & { draftId: string };
+type DraftPreset = ElevationColorMaterialPresetItem & {
+  draftId: string;
+  source: 'system' | 'user';
+  scope: 'personal' | 'team';
+  isNew?: boolean;
+};
 
 interface ColorMaterialPresetEditorModalProps {
   open: boolean;
@@ -18,13 +28,19 @@ interface ColorMaterialPresetEditorModalProps {
   title?: string;
   paletteLabel?: string;
   texturesLabel?: string;
+  canManageSystem?: boolean;
   onClose: () => void;
   onSave: (presets: ElevationColorMaterialPresetItem[]) => void | Promise<void>;
+  onRefresh?: (presets: ElevationColorMaterialPresetItem[]) => void;
 }
 
 function normalizeCategory(value: unknown): string {
   const text = String(value || '').trim();
   return text || DEFAULT_CATEGORY;
+}
+
+function normalizeScope(value: unknown): 'personal' | 'team' {
+  return value === 'team' ? 'team' : 'personal';
 }
 
 function presetInfo(preset: Pick<ElevationColorMaterialPresetItem, 'core' | 'features' | 'usage' | 'info'>): string {
@@ -42,12 +58,19 @@ function presetInfo(preset: Pick<ElevationColorMaterialPresetItem, 'core' | 'fea
 }
 
 function makeDraft(preset: Partial<ElevationColorMaterialPresetItem>, index: number): DraftPreset {
-  const label = String(preset.label || '').trim();
+  const source = preset.source === 'user' ? 'user' : 'system';
+  const scope = normalizeScope(preset.scope);
   return {
     id: String(preset.id || `preset_${Date.now()}_${index}`),
     draftId: `${String(preset.id || 'new')}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+    source,
+    scope,
+    ownerUserId: String(preset.ownerUserId || ''),
+    ownerName: String(preset.ownerName || ''),
+    canEdit: preset.canEdit === true,
+    canDelete: preset.canDelete === true,
     category: normalizeCategory(preset.category),
-    label,
+    label: String(preset.label || '').trim(),
     core: String(preset.core || '').trim(),
     features: String(preset.features || '').trim(),
     usage: String(preset.usage || '').trim(),
@@ -57,9 +80,15 @@ function makeDraft(preset: Partial<ElevationColorMaterialPresetItem>, index: num
   };
 }
 
-function toSaveItem(preset: DraftPreset, order: number): ElevationColorMaterialPresetItem {
+function toPresetItem(preset: DraftPreset, order: number): ElevationColorMaterialPresetItem {
   return {
     id: preset.id,
+    source: preset.source,
+    scope: preset.scope,
+    ownerUserId: preset.ownerUserId,
+    ownerName: preset.ownerName,
+    canEdit: preset.canEdit,
+    canDelete: preset.canDelete,
     category: normalizeCategory(preset.category),
     label: preset.label.trim(),
     core: String(preset.core || '').trim(),
@@ -71,44 +100,24 @@ function toSaveItem(preset: DraftPreset, order: number): ElevationColorMaterialP
   };
 }
 
-function serializeDrafts(presets: DraftPreset[]): string {
-  return presets
-    .map((preset) => [
-      normalizeCategory(preset.category),
-      preset.label,
-      String(preset.core || '').trim(),
-      String(preset.features || '').trim(),
-      String(preset.usage || '').trim(),
-      String(preset.negativePrompt || DEFAULT_NEGATIVE_PROMPT).trim(),
-    ].join('｜'))
-    .join('\n');
+function toUserPayload(preset: DraftPreset, order: number): ElevationColorMaterialUserPresetPayload {
+  return {
+    scope: preset.scope,
+    category: normalizeCategory(preset.category),
+    label: preset.label.trim(),
+    core: String(preset.core || '').trim(),
+    features: String(preset.features || '').trim(),
+    usage: String(preset.usage || '').trim(),
+    negativePrompt: String(preset.negativePrompt || DEFAULT_NEGATIVE_PROMPT).trim(),
+    info: presetInfo(preset),
+    order,
+  };
 }
 
-function parseRawText(text: string): DraftPreset[] {
-  return text
-    .split(/\r?\n/)
-    .map((line, index) => {
-      const raw = line.trim();
-      if (!raw) return null;
-      const parts = raw.split(/[｜|]/).map((part) => String(part || '').trim());
-      const hasCategory = parts.length >= 5;
-      const category = normalizeCategory(hasCategory ? parts[0] : DEFAULT_CATEGORY);
-      const label = String(hasCategory ? parts[1] : (parts[0] || '')).trim();
-      if (!label) return null;
-      const rest = hasCategory ? parts.slice(2) : parts.slice(1);
-      const usageParts = rest.length >= 4 ? rest.slice(2, -1) : rest.slice(2);
-      const negativePrompt = rest.length >= 4 ? rest[rest.length - 1] : DEFAULT_NEGATIVE_PROMPT;
-      return makeDraft({
-        id: `${label.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'preset'}-${index + 1}`,
-        category,
-        label,
-        core: String(rest[0] || '').trim(),
-        features: String(rest[1] || '').trim(),
-        usage: usageParts.join('｜').trim(),
-        negativePrompt: String(negativePrompt || DEFAULT_NEGATIVE_PROMPT).trim(),
-      }, index);
-    })
-    .filter(Boolean) as DraftPreset[];
+function splitPresets(presets: ElevationColorMaterialPresetItem[]) {
+  const system = presets.filter((preset) => preset.source !== 'user');
+  const user = presets.filter((preset) => preset.source === 'user');
+  return { system, user };
 }
 
 export default function ColorMaterialPresetEditorModal({
@@ -119,34 +128,27 @@ export default function ColorMaterialPresetEditorModal({
   title = '色彩与材质预设管理',
   paletteLabel = '核心 / Color palette',
   texturesLabel = '特征 / Materials',
+  canManageSystem = false,
   onClose,
   onSave,
+  onRefresh,
 }: ColorMaterialPresetEditorModalProps) {
   const [drafts, setDrafts] = useState<DraftPreset[]>([]);
-  const [categories, setCategories] = useState<string[]>([DEFAULT_CATEGORY]);
+  const [activeSource, setActiveSource] = useState<'user' | 'system'>('user');
   const [activeCategory, setActiveCategory] = useState<string>('all');
-  const [newCategory, setNewCategory] = useState('');
-  const [renameCategory, setRenameCategory] = useState('');
-  const [moveTarget, setMoveTarget] = useState(DEFAULT_CATEGORY);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [localSavingId, setLocalSavingId] = useState('');
+  const [deletingId, setDeletingId] = useState('');
   const [localError, setLocalError] = useState('');
-  const [editMode, setEditMode] = useState<'table' | 'raw'>('table');
-  const [rawText, setRawText] = useState('');
 
   useEffect(() => {
     if (!open) return;
     const nextDrafts = presets.map(makeDraft);
-    const nextCategories = Array.from(new Set([DEFAULT_CATEGORY, ...nextDrafts.map((item) => normalizeCategory(item.category))]));
     setDrafts(nextDrafts);
-    setCategories(nextCategories);
+    setActiveSource('user');
     setActiveCategory('all');
-    setNewCategory('');
-    setRenameCategory('');
-    setMoveTarget(nextCategories[0] || DEFAULT_CATEGORY);
-    setSelectedIds(new Set());
     setLocalError('');
-    setEditMode('table');
-    setRawText(serializeDrafts(nextDrafts));
+    setLocalSavingId('');
+    setDeletingId('');
   }, [open, presets]);
 
   useEffect(() => {
@@ -158,130 +160,152 @@ export default function ColorMaterialPresetEditorModal({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose, open]);
 
-  const groupedCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const category of categories) counts.set(category, 0);
-    for (const preset of drafts) {
-      const category = normalizeCategory(preset.category);
-      counts.set(category, (counts.get(category) || 0) + 1);
-    }
-    return counts;
-  }, [categories, drafts]);
-
-  const visibleDrafts = useMemo(
-    () => activeCategory === 'all' ? drafts : drafts.filter((preset) => normalizeCategory(preset.category) === activeCategory),
-    [activeCategory, drafts],
+  const sourceDrafts = useMemo(
+    () => drafts.filter((preset) => preset.source === activeSource),
+    [activeSource, drafts],
   );
 
-  const allVisibleSelected = visibleDrafts.length > 0 && visibleDrafts.every((preset) => selectedIds.has(preset.draftId));
-  const selectedCount = selectedIds.size;
+  const categories = useMemo(
+    () => Array.from(new Set([DEFAULT_CATEGORY, ...sourceDrafts.map((item) => normalizeCategory(item.category))])),
+    [sourceDrafts],
+  );
+
+  const visibleDrafts = useMemo(
+    () => activeCategory === 'all' ? sourceDrafts : sourceDrafts.filter((preset) => normalizeCategory(preset.category) === activeCategory),
+    [activeCategory, sourceDrafts],
+  );
+
+  const userPresetCount = drafts.filter((preset) => preset.source === 'user').length;
+  const systemPresetCount = drafts.filter((preset) => preset.source === 'system').length;
+  const busy = saving || !!localSavingId || !!deletingId;
 
   const updateDraft = (draftId: string, patch: Partial<DraftPreset>) => {
     setDrafts((items) => items.map((item) => item.draftId === draftId ? { ...item, ...patch } : item));
   };
 
-  const addCategory = () => {
-    const name = normalizeCategory(newCategory);
-    if (!name) return;
-    setCategories((items) => items.includes(name) ? items : [...items, name]);
-    setActiveCategory(name);
-    setMoveTarget(name);
-    setNewCategory('');
+  const replaceDraft = (draftId: string, preset: ElevationColorMaterialPresetItem) => {
+    setDrafts((items) => items.map((item, index) => item.draftId === draftId ? makeDraft(preset, index) : item));
   };
 
-  const confirmRenameCategory = () => {
-    if (activeCategory === 'all') return;
-    const nextName = normalizeCategory(renameCategory);
-    if (!nextName || nextName === activeCategory) return;
-    setDrafts((items) => items.map((item) => normalizeCategory(item.category) === activeCategory ? { ...item, category: nextName } : item));
-    setCategories((items) => Array.from(new Set(items.map((item) => item === activeCategory ? nextName : item))));
-    setSelectedIds(new Set());
-    setActiveCategory(nextName);
-    setMoveTarget(nextName);
-    setRenameCategory('');
+  const emitRefresh = (nextDrafts: DraftPreset[]) => {
+    onRefresh?.(nextDrafts.map((preset, index) => toPresetItem(preset, index)));
   };
 
-  const deleteActiveCategory = () => {
-    if (activeCategory === 'all' || activeCategory === DEFAULT_CATEGORY) return;
-    setDrafts((items) => items.map((item) => normalizeCategory(item.category) === activeCategory ? { ...item, category: DEFAULT_CATEGORY } : item));
-    setCategories((items) => items.filter((item) => item !== activeCategory));
-    setSelectedIds(new Set());
-    setActiveCategory(DEFAULT_CATEGORY);
-    setMoveTarget(DEFAULT_CATEGORY);
-  };
-
-  const addPreset = () => {
-    const category = activeCategory === 'all' ? moveTarget || DEFAULT_CATEGORY : activeCategory;
-    const draft = makeDraft({ category, label: '新预设' }, drafts.length);
+  const addUserPreset = () => {
+    const category = activeCategory === 'all' ? DEFAULT_CATEGORY : activeCategory;
+    const draft = makeDraft({
+      source: 'user',
+      scope: 'personal',
+      category,
+      label: '新预设',
+      canEdit: true,
+      canDelete: true,
+    }, drafts.length);
+    draft.isNew = true;
     setDrafts((items) => [...items, draft]);
-    setCategories((items) => items.includes(category) ? items : [...items, category]);
+    setActiveSource('user');
     setActiveCategory(category);
-    setSelectedIds(new Set([draft.draftId]));
   };
 
-  const toggleVisible = () => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (allVisibleSelected) {
-        for (const preset of visibleDrafts) next.delete(preset.draftId);
-      } else {
-        for (const preset of visibleDrafts) next.add(preset.draftId);
-      }
-      return next;
-    });
-  };
-
-  const deleteSelected = () => {
-    if (selectedIds.size === 0) return;
-    setDrafts((items) => items.filter((item) => !selectedIds.has(item.draftId)));
-    setSelectedIds(new Set());
-  };
-
-  const moveSelected = () => {
-    const target = normalizeCategory(moveTarget);
-    if (selectedIds.size === 0 || !target) return;
-    setCategories((items) => items.includes(target) ? items : [...items, target]);
-    setDrafts((items) => items.map((item) => selectedIds.has(item.draftId) ? { ...item, category: target } : item));
-    setActiveCategory(target);
-  };
-
-  const openRawEditor = () => {
-    setRawText(serializeDrafts(drafts));
-    setEditMode('raw');
-    setLocalError('');
-  };
-
-  const applyRawEditor = () => {
-    const nextDrafts = parseRawText(rawText);
-    if (nextDrafts.length === 0) {
-      setLocalError('请至少保留一条有效预设。');
-      return;
-    }
-    const nextCategories = Array.from(new Set([DEFAULT_CATEGORY, ...nextDrafts.map((item) => normalizeCategory(item.category))]));
-    setDrafts(nextDrafts);
-    setCategories(nextCategories);
-    setActiveCategory('all');
-    setMoveTarget(nextCategories[0] || DEFAULT_CATEGORY);
-    setSelectedIds(new Set());
-    setLocalError('');
-    setEditMode('table');
-  };
-
-  const save = async () => {
-    const sourceDrafts = editMode === 'raw' ? parseRawText(rawText) : drafts;
-    const next = sourceDrafts
-      .map((item, index) => toSaveItem(item, index))
-      .filter((item) => item.label);
-    if (next.length === 0) {
-      setLocalError('请至少保留一个有效预设。');
-      return;
-    }
-    if (next.length !== sourceDrafts.length) {
-      setLocalError('存在未填写名称的预设，请补全名称或删除。');
+  const saveUserPreset = async (preset: DraftPreset) => {
+    if (!preset.label.trim()) {
+      setLocalError('请填写预设名称。');
       return;
     }
     setLocalError('');
-    await onSave(next);
+    setLocalSavingId(preset.draftId);
+    try {
+      const order = drafts.filter((item) => item.source === 'user').findIndex((item) => item.draftId === preset.draftId);
+      const payload = toUserPayload(preset, Math.max(0, order));
+      const saved = preset.isNew
+        ? await createElevationColorMaterialUserPreset(payload)
+        : await updateElevationColorMaterialUserPreset(preset.id, payload);
+      replaceDraft(preset.draftId, saved);
+      const nextDrafts = drafts.map((item, index) => item.draftId === preset.draftId ? makeDraft(saved, index) : item);
+      emitRefresh(nextDrafts);
+    } catch (err: any) {
+      setLocalError(err?.message || '保存用户预设失败');
+    } finally {
+      setLocalSavingId('');
+    }
+  };
+
+  const deleteUserPreset = async (preset: DraftPreset) => {
+    if (preset.isNew) {
+      const nextDrafts = drafts.filter((item) => item.draftId !== preset.draftId);
+      setDrafts(nextDrafts);
+      emitRefresh(nextDrafts);
+      return;
+    }
+    setLocalError('');
+    setDeletingId(preset.draftId);
+    try {
+      await deleteElevationColorMaterialUserPreset(preset.id);
+      const nextDrafts = drafts.filter((item) => item.draftId !== preset.draftId);
+      setDrafts(nextDrafts);
+      emitRefresh(nextDrafts);
+    } catch (err: any) {
+      setLocalError(err?.message || '删除用户预设失败');
+    } finally {
+      setDeletingId('');
+    }
+  };
+
+  const saveSystemPresets = async () => {
+    if (!canManageSystem) return;
+    const systemPresets = drafts
+      .filter((preset) => preset.source === 'system')
+      .map((preset, index) => toPresetItem(preset, index))
+      .filter((preset) => preset.label);
+    if (systemPresets.length === 0) {
+      setLocalError('请至少保留一条系统预设。');
+      return;
+    }
+    setLocalError('');
+    await onSave(systemPresets);
+  };
+
+  const renderRow = (preset: DraftPreset) => {
+    const editable = preset.source === 'user' ? preset.canEdit !== false : canManageSystem;
+    const removable = preset.source === 'user' ? preset.canDelete !== false : canManageSystem;
+    const rowBusy = localSavingId === preset.draftId || deletingId === preset.draftId;
+    return (
+      <div key={preset.draftId} className="grid grid-cols-[92px_120px_140px_1fr_1fr_1fr_1fr_90px] items-start gap-1 border-b border-white/5 bg-black/10 p-1.5">
+        <select
+          className={FIELD}
+          value={preset.source === 'user' ? preset.scope : 'team'}
+          disabled={!editable || busy || preset.source === 'system'}
+          onChange={(event) => updateDraft(preset.draftId, { scope: normalizeScope(event.target.value) })}
+          title={preset.scope === 'team' ? '所有人可见' : '仅自己可见'}
+        >
+          <option value="personal">仅自己</option>
+          <option value="team">所有人</option>
+        </select>
+        <input className={FIELD} value={preset.category} disabled={!editable || busy} onChange={(event) => updateDraft(preset.draftId, { category: event.target.value })} />
+        <input className={FIELD} value={preset.label} disabled={!editable || busy} onChange={(event) => updateDraft(preset.draftId, { label: event.target.value })} />
+        <textarea className={`${FIELD} min-h-[58px] resize-y`} value={preset.core || ''} disabled={!editable || busy} onChange={(event) => updateDraft(preset.draftId, { core: event.target.value })} />
+        <textarea className={`${FIELD} min-h-[58px] resize-y`} value={preset.features || ''} disabled={!editable || busy} onChange={(event) => updateDraft(preset.draftId, { features: event.target.value })} />
+        <textarea className={`${FIELD} min-h-[58px] resize-y`} value={preset.usage || ''} disabled={!editable || busy} onChange={(event) => updateDraft(preset.draftId, { usage: event.target.value })} />
+        <textarea className={`${FIELD} min-h-[58px] resize-y`} value={preset.negativePrompt || DEFAULT_NEGATIVE_PROMPT} disabled={!editable || busy} onChange={(event) => updateDraft(preset.draftId, { negativePrompt: event.target.value })} />
+        <div className="flex flex-col gap-1">
+          <div className="truncate text-[9px] text-white/35" title={preset.ownerName || (preset.source === 'system' ? '系统公共预设' : '')}>
+            {preset.source === 'system' ? '系统' : (preset.ownerName || '个人')}
+          </div>
+          {preset.source === 'user' ? (
+            <div className="flex gap-1">
+              <button type="button" className={BUTTON} disabled={!editable || busy || !preset.label.trim()} onClick={() => void saveUserPreset(preset)}>
+                <Save size={11} /> {rowBusy && localSavingId === preset.draftId ? '保存中' : '保存'}
+              </button>
+              <button type="button" className="rounded p-1.5 text-white/45 hover:bg-rose-400/15 hover:text-rose-200 disabled:opacity-35" disabled={!removable || busy} onClick={() => void deleteUserPreset(preset)} title="删除">
+                <Trash2 size={13} />
+              </button>
+            </div>
+          ) : (
+            <div className="text-[9px] text-white/35">{canManageSystem ? '保存系统时生效' : '只读'}</div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   if (!open || typeof document === 'undefined') return null;
@@ -296,18 +320,17 @@ export default function ColorMaterialPresetEditorModal({
         <header className="flex items-center gap-3 border-b border-white/10 px-4 py-3">
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold text-cyan-100">{title}</div>
-            <div className="text-[10px] text-white/45">分类、预设和批量操作会在点击保存后写入团队预设。</div>
+            <div className="text-[10px] text-white/45">用户预设独立保存，不会改写系统公共预设。所有人可见的条款仅创建者和管理员可修改删除。</div>
           </div>
-          <button type="button" className={BUTTON} onClick={addPreset} disabled={saving}>
-            <Plus size={12} /> 新增预设
+          <button type="button" className={BUTTON} onClick={addUserPreset} disabled={busy}>
+            <Plus size={12} /> 新增个人预设
           </button>
-          <button type="button" className={BUTTON} onClick={editMode === 'raw' ? applyRawEditor : openRawEditor} disabled={saving}>
-            {editMode === 'raw' ? '应用整段' : '整段编辑'}
-          </button>
-          <button type="button" className={BUTTON} onClick={save} disabled={saving}>
-            <Save size={12} /> {saving ? '保存中' : '保存'}
-          </button>
-          <button type="button" className="rounded p-1.5 text-white/60 hover:bg-white/10 hover:text-white" onClick={onClose} disabled={saving} title="关闭">
+          {canManageSystem && activeSource === 'system' && (
+            <button type="button" className={BUTTON} onClick={() => void saveSystemPresets()} disabled={busy || saving}>
+              <Save size={12} /> {saving ? '保存中' : '保存系统预设'}
+            </button>
+          )}
+          <button type="button" className="rounded p-1.5 text-white/60 hover:bg-white/10 hover:text-white" onClick={onClose} disabled={busy} title="关闭">
             <X size={16} />
           </button>
         </header>
@@ -316,150 +339,67 @@ export default function ColorMaterialPresetEditorModal({
           <aside className="min-h-0 overflow-y-auto border-r border-white/10 bg-white/[0.025] p-3">
             <button
               type="button"
-              className={`mb-1 flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[11px] ${activeCategory === 'all' ? 'bg-cyan-300/15 text-cyan-100' : 'text-white/65 hover:bg-white/[0.08]'}`}
+              className={`mb-1 flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[11px] ${activeSource === 'user' ? 'bg-cyan-300/15 text-cyan-100' : 'text-white/65 hover:bg-white/[0.08]'}`}
+              onClick={() => { setActiveSource('user'); setActiveCategory('all'); }}
+            >
+              <span className="inline-flex items-center gap-1"><Lock size={11} /> 用户预设</span>
+              <span className="text-[10px] text-white/40">{userPresetCount}</span>
+            </button>
+            <button
+              type="button"
+              className={`mb-3 flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[11px] ${activeSource === 'system' ? 'bg-cyan-300/15 text-cyan-100' : 'text-white/65 hover:bg-white/[0.08]'}`}
+              onClick={() => { setActiveSource('system'); setActiveCategory('all'); }}
+            >
+              <span className="inline-flex items-center gap-1"><Globe2 size={11} /> 系统公共预设</span>
+              <span className="text-[10px] text-white/40">{systemPresetCount}</span>
+            </button>
+
+            <button
+              type="button"
+              className={`mb-1 flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[11px] ${activeCategory === 'all' ? 'bg-white/10 text-white' : 'text-white/55 hover:bg-white/[0.08]'}`}
               onClick={() => setActiveCategory('all')}
             >
               <span>全部分类</span>
-              <span className="text-[10px] text-white/40">{drafts.length}</span>
+              <span className="text-[10px] text-white/40">{sourceDrafts.length}</span>
             </button>
             {categories.map((category) => (
               <button
                 key={category}
                 type="button"
-                className={`mb-1 flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[11px] ${activeCategory === category ? 'bg-cyan-300/15 text-cyan-100' : 'text-white/65 hover:bg-white/[0.08]'}`}
-                onClick={() => {
-                  setActiveCategory(category);
-                  setMoveTarget(category);
-                  setRenameCategory(category);
-                }}
+                className={`mb-1 flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[11px] ${activeCategory === category ? 'bg-white/10 text-white' : 'text-white/55 hover:bg-white/[0.08]'}`}
+                onClick={() => setActiveCategory(category)}
               >
                 <span className="truncate">{category}</span>
-                <span className="text-[10px] text-white/40">{groupedCounts.get(category) || 0}</span>
+                <span className="text-[10px] text-white/40">{sourceDrafts.filter((item) => normalizeCategory(item.category) === category).length}</span>
               </button>
             ))}
-
-            <div className="mt-3 space-y-1.5 rounded border border-white/10 bg-black/20 p-2">
-              <div className="text-[10px] font-semibold text-white/55">新增分类</div>
-              <input className={FIELD} value={newCategory} disabled={saving} placeholder="分类名称" onChange={(event) => setNewCategory(event.target.value)} />
-              <button type="button" className={BUTTON} onClick={addCategory} disabled={saving || !newCategory.trim()}>
-                <FolderPlus size={12} /> 添加分类
-              </button>
-            </div>
-
-            {activeCategory !== 'all' && (
-              <div className="mt-2 space-y-1.5 rounded border border-white/10 bg-black/20 p-2">
-                <div className="text-[10px] font-semibold text-white/55">当前分类</div>
-                <input className={FIELD} value={renameCategory || activeCategory} disabled={saving} onChange={(event) => setRenameCategory(event.target.value)} />
-                <div className="flex gap-1">
-                  <button type="button" className={BUTTON} onClick={confirmRenameCategory} disabled={saving || !renameCategory.trim() || renameCategory === activeCategory}>
-                    重命名
-                  </button>
-                  <button type="button" className={BUTTON} onClick={deleteActiveCategory} disabled={saving || activeCategory === DEFAULT_CATEGORY}>
-                    删除分类
-                  </button>
-                </div>
-                <div className="text-[9px] leading-snug text-white/35">删除分类会把其中预设移到“默认”。</div>
-              </div>
-            )}
           </aside>
 
           <main className="flex min-h-0 flex-col">
-            {editMode === 'raw' ? (
-              <div className="flex min-h-0 flex-1 flex-col p-3">
-                <div className="mb-2 flex items-center gap-2">
-                  <div className="min-w-0 flex-1 text-[10px] text-white/45">
-                    每行格式：分类｜名称｜{paletteLabel}｜{texturesLabel}｜适用｜负面提示词。旧格式“名称｜核心｜特征｜适用”会归入默认分类并自动补默认负面提示词。
-                  </div>
-                  <button type="button" className={BUTTON} onClick={() => setEditMode('table')} disabled={saving}>
-                    返回表格
-                  </button>
-                  <button type="button" className={BUTTON} onClick={applyRawEditor} disabled={saving}>
-                    应用整段
-                  </button>
-                </div>
-                {(localError || error) && <div className="mb-2 text-[10px] text-red-300">{localError || error}</div>}
-                <textarea
-                  className={`${FIELD} min-h-0 flex-1 resize-none font-mono leading-relaxed`}
-                  value={rawText}
-                  disabled={saving}
-                  onChange={(event) => setRawText(event.target.value)}
-                />
-              </div>
-            ) : (
-            <>
             <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-3 py-2">
-              <button type="button" className={BUTTON} onClick={toggleVisible} disabled={visibleDrafts.length === 0 || saving}>
-                {allVisibleSelected ? <CheckSquare size={12} /> : <Square size={12} />} 选择当前列表
-              </button>
-              <span className="text-[10px] text-white/45">已选 {selectedCount} 项</span>
-              <select className="h-7 rounded border border-white/10 bg-black/25 px-2 text-[10px] text-white outline-none" value={moveTarget} disabled={saving} onChange={(event) => setMoveTarget(event.target.value)}>
-                {categories.map((category) => (
-                  <option key={category} value={category}>{category}</option>
-                ))}
-              </select>
-              <button type="button" className={BUTTON} onClick={moveSelected} disabled={saving || selectedCount === 0}>
-                批量移动
-              </button>
-              <button type="button" className={BUTTON} onClick={deleteSelected} disabled={saving || selectedCount === 0}>
-                <Trash2 size={12} /> 批量删除
-              </button>
+              <span className="text-[10px] text-white/45">
+                {activeSource === 'user' ? '用户预设可逐条保存；系统公共预设不会被改写。' : canManageSystem ? '管理员可维护系统公共预设。' : '系统公共预设为只读。'}
+              </span>
               {(localError || error) && <span className="text-[10px] text-red-300">{localError || error}</span>}
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto p-3">
-              <div className="min-w-[1040px] overflow-hidden rounded border border-white/10">
-                <div className="grid grid-cols-[34px_120px_140px_1fr_1fr_1fr_1fr_36px] border-b border-white/10 bg-white/[0.06] text-[10px] font-semibold text-white/55">
-                  <div className="px-2 py-2">选</div>
+              <div className="min-w-[1120px] overflow-hidden rounded border border-white/10">
+                <div className="grid grid-cols-[92px_120px_140px_1fr_1fr_1fr_1fr_90px] border-b border-white/10 bg-white/[0.06] text-[10px] font-semibold text-white/55">
+                  <div className="px-2 py-2">可见性</div>
                   <div className="px-2 py-2">分类</div>
                   <div className="px-2 py-2">名称</div>
                   <div className="px-2 py-2">{paletteLabel}</div>
                   <div className="px-2 py-2">{texturesLabel}</div>
                   <div className="px-2 py-2">适用</div>
                   <div className="px-2 py-2">负面提示词</div>
-                  <div className="px-2 py-2" />
+                  <div className="px-2 py-2">操作</div>
                 </div>
                 {visibleDrafts.length === 0 ? (
-                  <div className="px-3 py-10 text-center text-[11px] text-white/35">当前分类暂无预设。</div>
-                ) : visibleDrafts.map((preset) => {
-                  const selected = selectedIds.has(preset.draftId);
-                  return (
-                    <div key={preset.draftId} className={`grid grid-cols-[34px_120px_140px_1fr_1fr_1fr_1fr_36px] items-start gap-1 border-b border-white/5 p-1.5 ${selected ? 'bg-cyan-300/[0.08]' : 'bg-black/10'}`}>
-                      <label className="flex h-8 items-center justify-center">
-                        <input
-                          type="checkbox"
-                          className="h-3.5 w-3.5 accent-cyan-300"
-                          checked={selected}
-                          disabled={saving}
-                          onChange={(event) => {
-                            setSelectedIds((prev) => {
-                              const next = new Set(prev);
-                              if (event.target.checked) next.add(preset.draftId);
-                              else next.delete(preset.draftId);
-                              return next;
-                            });
-                          }}
-                        />
-                      </label>
-                      <select className={FIELD} value={normalizeCategory(preset.category)} disabled={saving} onChange={(event) => updateDraft(preset.draftId, { category: normalizeCategory(event.target.value) })}>
-                        {categories.map((category) => (
-                          <option key={category} value={category}>{category}</option>
-                        ))}
-                      </select>
-                      <input className={FIELD} value={preset.label} disabled={saving} onChange={(event) => updateDraft(preset.draftId, { label: event.target.value })} />
-                      <textarea className={`${FIELD} min-h-[58px] resize-y`} value={preset.core || ''} disabled={saving} onChange={(event) => updateDraft(preset.draftId, { core: event.target.value })} />
-                      <textarea className={`${FIELD} min-h-[58px] resize-y`} value={preset.features || ''} disabled={saving} onChange={(event) => updateDraft(preset.draftId, { features: event.target.value })} />
-                      <textarea className={`${FIELD} min-h-[58px] resize-y`} value={preset.usage || ''} disabled={saving} onChange={(event) => updateDraft(preset.draftId, { usage: event.target.value })} />
-                      <textarea className={`${FIELD} min-h-[58px] resize-y`} value={preset.negativePrompt || DEFAULT_NEGATIVE_PROMPT} disabled={saving} onChange={(event) => updateDraft(preset.draftId, { negativePrompt: event.target.value })} />
-                      <button type="button" className="mt-0.5 rounded p-1.5 text-white/45 hover:bg-rose-400/15 hover:text-rose-200" disabled={saving} onClick={() => setDrafts((items) => items.filter((item) => item.draftId !== preset.draftId))} title="删除">
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  );
-                })}
+                  <div className="px-3 py-10 text-center text-[11px] text-white/35">当前列表暂无预设。</div>
+                ) : visibleDrafts.map(renderRow)}
               </div>
             </div>
-            </>
-            )}
           </main>
         </div>
       </section>

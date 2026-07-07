@@ -311,6 +311,7 @@ const MentionPromptInput = ({
   const composingRef = useRef(false);
   const lastPlainInputRef = useRef<PlainInputSnapshot | null>(null);
   const compositionLeakRef = useRef<CompositionLeakSnapshot | null>(null);
+  const compositionFinishTimerRef = useRef<number | null>(null);
   const pendingCaretRef = useRef<number | null>(null);
   const expandShortcuts = useShortcutStore((s) => s.shortcuts['editor.expand-prompt']);
   const [isFocused, setIsFocused] = useState(false);
@@ -552,6 +553,29 @@ const MentionPromptInput = ({
     return { text, mentions: nextMentions, caret };
   };
 
+  const finishComposition = (delayMs = 16) => {
+    const el = localRef.current;
+    if (compositionFinishTimerRef.current !== null) {
+      window.clearTimeout(compositionFinishTimerRef.current);
+    }
+    compositionFinishTimerRef.current = window.setTimeout(() => {
+      compositionFinishTimerRef.current = null;
+      if (!el) return;
+      composingRef.current = false;
+      const flushed = flushEditorToData();
+      if (!flushed) return;
+      const fixed = stripCompositionLeak(flushed.text, flushed.mentions, compositionLeakRef.current);
+      compositionLeakRef.current = null;
+      lastPlainInputRef.current = null;
+      const text = fixed.changed ? fixed.text : flushed.text;
+      const nextMentions = fixed.changed ? fixed.mentions : flushed.mentions;
+      const caret = Math.max(0, flushed.caret + fixed.caretDelta);
+      if (fixed.changed) onChange(text, nextMentions);
+      pendingCaretRef.current = caret;
+      openFromCaret(text, caret, nextMentions);
+    }, delayMs);
+  };
+
   const selectMaterial = (material: Material) => {
     if (!localRef.current) return;
     const current = readRichEditor(localRef.current, mentions);
@@ -738,22 +762,7 @@ const MentionPromptInput = ({
             setQueryState((s) => ({ ...s, open: false }));
           }}
           onCompositionEnd={() => {
-            const el = localRef.current;
-            window.setTimeout(() => {
-              if (!el) return;
-              composingRef.current = false;
-              const flushed = flushEditorToData();
-              if (!flushed) return;
-              const fixed = stripCompositionLeak(flushed.text, flushed.mentions, compositionLeakRef.current);
-              compositionLeakRef.current = null;
-              lastPlainInputRef.current = null;
-              const text = fixed.changed ? fixed.text : flushed.text;
-              const nextMentions = fixed.changed ? fixed.mentions : flushed.mentions;
-              const caret = Math.max(0, flushed.caret + fixed.caretDelta);
-              if (fixed.changed) onChange(text, nextMentions);
-              pendingCaretRef.current = caret;
-              openFromCaret(text, caret, nextMentions);
-            }, 16);
+            finishComposition();
           }}
           onFocus={() => {
             if (isDisabled) return;
@@ -829,8 +838,12 @@ const MentionPromptInput = ({
             }
           }}
           onBlur={() => {
-            composingRef.current = false;
-            flushEditorToData();
+            // Some Chromium IME paths leave the component in a composing state until compositionend arrives after blur.
+            if (composingRef.current) {
+              finishComposition();
+            } else {
+              flushEditorToData();
+            }
             setIsFocused(false);
             window.setTimeout(() => setQueryState((s) => ({ ...s, open: false })), 120);
           }}

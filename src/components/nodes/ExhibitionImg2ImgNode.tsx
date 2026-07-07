@@ -3274,7 +3274,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
             <span className="min-w-0 flex-1 truncate text-[9px] text-white/40">
               {hasColorMaterialPreset ? '共享预设已接管色彩与材质' : hasColorMaterialReference ? '参考图接管色彩与材质' : '可选择共享预设或手填'}
             </span>
-            {canManageTeam && (
+            {currentUser && (
               <button type="button" className={BUTTON} disabled={colorMaterialSaving || busy} onClick={() => setColorMaterialEditorOpen((open) => !open)}>
                 <Settings size={11} />编辑
               </button>
@@ -3387,7 +3387,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               {renderColorMaterialMarkSettings('色彩与材质图标识', colorMaterialMarkSettings)}
             </div>
           )}
-          {canManageTeam && (
+          {currentUser && (
             <ColorMaterialPresetEditorModal
               open={colorMaterialEditorOpen}
               presets={colorMaterialPresets}
@@ -3396,6 +3396,8 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
               title="展陈图生图色彩与材质预设管理"
               onClose={() => setColorMaterialEditorOpen(false)}
               onSave={saveColorMaterialPresetItems}
+              canManageSystem={canManageTeam}
+              onRefresh={setColorMaterialPresets}
             />
           )}
           <div data-exhibition-compact-item="manual-input" className="grid grid-cols-2 gap-1">

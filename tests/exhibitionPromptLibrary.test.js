@@ -35,6 +35,23 @@ async function startApp(t, user) {
   return `http://127.0.0.1:${server.address().port}`;
 }
 
+async function startAppWithDataDir(t, user, tmpDir) {
+  const config = require('../backend/src/config.js');
+  config.DATA_DIR = tmpDir;
+  delete require.cache[require.resolve('../backend/src/routes/promptLibrary.js')];
+  const express = require('express');
+  const router = require('../backend/src/routes/promptLibrary.js');
+  const app = express();
+  app.use(express.json({ limit: '1mb' }));
+  app.use(asUser(user));
+  app.use('/api/prompt-library', router);
+  const server = await new Promise((resolve) => {
+    const s = app.listen(0, '127.0.0.1', () => resolve(s));
+  });
+  t.after(() => server.close());
+  return `http://127.0.0.1:${server.address().port}`;
+}
+
 test('regular users can manage personal entries but cannot create team entries', async (t) => {
   const base = await startApp(t, { id: 'u1', username: 'alice', name: 'Alice', role: 'designer' });
 
@@ -339,6 +356,104 @@ test('elevation color material presets keep entries beyond eighty', async (t) =>
   assert.equal(listed.success, true);
   assert.equal(listed.data.colorMaterial.length, 95);
   assert.equal(listed.data.colorMaterial.at(-1).label, '色材预设 95');
+});
+
+test('elevation color material user presets honor visibility and ownership', async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 't8-elevation-user-presets-'));
+  t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+  const config = require('../backend/src/config.js');
+  const oldDataDir = config.DATA_DIR;
+  t.after(() => { config.DATA_DIR = oldDataDir; });
+
+  const aliceBase = await startAppWithDataDir(t, { id: 'u1', username: 'alice', name: 'Alice', role: 'designer' }, tmpDir);
+  const privatePreset = await fetch(`${aliceBase}/api/prompt-library/elevation/presets/colorMaterial/user`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      scope: 'personal',
+      category: 'Alice',
+      label: 'Alice private color',
+      core: 'private core',
+      features: 'private features',
+      usage: 'private usage',
+    }),
+  }).then((res) => res.json());
+  assert.equal(privatePreset.success, true);
+  assert.equal(privatePreset.data.scope, 'personal');
+  assert.equal(privatePreset.data.ownerUserId, 'u1');
+  assert.equal(privatePreset.data.canEdit, true);
+
+  const teamPreset = await fetch(`${aliceBase}/api/prompt-library/elevation/presets/colorMaterial/user`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      scope: 'team',
+      category: 'Shared',
+      label: 'Alice shared color',
+      core: 'shared core',
+      features: 'shared features',
+      usage: 'shared usage',
+    }),
+  }).then((res) => res.json());
+  assert.equal(teamPreset.success, true);
+  assert.equal(teamPreset.data.scope, 'team');
+
+  const aliceList = await fetch(`${aliceBase}/api/prompt-library/elevation/presets`).then((res) => res.json());
+  assert.equal(aliceList.success, true);
+  assert.ok(aliceList.data.colorMaterial.some((item) => item.id === privatePreset.data.id));
+  assert.ok(aliceList.data.colorMaterial.some((item) => item.id === teamPreset.data.id && item.canEdit === true));
+  assert.ok(aliceList.data.colorMaterial.some((item) => item.source === 'system' && item.canEdit === false));
+
+  const bobBase = await startAppWithDataDir(t, { id: 'u2', username: 'bob', name: 'Bob', role: 'designer' }, tmpDir);
+  const bobList = await fetch(`${bobBase}/api/prompt-library/elevation/presets`).then((res) => res.json());
+  assert.equal(bobList.success, true);
+  assert.equal(bobList.data.colorMaterial.some((item) => item.id === privatePreset.data.id), false);
+  const bobShared = bobList.data.colorMaterial.find((item) => item.id === teamPreset.data.id);
+  assert.equal(bobShared.label, 'Alice shared color');
+  assert.equal(bobShared.canEdit, false);
+  assert.equal(bobShared.canDelete, false);
+
+  const deniedEdit = await fetch(`${bobBase}/api/prompt-library/elevation/presets/colorMaterial/user/${teamPreset.data.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label: 'Bob cannot edit' }),
+  });
+  assert.equal(deniedEdit.status, 403);
+
+  const updated = await fetch(`${aliceBase}/api/prompt-library/elevation/presets/colorMaterial/user/${teamPreset.data.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scope: 'team', label: 'Alice updated shared color', core: 'updated core' }),
+  }).then((res) => res.json());
+  assert.equal(updated.success, true);
+  assert.equal(updated.data.label, 'Alice updated shared color');
+  assert.equal(updated.data.ownerUserId, 'u1');
+
+  const adminBase = await startAppWithDataDir(t, { id: 'admin', username: 'root', name: 'Root', role: 'admin' }, tmpDir);
+  const adminUpdated = await fetch(`${adminBase}/api/prompt-library/elevation/presets/colorMaterial/user/${privatePreset.data.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scope: 'team', label: 'Admin promoted private color' }),
+  }).then((res) => res.json());
+  assert.equal(adminUpdated.success, true);
+  assert.equal(adminUpdated.data.ownerUserId, 'u1');
+  assert.equal(adminUpdated.data.scope, 'team');
+
+  const deleted = await fetch(`${adminBase}/api/prompt-library/elevation/presets/colorMaterial/user/${teamPreset.data.id}`, {
+    method: 'DELETE',
+  }).then((res) => res.json());
+  assert.equal(deleted.success, true);
+
+  const deniedSystem = await fetch(`${aliceBase}/api/prompt-library/elevation/presets/colorMaterial`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ presets: [{ label: 'regular user cannot replace system presets', info: 'deny' }] }),
+  });
+  assert.equal(deniedSystem.status, 403);
+
+  const finalList = await fetch(`${adminBase}/api/prompt-library/elevation/presets`).then((res) => res.json());
+  assert.ok(finalList.data.colorMaterial.some((item) => item.source === 'system'));
+  assert.equal(finalList.data.colorMaterial.some((item) => item.id === teamPreset.data.id), false);
 });
 
 test('elevation craft presets keep entries beyond eighty', async (t) => {
