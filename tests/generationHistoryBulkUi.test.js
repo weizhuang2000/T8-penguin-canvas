@@ -26,6 +26,9 @@ test('generation history drawer exposes bulk selection and actions', () => {
   assert.match(drawer, /deleteGenerationHistoryItem\(item\.id,\s*'delete-file'\)/);
   assert.match(drawer, /data-drag-materials/);
   assert.match(drawer, /bulkDragMaterialsForHistoryItems/);
+  assert.match(drawer, /import SmartImage from '\.\/SmartImage'/);
+  assert.match(drawer, /<SmartImage[\s\S]*src=\{item\.url\}[\s\S]*thumbSize=\{320\}/);
+  assert.doesNotMatch(drawer, /item\.kind === 'image' && <img src=\{item\.url\}/);
   assert.match(drawer, /readImageNaturalSize/);
   assert.match(drawer, /formatMediaResolution/);
   assert.match(drawer, /分辨率/);

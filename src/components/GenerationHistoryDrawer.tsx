@@ -30,6 +30,7 @@ import type { SendableMaterial } from '../utils/sendMaterials';
 import { readImageNaturalSize } from '../utils/imageNaturalSize';
 import { formatMediaResolution } from '../utils/mediaMetadata';
 import LoopingVideo from './LoopingVideo';
+import SmartImage from './SmartImage';
 
 interface GenerationHistoryDrawerProps {
   open: boolean;
@@ -910,7 +911,15 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
                   className={`overflow-hidden transition ${selected ? (isPixel ? 'ring-2 ring-[var(--px-yellow)]' : 'ring-2 ring-cyan-400') : ''} ${isPixel ? 'border-2 border-[var(--px-ink)] bg-[var(--px-surface)] shadow-[3px_3px_0_var(--px-ink)]' : isDark ? 'rounded-lg border border-white/10 bg-white/[0.04]' : 'rounded-lg border border-black/10 bg-black/[0.03]'}`}
                 >
                   <div className="relative h-32 overflow-hidden bg-black/80">
-                    {item.kind === 'image' && <img src={item.url} alt={item.title} className="h-full w-full object-cover" draggable={false} />}
+                    {item.kind === 'image' && (
+                      <SmartImage
+                        src={item.url}
+                        alt={item.title}
+                        className="h-full w-full object-cover"
+                        draggable={false}
+                        thumbSize={320}
+                      />
+                    )}
                     {item.kind === 'video' && <LoopingVideo src={item.url} muted className="h-full w-full object-cover" />}
                     {item.kind === 'audio' && <div className="h-full w-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#312e81,#7c3aed,#db2777)' }}><Music size={34} className="text-white" /></div>}
                     {item.hidden && <span className="absolute left-10 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">已隐藏</span>}
