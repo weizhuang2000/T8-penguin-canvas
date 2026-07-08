@@ -135,6 +135,7 @@ import ExhibitionSceneDesignNode from './nodes/ExhibitionSceneDesignNode';
 import ScienceExhibitDesignNode from './nodes/ScienceExhibitDesignNode';
 import ShowcaseInteriorDesignNode from './nodes/ShowcaseInteriorDesignNode';
 import CinemaAuditoriumDesignNode from './nodes/CinemaAuditoriumDesignNode';
+import ArtistStyleMasterNode from './nodes/ArtistStyleMasterNode';
 import PortraitMasterNode from './nodes/PortraitMasterNode';
 import PoseMasterNode from './nodes/PoseMasterNode';
 import IdeaNode from './nodes/IdeaNode';
@@ -243,6 +244,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'science-exhibit-design': ScienceExhibitDesignNode,
   'showcase-interior-design': ShowcaseInteriorDesignNode,
   'cinema-auditorium-design': CinemaAuditoriumDesignNode,
+  'artist-style-master': ArtistStyleMasterNode,
   'multi-angle-visual': ToolboxParamNode,
   'portrait-master': PortraitMasterNode,
   'pose-master': PoseMasterNode,
@@ -1252,6 +1254,16 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     status: 'idle',
     error: '',
   },
+  'artist-style-master': {
+    artistStyleQuery: '',
+    artistStyleMovement: 'all',
+    artistStyleCategory: 'all',
+    artistStyleOutputMode: 'prompt',
+    artistStyleSelectedId: '',
+    lastArtistStyleOutputMode: '',
+    lastArtistStyleText: '',
+    lastArtistStyleImageUrl: '',
+  },
   'portrait-master': {
     portraitLanguage: 'en',
     portraitSelection: {},
@@ -1556,7 +1568,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   // v1.2.8 工具节点 (循环器 / 从合集获取)
   'loop', 'pick-from-set',
   // v1.4.8: 工具箱文本节点也可点击 RUN 直接外挂 OutputNode
-  'cinematic', 'video-motion', 'multi-angle-visual', 'portrait-master', 'pose-master',
+  'cinematic', 'video-motion', 'artist-style-master', 'multi-angle-visual', 'portrait-master', 'pose-master',
   'elevation-prompt',
   'exhibition-img2img',
   'exhibition-style-transfer',

@@ -41,7 +41,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   // v1.4.6: 工具箱文本节点也可点击 RUN 直接外挂 OutputNode
   'cinematic', 'video-motion',
   'elevation-prompt', 'exhibition-img2img', 'exhibition-style-transfer', 'exhibition-recolor', 'exhibition-lighting-heatmap', 'exhibition-creative-image', 'exhibition-render-to-elevation', 'exhibition-text-image-loop', 'exhibition-outline-split', 'exhibition-ai-plan-layout', 'unit-panel-design', 'sculpture-relief-design', 'exhibition-wayfinding-design', 'exhibition-scene-design', 'science-exhibit-design', 'showcase-interior-design', 'cinema-auditorium-design',
-  'portrait-master', 'pose-master', 'aggregate-parser', 'batch-processor',
+  'artist-style-master', 'portrait-master', 'pose-master', 'aggregate-parser', 'batch-processor',
   'topaz-image-upscale', 'topaz-video-upscale',
   'remove-ai-watermark',
 ]);
