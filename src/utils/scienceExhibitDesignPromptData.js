@@ -143,6 +143,18 @@ export function normalizeScienceExhibitInteraction(value, options = SCIENCE_EXHI
   return normalizeId(value, list, list[0].id);
 }
 
+export function normalizeScienceExhibitInteractions(value, options = SCIENCE_EXHIBIT_INTERACTIONS) {
+  const list = normalizeOptionList(options, SCIENCE_EXHIBIT_INTERACTIONS);
+  const source = Array.isArray(value) ? value : [value];
+  const out = [];
+  for (const item of source) {
+    const id = String(item || '').trim();
+    if (list.some((option) => option.id === id) && !out.includes(id)) out.push(id);
+  }
+  if (out.length) return out;
+  return [normalizeScienceExhibitInteraction(Array.isArray(value) ? value[0] : value, list)];
+}
+
 export function normalizeScienceExhibitAudience(value, options = SCIENCE_EXHIBIT_AUDIENCES) {
   const list = normalizeOptionList(options, SCIENCE_EXHIBIT_AUDIENCES);
   return normalizeId(value, list, list.find((item) => item.id === 'general')?.id || list[0].id);
@@ -208,6 +220,13 @@ export function scienceExhibitInteractionMeta(value, options = SCIENCE_EXHIBIT_I
   const list = normalizeOptionList(options, SCIENCE_EXHIBIT_INTERACTIONS);
   const id = normalizeScienceExhibitInteraction(value, list);
   return list.find((item) => item.id === id) || list[0];
+}
+
+export function scienceExhibitInteractionMetas(value, options = SCIENCE_EXHIBIT_INTERACTIONS) {
+  const list = normalizeOptionList(options, SCIENCE_EXHIBIT_INTERACTIONS);
+  return normalizeScienceExhibitInteractions(value, list)
+    .map((id) => list.find((item) => item.id === id))
+    .filter(Boolean);
 }
 
 export function scienceExhibitAudienceMeta(value, options = SCIENCE_EXHIBIT_AUDIENCES) {
@@ -329,12 +348,25 @@ function colorMaterialContext(values = {}, drawingType = '') {
   return lines.join('\n');
 }
 
+function interactionValues(values = {}) {
+  return Array.isArray(values.interactionModes) && values.interactionModes.length
+    ? values.interactionModes
+    : values.interactionMode;
+}
+
+function interactionPromptText(interactions) {
+  return interactions
+    .map((item, index) => `${index + 1}. ${item.label}: ${item.prompt}`)
+    .join('；');
+}
+
 export function buildScienceExhibitExtractPrompt(values = {}) {
   const sourceText = cleanScienceExhibitText(values.sourceText, 50000);
   const sizeText = dimensionsText(values.dimensions, values.spatialScale);
   const domain = scienceExhibitDomainMeta(values.scienceDomain, values.domainOptions);
   const exhibitType = scienceExhibitTypeMeta(values.exhibitType, values.typeOptions);
-  const interaction = scienceExhibitInteractionMeta(values.interactionMode, values.interactionOptions);
+  const interactions = scienceExhibitInteractionMetas(interactionValues(values), values.interactionOptions);
+  const interactionText = interactionPromptText(interactions);
   const audience = scienceExhibitAudienceMeta(values.audience, values.audienceOptions);
   const scale = scienceExhibitScaleMeta(values.spatialScale, values.scaleOptions);
   const bgText = backgroundText(values.backgroundMode);
@@ -345,7 +377,7 @@ export function buildScienceExhibitExtractPrompt(values = {}) {
     '节点设计选项用于限定互动流程、装置构成、观众尺度、视觉说明和图纸约束；不得用这些选项替代资料中的真实科学原理，也不得为了匹配风格而改写科学结论。',
     `科学领域：${domain.label}；提炼时优先寻找与 ${domain.prompt} 相关的真实原理和可控变量。`,
     `展项类型：${exhibitType.label}；请让 mechanismDesign 和 drawingNotes 贴合 ${exhibitType.prompt}。`,
-    `互动方式：${interaction.label}；请让 interactionFlow、传感器/执行器和关键参数贴合 ${interaction.prompt}。`,
+    `互动方式：${interactionText}。请让 interactionFlow、传感器/执行器和关键参数同时贴合所有选中的互动方式，不要只体现其中一种。`,
     `目标观众：${audience.label}；请让操作高度、安全维护、说明深度和交互难度贴合 ${audience.prompt}。`,
     `空间尺度：${scale.label}；请让结构尺度、维护方式和图纸约束贴合 ${scale.prompt}。`,
     bgText,
@@ -446,7 +478,8 @@ function analysisText(analysis) {
 export function buildScienceExhibitImagePrompt(values = {}) {
   const domain = scienceExhibitDomainMeta(values.scienceDomain, values.domainOptions);
   const exhibitType = scienceExhibitTypeMeta(values.exhibitType, values.typeOptions);
-  const interaction = scienceExhibitInteractionMeta(values.interactionMode, values.interactionOptions);
+  const interactions = scienceExhibitInteractionMetas(interactionValues(values), values.interactionOptions);
+  const interactionText = interactionPromptText(interactions);
   const audience = scienceExhibitAudienceMeta(values.audience, values.audienceOptions);
   const scale = scienceExhibitScaleMeta(values.spatialScale, values.scaleOptions);
   const analysis = normalizeScienceExhibitAnalysis(values.analysis || {});
@@ -461,7 +494,7 @@ export function buildScienceExhibitImagePrompt(values = {}) {
     '核心要求：生成专业科技馆/科学中心“科技展项设计”主效果图，画面应能用于方案汇报，必须围绕真实科学原理设计，不要伪科学、不要随机炫酷装置、不要错误公式或乱码文字。',
     `科学领域：${domain.label}，${domain.prompt}`,
     `展项类型：${exhibitType.label}，${exhibitType.prompt}`,
-    `互动方式：${interaction.label}，${interaction.prompt}`,
+    `互动方式：${interactionText}。画面中的操作台、输入部件、传感器、执行器、反馈屏幕和观众动线必须同时支持所有选中的互动方式。`,
     `目标观众：${audience.label}，${audience.prompt}`,
     `空间尺度：${scale.label}，${scale.prompt}`,
     bgText,

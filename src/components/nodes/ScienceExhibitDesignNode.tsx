@@ -37,6 +37,7 @@ import {
   normalizeScienceExhibitDomain,
   normalizeScienceExhibitDrawingSelection,
   normalizeScienceExhibitInteraction,
+  normalizeScienceExhibitInteractions,
   normalizeScienceExhibitScale,
   normalizeScienceExhibitType,
   parseScienceExhibitExtractJson,
@@ -298,7 +299,8 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
   const scaleOptions = useMemo(() => scienceOptionList(scienceOptionPresets.scales, SCIENCE_EXHIBIT_SCALES), [scienceOptionPresets.scales]);
   const scienceDomain = normalizeScienceExhibitDomain(d.scienceDomain, domainOptions);
   const exhibitType = normalizeScienceExhibitType(d.exhibitType, typeOptions);
-  const interactionMode = normalizeScienceExhibitInteraction(d.interactionMode, interactionOptions);
+  const interactionModes = normalizeScienceExhibitInteractions(d.interactionModes || d.interactionMode, interactionOptions);
+  const interactionMode = interactionModes[0] || normalizeScienceExhibitInteraction(d.interactionMode, interactionOptions);
   const audience = normalizeScienceExhibitAudience(d.audience, audienceOptions);
   const spatialScale = normalizeScienceExhibitScale(d.spatialScale, scaleOptions);
   const canManageScienceOptions = currentUser?.role === 'admin' || currentUser?.role === 'manager';
@@ -365,6 +367,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
     scienceDomain,
     exhibitType,
     interactionMode,
+    interactionModes,
     audience,
     spatialScale,
     backgroundMode,
@@ -382,7 +385,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
     interactionOptions,
     audienceOptions,
     scaleOptions,
-  }), [analysis, audience, audienceOptions, backgroundMode, colorMaterialPalette, colorMaterialText, colorMaterialTextures, deviceReferenceImages, dimensions, domainOptions, exhibitType, hasColorMaterialPreset, interactionMode, interactionOptions, resolvedSupplement, scaleOptions, scienceDomain, spaceReferenceImages, spatialScale, typeOptions]);
+  }), [analysis, audience, audienceOptions, backgroundMode, colorMaterialPalette, colorMaterialText, colorMaterialTextures, deviceReferenceImages, dimensions, domainOptions, exhibitType, hasColorMaterialPreset, interactionMode, interactionModes, interactionOptions, resolvedSupplement, scaleOptions, scienceDomain, spaceReferenceImages, spatialScale, typeOptions]);
 
   useEffect(() => {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
@@ -395,14 +398,15 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
   }, []);
 
   useEffect(() => {
-    const patch: Record<string, string> = {};
+    const patch: Record<string, any> = {};
     if (d.scienceDomain !== scienceDomain) patch.scienceDomain = scienceDomain;
     if (d.exhibitType !== exhibitType) patch.exhibitType = exhibitType;
     if (d.interactionMode !== interactionMode) patch.interactionMode = interactionMode;
+    if (!Array.isArray(d.interactionModes) || d.interactionModes.join('|') !== interactionModes.join('|')) patch.interactionModes = interactionModes;
     if (d.audience !== audience) patch.audience = audience;
     if (d.spatialScale !== spatialScale) patch.spatialScale = spatialScale;
     if (Object.keys(patch).length) update(patch);
-  }, [audience, d.audience, d.exhibitType, d.interactionMode, d.scienceDomain, d.spatialScale, exhibitType, interactionMode, scienceDomain, spatialScale, update]);
+  }, [audience, d.audience, d.exhibitType, d.interactionMode, d.interactionModes, d.scienceDomain, d.spatialScale, exhibitType, interactionMode, interactionModes, scienceDomain, spatialScale, update]);
 
   useEffect(() => {
     if (
@@ -465,6 +469,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
           scienceDomain,
           exhibitType,
           interactionMode,
+          interactionModes,
           audience,
           spatialScale,
           backgroundMode,
@@ -517,7 +522,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
       update({ status: 'error', error: llmErrorMessage(error), progress: '' });
       return null;
     }
-  }, [activeLlmConfig?.id, audience, audienceOptions, backgroundMode, busy, colorMaterialPalette, colorMaterialText, colorMaterialTextures, dimensions, domainOptions, effectiveSourceText, exhibitType, hasColorMaterialPreset, interactionMode, interactionOptions, isReadonly, llmModel, scaleOptions, scienceDomain, spatialScale, typeOptions, update]);
+  }, [activeLlmConfig?.id, audience, audienceOptions, backgroundMode, busy, colorMaterialPalette, colorMaterialText, colorMaterialTextures, dimensions, domainOptions, effectiveSourceText, exhibitType, hasColorMaterialPreset, interactionMode, interactionModes, interactionOptions, isReadonly, llmModel, scaleOptions, scienceDomain, spatialScale, typeOptions, update]);
 
   const generateOneImage = useCallback(async ({
     kind,
@@ -710,6 +715,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
             scienceDomain,
             exhibitType,
             interactionMode,
+            interactionModes,
             audience,
             spatialScale,
             backgroundMode,
@@ -801,11 +807,20 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`科技展项设计失败: ${msg}`, src);
       throw error;
     }
-  }, [analysis, audience, audienceOptions, backgroundMode, busy, colorMaterialPalette, colorMaterialText, colorMaterialTextures, d.extractBeforeGenerate, deviceReferenceImages, dimensions, domainOptions, drawingSelection, effectiveSourceText, exhibitType, finishedRenderImage, finishedRenderMode, finishedRenderReferenceImages, generateOneImage, hasColorMaterialPreset, id, interactionMode, interactionOptions, isReadonly, resolvedSupplement, runExtract, scaleOptions, scienceDomain, seed, spaceReferenceImages, spatialScale, typeOptions, update]);
+  }, [analysis, audience, audienceOptions, backgroundMode, busy, colorMaterialPalette, colorMaterialText, colorMaterialTextures, d.extractBeforeGenerate, deviceReferenceImages, dimensions, domainOptions, drawingSelection, effectiveSourceText, exhibitType, finishedRenderImage, finishedRenderMode, finishedRenderReferenceImages, generateOneImage, hasColorMaterialPreset, id, interactionMode, interactionModes, interactionOptions, isReadonly, resolvedSupplement, runExtract, scaleOptions, scienceDomain, seed, spaceReferenceImages, spatialScale, typeOptions, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
   const results: ScienceExhibitResult[] = Array.isArray(d.scienceExhibitResults) ? d.scienceExhibitResults : [];
+  const selectedInteractionSet = new Set(interactionModes);
+  const toggleInteraction = (interactionId: string) => {
+    const normalizedId = normalizeScienceExhibitInteraction(interactionId, interactionOptions);
+    const next = new Set(interactionModes);
+    if (next.has(normalizedId)) next.delete(normalizedId);
+    else next.add(normalizedId);
+    const normalized = normalizeScienceExhibitInteractions(Array.from(next), interactionOptions);
+    update({ interactionModes: normalized, interactionMode: normalized[0] || interactionMode });
+  };
   const selectedDrawingSet = new Set(drawingSelection);
   const toggleDrawing = (kind: string) => {
     const next = new Set(drawingSelection);
@@ -836,6 +851,11 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
         audiences: 'audience',
         scales: 'spatialScale',
       };
+      if (group === 'interactions') {
+        const normalized = normalizeScienceExhibitInteractions(d.interactionModes || d.interactionMode, nextOptions);
+        update({ interactionModes: normalized, interactionMode: normalized[0] || nextOptions[0]?.id || '' });
+        return;
+      }
       const currentValue = String(d[keyByGroup[group]] || '');
       if (!nextOptions.some((item) => item.id === currentValue)) {
         update({ [keyByGroup[group]]: nextOptions[0]?.id || '' });
@@ -884,7 +904,6 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
           {[
             ['scienceDomain', '科学领域', scienceDomain, domainOptions, (raw: string) => normalizeScienceExhibitDomain(raw, domainOptions)],
             ['exhibitType', '展项类型', exhibitType, typeOptions, (raw: string) => normalizeScienceExhibitType(raw, typeOptions)],
-            ['interactionMode', '互动方式', interactionMode, interactionOptions, (raw: string) => normalizeScienceExhibitInteraction(raw, interactionOptions)],
             ['audience', '目标观众', audience, audienceOptions, (raw: string) => normalizeScienceExhibitAudience(raw, audienceOptions)],
             ['spatialScale', '空间尺度', spatialScale, scaleOptions, (raw: string) => normalizeScienceExhibitScale(raw, scaleOptions)],
             ['backgroundMode', '背景', backgroundMode, SCIENCE_EXHIBIT_BACKGROUNDS, normalizeScienceExhibitBackground],
@@ -896,6 +915,17 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
               </select>
             </label>
           ))}
+          <div data-exhibition-compact-item="interaction-modes" className="col-span-3 space-y-1">
+            <div className="text-[10px] text-white/55">互动方式（可多选）</div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {interactionOptions.map((item) => (
+                <label key={item.id} className="flex min-h-7 items-center gap-1 rounded border border-white/10 bg-black/15 px-2 py-1 text-[10px] text-white/70">
+                  <input type="checkbox" checked={selectedInteractionSet.has(item.id)} disabled={isReadonly || busy} onChange={() => toggleInteraction(item.id)} />
+                  <span>{item.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
           <label data-exhibition-compact-item="aspect-size" className="space-y-1">
             <span className="text-[10px] text-white/55">画面比例</span>
             <select className={FIELD} value={aspectRatio} disabled={isReadonly || busy} onChange={(event) => update({ aspectRatio: event.target.value })}>

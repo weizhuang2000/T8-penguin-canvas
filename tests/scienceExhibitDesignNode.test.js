@@ -15,6 +15,7 @@ test('science exhibit design node is registered across frontend and permissions'
   assert.match(read('src/components/Canvas.tsx'), /ScienceExhibitDesignNode/);
   assert.match(read('src/components/Canvas.tsx'), /'science-exhibit-design': ScienceExhibitDesignNode/);
   assert.match(read('src/components/Canvas.tsx'), /scienceDomain: 'physics'/);
+  assert.match(read('src/components/Canvas.tsx'), /interactionModes: \['turn-handle'\]/);
   assert.match(read('src/components/Canvas.tsx'), /backgroundMode: 'white'/);
   assert.match(read('src/components/Canvas.tsx'), /colorMaterialPreset: ''/);
   assert.match(read('src/components/Canvas.tsx'), /colorMaterialPalette: ''/);
@@ -50,7 +51,12 @@ test('science exhibit component exposes handles, llm extraction and generation s
   assert.match(source, /colorMaterialTextFromPreset/);
   assert.match(source, /resolveMediaMentions/);
   assert.match(source, /buildScienceExhibitExtractPrompt/);
-  assert.match(source, /scienceDomain,\s*\n\s*exhibitType,\s*\n\s*interactionMode,\s*\n\s*audience,/);
+  assert.match(source, /scienceDomain,\s*\n\s*exhibitType,\s*\n\s*interactionMode,\s*\n\s*interactionModes,\s*\n\s*audience,/);
+  assert.match(source, /normalizeScienceExhibitInteractions/);
+  assert.match(source, /selectedInteractionSet/);
+  assert.match(source, /toggleInteraction/);
+  assert.match(source, /data-exhibition-compact-item="interaction-modes"/);
+  assert.match(source, /type="checkbox" checked=\{selectedInteractionSet\.has\(item\.id\)\}/);
   assert.match(source, /colorMaterial:\s*colorMaterialText/);
   assert.match(source, /extractBeforeGenerate/);
   assert.match(source, /data-exhibition-compact-item="extract-before-generate"/);
@@ -96,6 +102,7 @@ test('compact form exposes science exhibit sections and references', () => {
     const source = read(file);
     assert.match(source, /nodeType: 'science-exhibit-design'/);
     assert.match(source, /id: 'science'/);
+    assert.match(source, /id: 'interaction-modes'/);
     assert.match(source, /id: 'option-editor'/);
     assert.match(source, /id: 'background-mode'/);
     assert.match(source, /id: 'dimensions'/);

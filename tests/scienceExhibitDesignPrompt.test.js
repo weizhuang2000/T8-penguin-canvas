@@ -10,6 +10,7 @@ import {
   normalizeScienceExhibitDimensions,
   normalizeScienceExhibitDomain,
   normalizeScienceExhibitDrawingSelection,
+  normalizeScienceExhibitInteractions,
   parseScienceExhibitExtractJson,
   SCIENCE_EXHIBIT_DEFAULT_DRAWINGS,
 } from '../src/utils/scienceExhibitDesignPromptData.js';
@@ -87,6 +88,8 @@ test('normalizers use stable defaults', () => {
   assert.deepEqual(normalizeScienceExhibitDrawingSelection(['exploded', 'render', 'bad']), ['exploded']);
   assert.deepEqual(normalizeScienceExhibitDrawingSelection(undefined), SCIENCE_EXHIBIT_DEFAULT_DRAWINGS);
   assert.deepEqual(normalizeScienceExhibitDrawingSelection([]), []);
+  assert.deepEqual(normalizeScienceExhibitInteractions(['touch-screen', 'sensor-trigger', 'bad', 'touch-screen']), ['touch-screen', 'sensor-trigger']);
+  assert.deepEqual(normalizeScienceExhibitInteractions([]), ['turn-handle']);
 });
 
 test('main image prompt keeps real science and parameter consistency', () => {
@@ -161,6 +164,30 @@ test('science exhibit prompts use dynamic option definitions when provided', () 
   });
   assert.match(imagePrompt, /自定义空间尺度/);
   assert.match(imagePrompt, /custom audience learning depth/);
+});
+
+test('science exhibit prompts apply multiple selected interaction modes', () => {
+  const interactionOptions = [
+    { id: 'touch-screen', label: 'Touch choice', prompt: 'touchscreen parameter selection', order: 0 },
+    { id: 'sensor-trigger', label: 'Sensor trigger', prompt: 'motion sensor triggers feedback', order: 1 },
+  ];
+  const extractPrompt = buildScienceExhibitExtractPrompt({
+    sourceText: 'source text',
+    interactionModes: ['touch-screen', 'sensor-trigger'],
+    interactionOptions,
+  });
+  assert.match(extractPrompt, /Touch choice/);
+  assert.match(extractPrompt, /Sensor trigger/);
+  assert.match(extractPrompt, /同时贴合所有选中的互动方式/);
+
+  const imagePrompt = buildScienceExhibitImagePrompt({
+    interactionModes: ['touch-screen', 'sensor-trigger'],
+    interactionOptions,
+    analysis,
+  });
+  assert.match(imagePrompt, /touchscreen parameter selection/);
+  assert.match(imagePrompt, /motion sensor triggers feedback/);
+  assert.match(imagePrompt, /同时支持所有选中的互动方式/);
 });
 
 test('technical drawing prompts bind later drawings to render reference', () => {

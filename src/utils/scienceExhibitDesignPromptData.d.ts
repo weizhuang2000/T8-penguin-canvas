@@ -46,6 +46,7 @@ export function cleanScienceExhibitText(value: unknown, limit?: number): string;
 export function normalizeScienceExhibitDomain(value: unknown, options?: ScienceExhibitPromptOption[]): string;
 export function normalizeScienceExhibitType(value: unknown, options?: ScienceExhibitPromptOption[]): string;
 export function normalizeScienceExhibitInteraction(value: unknown, options?: ScienceExhibitPromptOption[]): string;
+export function normalizeScienceExhibitInteractions(value: unknown, options?: ScienceExhibitPromptOption[]): string[];
 export function normalizeScienceExhibitAudience(value: unknown, options?: ScienceExhibitPromptOption[]): string;
 export function normalizeScienceExhibitScale(value: unknown, options?: ScienceExhibitPromptOption[]): string;
 export function normalizeScienceExhibitDrawingType(value: unknown): string;
@@ -55,6 +56,7 @@ export function normalizeScienceExhibitDimensions(value?: unknown, scaleValue?: 
 export function scienceExhibitDomainMeta(value: unknown, options?: ScienceExhibitPromptOption[]): ScienceExhibitPromptOption;
 export function scienceExhibitTypeMeta(value: unknown, options?: ScienceExhibitPromptOption[]): ScienceExhibitPromptOption;
 export function scienceExhibitInteractionMeta(value: unknown, options?: ScienceExhibitPromptOption[]): ScienceExhibitPromptOption;
+export function scienceExhibitInteractionMetas(value: unknown, options?: ScienceExhibitPromptOption[]): ScienceExhibitPromptOption[];
 export function scienceExhibitAudienceMeta(value: unknown, options?: ScienceExhibitPromptOption[]): ScienceExhibitPromptOption;
 export function scienceExhibitScaleMeta(value: unknown, options?: ScienceExhibitPromptOption[]): ScienceExhibitPromptOption;
 export function scienceExhibitDrawingMeta(value: unknown): ScienceExhibitPromptOption;

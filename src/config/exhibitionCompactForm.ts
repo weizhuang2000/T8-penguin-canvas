@@ -473,6 +473,7 @@ export const EXHIBITION_COMPACT_FORM_DEFINITIONS: ExhibitionCompactNodeDefinitio
   { nodeType: 'science-exhibit-design', label: '\u79d1\u6280\u5c55\u9879\u8bbe\u8ba1', sections: [
     { id: 'science', label: '\u79d1\u5b66\u8bbe\u7f6e', items: [
       { id: 'parameter-input', label: '\u53c2\u6570\u8f93\u5165' },
+      { id: 'interaction-modes', label: '\u4e92\u52a8\u65b9\u5f0f\u591a\u9009' },
       { id: 'option-editor', label: '\u9009\u9879\u7ba1\u7406' },
       { id: 'background-mode', label: '\u80cc\u666f\u9009\u9879' },
       { id: 'aspect-size', label: '\u6bd4\u4f8b/\u5c3a\u5bf8' },

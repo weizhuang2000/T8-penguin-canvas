@@ -1075,6 +1075,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     scienceDomain: 'physics',
     exhibitType: 'interactive-device',
     interactionMode: 'turn-handle',
+    interactionModes: ['turn-handle'],
     audience: 'general',
     spatialScale: 'island',
     backgroundMode: 'white',
