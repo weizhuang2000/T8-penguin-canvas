@@ -34,10 +34,14 @@ import {
   FlipVertical2,
   Image as ImageIconLucide,
   RotateCw,
+  Sparkles,
 } from 'lucide-react';
 import { useThemeStore } from '../../stores/theme';
+import { useApiKeysStore } from '../../stores/apiKeys';
 import { opCrop, opGridCrop, uploadDataUrl, uploadFileBlob } from '../../services/imageOps';
+import { generateExternalImage, queryExternalImageStatus } from '../../services/generation';
 import { createMaxCropBoxForAspect, fitCropBoxToAspect, resizeCropBoxWithAspect } from '../../utils/imageCropAspect';
+import { advancedProviderModelOptions, advancedProvidersForNode, externalImageSizeFor } from '../../utils/advancedProviders';
 
 /**
  * ImageEditModal
@@ -61,6 +65,7 @@ export type ImageEditProduceMeta =
   | { type: 'mask'; strokeCount: number }
   | { type: 'brush'; strokeCount: number }
   | { type: 'annotation-edit'; instruction: string; strokeCount: number; annotationTextCount: number; annotationShapeCount: number }
+  | { type: 'annotation-modify'; prompt: string; providerId: string; providerModel: string }
   | { type: 'compose'; layerCount: number; canvasW: number; canvasH: number };
 
 interface Props {
@@ -78,6 +83,11 @@ type CropAspectPreset = 'free' | '16:9' | '9:16' | '4:3' | '3:4' | '1:1' | 'cust
 
 const AUTO_ANNOTATION_TEXT_ID = 'annotation-instruction-text';
 const ANNOTATION_EDIT_DEFAULT_INSTRUCTION = '请根据标注图，在干净原图上完成对应的 AI 改图。';
+const ANNOTATION_MODIFY_PROMPT = '按图1中标注要求修改图2。图1是带箭头、框选、标号或文字的标注参考图；图2是需要被修改的干净原图。只输出修改后的最终图片，不要保留标注元素。';
+const ANNOTATION_MODIFY_ASPECT_RATIO = '1:1';
+const ANNOTATION_MODIFY_IMAGE_SIZE = '4K';
+const ANNOTATION_MODIFY_POLL_INTERVAL_MS = 3000;
+const ANNOTATION_MODIFY_TIMEOUT_MS = 3600 * 1000;
 
 const CROP_ASPECT_PRESETS: Array<{ id: CropAspectPreset; label: string }> = [
   { id: 'free', label: '自由' },
@@ -301,6 +311,17 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
   const { theme, style } = useThemeStore();
   const isDark = theme === 'dark';
   const isPixel = style === 'pixel';
+  const advancedProviders = useApiKeysStore((state) => state.settings.advancedProviders);
+  const firstImageAdvancedProvider = useMemo(
+    () => advancedProvidersForNode(advancedProviders, 'image')[0] || null,
+    [advancedProviders],
+  );
+  const firstImageProviderModel = useMemo(
+    () => firstImageAdvancedProvider
+      ? advancedProviderModelOptions(firstImageAdvancedProvider, 'image')[0] || ''
+      : '',
+    [firstImageAdvancedProvider],
+  );
 
   const [mode, setMode] = useState<EditMode>('crop');
   const [gridMode, setGridMode] = useState<GridSubMode>('preset');
@@ -316,6 +337,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
   const [history, setHistory] = useState<Line[][]>([]);
   const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<'annotation-modify' | null>(null);
   const [errMsg, setErrMsg] = useState<string | null>(null);
 
   // ---- mask / brush ----
@@ -1811,35 +1833,120 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
   }
 
 
-  async function applyAnnotationEdit() {
+  async function buildAnnotationEditImages() {
     if (!naturalSize || brushStrokes.length === 0) return;
     const annotationTextCount = brushStrokes.filter((stroke) => stroke.kind === 'brush-label' || stroke.kind === 'brush-text').length;
     const annotationShapeCount = brushStrokes.filter((stroke) => stroke.kind !== 'brush-free' && stroke.kind !== 'brush-text').length;
+    const img = await loadImage(srcUrl);
+
+    const originCv = document.createElement('canvas');
+    originCv.width = naturalSize.w;
+    originCv.height = naturalSize.h;
+    const originCtx = originCv.getContext('2d');
+    if (!originCtx) throw new Error('canvas unavailable');
+    originCtx.drawImage(img, 0, 0, originCv.width, originCv.height);
+    const originDataUrl = originCv.toDataURL('image/png');
+
+    const annotatedCv = document.createElement('canvas');
+    annotatedCv.width = naturalSize.w;
+    annotatedCv.height = naturalSize.h;
+    const annotatedCtx = annotatedCv.getContext('2d');
+    if (!annotatedCtx) throw new Error('canvas unavailable');
+    annotatedCtx.drawImage(img, 0, 0, annotatedCv.width, annotatedCv.height);
+    for (const s of brushStrokes) drawStrokeOnCtx(annotatedCtx, s, annotatedCv.width, annotatedCv.height);
+    const annotatedDataUrl = annotatedCv.toDataURL('image/png');
+
+    return {
+      originDataUrl,
+      annotatedDataUrl,
+      strokeCount: brushStrokes.length,
+      annotationTextCount,
+      annotationShapeCount,
+    };
+  }
+
+  async function applyAnnotationEdit() {
+    if (!naturalSize || brushStrokes.length === 0) return;
     setBusy(true);
     setErrMsg(null);
     try {
-      const img = await loadImage(srcUrl);
-      const cv = document.createElement('canvas');
-      cv.width = naturalSize.w;
-      cv.height = naturalSize.h;
-      const ctx = cv.getContext('2d');
-      if (!ctx) throw new Error('canvas unavailable');
-      ctx.drawImage(img, 0, 0, cv.width, cv.height);
-      for (const s of brushStrokes) drawStrokeOnCtx(ctx, s, cv.width, cv.height);
-      const dataUrl = cv.toDataURL('image/png');
-      const originUrl = await fetchAndUpload(srcUrl, 'annotation-source');
-      const annotatedUrl = await uploadDataUrl(dataUrl, 'annotation-markup');
+      const payload = await buildAnnotationEditImages();
+      if (!payload) return;
+      const originUrl = await uploadDataUrl(payload.originDataUrl, 'annotation-source');
+      const annotatedUrl = await uploadDataUrl(payload.annotatedDataUrl, 'annotation-markup');
       await onProduce([originUrl, annotatedUrl], {
         type: 'annotation-edit',
         instruction: ANNOTATION_EDIT_DEFAULT_INSTRUCTION,
-        strokeCount: brushStrokes.length,
-        annotationTextCount,
-        annotationShapeCount,
+        strokeCount: payload.strokeCount,
+        annotationTextCount: payload.annotationTextCount,
+        annotationShapeCount: payload.annotationShapeCount,
       });
       onClose();
     } catch (e: any) {
       setErrMsg(e?.message || 'Annotation edit failed');
     } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyAnnotationModify() {
+    if (!naturalSize || brushStrokes.length === 0) return;
+    if (!firstImageAdvancedProvider) {
+      setErrMsg('未配置可用的图像扩展平台');
+      return;
+    }
+    if (!firstImageProviderModel) {
+      setErrMsg('扩展平台未配置可用图像模型');
+      return;
+    }
+    setBusy(true);
+    setBusyAction('annotation-modify');
+    setErrMsg(null);
+    try {
+      const payload = await buildAnnotationEditImages();
+      if (!payload) return;
+      let result = await generateExternalImage({
+        providerId: firstImageAdvancedProvider.id,
+        providerModel: firstImageProviderModel,
+        model: firstImageProviderModel,
+        prompt: ANNOTATION_MODIFY_PROMPT,
+        size: externalImageSizeFor(ANNOTATION_MODIFY_ASPECT_RATIO, ANNOTATION_MODIFY_IMAGE_SIZE),
+        aspect_ratio: ANNOTATION_MODIFY_ASPECT_RATIO,
+        image_size: ANNOTATION_MODIFY_IMAGE_SIZE,
+        images: [payload.annotatedDataUrl, payload.originDataUrl],
+        n: 1,
+        async: true,
+      });
+      const maxPoll = Math.ceil(ANNOTATION_MODIFY_TIMEOUT_MS / ANNOTATION_MODIFY_POLL_INTERVAL_MS);
+      const runningStatuses = new Set(['running', 'pending', 'submitted', 'in_progress', 'processing', 'queued']);
+      if ((!result.imageUrls?.length) && result.taskId && runningStatuses.has(String(result.code || result.status || '').toLowerCase())) {
+        let taskId = result.taskId;
+        for (let i = 0; i < maxPoll; i += 1) {
+          await new Promise((resolve) => setTimeout(resolve, ANNOTATION_MODIFY_POLL_INTERVAL_MS));
+          result = await queryExternalImageStatus({
+            providerId: firstImageAdvancedProvider.id,
+            providerModel: firstImageProviderModel,
+            taskId,
+          });
+          taskId = result.taskId || taskId;
+          if (result.imageUrls?.length) break;
+          const status = String(result.code || result.status || '').toLowerCase();
+          if (status && !runningStatuses.has(status)) break;
+        }
+      }
+      const urls = (result.imageUrls || []).filter(Boolean);
+      if (!urls.length) throw new Error(result.error || '扩展平台完成但未返回图片');
+      await onProduce([urls[0]], {
+        type: 'annotation-modify',
+        prompt: ANNOTATION_MODIFY_PROMPT,
+        providerId: firstImageAdvancedProvider.id,
+        providerModel: firstImageProviderModel,
+      });
+      onClose();
+    } catch (e: any) {
+      setErrMsg(e?.message || '修改失败');
+    } finally {
+      setBusyAction(null);
       setBusy(false);
     }
   }
@@ -3269,6 +3376,22 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
                 ) : (
                   <>
                     <Paintbrush size={14} /> 标注编辑
+                  </>
+                )}
+              </button>
+              <button
+                style={btnPrimary}
+                onClick={applyAnnotationModify}
+                disabled={busy || !naturalSize || brushStrokes.length === 0}
+                title={brushStrokes.length === 0 ? '请先用箭头、框选、标号或文字标出编辑目标' : '静默调用第一个扩展平台模型生成修改结果'}
+              >
+                {busy && busyAction === 'annotation-modify' ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" /> 生成中...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={14} /> 修改
                   </>
                 )}
               </button>

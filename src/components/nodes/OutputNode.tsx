@@ -710,10 +710,13 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
         .toString(36)
         .slice(2, 6)}`;
       const isAnnotationEdit = _meta?.type === 'annotation-edit';
+      const isAnnotationModify = _meta?.type === 'annotation-modify';
       const annotationLabel = isAnnotationEdit
         ? i === 0
           ? 'Annotation source'
           : 'Annotation reference'
+        : isAnnotationModify
+        ? '修改结果'
         : undefined;
       return {
         id: newId,
@@ -736,6 +739,14 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
                     : 'Annotated reference: follow arrows, boxes, labels, and text when editing.',
                 annotationEditRole: i === 0 ? 'source' : 'markup',
                 annotationEditPrompt: _meta.instruction,
+              }
+            : {}),
+          ...(isAnnotationModify
+            ? {
+                directOutputText: '修改结果',
+                annotationModifyPrompt: _meta.prompt,
+                annotationModifyProviderId: _meta.providerId,
+                annotationModifyProviderModel: _meta.providerModel,
               }
             : {}),
         },
