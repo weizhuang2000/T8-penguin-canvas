@@ -62,6 +62,9 @@ const handleStyle = {
   border: '2px solid var(--asm-handle-border, #0f172a)',
   boxShadow: '0 0 0 2px var(--asm-bg, #fff7ed)',
 };
+const TEXT_INPUT_HANDLE_TITLE = '输入：上游文本会作为检索/创作语境';
+const TEXT_OUTPUT_HANDLE_TITLE = '输出：风格提示词文本';
+const IMAGE_OUTPUT_HANDLE_TITLE = '输出：风格参考图像';
 
 function readLibrary(): ArtistStyleUserLibrary {
   if (typeof window === 'undefined') return EMPTY_LIBRARY;
@@ -568,9 +571,9 @@ function ArtistStyleMasterNode({ id, data, selected }: NodeProps) {
       data-artist-style-master-root
       onWheelCapture={(event) => event.stopPropagation()}
     >
-      <Handle id="text" type="target" position={Position.Left} style={{ ...handleStyle, background: PORT_COLOR.text, top: 160 }} />
-      <Handle id="text" type="source" position={Position.Right} style={{ ...handleStyle, background: PORT_COLOR.text, top: 152 }} />
-      <Handle id="image" type="source" position={Position.Right} style={{ ...handleStyle, background: PORT_COLOR.image, top: 190 }} />
+      <Handle id="text" type="target" position={Position.Left} style={{ ...handleStyle, background: PORT_COLOR.text, top: 160 }} title={TEXT_INPUT_HANDLE_TITLE} />
+      <Handle id="text" type="source" position={Position.Right} style={{ ...handleStyle, background: PORT_COLOR.text, top: 152 }} title={TEXT_OUTPUT_HANDLE_TITLE} />
+      <Handle id="image" type="source" position={Position.Right} style={{ ...handleStyle, background: PORT_COLOR.image, top: 190 }} title={IMAGE_OUTPUT_HANDLE_TITLE} />
 
       <header className="artist-style-master-header" data-artist-style-master-drag-surface>
         <div className="artist-style-master-icon"><Palette size={22} /></div>

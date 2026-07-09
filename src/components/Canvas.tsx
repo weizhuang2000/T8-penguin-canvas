@@ -136,6 +136,8 @@ import ScienceExhibitDesignNode from './nodes/ScienceExhibitDesignNode';
 import ShowcaseInteriorDesignNode from './nodes/ShowcaseInteriorDesignNode';
 import CinemaAuditoriumDesignNode from './nodes/CinemaAuditoriumDesignNode';
 import ArtistStyleMasterNode from './nodes/ArtistStyleMasterNode';
+import AnimeTagMasterNode from './nodes/AnimeTagMasterNode';
+import BatchProcessorNode from './nodes/BatchProcessorNode';
 import PortraitMasterNode from './nodes/PortraitMasterNode';
 import PoseMasterNode from './nodes/PoseMasterNode';
 import IdeaNode from './nodes/IdeaNode';
@@ -245,6 +247,8 @@ const SPECIFIC_NODES: Record<string, any> = {
   'showcase-interior-design': ShowcaseInteriorDesignNode,
   'cinema-auditorium-design': CinemaAuditoriumDesignNode,
   'artist-style-master': ArtistStyleMasterNode,
+  'anime-tag-master': AnimeTagMasterNode,
+  'batch-processor': BatchProcessorNode,
   'multi-angle-visual': ToolboxParamNode,
   'portrait-master': PortraitMasterNode,
   'pose-master': PoseMasterNode,
@@ -1264,6 +1268,48 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     lastArtistStyleText: '',
     lastArtistStyleImageUrl: '',
   },
+  'anime-tag-master': {
+    animeTagQuery: '',
+    animeTagCategory: 'all',
+    animeTagSource: 'all',
+    animeTagProvider: 'danbooru',
+    animeTagOnlineQuery: '',
+    animeTagOnlineCategory: 'artist',
+    animeTagOutputMode: 'tags',
+    animeTagSelectedId: '',
+    lastAnimeTagOutputMode: '',
+    lastAnimeTagText: '',
+    lastAnimeTagImageUrl: '',
+  },
+  'batch-processor': {
+    batchProcessorItems: [],
+    batchProcessorResults: [],
+    batchProcessorProgress: { total: 0, pending: 0, running: 0, success: 0, error: 0 },
+    batchProcessorNameMode: 'original',
+    batchProcessorRenamePattern: 'asset-{index}',
+    batchProcessorOutputFormat: 'keep',
+    batchProcessorTargetRatio: 'keep',
+    batchProcessorUpscaleScale: 2,
+    batchProcessorTrimMode: 'auto',
+    batchProcessorTrimAxis: 'vertical',
+    batchProcessorTrimStrategy: 'auto',
+    batchProcessorTrimThreshold: 18,
+    batchProcessorTrimManualTop: 0,
+    batchProcessorTrimManualRight: 0,
+    batchProcessorTrimManualBottom: 0,
+    batchProcessorTrimManualLeft: 0,
+    batchProcessorSequenceStart: 1,
+    batchProcessorIndexPadding: 3,
+    batchProcessorQuality: 90,
+    batchProcessorPadBackground: '#00000000',
+    batchProcessorTrimBlackBars: false,
+    batchProcessorRemoveBg: false,
+    batchProcessorExpandCanvas: false,
+    batchProcessorUpscale: false,
+    batchProcessorUploadNotice: '',
+    status: 'idle',
+    error: '',
+  },
   'portrait-master': {
     portraitLanguage: 'en',
     portraitSelection: {},
@@ -1568,7 +1614,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   // v1.2.8 工具节点 (循环器 / 从合集获取)
   'loop', 'pick-from-set',
   // v1.4.8: 工具箱文本节点也可点击 RUN 直接外挂 OutputNode
-  'cinematic', 'video-motion', 'artist-style-master', 'multi-angle-visual', 'portrait-master', 'pose-master',
+  'cinematic', 'video-motion', 'artist-style-master', 'anime-tag-master', 'batch-processor', 'multi-angle-visual', 'portrait-master', 'pose-master',
   'elevation-prompt',
   'exhibition-img2img',
   'exhibition-style-transfer',

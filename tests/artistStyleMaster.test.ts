@@ -201,6 +201,12 @@ test('artist style master frontend keeps gallery and theme readability hooks', (
   assert.match(node, /打开艺术风格库/);
   assert.match(node, /输出风格提示词/);
   assert.match(node, /输出风格图片/);
+  assert.match(node, /TEXT_INPUT_HANDLE_TITLE/);
+  assert.match(node, /TEXT_OUTPUT_HANDLE_TITLE/);
+  assert.match(node, /IMAGE_OUTPUT_HANDLE_TITLE/);
+  assert.match(node, /title=\{TEXT_INPUT_HANDLE_TITLE\}/);
+  assert.match(node, /title=\{TEXT_OUTPUT_HANDLE_TITLE\}/);
+  assert.match(node, /title=\{IMAGE_OUTPUT_HANDLE_TITLE\}/);
   assert.match(node, /runArtistStyleOutput\('prompt'\)/);
   assert.match(node, /runArtistStyleOutput\('image'\)/);
   assert.match(node, /保存到艺术风格大师/);
