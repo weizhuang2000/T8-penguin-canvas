@@ -82,8 +82,8 @@ type BrushFillMode = 'stroke' | 'fill';
 type CropAspectPreset = 'free' | '16:9' | '9:16' | '4:3' | '3:4' | '1:1' | 'custom';
 
 const AUTO_ANNOTATION_TEXT_ID = 'annotation-instruction-text';
-const ANNOTATION_EDIT_DEFAULT_INSTRUCTION = '请根据标注图，在干净原图上完成对应的 AI 改图。';
-const ANNOTATION_MODIFY_PROMPT = '按图1中标注要求修改图2。图1是带箭头、框选、标号或文字的标注参考图；图2是需要被修改的干净原图。只输出修改后的最终图片，不要保留标注元素。';
+const ANNOTATION_EDIT_DEFAULT_INSTRUCTION = '请根据标注图，在干净原图上完成对应的 AI 改图；非标注区域尽量保持不变。';
+const ANNOTATION_MODIFY_PROMPT = '按图1中标注要求修改图2。图1是带箭头、框选、标号或文字的标注参考图；图2是需要被修改的干净原图。只输出修改后的最终图片，不要保留标注元素；非标注区域尽量不要有任何调整，保持原图内容、构图、质感和细节。';
 const ANNOTATION_MODIFY_ASPECT_RATIO = '1:1';
 const ANNOTATION_MODIFY_IMAGE_SIZE = '4K';
 const ANNOTATION_MODIFY_POLL_INTERVAL_MS = 3000;
@@ -323,7 +323,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
     [firstImageAdvancedProvider],
   );
 
-  const [mode, setMode] = useState<EditMode>('crop');
+  const [mode, setMode] = useState<EditMode>('brush');
   const [gridMode, setGridMode] = useState<GridSubMode>('preset');
   const [crop, setCrop] = useState<CropBox>({ x: 0.1, y: 0.1, w: 0.8, h: 0.8 });
   const [cropAspectPreset, setCropAspectPreset] = useState<CropAspectPreset>('free');
