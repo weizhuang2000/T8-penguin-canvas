@@ -313,6 +313,7 @@ const MentionPromptInput = ({
   const lastPlainInputRef = useRef<PlainInputSnapshot | null>(null);
   const compositionLeakRef = useRef<CompositionLeakSnapshot | null>(null);
   const compositionFinishTimerRef = useRef<number | null>(null);
+  const renderedEditorHtmlRef = useRef<string | null>(null);
   const pendingCaretRef = useRef<number | null>(null);
   const expandShortcuts = useShortcutStore((s) => s.shortcuts['editor.expand-prompt']);
   const [isFocused, setIsFocused] = useState(false);
@@ -446,12 +447,23 @@ const MentionPromptInput = ({
     if (composingRef.current) return;
     const focused = document.activeElement === el;
     const keepCaret = focused ? getCaretPlainOffset(el) : null;
-    const htmlChanged = el.innerHTML !== editorHtml;
-    if (htmlChanged) el.innerHTML = editorHtml;
+    const htmlChanged = renderedEditorHtmlRef.current !== editorHtml;
+    if (htmlChanged) {
+      el.innerHTML = editorHtml;
+      renderedEditorHtmlRef.current = editorHtml;
+    }
     for (const item of inlineMentions) {
       const span = Array.from(el.querySelectorAll<HTMLElement>('[data-mention-id]'))
         .find((candidate) => candidate.dataset.mentionId === item.mention.id);
       if (!span) continue;
+      const renderKey = [
+        item.token,
+        item.material.kind,
+        item.material.url,
+        isPixel ? 'pixel' : 'default',
+      ].join('|');
+      if (!htmlChanged && span.dataset.mentionRenderKey === renderKey) continue;
+      span.dataset.mentionRenderKey = renderKey;
       span.title = item.token;
       span.style.cssText = [
         'display:inline-block',
