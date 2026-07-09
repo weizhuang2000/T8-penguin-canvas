@@ -5432,6 +5432,51 @@ html[data-theme-visual] .artist-style-master-lightbox-backdrop {
   line-height: 1.45;
 }
 
+.artist-style-master-beautify-toggle {
+  display: flex;
+  width: 100%;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+  border: 2px solid var(--asm-border);
+  border-radius: 8px;
+  background: var(--asm-panel);
+  color: var(--asm-text);
+  padding: 8px 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.artist-style-master-beautify-toggle span {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.artist-style-master-beautify-toggle small {
+  min-width: 0;
+  color: var(--asm-muted);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.artist-style-master-beautify-toggle.active {
+  border-color: var(--asm-accent);
+  background: color-mix(in srgb, var(--asm-accent) 16%, var(--asm-panel) 84%);
+}
+
+.artist-style-master-beautify-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 .artist-style-master-redraw-result {
   display: block;
   max-height: 180px;

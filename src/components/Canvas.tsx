@@ -1277,6 +1277,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     artistStyleCategory: 'all',
     artistStyleOutputMode: 'prompt',
     artistStyleSelectedId: '',
+    artistStyleBeautify: false,
     lastArtistStyleOutputMode: '',
     lastArtistStyleText: '',
     lastArtistStyleImageUrl: '',

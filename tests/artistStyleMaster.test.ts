@@ -42,6 +42,7 @@ test('artist style master is registered in the exhibition category', () => {
   assert.match(canvas, /'artist-style-master':\s*\{[\s\S]*sizeLevel:\s*'2K'/);
   assert.match(canvas, /'artist-style-master':\s*\{[\s\S]*outputFormat:\s*'jpg'/);
   assert.match(canvas, /'artist-style-master':\s*\{[\s\S]*seed:\s*0/);
+  assert.match(canvas, /'artist-style-master':\s*\{[\s\S]*artistStyleBeautify:\s*false/);
   assert.match(sidebar, /'artist-style-master': 'Palette'/);
   assert.match(placement, /'artist-style-master':\s*\{\s*w:\s*480,\s*h:\s*780\s*\}/);
   assert.match(features, /artistStyleMasterNode/);
@@ -86,6 +87,12 @@ test('artist style search, prompt output and import/export are deterministic', (
   assert.equal(prompt, `${mucha.chineseName}，${mucha.cue}, Use this as a visual style reference: composition language, line quality, color palette, lighting, texture, mood and design rhythm.`);
 
   const redrawPrompt = buildArtistStyleRedrawPrompt(mucha);
+  const beautifyPrompt = buildArtistStyleRedrawPrompt(mucha, { beautify: true });
+  assert.match(redrawPrompt, /美化模式关闭/);
+  assert.match(redrawPrompt, /不要改变主体姿态、主体位置/);
+  assert.match(beautifyPrompt, /美化模式已开启/);
+  assert.match(beautifyPrompt, /各对象主体的姿态、位置、朝向/);
+  assert.match(beautifyPrompt, /整体画面更加美化/);
   assert.match(redrawPrompt, /第一张参考图是原始图像/);
   assert.match(redrawPrompt, /第二张参考图只用于提取艺术风格/);
   assert.match(redrawPrompt, /必须保留/);
@@ -228,7 +235,11 @@ test('artist style master frontend keeps gallery and theme readability hooks', (
   assert.match(node, /title=\{ORIGINAL_IMAGE_HANDLE_TITLE\}/);
   assert.match(node, /title=\{IMAGE_OUTPUT_HANDLE_TITLE\}/);
   assert.match(node, /useInputImageByHandle\(id,\s*'original-image'\)/);
-  assert.match(node, /buildArtistStyleRedrawPrompt\(selectedStyle\)/);
+  assert.match(node, /buildArtistStyleRedrawPrompt\(selectedStyle,\s*\{\s*beautify\s*\}\)/);
+  assert.match(node, /artist-style-master-beautify-toggle/);
+  assert.match(node, /role="switch"/);
+  assert.match(node, /artistStyleBeautify:\s*!beautify/);
+  assert.match(node, /artistStyleBeautify:\s*beautify/);
   assert.match(node, /originalImage\s*\?\s*runArtistStyleRedraw\(\)\s*:\s*runArtistStyleOutput\(outputMode\)/);
   assert.match(node, /submitImageAsync/);
   assert.match(node, /generateExternalImage/);
@@ -273,6 +284,7 @@ test('artist style master frontend keeps gallery and theme readability hooks', (
   assert.match(styles, /artist-style-master-redraw-grid/);
   assert.match(styles, /artist-style-master-model-grid/);
   assert.match(styles, /artist-style-master-redraw-result/);
+  assert.match(styles, /artist-style-master-beautify-toggle/);
   assert.match(styles, /artist-style-master-error/);
   assert.match(styles, /artist-style-master-inline-form[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\) auto/);
   assert.match(styles, /artist-style-master-custom-upload/);

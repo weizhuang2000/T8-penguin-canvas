@@ -15,6 +15,7 @@ import {
   Plus,
   Save,
   Search,
+  Sparkles,
   Trash2,
   Upload,
   X,
@@ -208,6 +209,7 @@ function ArtistStyleMasterNode({ id, data, selected }: NodeProps) {
   const sizeLevel = d.sizeLevel || '2K';
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
+  const beautify = d.artistStyleBeautify === true;
   const imageAdvancedProviders = useMemo(() => advancedProvidersForNode(advancedProviders, 'image'), [advancedProviders]);
   const providerSelection = useMemo(
     () => resolveAdvancedProviderSelection(advancedProviders, 'image', {
@@ -503,7 +505,7 @@ function ArtistStyleMasterNode({ id, data, selected }: NodeProps) {
       throw new Error(msg);
     }
 
-    const prompt = buildArtistStyleRedrawPrompt(selectedStyle);
+    const prompt = buildArtistStyleRedrawPrompt(selectedStyle, { beautify });
     const referenceImages = [originalImage, styleImage];
     const runSeed = seed > 0 ? seed : randomImageSeed();
     const src = `artist-style-master:${id.slice(0, 6)}`;
@@ -535,6 +537,7 @@ function ArtistStyleMasterNode({ id, data, selected }: NodeProps) {
       artistStyleOriginalImageUrl: originalImage,
       artistStyleReferenceImageUrl: styleImage,
       artistStyleSelectedId: selectedStyle.id,
+      artistStyleBeautify: beautify,
     });
     setStatus('正在按所选艺术风格重绘原始图像...');
 
@@ -646,6 +649,7 @@ function ArtistStyleMasterNode({ id, data, selected }: NodeProps) {
         referenceImages,
         artistStyleOriginalImageUrl: originalImage,
         artistStyleReferenceImageUrl: styleImage,
+        artistStyleBeautify: beautify,
         lastArtistStyleOutputMode: 'redraw',
         lastArtistStyleText: prompt,
         lastArtistStyleImageUrl: urls[0],
@@ -665,6 +669,7 @@ function ArtistStyleMasterNode({ id, data, selected }: NodeProps) {
     activeCanvasId,
     apiModel,
     aspectRatio,
+    beautify,
     d.providerParams,
     d.taskId,
     externalProviderModel,
@@ -916,6 +921,17 @@ function ArtistStyleMasterNode({ id, data, selected }: NodeProps) {
             <span>艺术风格</span>
           </div>
         </div>
+        <button
+          type="button"
+          className={`artist-style-master-beautify-toggle ${beautify ? 'active' : ''}`}
+          role="switch"
+          aria-checked={beautify}
+          disabled={isReadonly || busy}
+          onClick={() => update({ artistStyleBeautify: !beautify })}
+        >
+          <span><Sparkles size={14} /> 美化</span>
+          <small>{beautify ? '开启：允许轻微微调主体姿态和位置' : '关闭：严格保留主体姿态和位置'}</small>
+        </button>
         <small className="artist-style-master-redraw-note">
           连接原始图像后点击运行，会保留构图和主要内容，只迁移笔触、色彩、光影和细节风格。
         </small>
