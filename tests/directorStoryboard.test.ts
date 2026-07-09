@@ -22,7 +22,7 @@ test('director storyboard node is registered as a visible Seedance orchestration
   assert.match(registry, /type:\s*'director-storyboard'[\s\S]*label:\s*'导演分镜台'[\s\S]*category:\s*'core'/);
   assert.match(ports, /'director-storyboard':\s*\{\s*inputs:\s*\['text', 'image', 'video', 'audio'\],\s*outputs:\s*\['video', 'text'\]\s*\}/);
   assert.match(types, /\|\s*'director-storyboard'/);
-  assert.match(canvas, /const DirectorStoryboardNode = lazyCanvasNode\(\(\) => import\('\.\/nodes\/DirectorStoryboardNode'\), 'DirectorStoryboardNode'\)/);
+  assert.match(canvas, /import DirectorStoryboardNode from '\.\/nodes\/DirectorStoryboardNode'/);
   assert.match(canvas, /'director-storyboard': DirectorStoryboardNode/);
   assert.match(canvas, /'director-storyboard':\s*\{/);
   assert.match(features, /director-storyboard/);

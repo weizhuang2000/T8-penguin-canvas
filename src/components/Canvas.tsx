@@ -105,6 +105,7 @@ import ImageNode from './nodes/ImageNode';
 import LLMNode from './nodes/LLMNode';
 import VideoNode from './nodes/VideoNode';
 import SeedanceNode from './nodes/SeedanceNode';
+import DirectorStoryboardNode from './nodes/DirectorStoryboardNode';
 import AudioNode from './nodes/AudioNode';
 import RunningHubNode from './nodes/RunningHubNode';
 import RhConfigNode from './nodes/RhConfigNode';
@@ -186,6 +187,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   image: ImageNode,
   video: VideoNode,
   seedance: SeedanceNode, // 完全对齐 gpt-image-2-web Seedance2.0(独立 /seedance/v3 路径)
+  'director-storyboard': DirectorStoryboardNode,
   audio: AudioNode,
   llm: LLMNode,
   runninghub: RunningHubNode,
