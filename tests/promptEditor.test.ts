@@ -55,6 +55,8 @@ test('mention prompt input keeps media mentions in expanded editor', () => {
   assert.match(mention, /const flushEditorToData = \(\) =>/);
   assert.match(mention, /const finishComposition = \(delayMs = 16\) =>/);
   assert.match(mention, /compositionFinishTimerRef/);
+  assert.match(mention, /const htmlChanged = el\.innerHTML !== editorHtml/);
+  assert.match(mention, /if \(focused && \(pendingCaret !== null \|\| htmlChanged\)\)/);
   assert.match(mention, /composingRef\.current = false;[\s\S]*const flushed = flushEditorToData\(\)/);
   assert.match(mention, /onCompositionEnd=\{\(\) => \{\s*finishComposition\(\);/);
   assert.match(mention, /onBlur=\{\(\) => \{[\s\S]*if \(composingRef\.current\) \{\s*finishComposition\(\);/);

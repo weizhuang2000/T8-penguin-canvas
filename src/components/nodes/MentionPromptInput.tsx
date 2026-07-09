@@ -1,5 +1,6 @@
 import {
   memo,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -443,8 +444,10 @@ const MentionPromptInput = ({
     const el = localRef.current;
     if (!el) return;
     if (composingRef.current) return;
-    const keepCaret = document.activeElement === el ? getCaretPlainOffset(el) : null;
-    if (el.innerHTML !== editorHtml) el.innerHTML = editorHtml;
+    const focused = document.activeElement === el;
+    const keepCaret = focused ? getCaretPlainOffset(el) : null;
+    const htmlChanged = el.innerHTML !== editorHtml;
+    if (htmlChanged) el.innerHTML = editorHtml;
     for (const item of inlineMentions) {
       const span = Array.from(el.querySelectorAll<HTMLElement>('[data-mention-id]'))
         .find((candidate) => candidate.dataset.mentionId === item.mention.id);
@@ -490,12 +493,19 @@ const MentionPromptInput = ({
       }
       span.replaceChildren(content);
     }
-    if (document.activeElement === el) {
-      const caret = pendingCaretRef.current ?? keepCaret;
-      pendingCaretRef.current = null;
+    const pendingCaret = pendingCaretRef.current;
+    pendingCaretRef.current = null;
+    if (focused && (pendingCaret !== null || htmlChanged)) {
+      const caret = pendingCaret ?? keepCaret;
       if (caret !== null) setCaretPlainOffset(el, caret);
     }
   }, [editorHtml, inlineMentions, isDark, isPixel]);
+
+  useEffect(() => () => {
+    if (compositionFinishTimerRef.current !== null) {
+      window.clearTimeout(compositionFinishTimerRef.current);
+    }
+  }, []);
 
   const openFromCaret = (text: string, caret: number, mentionList: MediaMention[] = mentions) => {
     const query = getAtQuery(text, caret, mentionList);
