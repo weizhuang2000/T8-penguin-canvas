@@ -2324,13 +2324,13 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
                   key={tool.id}
                   style={{ ...tabBtn(brushTool === tool.id), padding: '0 8px' }}
                   onClick={() => setBrushTool(tool.id)}
-                  title={tool.id === 'label' ? `${tool.title}: current ${labelCounter}, auto +1 after click` : tool.title}
+                  title={tool.id === 'label' ? `${tool.title}：当前 ${labelCounter}，点击后自动 +1` : tool.title}
                 >
                   {renderBrushToolIcon(tool.icon)}
                   <span>{tool.label}</span>
                 </button>
               ))}
-              <span style={{ color: subText, marginLeft: 4 }}>Color</span>
+              <span style={{ color: subText, marginLeft: 4 }}>颜色</span>
               <input
                 type="color"
                 value={brushColor}
@@ -2346,18 +2346,18 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
                 }}
               />
               {(brushTool === 'rect' || brushTool === 'ellipse') && (
-                <div role="group" aria-label="shape fill mode" style={{ display: 'inline-flex', gap: 4 }}>
-                  <button type="button" style={tabBtn(brushFillMode === 'stroke')} onClick={() => setBrushFillMode('stroke')} title="Stroke only">
-                    Stroke
+                <div role="group" aria-label="形状填充模式" style={{ display: 'inline-flex', gap: 4 }}>
+                  <button type="button" style={tabBtn(brushFillMode === 'stroke')} onClick={() => setBrushFillMode('stroke')} title="仅描边">
+                    描边
                   </button>
-                  <button type="button" style={tabBtn(brushFillMode === 'fill')} onClick={() => setBrushFillMode('fill')} title="Solid fill">
-                    Fill
+                  <button type="button" style={tabBtn(brushFillMode === 'fill')} onClick={() => setBrushFillMode('fill')} title="实心填充">
+                    填充
                   </button>
                 </div>
               )}
               {brushTool === 'label' && (
                 <>
-                  <span style={{ color: subText }}>Size</span>
+                  <span style={{ color: subText }}>编号</span>
                   <input
                     type="number"
                     min={1}
@@ -2365,15 +2365,15 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
                     value={labelCounter}
                     onChange={(e) => setLabelCounter(clampLabelCounter(Number(e.target.value)))}
                     style={{ ...inputStyle, width: 66 }}
-                    aria-label="current label number"
-                    title="Number used for the next click"
+                    aria-label="当前标号数字"
+                    title="下一次点击使用的数字"
                   />
-                  <button type="button" style={btnBase} onClick={() => setLabelCounter(1)} title="Reset next label to 1">
-                    Reset 1
+                  <button type="button" style={btnBase} onClick={() => setLabelCounter(1)} title="将下一个标号重置为 1">
+                    重置 1
                   </button>
                 </>
               )}
-              <span style={{ color: subText }}>Size</span>
+              <span style={{ color: subText }}>尺寸</span>
               <input
                 type="range"
                 min={2}
@@ -2385,17 +2385,17 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
               <span style={{ minWidth: 24, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>
                 {brushSize}
               </span>
-              <button style={btnBase} onClick={undo} disabled={!brushHistory.length} title="Undo (Ctrl+Z)">
+              <button style={btnBase} onClick={undo} disabled={!brushHistory.length} title="撤销 (Ctrl+Z)">
                 <Undo2 size={13} />
               </button>
-              <button style={btnBase} onClick={redo} disabled={!brushRedo.length} title="Redo (Ctrl+Y)">
+              <button style={btnBase} onClick={redo} disabled={!brushRedo.length} title="恢复 (Ctrl+Y)">
                 <Redo2 size={13} />
               </button>
-              <button style={btnBase} onClick={clearCurrent} title="Clear board">
-                <Eraser size={13} /> Clear
+              <button style={btnBase} onClick={clearCurrent} title="清空画板">
+                <Eraser size={13} /> 清空
               </button>
               <div style={{ flex: 1 }} />
-              <span style={{ color: subText }}>Output: clean original + annotated reference</span>
+              <span style={{ color: subText }}>输出：干净原图 + 标注参考图</span>
             </>
           )}
           {mode === 'compose' && (
@@ -3229,30 +3229,30 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
                 }}
                 value={annotationInstruction}
                 onChange={(event) => setAnnotationInstruction(event.target.value)}
-                placeholder="Type text to add an editable note on the image"
-                title="Text annotation"
+                placeholder="输入文字，在图片上添加可编辑标注"
+                title="文字标注"
               />
               <button
                 style={btnBase}
                 onClick={confirmAnnotationTextDraft}
                 disabled={busy || !hasAnnotationTextDraft}
-                title={hasAnnotationTextDraft ? 'Lock the current text note and clear the input' : 'Type text first, then confirm to add another note'}
+                title={hasAnnotationTextDraft ? '固定当前文字标注并清空输入框' : '请先输入文字，再确认添加下一条标注'}
               >
-                <Check size={14} /> Confirm text
+                <Check size={14} /> 确认文字
               </button>
               <button
                 style={btnBase}
                 onClick={applyBrush}
                 disabled={busy || !naturalSize || brushStrokes.length === 0}
-                title={brushStrokes.length === 0 ? 'Draw something first' : ''}
+                title={brushStrokes.length === 0 ? '请先在画板上添加标注' : ''}
               >
                 {busy ? (
                   <>
-                    <Loader2 size={14} className="animate-spin" /> Processing...
+                    <Loader2 size={14} className="animate-spin" /> 处理中...
                   </>
                 ) : (
                   <>
-                    <Check size={14} /> Apply board
+                    <Check size={14} /> 应用画板
                   </>
                 )}
               </button>
@@ -3260,15 +3260,15 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
                 style={btnPrimary}
                 onClick={applyAnnotationEdit}
                 disabled={busy || !naturalSize || brushStrokes.length === 0}
-                title={brushStrokes.length === 0 ? 'Use arrows, boxes, labels, or text to mark the edit target first' : 'Send clean original and annotated reference for AI edit'}
+                title={brushStrokes.length === 0 ? '请先用箭头、框选、标号或文字标出编辑目标' : '发送干净原图和标注参考图进行 AI 编辑'}
               >
                 {busy ? (
                   <>
-                    <Loader2 size={14} className="animate-spin" /> Processing...
+                    <Loader2 size={14} className="animate-spin" /> 处理中...
                   </>
                 ) : (
                   <>
-                    <Paintbrush size={14} /> Annotate edit
+                    <Paintbrush size={14} /> 标注编辑
                   </>
                 )}
               </button>
