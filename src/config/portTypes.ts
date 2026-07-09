@@ -97,8 +97,8 @@ export const NODE_PORTS: Record<string, NodePorts> = {
   'codex-cli-agent': { inputs: ['text', 'image', 'video', 'audio'], outputs: ['text', 'image', 'video', 'audio', 'model3d'] },
 
   // ========== Inspiration ==========
-  // 艺术风格大师：可接收上游文本作为检索/创作语境，运行时输出风格提示词或风格参考图。
-  'artist-style-master': { inputs: ['text'], outputs: ['text', 'image'] },
+  // 艺术风格大师：可接收上游文本作为检索/创作语境，也可接收原始图像进行所选艺术风格重绘。
+  'artist-style-master': { inputs: ['text', 'image'], outputs: ['text', 'image'] },
   // 动漫标签大师：可接收文本/图像语境，运行时输出标签提示词或标签参考图。
   'anime-tag-master': { inputs: ['text', 'image'], outputs: ['text', 'image'] },
 

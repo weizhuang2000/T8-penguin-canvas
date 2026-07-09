@@ -6,6 +6,7 @@ import {
   ARTIST_STYLE_MASTER_STORAGE_KEY,
   buildArtistStyleOutputPayload,
   buildArtistStylePrompt,
+  buildArtistStyleRedrawPrompt,
   createArtistStyleFromMaterial,
   createArtistStyleExport,
   importArtistStyleExport,
@@ -32,12 +33,17 @@ test('artist style master is registered in the Inspiration category', () => {
   assert.match(types, /'inspiration'/);
   assert.match(registry, /type:\s*'artist-style-master'[\s\S]*label:\s*'艺术风格大师'[\s\S]*category:\s*'inspiration'/);
   assert.match(registry, /inspiration:\s*\{\s*label:\s*'灵感之源'/);
-  assert.match(ports, /'artist-style-master':\s*\{\s*inputs:\s*\['text'\],\s*outputs:\s*\['text', 'image'\]/);
+  assert.match(ports, /'artist-style-master':\s*\{\s*inputs:\s*\['text', 'image'\],\s*outputs:\s*\['text', 'image'\]/);
   assert.match(canvas, /ArtistStyleMasterNode/);
   assert.match(canvas, /import\('\.\/nodes\/ArtistStyleMasterNode'\)/);
   assert.match(canvas, /'artist-style-master': ArtistStyleMasterNode/);
+  assert.match(canvas, /'artist-style-master':\s*\{[\s\S]*apiModel:\s*'gpt-image-2-all'/);
+  assert.match(canvas, /'artist-style-master':\s*\{[\s\S]*providerSource:\s*'zhenzhen'/);
+  assert.match(canvas, /'artist-style-master':\s*\{[\s\S]*sizeLevel:\s*'2K'/);
+  assert.match(canvas, /'artist-style-master':\s*\{[\s\S]*outputFormat:\s*'jpg'/);
+  assert.match(canvas, /'artist-style-master':\s*\{[\s\S]*seed:\s*0/);
   assert.match(sidebar, /'artist-style-master': 'Palette'/);
-  assert.match(placement, /'artist-style-master':\s*\{\s*w:\s*480,\s*h:\s*620\s*\}/);
+  assert.match(placement, /'artist-style-master':\s*\{\s*w:\s*480,\s*h:\s*780\s*\}/);
   assert.match(features, /artistStyleMasterNode/);
   assert.match(features, /"label":\s*"灵感之源"/);
 });
@@ -78,6 +84,17 @@ test('artist style search, prompt output and import/export are deterministic', (
   assert.equal(prompt.includes('\n'), false);
   assert.doesNotMatch(prompt, /Artist style reference|Movement:|Visual cue:|Style tags:/);
   assert.equal(prompt, `${mucha.chineseName}，${mucha.cue}, Use this as a visual style reference: composition language, line quality, color palette, lighting, texture, mood and design rhythm.`);
+
+  const redrawPrompt = buildArtistStyleRedrawPrompt(mucha);
+  assert.match(redrawPrompt, /第一张参考图是原始图像/);
+  assert.match(redrawPrompt, /第二张参考图只用于提取艺术风格/);
+  assert.match(redrawPrompt, /必须保留/);
+  assert.match(redrawPrompt, /整体构图/);
+  assert.match(redrawPrompt, /主要内容/);
+  assert.match(redrawPrompt, /只在笔触、色彩、光影、质感和细节风格上/);
+  assert.match(redrawPrompt, /题字、落款、签章/);
+  assert.match(redrawPrompt, /作者签名/);
+  assert.match(redrawPrompt, /不要复制第二张风格参考图的具体构图/);
 
   const textPayload = buildArtistStyleOutputPayload(mucha, 'prompt');
   assert.equal(textPayload.kind, 'text');
@@ -203,10 +220,28 @@ test('artist style master frontend keeps gallery and theme readability hooks', (
   assert.match(node, /输出风格图片/);
   assert.match(node, /TEXT_INPUT_HANDLE_TITLE/);
   assert.match(node, /TEXT_OUTPUT_HANDLE_TITLE/);
+  assert.match(node, /ORIGINAL_IMAGE_HANDLE_TITLE/);
   assert.match(node, /IMAGE_OUTPUT_HANDLE_TITLE/);
   assert.match(node, /title=\{TEXT_INPUT_HANDLE_TITLE\}/);
   assert.match(node, /title=\{TEXT_OUTPUT_HANDLE_TITLE\}/);
+  assert.match(node, /id="original-image" type="target"/);
+  assert.match(node, /title=\{ORIGINAL_IMAGE_HANDLE_TITLE\}/);
   assert.match(node, /title=\{IMAGE_OUTPUT_HANDLE_TITLE\}/);
+  assert.match(node, /useInputImageByHandle\(id,\s*'original-image'\)/);
+  assert.match(node, /buildArtistStyleRedrawPrompt\(selectedStyle\)/);
+  assert.match(node, /originalImage\s*\?\s*runArtistStyleRedraw\(\)\s*:\s*runArtistStyleOutput\(outputMode\)/);
+  assert.match(node, /submitImageAsync/);
+  assert.match(node, /generateExternalImage/);
+  assert.match(node, /queryExternalImageStatus/);
+  assert.match(node, /queryImageStatus/);
+  assert.match(node, /directImageUrl:\s*urls\[0\]/);
+  assert.match(node, /artistStyleOriginalImageUrl:\s*originalImage/);
+  assert.match(node, /artistStyleReferenceImageUrl:\s*styleImage/);
+  assert.match(node, /生图平台/);
+  assert.match(node, /生图模型/);
+  assert.match(node, /输出格式/);
+  assert.match(node, /Seed（0 随机）/);
+  assert.match(node, /重绘原图/);
   assert.match(node, /runArtistStyleOutput\('prompt'\)/);
   assert.match(node, /runArtistStyleOutput\('image'\)/);
   assert.match(node, /保存到艺术风格大师/);
@@ -235,6 +270,10 @@ test('artist style master frontend keeps gallery and theme readability hooks', (
   assert.match(styles, /artist-style-master-mini-grid[\s\S]*overflow-y:\s*auto/);
   assert.match(styles, /artist-style-master-mini-grid button[\s\S]*min-width:\s*0/);
   assert.match(styles, /artist-style-master-mini-grid img[\s\S]*max-height/);
+  assert.match(styles, /artist-style-master-redraw-grid/);
+  assert.match(styles, /artist-style-master-model-grid/);
+  assert.match(styles, /artist-style-master-redraw-result/);
+  assert.match(styles, /artist-style-master-error/);
   assert.match(styles, /artist-style-master-inline-form[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\) auto/);
   assert.match(styles, /artist-style-master-custom-upload/);
   assert.match(styles, /\[data-theme-mode="dark"\][\s\S]*artist-style-master-node/);

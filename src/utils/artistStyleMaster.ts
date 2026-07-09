@@ -279,6 +279,27 @@ export function buildArtistStylePrompt(item: ArtistStyleItem): string {
   return [leading, ARTIST_STYLE_REFERENCE_SUFFIX].filter(Boolean).join(', ');
 }
 
+export function buildArtistStyleRedrawPrompt(item: ArtistStyleItem): string {
+  const styleName = [textOf(item.chineseName), textOf(item.name)].filter(Boolean).join(' / ');
+  const movement = [textOf(item.movementZh), textOf(item.movement)].filter(Boolean).join(' / ');
+  const tags = (Array.isArray(item.tags) ? item.tags : []).map(textOf).filter(Boolean).join('、');
+  const lines = [
+    '任务：使用两张参考图进行艺术风格重绘。第一张参考图是原始图像，是构图、主体、内容、空间关系、镜头角度、透视、文字区域和主要细节的唯一依据；第二张参考图只用于提取艺术风格。',
+    '',
+    `目标艺术风格：${styleName || textOf(item.displayName) || '已选艺术风格'}`,
+    movement && `风格流派：${movement}`,
+    textOf(item.cue) && `风格特征：${textOf(item.cue)}`,
+    tags && `风格标签：${tags}`,
+    '',
+    '必须保留：原始图像的整体构图、主体数量、主体位置、主体轮廓、人物/物体/空间关系、镜头高度、透视角度、主要内容、文字所在区域和版式层级。',
+    '允许改变：笔触、线条质量、色彩倾向、明暗关系、光影氛围、纹理、材质表现、边缘处理、细节绘制方式和整体艺术质感，使结果看起来像是与第二张艺术风格参考图出自同一位作者。',
+    '禁止改变：不要移动、删除、替换或新增原始图像中的主体；不要复制第二张风格参考图的具体构图、人物、物体、场景或叙事内容。',
+    '文字与签名限制：不要新增原始图像上没有的题字、落款、签章、署名、水印、印章、标签、可读文字或作者签名；如果原始图像没有文字，输出图也不得出现文字。',
+    '最终输出：与第一张原始图像一眼可识别为同一构图和同一主要内容，只在笔触、色彩、光影、质感和细节风格上完成艺术化重绘。',
+  ];
+  return lines.filter(Boolean).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 export function buildArtistStyleOutputPayload(item: ArtistStyleItem, mode: ArtistStyleOutputMode): ArtistStyleOutputPayload {
   const prompt = buildArtistStylePrompt(item);
   const data: ArtistStyleOutputPayload['data'] = {

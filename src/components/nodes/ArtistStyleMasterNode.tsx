@@ -1,4 +1,4 @@
-import { Handle, Position, useReactFlow, type Node, type NodeProps } from '@xyflow/react';
+import { Handle, Position, useNodeConnections, useNodesData, useReactFlow, type Node, type NodeProps } from '@xyflow/react';
 import {
   BookOpen,
   ChevronLeft,
@@ -10,6 +10,7 @@ import {
   Filter,
   Image as ImageIcon,
   Images,
+  Loader2,
   Palette,
   Plus,
   Save,
@@ -26,11 +27,24 @@ import {
   ARTIST_STYLE_MASTER_MOVEMENTS,
 } from '../../data/artistStyleMasterManifest';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
+import { IMAGE_MODELS } from '../../providers/models';
+import { generateExternalImage, queryExternalImageStatus, queryImageStatus, submitImageAsync } from '../../services/generation';
+import { useApiKeysStore } from '../../stores/apiKeys';
+import { useCanvasStore } from '../../stores/canvas';
+import { logBus } from '../../stores/logs';
+import { taskCompletionSound } from '../../stores/taskCompletionSound';
+import {
+  advancedProviderModelOptions,
+  advancedProvidersForNode,
+  externalImageSizeFor,
+  resolveAdvancedProviderSelection,
+} from '../../utils/advancedProviders';
 import { defaultSizeOf, placeSingleNode } from '../../utils/nodePlacement';
 import {
   ARTIST_STYLE_MASTER_STORAGE_KEY,
   buildArtistStyleOutputPayload,
   buildArtistStylePrompt,
+  buildArtistStyleRedrawPrompt,
   createArtistStyleExport,
   importArtistStyleExport,
   mergeArtistStyleLibraries,
@@ -64,7 +78,59 @@ const handleStyle = {
 };
 const TEXT_INPUT_HANDLE_TITLE = '输入：上游文本会作为检索/创作语境';
 const TEXT_OUTPUT_HANDLE_TITLE = '输出：风格提示词文本';
-const IMAGE_OUTPUT_HANDLE_TITLE = '输出：风格参考图像';
+const ORIGINAL_IMAGE_HANDLE_TITLE = '输入：需要按所选艺术风格重绘的原始图像';
+const IMAGE_OUTPUT_HANDLE_TITLE = '输出：风格参考图像或艺术风格重绘结果';
+const MAX_IMAGE_SEED = 2147483647;
+const EXTERNAL_IMAGE_MAX_POLLS = 300;
+const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
+
+function randomImageSeed(): number {
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const values = new Uint32Array(1);
+    crypto.getRandomValues(values);
+    return (values[0] % MAX_IMAGE_SEED) + 1;
+  }
+  return Math.floor(Math.random() * MAX_IMAGE_SEED) + 1;
+}
+
+function imagesFromData(data: any): string[] {
+  const out: string[] = [];
+  const push = (value: any) => {
+    const url = typeof value === 'string' ? value.trim() : '';
+    if (url && !out.includes(url)) out.push(url);
+  };
+  push(data?.imageUrl);
+  push(data?.directImageUrl);
+  for (const key of ['imageUrls', 'urls', 'generatedImages', 'directImageUrls', 'referenceImages']) {
+    const list = data?.[key];
+    if (Array.isArray(list)) list.forEach(push);
+  }
+  return out;
+}
+
+function firstImageFromData(data: any): string {
+  return imagesFromData(data)[0] || '';
+}
+
+function useInputImageByHandle(nodeId: string, handle: string): string {
+  const conns = useNodeConnections({ id: nodeId, handleType: 'target' });
+  const sourceIds = useMemo(
+    () => Array.from(new Set(conns
+      .filter((conn: any) => (conn.targetHandle || '') === handle)
+      .map((conn: any) => conn.source)
+      .filter(Boolean))),
+    [conns, handle],
+  );
+  const nodesData = useNodesData(sourceIds);
+  return useMemo(() => {
+    const list = Array.isArray(nodesData) ? nodesData : [nodesData];
+    for (const node of list) {
+      const url = firstImageFromData((node as any)?.data || {});
+      if (url) return url;
+    }
+    return '';
+  }, [nodesData]);
+}
 
 function readLibrary(): ArtistStyleUserLibrary {
   if (typeof window === 'undefined') return EMPTY_LIBRARY;
@@ -104,18 +170,26 @@ function stopCanvasWheel(event: React.WheelEvent) {
 }
 
 function ArtistStyleMasterNode({ id, data, selected }: NodeProps) {
+  const d = (data || {}) as any;
   const rf = useReactFlow();
   const update = useUpdateNodeData(id);
   const importRef = useRef<HTMLInputElement | null>(null);
   const customImageUploadRef = useRef<HTMLInputElement | null>(null);
+  const pollAbortRef = useRef(false);
+  const originalImage = useInputImageByHandle(id, 'original-image');
+  const activeCanvas = useCanvasStore((state) => state.canvases.find((canvas) => canvas.id === state.activeId) || null);
+  const activeCanvasId = useCanvasStore((state) => state.activeId);
+  const isReadonly = activeCanvas?.access?.canEdit === false;
+  const advancedProviders = useApiKeysStore((state) => state.settings.advancedProviders);
+  const allowZhenzhenFallback = useApiKeysStore((state) => state.settings.enableZhenzhenFallback !== false);
   const [library, setLibrary] = useState<ArtistStyleUserLibrary>(() => readLibrary());
-  const [query, setQuery] = useState(String((data as any)?.artistStyleQuery || ''));
-  const [movement, setMovement] = useState(String((data as any)?.artistStyleMovement || 'all'));
-  const [category, setCategory] = useState(String((data as any)?.artistStyleCategory || 'all'));
+  const [query, setQuery] = useState(String(d.artistStyleQuery || ''));
+  const [movement, setMovement] = useState(String(d.artistStyleMovement || 'all'));
+  const [category, setCategory] = useState(String(d.artistStyleCategory || 'all'));
   const [outputMode, setOutputMode] = useState<ArtistStyleOutputMode>(
-    (data as any)?.artistStyleOutputMode === 'image' ? 'image' : 'prompt',
+    d.artistStyleOutputMode === 'image' ? 'image' : 'prompt',
   );
-  const [selectedId, setSelectedId] = useState(String((data as any)?.artistStyleSelectedId || ARTIST_STYLE_MASTER_ITEMS[0]?.id || ''));
+  const [selectedId, setSelectedId] = useState(String(d.artistStyleSelectedId || ARTIST_STYLE_MASTER_ITEMS[0]?.id || ''));
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -124,6 +198,34 @@ function ArtistStyleMasterNode({ id, data, selected }: NodeProps) {
   const [customDraft, setCustomDraft] = useState(EMPTY_CUSTOM_DRAFT);
   const [editingStyleId, setEditingStyleId] = useState('');
   const [status, setStatus] = useState('选择一个风格，运行后输出提示词或参考图。');
+
+  const nodeStatus = String(d.status || 'idle');
+  const busy = nodeStatus === 'generating';
+  const model = d.model || 'gpt-image-2';
+  const modelDef = useMemo(() => IMAGE_MODELS.find((item) => item.id === model) || IMAGE_MODELS[0], [model]);
+  const apiModel = d.apiModel || modelDef.apiModel;
+  const aspectRatio = d.aspectRatio || '1:1';
+  const sizeLevel = d.sizeLevel || '2K';
+  const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
+  const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
+  const imageAdvancedProviders = useMemo(() => advancedProvidersForNode(advancedProviders, 'image'), [advancedProviders]);
+  const providerSelection = useMemo(
+    () => resolveAdvancedProviderSelection(advancedProviders, 'image', {
+      providerSource: d.providerSource,
+      providerId: d.providerId,
+      providerModel: d.providerModel,
+    }),
+    [advancedProviders, d.providerSource, d.providerId, d.providerModel],
+  );
+  const isExternalSelected = providerSelection.available && providerSelection.providerSource !== 'zhenzhen';
+  const externalModelOptions = providerSelection.provider
+    ? advancedProviderModelOptions(providerSelection.provider, 'image')
+    : [];
+  const externalProviderModel = providerSelection.providerModel || externalModelOptions[0] || '';
+  const firstImageAdvancedProvider = imageAdvancedProviders[0] || null;
+  const providerSelectValue = isExternalSelected
+    ? providerSelection.providerId
+    : (allowZhenzhenFallback ? 'zhenzhen' : (firstImageAdvancedProvider?.id || ''));
 
   useEffect(() => {
     writeLibrary(library);
@@ -382,6 +484,204 @@ function ArtistStyleMasterNode({ id, data, selected }: NodeProps) {
     reader.readAsDataURL(file);
   }, []);
 
+  const runArtistStyleRedraw = useCallback(async () => {
+    if (isReadonly) return;
+    if (!selectedStyle) {
+      const msg = '请先选择一个艺术风格';
+      update({ status: 'error', error: msg });
+      throw new Error(msg);
+    }
+    if (!originalImage) {
+      const msg = '请先连接原始图像';
+      update({ status: 'error', error: msg });
+      throw new Error(msg);
+    }
+    const styleImage = selectedStyle.imageUrl;
+    if (!styleImage) {
+      const msg = '当前艺术风格缺少参考图像';
+      update({ status: 'error', error: msg });
+      throw new Error(msg);
+    }
+
+    const prompt = buildArtistStyleRedrawPrompt(selectedStyle);
+    const referenceImages = [originalImage, styleImage];
+    const runSeed = seed > 0 ? seed : randomImageSeed();
+    const src = `artist-style-master:${id.slice(0, 6)}`;
+    const historyContext = {
+      canvasId: activeCanvasId,
+      sourceNodeId: id,
+      sourceNodeType: 'artist-style-master',
+      seed: runSeed,
+      nodeTitle: '艺术风格大师',
+      outputTitle: `${selectedStyle.chineseName} 风格重绘`,
+    };
+    pollAbortRef.current = false;
+    taskCompletionSound.primeAudio();
+    update({
+      status: 'generating',
+      progress: '0%',
+      error: '',
+      imageUrl: '',
+      imageUrls: [],
+      urls: [],
+      directImageUrl: '',
+      directImageUrls: [],
+      prompt,
+      outputText: prompt,
+      text: prompt,
+      lastPrompt: prompt,
+      lastSeed: runSeed,
+      referenceImages,
+      artistStyleOriginalImageUrl: originalImage,
+      artistStyleReferenceImageUrl: styleImage,
+      artistStyleSelectedId: selectedStyle.id,
+    });
+    setStatus('正在按所选艺术风格重绘原始图像...');
+
+    try {
+      let urls: string[] = [];
+      if (isExternalSelected && providerSelection.provider) {
+        if (!externalProviderModel) throw new Error('扩展平台未配置可用图像模型');
+        const size = externalImageSizeFor(aspectRatio, sizeLevel);
+        const providerParams = {
+          ...(d.providerParams || {}),
+          aspect_ratio: aspectRatio,
+          aspectRatio,
+          image_size: sizeLevel,
+          imageSize: sizeLevel,
+        };
+        logBus.info(`艺术风格大师重绘提交: ${providerSelection.provider.label || providerSelection.provider.id} · ${externalProviderModel} · refs=${referenceImages.length}`, src);
+        let res = await generateExternalImage({
+          providerId: providerSelection.provider.id,
+          providerModel: externalProviderModel,
+          model: externalProviderModel,
+          prompt,
+          size,
+          aspect_ratio: aspectRatio,
+          image_size: sizeLevel,
+          images: referenceImages,
+          outputFormat,
+          seed: runSeed,
+          n: Math.max(1, Math.min(4, Number(providerParams.n || 1))),
+          providerParams,
+          historyContext,
+          async: true,
+        });
+        if (!res.imageUrls?.length && res.taskId && (res.code === 'running' || res.status === 'running')) {
+          let pollingTaskId = res.taskId;
+          update({ progress: '生成中...', taskId: pollingTaskId });
+          for (let index = 0; index < EXTERNAL_IMAGE_MAX_POLLS; index += 1) {
+            if (pollAbortRef.current) throw new Error('任务已取消');
+            await new Promise((resolve) => setTimeout(resolve, EXTERNAL_IMAGE_POLL_INTERVAL_MS));
+            res = await queryExternalImageStatus({
+              providerId: providerSelection.provider.id,
+              providerModel: externalProviderModel,
+              taskId: pollingTaskId,
+              outputFormat,
+              historyContext,
+            });
+            pollingTaskId = res.taskId || pollingTaskId;
+            update({ progress: `${Math.min(99, Math.round(((index + 1) / EXTERNAL_IMAGE_MAX_POLLS) * 100))}%`, taskId: pollingTaskId });
+            if (res.imageUrls?.length || (res.code && res.code !== 'running')) break;
+          }
+        }
+        urls = res.imageUrls || [];
+        if (!urls.length) throw new Error('扩展平台完成但未返回图片');
+        update({ remoteImageUrls: res.remoteImageUrls, taskId: res.taskId || d.taskId });
+      } else {
+        logBus.info(`艺术风格大师重绘提交: model=${apiModel} ratio=${aspectRatio} size=${sizeLevel} refs=${referenceImages.length}`, src);
+        const submit = await submitImageAsync({
+          model: modelDef.id,
+          apiModel,
+          paramKind: modelDef.paramKind,
+          prompt,
+          aspect_ratio: aspectRatio,
+          image_size: sizeLevel,
+          images: referenceImages,
+          n: 1,
+          outputFormat,
+          seed: runSeed,
+          historyContext,
+        });
+        if (submit.sync && submit.urls?.length) {
+          urls = submit.urls;
+        } else {
+          if (!submit.taskId) throw new Error('未获取到任务 ID');
+          update({ progress: submit.progress || '5%', taskId: submit.taskId });
+          let lastProgress = submit.progress || '5%';
+          for (let index = 0; index < 1800; index += 1) {
+            if (pollAbortRef.current) throw new Error('任务已取消');
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            const q = await queryImageStatus(submit.taskId, apiModel, outputFormat, historyContext);
+            if (q.progress && q.progress !== lastProgress) {
+              lastProgress = q.progress;
+              update({ progress: q.progress });
+            }
+            const statusText = String(q.status || '').toLowerCase();
+            if (statusText === 'completed' || statusText === 'success' || statusText === 'done') {
+              urls = q.urls || [];
+              break;
+            }
+            if (statusText === 'failed' || statusText === 'failure' || statusText === 'error') {
+              throw new Error(q.error || '任务失败');
+            }
+          }
+        }
+      }
+
+      if (!urls.length) throw new Error('任务完成但未返回图片');
+      update({
+        status: 'success',
+        progress: '100%',
+        imageUrl: urls[0],
+        imageUrls: urls,
+        urls,
+        directImageUrl: urls[0],
+        directImageUrls: urls,
+        prompt,
+        outputText: prompt,
+        text: prompt,
+        lastPrompt: prompt,
+        lastSeed: runSeed,
+        referenceImages,
+        artistStyleOriginalImageUrl: originalImage,
+        artistStyleReferenceImageUrl: styleImage,
+        lastArtistStyleOutputMode: 'redraw',
+        lastArtistStyleText: prompt,
+        lastArtistStyleImageUrl: urls[0],
+        error: '',
+      });
+      setStatus('艺术风格重绘完成。');
+      logBus.success(`艺术风格大师重绘完成 → ${urls[0]}`, src);
+      taskCompletionSound.notifyComplete(id, 'image');
+    } catch (error: any) {
+      const message = error?.message || '艺术风格重绘失败';
+      update({ status: 'error', error: message, progress: '' });
+      setStatus(message);
+      logBus.error(message, src);
+      throw error;
+    }
+  }, [
+    activeCanvasId,
+    apiModel,
+    aspectRatio,
+    d.providerParams,
+    d.taskId,
+    externalProviderModel,
+    id,
+    isExternalSelected,
+    isReadonly,
+    modelDef.id,
+    modelDef.paramKind,
+    originalImage,
+    outputFormat,
+    providerSelection.provider,
+    seed,
+    selectedStyle,
+    sizeLevel,
+    update,
+  ]);
+
   const runArtistStyleOutput = useCallback(async (mode: ArtistStyleOutputMode = outputMode) => {
     if (!selectedStyle) throw new Error('请先选择一个艺术风格');
     const payload = buildArtistStyleOutputPayload(selectedStyle, mode);
@@ -411,7 +711,9 @@ function ArtistStyleMasterNode({ id, data, selected }: NodeProps) {
     setStatus(mode === 'image' ? '已输出风格图片。' : '已输出风格提示词。');
   }, [id, outputMode, rf, selectedStyle, update]);
 
-  const handleRun = useCallback(() => runArtistStyleOutput(outputMode), [outputMode, runArtistStyleOutput]);
+  const handleRun = useCallback(() => (
+    originalImage ? runArtistStyleRedraw() : runArtistStyleOutput(outputMode)
+  ), [originalImage, outputMode, runArtistStyleOutput, runArtistStyleRedraw]);
 
   useRunTrigger(id, handleRun, 'artist-style-master');
 
@@ -571,7 +873,8 @@ function ArtistStyleMasterNode({ id, data, selected }: NodeProps) {
       data-artist-style-master-root
       onWheelCapture={(event) => event.stopPropagation()}
     >
-      <Handle id="text" type="target" position={Position.Left} style={{ ...handleStyle, background: PORT_COLOR.text, top: 160 }} title={TEXT_INPUT_HANDLE_TITLE} />
+      <Handle id="text" type="target" position={Position.Left} style={{ ...handleStyle, background: PORT_COLOR.text, top: 148 }} title={TEXT_INPUT_HANDLE_TITLE} />
+      <Handle id="original-image" type="target" position={Position.Left} style={{ ...handleStyle, background: PORT_COLOR.image, top: 196 }} title={ORIGINAL_IMAGE_HANDLE_TITLE} />
       <Handle id="text" type="source" position={Position.Right} style={{ ...handleStyle, background: PORT_COLOR.text, top: 152 }} title={TEXT_OUTPUT_HANDLE_TITLE} />
       <Handle id="image" type="source" position={Position.Right} style={{ ...handleStyle, background: PORT_COLOR.image, top: 190 }} title={IMAGE_OUTPUT_HANDLE_TITLE} />
 
@@ -596,6 +899,29 @@ function ArtistStyleMasterNode({ id, data, selected }: NodeProps) {
           </div>
         </div>
         <p className="artist-style-master-cue">{selectedStyle?.cue}</p>
+      </section>
+
+      <section className="artist-style-master-section nodrag nopan">
+        <div className="artist-style-master-section-title">
+          <span><ImageIcon size={14} /> 重绘原图</span>
+          {busy ? <Loader2 size={14} className="animate-spin" /> : null}
+        </div>
+        <div className="artist-style-master-redraw-grid">
+          <div className="artist-style-master-redraw-slot">
+            {originalImage ? <img src={originalImage} alt="原始图像" /> : <div>连接原始图像</div>}
+            <span>原始图像</span>
+          </div>
+          <div className="artist-style-master-redraw-slot">
+            {selectedStyle ? <img src={selectedStyle.thumbnailUrl || selectedStyle.imageUrl} alt="艺术风格参考" /> : <div>选择风格</div>}
+            <span>艺术风格</span>
+          </div>
+        </div>
+        <small className="artist-style-master-redraw-note">
+          连接原始图像后点击运行，会保留构图和主要内容，只迁移笔触、色彩、光影和细节风格。
+        </small>
+        {d.error ? <div className="artist-style-master-error">{d.error}</div> : null}
+        {d.progress ? <div className="artist-style-master-status">{d.progress}</div> : null}
+        {d.imageUrl ? <img className="artist-style-master-redraw-result" src={d.imageUrl} alt="艺术风格重绘结果" draggable={false} /> : null}
       </section>
 
       <section className="artist-style-master-section nodrag nopan">
@@ -644,6 +970,74 @@ function ArtistStyleMasterNode({ id, data, selected }: NodeProps) {
       </section>
 
       <section className="artist-style-master-section nodrag nopan">
+        <div className="artist-style-master-section-title">
+          <span><ImageIcon size={14} /> 生图模型</span>
+        </div>
+        <div className="artist-style-master-model-grid">
+          <label>
+            <span>生图平台</span>
+            <select
+              value={providerSelectValue}
+              disabled={isReadonly || busy || (!allowZhenzhenFallback && imageAdvancedProviders.length === 0)}
+              onChange={(event) => {
+                const nextId = event.target.value;
+                if (nextId === 'zhenzhen') {
+                  update({ providerSource: 'zhenzhen', providerId: '', providerModel: '' });
+                  return;
+                }
+                const provider = imageAdvancedProviders.find((item) => item.id === nextId);
+                if (!provider) return;
+                const models = advancedProviderModelOptions(provider, 'image');
+                update({ providerSource: provider.protocol, providerId: provider.id, providerModel: models[0] || '' });
+              }}
+            >
+              {allowZhenzhenFallback && <option value="zhenzhen">内置生图平台</option>}
+              {imageAdvancedProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label || provider.id}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>生图模型</span>
+            {isExternalSelected ? (
+              <select value={externalProviderModel} disabled={isReadonly || busy || externalModelOptions.length === 0} onChange={(event) => update({ providerModel: event.target.value })}>
+                {externalModelOptions.length > 0
+                  ? externalModelOptions.map((item) => <option key={item} value={item}>{item}</option>)
+                  : <option value="">未配置图像模型</option>}
+              </select>
+            ) : (
+              <select value={apiModel} disabled={isReadonly || busy} onChange={(event) => update({ apiModel: event.target.value })}>
+                {modelDef.apiModelOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </select>
+            )}
+          </label>
+          <label>
+            <span>画面比例</span>
+            <select value={aspectRatio} disabled={isReadonly || busy} onChange={(event) => update({ aspectRatio: event.target.value })}>
+              {modelDef.aspectRatios.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>分辨率</span>
+            <select value={sizeLevel} disabled={isReadonly || busy} onChange={(event) => update({ sizeLevel: event.target.value })}>
+              <option value="1K">1K</option>
+              <option value="2K">2K</option>
+              <option value="4K">4K</option>
+            </select>
+          </label>
+          <label>
+            <span>输出格式</span>
+            <select value={outputFormat} disabled={isReadonly || busy} onChange={(event) => update({ outputFormat: event.target.value })}>
+              <option value="jpg">JPG</option>
+              <option value="png">PNG</option>
+            </select>
+          </label>
+          <label>
+            <span>Seed（0 随机）</span>
+            <input type="number" min={0} value={seed} disabled={isReadonly || busy} onChange={(event) => update({ seed: Math.max(0, Math.floor(Number(event.target.value) || 0)) })} />
+          </label>
+        </div>
+      </section>
+
+      <section className="artist-style-master-section nodrag nopan">
         <div className="artist-style-master-mini-grid" onWheelCapture={stopCanvasWheel}>
           {filteredStyles.map((style) => (
             <button key={style.id} type="button" className={selectedStyle?.id === style.id ? 'active' : ''} onClick={() => setSelectedId(style.id)}>
@@ -662,9 +1056,9 @@ function ArtistStyleMasterNode({ id, data, selected }: NodeProps) {
 
       <footer className="artist-style-master-footer nodrag nopan">
         <span>{filteredStyles.length} 个匹配 · {library.styles.length} 个自定义</span>
-        <button type="button" onClick={() => void handleRun()}>
-          {outputMode === 'image' ? <ImageIcon size={17} /> : <FileText size={17} />}
-          运行
+        <button type="button" disabled={isReadonly || busy} onClick={() => void handleRun()}>
+          {busy ? <Loader2 size={17} className="animate-spin" /> : originalImage ? <ImageIcon size={17} /> : outputMode === 'image' ? <ImageIcon size={17} /> : <FileText size={17} />}
+          {originalImage ? '重绘原图' : '运行'}
         </button>
       </footer>
 
