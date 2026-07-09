@@ -145,10 +145,48 @@ function resolveResourceLibraryMediaPath(value, options = {}) {
   } : null;
 }
 
+function uniqueExistingDirs(dirs) {
+  const seen = new Set();
+  const out = [];
+  for (const dir of dirs) {
+    const clean = String(dir || '').trim();
+    if (!clean) continue;
+    const resolved = path.resolve(clean);
+    const key = process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (fs.existsSync(resolved)) out.push(resolved);
+  }
+  return out;
+}
+
+function resolvePublicAssetMediaPath(value) {
+  const text = String(value || '').trim().split(/[?#]/)[0];
+  const prefix = '/artist-style-master/generated/';
+  if (!text.startsWith(prefix)) return '';
+
+  const relative = decodeUrlPathPart(text.slice(prefix.length));
+  if (!relative) return '';
+
+  const roots = uniqueExistingDirs([
+    config.FRONTEND_DIST ? path.join(config.FRONTEND_DIST, 'artist-style-master', 'generated') : '',
+    path.join(config.BASE_DIR, 'public', 'artist-style-master', 'generated'),
+    path.resolve(__dirname, '..', '..', '..', 'public', 'artist-style-master', 'generated'),
+  ]);
+
+  for (const root of roots) {
+    const filePath = safeJoinInside(root, relative);
+    if (filePath && fs.existsSync(filePath)) return filePath;
+  }
+  return '';
+}
+
 function resolveT8LocalMediaPath(value, options = {}) {
   const text = String(value || '').trim().split(/[?#]/)[0];
   const resourcePath = resolveResourceLibraryMediaPath(text, options);
   if (resourcePath?.path) return resourcePath.path;
+  const publicAssetPath = resolvePublicAssetMediaPath(text);
+  if (publicAssetPath) return publicAssetPath;
   const rules = [
     ['/files/input/', config.INPUT_DIR],
     ['/input/', config.INPUT_DIR],
@@ -299,6 +337,7 @@ module.exports = {
   mediaRefToAbsoluteUrl,
   mimeFromPath,
   resolveMediaRef,
+  resolvePublicAssetMediaPath,
   resolveResourceLibraryMediaPath,
   resolveT8LocalMediaPath,
 };

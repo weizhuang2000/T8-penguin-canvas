@@ -10,6 +10,7 @@ const require = createRequire(import.meta.url);
 const {
   mediaRefToAbsoluteUrl,
   resolveMediaRef,
+  resolvePublicAssetMediaPath,
   resolveT8LocalMediaPath,
 } = require('../backend/src/providers/mediaResolver.js');
 
@@ -88,6 +89,22 @@ test('resolveMediaRef maps resource library file URLs to local paths', async () 
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
+});
+
+test('resolveMediaRef converts bundled artist style images to data URLs', async () => {
+  const ref = '/artist-style-master/generated/katsushika-hokusai.webp?cache=1';
+  const filePath = resolvePublicAssetMediaPath(ref);
+
+  assert.equal(path.basename(filePath), 'katsushika-hokusai.webp');
+  assert.ok(fs.existsSync(filePath));
+  assert.equal(resolvePublicAssetMediaPath('/artist-style-master/generated/../../backend/src/config.js'), '');
+
+  const resolved = await resolveMediaRef(ref, { target: 'data-url' });
+  assert.equal(resolved.kind, 'data-url');
+  assert.equal(resolved.mime, 'image/webp');
+  assert.equal(resolved.path, filePath);
+  assert.match(resolved.dataUrl, /^data:image\/webp;base64,/);
+  assert.ok(resolved.base64.length > 0);
 });
 
 test('resolveT8LocalMediaPath maps /files/input and /files/output to configured directories', () => {
