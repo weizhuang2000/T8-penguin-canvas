@@ -857,11 +857,12 @@
     "status": "implemented",
     "date": "2026-06-13",
     "nodeType": "artist-style-master",
-    "category": "inspiration",
-    "description": "左侧新增「灵感之源」分类和「艺术风格大师」节点：迁移 joeseesun/qiaomu-artist-style 本地 383 个艺术家风格参考，面向设计和生图创作提供可搜索、可筛选、可管理的风格提示词与风格图片输出。",
+    "category": "exhibition",
+    "description": "展陈工具内「艺术风格大师」节点：迁移 joeseesun/qiaomu-artist-style 本地 383 个艺术家风格参考，面向设计和生图创作提供可搜索、可筛选、可管理的风格提示词、风格图片输出与原图风格重绘。",
     "ports": {
       "inputs": [
-        "text"
+        "text",
+        "image"
       ],
       "outputs": [
         "text",
@@ -4986,15 +4987,21 @@
         }
       ]
     },
-    "inspiration": {
-      "label": "灵感之源",
-      "count": 2,
+    "exhibition": {
+      "label": "展陈工具",
+      "count": 1,
       "nodes": [
         {
           "type": "artist-style-master",
           "label": "艺术风格大师",
-          "description": "移植 qiaomu 艺术家风格库，支持画家英文名/中文名/风格标签搜索、按流派和分类筛选、缩略图 lightbox、大图方向键切换、复制画家提示词、自定义分类/风格保存、导入导出，并可运行输出风格提示词或风格图片"
-        },
+          "description": "移植 qiaomu 艺术家风格库，支持画家英文名/中文名/风格标签搜索、按流派和分类筛选、缩略图 lightbox、大图方向键切换、复制画家提示词、自定义分类/风格保存、导入导出，并可运行输出风格提示词、风格图片或按选中艺术风格重绘原始图像"
+        }
+      ]
+    },
+    "inspiration": {
+      "label": "灵感之源",
+      "count": 1,
+      "nodes": [
         {
           "type": "anime-tag-master",
           "label": "动漫标签大师",

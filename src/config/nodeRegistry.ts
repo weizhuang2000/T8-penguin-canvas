@@ -49,7 +49,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: 'codex-image-conjure', label: 'Codex 生图工作台', category: 'codex', description: '基于 Codex CLI imagegen 的专用生图工作台：提示词模板、片段、参考图和公共图库', icon: 'ImagePlus', color: 'sky' },
 
   // ========== Inspiration 灵感之源 ==========
-  { type: 'artist-style-master', label: '艺术风格大师', category: 'inspiration', description: '移植 qiaomu 艺术家风格库：按画家、中文名、流派和标签检索，输出风格提示词或参考图', icon: 'Palette', color: 'amber' },
+  { type: 'artist-style-master', label: '艺术风格大师', category: 'exhibition', description: '移植 qiaomu 艺术家风格库：按画家、中文名、流派和标签检索，输出风格提示词、参考图或原图风格重绘', icon: 'Palette', color: 'cyan' },
   { type: 'anime-tag-master', label: '动漫标签大师', category: 'inspiration', description: '移植 comfyui-anima-t8 Danbooru / Gelbooru 懒加载图库：搜索动漫标签、参考图、保存自定义标签并输出标签或图像', icon: 'Tags', color: 'lime' },
 
   // ========== ComfyUI 本地工作流节点 ==========

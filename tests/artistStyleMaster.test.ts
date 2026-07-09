@@ -20,7 +20,7 @@ function read(rel: string) {
   return readFileSync(new URL(rel, import.meta.url), 'utf8');
 }
 
-test('artist style master is registered in the Inspiration category', () => {
+test('artist style master is registered in the exhibition category', () => {
   const types = read('../src/types/canvas.ts');
   const registry = read('../src/config/nodeRegistry.ts');
   const ports = read('../src/config/portTypes.ts');
@@ -30,9 +30,9 @@ test('artist style master is registered in the Inspiration category', () => {
   const features = read('../features.json');
 
   assert.match(types, /'artist-style-master'/);
-  assert.match(types, /'inspiration'/);
-  assert.match(registry, /type:\s*'artist-style-master'[\s\S]*label:\s*'艺术风格大师'[\s\S]*category:\s*'inspiration'/);
-  assert.match(registry, /inspiration:\s*\{\s*label:\s*'灵感之源'/);
+  assert.match(types, /'exhibition'/);
+  assert.match(registry, /type:\s*'artist-style-master'[\s\S]*label:\s*'艺术风格大师'[\s\S]*category:\s*'exhibition'/);
+  assert.match(registry, /exhibition:\s*\{\s*label:\s*'展陈工具'/);
   assert.match(ports, /'artist-style-master':\s*\{\s*inputs:\s*\['text', 'image'\],\s*outputs:\s*\['text', 'image'\]/);
   assert.match(canvas, /ArtistStyleMasterNode/);
   assert.match(canvas, /import\('\.\/nodes\/ArtistStyleMasterNode'\)/);
@@ -45,7 +45,7 @@ test('artist style master is registered in the Inspiration category', () => {
   assert.match(sidebar, /'artist-style-master': 'Palette'/);
   assert.match(placement, /'artist-style-master':\s*\{\s*w:\s*480,\s*h:\s*780\s*\}/);
   assert.match(features, /artistStyleMasterNode/);
-  assert.match(features, /"label":\s*"灵感之源"/);
+  assert.match(features, /"artistStyleMasterNode":\s*\{[\s\S]*"category":\s*"exhibition"/);
 });
 
 test('artist style manifest migrates qiaomu styles and local thumbnails', () => {
