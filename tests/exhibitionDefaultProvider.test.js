@@ -12,6 +12,7 @@ test('new exhibition image generation nodes default to first advanced image prov
   assert.match(canvas, /useApiKeysStore\(\(state\) => state\.settings\.advancedProviders\)/);
   assert.match(canvas, /EXHIBITION_IMAGE_PROVIDER_NODE_TYPES/);
   for (const type of [
+    'artist-style-master',
     'exhibition-img2img',
     'exhibition-style-transfer',
     'exhibition-recolor',

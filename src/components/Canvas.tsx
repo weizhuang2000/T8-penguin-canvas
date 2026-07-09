@@ -1511,6 +1511,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
 };
 
 const EXHIBITION_IMAGE_PROVIDER_NODE_TYPES = new Set<string>([
+  'artist-style-master',
   'exhibition-img2img',
   'exhibition-style-transfer',
   'exhibition-recolor',

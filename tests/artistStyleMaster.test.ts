@@ -38,7 +38,10 @@ test('artist style master is registered in the exhibition category', () => {
   assert.match(canvas, /import\('\.\/nodes\/ArtistStyleMasterNode'\)/);
   assert.match(canvas, /'artist-style-master': ArtistStyleMasterNode/);
   assert.match(canvas, /'artist-style-master':\s*\{[\s\S]*apiModel:\s*'gpt-image-2-all'/);
-  assert.match(canvas, /'artist-style-master':\s*\{[\s\S]*providerSource:\s*'zhenzhen'/);
+  assert.match(canvas, /EXHIBITION_IMAGE_PROVIDER_NODE_TYPES[\s\S]*'artist-style-master'/);
+  assert.match(canvas, /advancedProvidersForNode\(providers,\s*'image'\)\[0\]/);
+  assert.match(canvas, /providerSource:\s*provider\.protocol/);
+  assert.match(canvas, /providerModel:\s*models\[0\]\s*\|\|\s*''/);
   assert.match(canvas, /'artist-style-master':\s*\{[\s\S]*sizeLevel:\s*'2K'/);
   assert.match(canvas, /'artist-style-master':\s*\{[\s\S]*outputFormat:\s*'jpg'/);
   assert.match(canvas, /'artist-style-master':\s*\{[\s\S]*seed:\s*0/);
