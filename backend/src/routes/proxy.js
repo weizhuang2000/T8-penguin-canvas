@@ -14,6 +14,7 @@ const { tryDecodeDuckPayload } = require('../utils/duckPayload');
 const { normalizeImageOutputFormat, writeImageOutput } = require('../utils/imageOutput');
 const { addHistoryItems, kindFromUrl } = require('../utils/generationHistory');
 const { resolveLlmChatCompletionsUrl } = require('../utils/llmBaseUrl');
+const { mimeFromPath, resolveMediaRef } = require('../providers/mediaResolver');
 const { requireNodePermission } = require('../auth/toolPermissions');
 const settingsRouter = require('./settings');
 
@@ -1519,22 +1520,32 @@ async function uploadRefToZhenzhen(ref, apiKey, baseUrl = config.ZHENZHEN_BASE_U
     mime = m[1] || 'image/png';
     buf = Buffer.from(m[2], 'base64');
     ext = extFromContentType(mime) || (mime.split('/')[1] || 'png').replace('jpeg', 'jpg');
-  } else if (
-    trimmed.startsWith('http://') ||
-    trimmed.startsWith('https://') ||
-    trimmed.startsWith('/files/') ||
-    trimmed.startsWith('/api/resources/file/') ||
-    trimmed.startsWith('/api/resources/set-file/')
-  ) {
-    const url = trimmed.startsWith('/') ? `http://127.0.0.1:${config.PORT}${trimmed}` : trimmed;
-    const r = await fetch(url);
-    if (!r.ok) return null;
-    mime = r.headers.get('content-type') || 'image/png';
-    buf = Buffer.from(await r.arrayBuffer());
-    const tailExt = url.split(/[?#]/)[0].match(/\.([a-z0-9]{2,8})$/i)?.[1];
-    ext = extFromContentType(mime) || tailExt || (mime.split('/')[1] || 'png').replace('jpeg', 'jpg');
   } else {
-    return null;
+    const local = await resolveMediaRef(trimmed, {
+      target: 'local-path',
+      baseUrl: `http://127.0.0.1:${config.PORT}`,
+    }).catch(() => null);
+    if (local?.path && fs.existsSync(local.path)) {
+      mime = local.mime || mimeFromPath(local.path);
+      buf = fs.readFileSync(local.path);
+      ext = extFromContentType(mime) || path.extname(local.path).replace(/^\./, '') || (mime.split('/')[1] || 'png').replace('jpeg', 'jpg');
+    } else if (
+      trimmed.startsWith('http://') ||
+      trimmed.startsWith('https://') ||
+      trimmed.startsWith('/files/') ||
+      trimmed.startsWith('/api/resources/file/') ||
+      trimmed.startsWith('/api/resources/set-file/')
+    ) {
+      const url = trimmed.startsWith('/') ? `http://127.0.0.1:${config.PORT}${trimmed}` : trimmed;
+      const r = await fetch(url);
+      if (!r.ok) return null;
+      mime = r.headers.get('content-type') || 'image/png';
+      buf = Buffer.from(await r.arrayBuffer());
+      const tailExt = url.split(/[?#]/)[0].match(/\.([a-z0-9]{2,8})$/i)?.[1];
+      ext = extFromContentType(mime) || tailExt || (mime.split('/')[1] || 'png').replace('jpeg', 'jpg');
+    } else {
+      return null;
+    }
   }
   const fd = new FormData();
   const blob = new Blob([buf], { type: mime });
