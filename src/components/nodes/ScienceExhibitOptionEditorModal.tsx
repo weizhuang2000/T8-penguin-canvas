@@ -1,12 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Save, Trash2, X } from 'lucide-react';
+import { FileText, Plus, Save, Trash2, X } from 'lucide-react';
 import type { ScienceExhibitPresetGroup, ScienceExhibitPromptPresetMap, ScienceExhibitOptionPresetItem } from '../../services/api';
+import {
+  mergeScienceExhibitOptionBatchItems,
+  parseScienceExhibitOptionBatchText,
+  type ScienceExhibitOptionBatchError,
+} from '../../utils/scienceExhibitOptionBatchImport.js';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/25 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
 
 type DraftOption = ScienceExhibitOptionPresetItem & { draftId: string };
+type BatchFeedback = {
+  tone: 'success' | 'warning' | 'error';
+  message: string;
+  errors: ScienceExhibitOptionBatchError[];
+};
 
 const GROUPS: Array<{ id: ScienceExhibitPresetGroup; label: string }> = [
   { id: 'domains', label: '科学领域' },
@@ -71,6 +81,9 @@ export default function ScienceExhibitOptionEditorModal({
     scales: [],
   });
   const [localError, setLocalError] = useState('');
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [batchText, setBatchText] = useState('');
+  const [batchFeedback, setBatchFeedback] = useState<BatchFeedback | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -83,6 +96,9 @@ export default function ScienceExhibitOptionEditorModal({
     });
     setActiveGroup('domains');
     setLocalError('');
+    setBatchOpen(false);
+    setBatchText('');
+    setBatchFeedback(null);
   }, [open, presets]);
 
   useEffect(() => {
@@ -125,6 +141,48 @@ export default function ScienceExhibitOptionEditorModal({
     setGroupDrafts((items) => items.filter((item) => item.draftId !== draftId));
   };
 
+  const selectGroup = (group: ScienceExhibitPresetGroup) => {
+    setActiveGroup(group);
+    setBatchOpen(false);
+    setBatchText('');
+    setBatchFeedback(null);
+  };
+
+  const closeBatchImport = () => {
+    setBatchOpen(false);
+    setBatchText('');
+    setBatchFeedback(null);
+  };
+
+  const applyBatchImport = () => {
+    const parsed = parseScienceExhibitOptionBatchText(batchText);
+    if (parsed.items.length === 0) {
+      setBatchFeedback({
+        tone: 'error',
+        message: `未找到有效选项，已跳过 ${parsed.errors.length} 行`,
+        errors: parsed.errors,
+      });
+      return;
+    }
+    const importedDrafts = parsed.items.map((item, index) => makeDraft(item, activeDrafts.length + index));
+    const merged = mergeScienceExhibitOptionBatchItems(activeDrafts, importedDrafts) as {
+      items: DraftOption[];
+      added: number;
+      updated: number;
+    };
+    setGroupDrafts(() => merged.items);
+    const skipped = parsed.errors.length;
+    setBatchFeedback({
+      tone: skipped > 0 ? 'warning' : 'success',
+      message: `批量导入完成：新增 ${merged.added} 项，更新 ${merged.updated} 项，跳过 ${skipped} 行。请检查后点击“保存当前分类”。`,
+      errors: parsed.errors,
+    });
+    if (skipped === 0) {
+      setBatchText('');
+      setBatchOpen(false);
+    }
+  };
+
   const saveActive = async () => {
     const normalized = normalizeDrafts(activeDrafts);
     if (normalized.length === 0) {
@@ -155,7 +213,7 @@ export default function ScienceExhibitOptionEditorModal({
                 key={group.id}
                 type="button"
                 className={`w-full rounded px-2 py-2 text-left text-[11px] ${activeGroup === group.id ? 'bg-cyan-300/15 text-cyan-100' : 'text-white/65 hover:bg-white/10'}`}
-                onClick={() => setActiveGroup(group.id)}
+                onClick={() => selectGroup(group.id)}
                 disabled={saving}
               >
                 {group.label}
@@ -169,11 +227,48 @@ export default function ScienceExhibitOptionEditorModal({
               <div className="text-[11px] font-semibold text-cyan-100">{activeLabel}</div>
               <div className="flex gap-1">
                 <button type="button" className={BUTTON} onClick={addOption} disabled={saving}><Plus size={13} /> 新增</button>
+                <button type="button" className={BUTTON} onClick={() => setBatchOpen((value) => !value)} disabled={saving}><FileText size={13} /> 批量导入</button>
                 <button type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} onClick={() => void saveActive()} disabled={saving}><Save size={13} /> 保存当前分类</button>
               </div>
             </div>
 
-            <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
+            {batchFeedback && (
+              <div className={`rounded border px-2 py-1.5 text-[10px] ${batchFeedback.tone === 'error' ? 'border-red-300/25 bg-red-400/10 text-red-200' : batchFeedback.tone === 'warning' ? 'border-amber-300/25 bg-amber-300/10 text-amber-100' : 'border-emerald-300/25 bg-emerald-300/10 text-emerald-100'}`}>
+                <div>{batchFeedback.message}</div>
+                {batchFeedback.errors.length > 0 && (
+                  <div className="mt-1 max-h-24 space-y-0.5 overflow-y-auto font-mono text-[9px]">
+                    {batchFeedback.errors.map((item) => <div key={`${item.line}:${item.source}`}>第 {item.line} 行：{item.message}</div>)}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {batchOpen && (
+              <div className="space-y-2 rounded border border-white/10 bg-black/20 p-2">
+                <div className="text-[10px] leading-relaxed text-white/55">
+                  每行一个选项：英文 ID + 中文名称 + 英文 Prompt。支持普通空格、Tab、全角空格，ID 和名称可使用 **粗体**。
+                </div>
+                <textarea
+                  className={`${FIELD} min-h-[132px] resize-y font-mono`}
+                  value={batchText}
+                  disabled={saving}
+                  placeholder={'**slider-control**　**滑杆调节**　visitor moves physical sliders to adjust variables and observes immediate changes in the exhibit\n**knob-control**　**旋钮调节**　visitor rotates knobs to fine-tune parameters such as frequency, intensity, temperature or scale'}
+                  onChange={(event) => {
+                    setBatchText(event.target.value);
+                    setBatchFeedback(null);
+                  }}
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[9px] text-white/35">同 ID 更新原项，新 ID 追加；错误行会跳过并显示行号。</div>
+                  <div className="flex shrink-0 gap-1">
+                    <button type="button" className={BUTTON} disabled={saving} onClick={closeBatchImport}>取消</button>
+                    <button type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={saving || !batchText.trim()} onClick={applyBatchImport}>导入有效行</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className={`${batchOpen ? 'max-h-[38vh]' : 'max-h-[60vh]'} space-y-2 overflow-y-auto pr-1`}>
               {activeDrafts.map((item, index) => (
                 <div key={item.draftId} className="grid grid-cols-[120px_150px_1fr_88px] gap-2 rounded border border-white/10 bg-white/[0.035] p-2">
                   <label className="space-y-1">

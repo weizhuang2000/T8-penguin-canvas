@@ -34,6 +34,7 @@ test('science exhibit design node is registered across frontend and permissions'
 
 test('science exhibit component exposes handles, llm extraction and generation services', () => {
   const source = read('src/components/nodes/ScienceExhibitDesignNode.tsx');
+  const optionEditor = read('src/components/nodes/ScienceExhibitOptionEditorModal.tsx');
   assert.match(source, /id="text"/);
   assert.match(source, /id="space-reference"/);
   assert.match(source, /id="device-reference"/);
@@ -78,6 +79,15 @@ test('science exhibit component exposes handles, llm extraction and generation s
   assert.match(source, /generateExternalImage/);
   assert.match(source, /submitImageAsync/);
   assert.match(source, /useRunTrigger\(id, runGenerate, 'image'\)/);
+  assert.match(optionEditor, /批量导入/);
+  assert.match(optionEditor, /parseScienceExhibitOptionBatchText/);
+  assert.match(optionEditor, /mergeScienceExhibitOptionBatchItems/);
+  assert.match(optionEditor, /applyBatchImport/);
+  assert.match(optionEditor, /导入有效行/);
+  assert.match(optionEditor, /第 \{item\.line\} 行/);
+  assert.match(optionEditor, /保存当前分类/);
+  const importBlock = optionEditor.slice(optionEditor.indexOf('const applyBatchImport'), optionEditor.indexOf('const saveActive'));
+  assert.doesNotMatch(importBlock, /onSave/);
 });
 
 test('science exhibit generation preserves fixed drawing order and output text', () => {
