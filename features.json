@@ -1,6 +1,23 @@
 {
   "$schema": "本文件为 T8-penguin-canvas 节点清单防丢失锁,任何节点删减都需要在 roadmap.md 中说明并更新本文件。",
   "version": "2.2.7",
+  "exhibitionFloorplanLayout": {
+    "status": "implemented",
+    "nodeType": "exhibition-floorplan-layout",
+    "label": "展陈平面布局",
+    "capabilities": [
+      "DXF 与校准截图建筑底图输入、人工确认和版本锁定",
+      "展陈大纲 LLM 结构化提炼与三套确定性候选布局",
+      "边界、墙柱、出入口缓冲、净距和通道方案级校验",
+      "SVG 展项拖拽、旋转、尺寸编辑、JSON 导入导出和 SVG 导出",
+      "精确数据层与 gpt-image-2 AI 表现层分离"
+    ],
+    "verification": [
+      "node --test tests/floorplanEngine.test.js tests/exhibitionFloorplanLayoutNode.test.js",
+      "npm run type-check",
+      "npm run build"
+    ]
+  },
   "lastUpdated": "2026-06-16-electron-release-v227",
   "electronReleaseV227": {
     "version": "2.2.7",

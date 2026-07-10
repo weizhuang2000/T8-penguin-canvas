@@ -112,6 +112,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: 'exhibition-wayfinding-design', label: '导视系统设计', category: 'exhibition', description: '博物馆室内外导视系统：导览标牌、方向牌、楼层索引、无障碍与安全导视的规范图和效果图生成', icon: 'MapPinned', color: 'cyan' },
   { type: 'exhibition-scene-design', label: '场景设计', category: 'exhibition', description: '展馆场景设计：场景分类、整体环境参考、人物道具 @ 引用和图像生成', icon: 'Theater', color: 'cyan' },
   { type: 'science-exhibit-design', label: '科技展项设计', category: 'exhibition', description: '科技馆展项设计：LLM 提炼真实科学原理与参数，一键生成效果图、爆炸图、原理图、三视图和参数表', icon: 'Atom', color: 'cyan' },
+  { type: 'exhibition-floorplan-layout', label: '展陈平面布局', category: 'exhibition', description: 'DXF/截图建筑底图锁定、规则排布、三套候选、约束校验和 AI 平面表现图', icon: 'LayoutDashboard', color: 'cyan' },
   { type: 'showcase-interior-design', label: '柜内设计', category: 'exhibition', description: '展柜内部陈列设计：展柜尺寸、展品图与展品高度、色彩材质预设、尺寸标注和爆炸图输出', icon: 'Archive', color: 'cyan' },
   { type: 'cinema-auditorium-design', label: '影院报告厅设计', category: 'exhibition', description: '影院、报告厅和特效影院空间设计：长宽高、银幕舞台方向、色彩材质预设，输出效果图、彩平图和系统设备原理图', icon: 'Theater', color: 'cyan' },
   { type: 'multi-angle-visual', label: '可视化多角度', category: 'toolbox', description: '可视化调节方位 / 俯仰 / 远近，支持批量角度、Prompt 模式、前后缀、镜头收藏、JSON 导入/导出与紧凑双栏 UI', icon: 'Compass', color: 'pink' },

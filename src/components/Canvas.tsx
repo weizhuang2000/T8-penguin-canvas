@@ -133,6 +133,7 @@ import SculptureReliefDesignNode from './nodes/SculptureReliefDesignNode';
 import WayfindingDesignNode from './nodes/WayfindingDesignNode';
 import ExhibitionSceneDesignNode from './nodes/ExhibitionSceneDesignNode';
 import ScienceExhibitDesignNode from './nodes/ScienceExhibitDesignNode';
+import ExhibitionFloorplanLayoutNode from './nodes/ExhibitionFloorplanLayoutNode';
 import ShowcaseInteriorDesignNode from './nodes/ShowcaseInteriorDesignNode';
 import CinemaAuditoriumDesignNode from './nodes/CinemaAuditoriumDesignNode';
 import ArtistStyleMasterNode from './nodes/ArtistStyleMasterNode';
@@ -244,6 +245,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'exhibition-wayfinding-design': WayfindingDesignNode,
   'exhibition-scene-design': ExhibitionSceneDesignNode,
   'science-exhibit-design': ScienceExhibitDesignNode,
+  'exhibition-floorplan-layout': ExhibitionFloorplanLayoutNode,
   'showcase-interior-design': ShowcaseInteriorDesignNode,
   'cinema-auditorium-design': CinemaAuditoriumDesignNode,
   'artist-style-master': ArtistStyleMasterNode,
@@ -1086,6 +1088,31 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     status: 'idle',
     error: '',
   },
+  'exhibition-floorplan-layout': {
+    model: 'gpt-image-2',
+    apiModel: 'gpt-image-2-all',
+    llmModel: 'gpt-4o-mini',
+    calibrationWidthMm: 24000,
+    calibrationHeightMm: 12000,
+    minimumPathWidth: 1200,
+    sourceText: '',
+    source: null,
+    architecture: null,
+    architectureLocked: false,
+    architectureVersion: '',
+    constraintsVersion: 'rules-v1',
+    requirement: null,
+    candidates: [],
+    activeCandidateId: '',
+    render: null,
+    imageUrl: '',
+    imageUrls: [],
+    urls: [],
+    outputText: '',
+    text: '',
+    status: 'idle',
+    error: '',
+  },
   'showcase-interior-design': {
     model: 'gpt-image-2',
     apiModel: 'gpt-image-2-all',
@@ -1481,6 +1508,7 @@ const EXHIBITION_IMAGE_PROVIDER_NODE_TYPES = new Set<string>([
   'exhibition-wayfinding-design',
   'exhibition-scene-design',
   'science-exhibit-design',
+  'exhibition-floorplan-layout',
   'showcase-interior-design',
   'cinema-auditorium-design',
 ]);
@@ -1603,6 +1631,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'exhibition-wayfinding-design',
   'exhibition-scene-design',
   'science-exhibit-design',
+  'exhibition-floorplan-layout',
   'showcase-interior-design',
   'cinema-auditorium-design',
   'remove-ai-watermark',

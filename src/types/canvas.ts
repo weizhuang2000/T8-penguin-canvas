@@ -77,6 +77,7 @@ export type NodeType =
   | 'exhibition-wayfinding-design'
   | 'exhibition-scene-design'
   | 'science-exhibit-design'
+  | 'exhibition-floorplan-layout'
   | 'showcase-interior-design'
   | 'cinema-auditorium-design'
   | 'multi-angle-visual'
