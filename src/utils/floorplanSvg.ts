@@ -16,3 +16,26 @@ export function buildFloorplanSvg(architecture: FloorplanArchitecture, candidate
 
 export function svgDataUrl(svg: string) { return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`; }
 
+export async function floorplanSvgToPngDataUrl(svg: string, width = 1400, height = 900): Promise<string> {
+  const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error('精确平面 SVG 栅格化失败'));
+      element.src = objectUrl;
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('浏览器不支持平面图 Canvas 栅格化');
+    context.fillStyle = '#0f172a';
+    context.fillRect(0, 0, width, height);
+    context.drawImage(image, 0, 0, width, height);
+    return canvas.toDataURL('image/png');
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}

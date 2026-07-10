@@ -6,7 +6,7 @@ import { useApiKeysStore } from '../../stores/apiKeys';
 import { advancedProviderModelOptions, advancedProvidersForNode, externalImageSizeFor, resolveAdvancedProviderSelection } from '../../utils/advancedProviders';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useUpdateNodeData } from './useUpdateNodeData';
-import { buildFloorplanSvg, svgDataUrl } from '../../utils/floorplanSvg';
+import { buildFloorplanSvg, floorplanSvgToPngDataUrl, svgDataUrl } from '../../utils/floorplanSvg';
 import type { FloorplanArchitecture, FloorplanCandidate, FloorplanRequirement, FloorplanValidation } from '../../types/floorplan';
 
 const FIELD = 'nodrag w-full rounded border border-white/10 bg-black/25 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60';
@@ -156,7 +156,9 @@ function ExhibitionFloorplanLayoutNode({ id, data }: NodeProps) {
     setBusy('生成 AI 表现图');
     try {
       const prompt = `根据参考图和布局 JSON 生成展厅正交俯视平面表现图。严格保持墙体、柱、入口、出口的位置和比例，不得新增、删除或移动建筑结构，不得添加 JSON 中不存在的展项。主通道连续清晰。布局 JSON：${JSON.stringify(active.items)}。风格：${JSON.stringify(requirement.style)}`;
-      const referenceImages = [svgDataUrl(svg), ...upstreamImages.slice(0, 4)];
+      const precisePlanPng = await floorplanSvgToPngDataUrl(svg);
+      const safeUpstreamImages = upstreamImages.filter((url) => !/^data:image\/svg\+xml/i.test(url)).slice(0, 4);
+      const referenceImages = [precisePlanPng, ...safeUpstreamImages];
       let imageUrl = '';
       let renderProvider = 'gpt-image-2';
       if (isExternalSelected && providerSelection.provider) {

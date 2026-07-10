@@ -25,6 +25,7 @@ test('node enforces architecture lock and separates AI render action', () => {
   assert.match(source, /layoutVersion/);
   assert.match(source, /advancedProvidersForNode\(advancedProviders, 'image'\)/);
   assert.match(source, /generateExternalImage/);
+  assert.match(source, /await floorplanSvgToPngDataUrl\(svg\)/);
   assert.match(source, /providerModel: models\[0\] \|\| ''/);
   assert.match(source, /生图平台/);
   assert.match(source, /生图模型/);
