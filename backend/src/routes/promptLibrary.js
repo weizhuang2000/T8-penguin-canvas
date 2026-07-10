@@ -12,8 +12,6 @@ const DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition.json');
 const ELEVATION_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_elevation.json');
 const CREATIVE_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition_creative.json');
 const IMG2IMG_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition_img2img.json');
-const PLAN_LAYOUT_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition_plan_layout.json');
-const AI_PLAN_LAYOUT_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition_ai_plan_layout.json');
 const RECOLOR_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition_recolor.json');
 const UNIT_PANEL_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_unit_panel.json');
 const SCULPTURE_RELIEF_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_sculpture_relief.json');
@@ -222,41 +220,6 @@ const DEFAULT_EXHIBITION_IMG2IMG_EXCLUDE_PRESETS = [
   { id: 'cartoon-style', label: '卡通低幼风格' },
   { id: 'blurry-low-quality', label: '低清晰度/模糊画面' },
   { id: 'extra-structure', label: '擅自新增或改变建筑结构' },
-].map((item, index) => ({ ...item, order: index }));
-
-const DEFAULT_EXHIBITION_PLAN_LAYOUT_INSERT_PRESETS = [
-  { id: 'large-sculpture', label: '大型雕塑' },
-  { id: 'relief', label: '浮雕' },
-  { id: 'group-sculpture', label: '群雕' },
-  { id: 'art-installation', label: '艺术装置' },
-  { id: 'multimedia-equipment', label: '多媒体设备' },
-  { id: 'showcase', label: '文物柜/展柜' },
-  { id: 'scene', label: '场景复原' },
-  { id: 'artwork', label: '艺术品/主题展项' },
-].map((item, index) => ({ ...item, order: index }));
-
-const DEFAULT_EXHIBITION_PLAN_LAYOUT_EXCLUDE_PRESETS = [
-  { id: 'readable-wrong-text', label: '可读错字/乱码文字' },
-  { id: 'real-brand-logo', label: '真实品牌标识' },
-  { id: 'instruction-table', label: '说明表格' },
-  { id: 'crowded-people', label: '过多人群' },
-  { id: 'messy-cables', label: '杂乱线缆' },
-  { id: 'cartoon-style', label: '卡通低幼风格' },
-  { id: 'blurry-low-quality', label: '低清晰度/模糊画面' },
-  { id: 'floating-islands', label: '孤立漂浮展区' },
-  { id: 'isolated-columns', label: '孤零零不连接任何物体的柱子' },
-].map((item, index) => ({ ...item, order: index }));
-
-const DEFAULT_EXHIBITION_AI_PLAN_LAYOUT_STYLE_PRESETS = [
-  { id: 'tech-blueprint', label: '科技馆蓝白线稿汇报风', prompt: '科技馆蓝白线稿汇报风：白色底图、蓝色/青色分区、清晰细线、红色动线箭头、理性工程图表达，适合科技产业与城市规划展陈。' },
-  { id: 'minimal-museum', label: '极简博物馆风', prompt: '极简博物馆风：低饱和灰白底、克制色块、少量重点色、标注精简，强调留白、秩序和专业博物馆导览感。' },
-  { id: 'family-learning', label: '儿童研学明亮风', prompt: '儿童研学明亮风：明亮友好的分区色彩、清晰图标化展项、动线易懂但不幼稚，适合亲子研学和互动教育空间。' },
-].map((item, index) => ({ ...item, order: index }));
-
-const DEFAULT_EXHIBITION_AI_PLAN_LAYOUT_REQUIREMENT_PRESETS = [
-  { id: 'one-way-no-branch', label: '单向无分叉动线', prompt: '动线从入口到出口必须单向连续、无分叉、无断线，依次经过所有展区，避免回头路和交叉拥堵。' },
-  { id: 'keep-fire-route', label: '保留消防疏散通道', prompt: '必须保留原建筑主要消防疏散通道和门洞可达关系，不得用展墙、展柜或装置遮挡必要疏散路径。' },
-  { id: 'core-exhibit-near-atrium', label: '主展项靠近中庭', prompt: '将核心展项或主题装置布置在中庭、开敞核心区或视觉焦点附近，并围绕它组织若干连续展区。' },
 ].map((item, index) => ({ ...item, order: index }));
 
 const DEFAULT_EXHIBITION_RECOLOR_PALETTE_PRESETS = [
@@ -615,77 +578,6 @@ function normalizeCreativeViewAnglePresetList(value) {
     .map((item, index) => ({ ...item, order: index }));
 }
 
-function normalizePlanLayoutInsertPresetList(value) {
-  const source = Array.isArray(value) && value.length > 0 ? value : DEFAULT_EXHIBITION_PLAN_LAYOUT_INSERT_PRESETS;
-  const used = new Set();
-  return source
-    .map((raw, index) => {
-      const label = safeText(raw?.label || raw?.text, 120);
-      if (!label) return null;
-      let id = safeText(raw?.id, 96).replace(/[^a-zA-Z0-9_-]/g, '');
-      if (!id) id = `insert_${index + 1}`;
-      while (used.has(id)) id = `${id}_${index + 1}`;
-      used.add(id);
-      return {
-        id,
-        label,
-        order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,
-      };
-    })
-    .filter(Boolean)
-    .slice(0, 80)
-    .sort((a, b) => (a.order || 0) - (b.order || 0))
-    .map((item, index) => ({ ...item, order: index }));
-}
-
-function normalizePlanLayoutExcludePresetList(value) {
-  const source = Array.isArray(value) && value.length > 0 ? value : DEFAULT_EXHIBITION_PLAN_LAYOUT_EXCLUDE_PRESETS;
-  const used = new Set();
-  return source
-    .map((raw, index) => {
-      const label = safeText(raw?.label || raw?.text, 120);
-      if (!label) return null;
-      let id = safeText(raw?.id, 96).replace(/[^a-zA-Z0-9_-]/g, '');
-      if (!id) id = `exclude_${index + 1}`;
-      while (used.has(id)) id = `${id}_${index + 1}`;
-      used.add(id);
-      return {
-        id,
-        label,
-        order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,
-      };
-    })
-    .filter(Boolean)
-    .slice(0, 80)
-    .sort((a, b) => (a.order || 0) - (b.order || 0))
-    .map((item, index) => ({ ...item, order: index }));
-}
-
-function normalizeAiPlanLayoutPresetList(value, defaults, fallbackId) {
-  const source = Array.isArray(value) && value.length > 0 ? value : defaults;
-  const used = new Set();
-  return source
-    .map((raw, index) => {
-      const label = safeText(raw?.label || raw?.text, 120);
-      const prompt = safeText(raw?.prompt || raw?.text || raw?.label, 3000);
-      if (!label || !prompt) return null;
-      let id = safeText(raw?.id, 96).replace(/[^a-zA-Z0-9_-]/g, '');
-      if (!id) id = `${fallbackId}_${index + 1}`;
-      while (used.has(id)) id = `${id}_${index + 1}`;
-      used.add(id);
-      return {
-        id,
-        label,
-        prompt,
-        order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,
-      };
-    })
-    .filter(Boolean)
-    .slice(0, 80)
-    .sort((a, b) => (a.order || 0) - (b.order || 0))
-    .map((item, index) => ({ ...item, order: index }));
-}
-
 function normalizeHexColor(value, fallback) {
   const text = safeText(value, 32);
   if (/^#[0-9a-f]{6}$/i.test(text)) return text.toLowerCase();
@@ -1017,72 +909,6 @@ function writeImg2ImgDb(db) {
     IMG2IMG_DB_FILE,
     JSON.stringify({
       excludePresets: normalizeImg2ImgExcludePresetList(db?.excludePresets),
-    }, null, 2),
-    'utf-8',
-  );
-}
-
-function readPlanLayoutDb() {
-  try {
-    if (!fs.existsSync(PLAN_LAYOUT_DB_FILE)) {
-      return {
-        insertPresets: normalizePlanLayoutInsertPresetList(DEFAULT_EXHIBITION_PLAN_LAYOUT_INSERT_PRESETS),
-        excludePresets: normalizePlanLayoutExcludePresetList(DEFAULT_EXHIBITION_PLAN_LAYOUT_EXCLUDE_PRESETS),
-      };
-    }
-    const raw = JSON.parse(fs.readFileSync(PLAN_LAYOUT_DB_FILE, 'utf-8'));
-    return {
-      insertPresets: normalizePlanLayoutInsertPresetList(raw?.insertPresets),
-      excludePresets: normalizePlanLayoutExcludePresetList(raw?.excludePresets),
-    };
-  } catch {
-    return {
-      insertPresets: normalizePlanLayoutInsertPresetList(DEFAULT_EXHIBITION_PLAN_LAYOUT_INSERT_PRESETS),
-      excludePresets: normalizePlanLayoutExcludePresetList(DEFAULT_EXHIBITION_PLAN_LAYOUT_EXCLUDE_PRESETS),
-    };
-  }
-}
-
-function writePlanLayoutDb(db) {
-  fs.mkdirSync(path.dirname(PLAN_LAYOUT_DB_FILE), { recursive: true });
-  fs.writeFileSync(
-    PLAN_LAYOUT_DB_FILE,
-    JSON.stringify({
-      insertPresets: normalizePlanLayoutInsertPresetList(db?.insertPresets),
-      excludePresets: normalizePlanLayoutExcludePresetList(db?.excludePresets),
-    }, null, 2),
-    'utf-8',
-  );
-}
-
-function readAiPlanLayoutDb() {
-  try {
-    if (!fs.existsSync(AI_PLAN_LAYOUT_DB_FILE)) {
-      return {
-        stylePresets: normalizeAiPlanLayoutPresetList(DEFAULT_EXHIBITION_AI_PLAN_LAYOUT_STYLE_PRESETS, DEFAULT_EXHIBITION_AI_PLAN_LAYOUT_STYLE_PRESETS, 'style'),
-        requirementPresets: normalizeAiPlanLayoutPresetList(DEFAULT_EXHIBITION_AI_PLAN_LAYOUT_REQUIREMENT_PRESETS, DEFAULT_EXHIBITION_AI_PLAN_LAYOUT_REQUIREMENT_PRESETS, 'requirement'),
-      };
-    }
-    const raw = JSON.parse(fs.readFileSync(AI_PLAN_LAYOUT_DB_FILE, 'utf-8'));
-    return {
-      stylePresets: normalizeAiPlanLayoutPresetList(raw?.stylePresets || raw?.styles, DEFAULT_EXHIBITION_AI_PLAN_LAYOUT_STYLE_PRESETS, 'style'),
-      requirementPresets: normalizeAiPlanLayoutPresetList(raw?.requirementPresets || raw?.requirements, DEFAULT_EXHIBITION_AI_PLAN_LAYOUT_REQUIREMENT_PRESETS, 'requirement'),
-    };
-  } catch {
-    return {
-      stylePresets: normalizeAiPlanLayoutPresetList(DEFAULT_EXHIBITION_AI_PLAN_LAYOUT_STYLE_PRESETS, DEFAULT_EXHIBITION_AI_PLAN_LAYOUT_STYLE_PRESETS, 'style'),
-      requirementPresets: normalizeAiPlanLayoutPresetList(DEFAULT_EXHIBITION_AI_PLAN_LAYOUT_REQUIREMENT_PRESETS, DEFAULT_EXHIBITION_AI_PLAN_LAYOUT_REQUIREMENT_PRESETS, 'requirement'),
-    };
-  }
-}
-
-function writeAiPlanLayoutDb(db) {
-  fs.mkdirSync(path.dirname(AI_PLAN_LAYOUT_DB_FILE), { recursive: true });
-  fs.writeFileSync(
-    AI_PLAN_LAYOUT_DB_FILE,
-    JSON.stringify({
-      stylePresets: normalizeAiPlanLayoutPresetList(db?.stylePresets, DEFAULT_EXHIBITION_AI_PLAN_LAYOUT_STYLE_PRESETS, 'style'),
-      requirementPresets: normalizeAiPlanLayoutPresetList(db?.requirementPresets, DEFAULT_EXHIBITION_AI_PLAN_LAYOUT_REQUIREMENT_PRESETS, 'requirement'),
     }, null, 2),
     'utf-8',
   );
@@ -1541,72 +1367,6 @@ router.put('/exhibition-img2img/presets/exclusions', (req, res) => {
   const db = readImg2ImgDb();
   const presets = normalizeImg2ImgExcludePresetList(req.body?.presets);
   writeImg2ImgDb({ ...db, excludePresets: presets });
-  res.json({ success: true, data: presets });
-});
-
-router.get('/exhibition-plan-layout/presets', (_req, res) => {
-  const db = readPlanLayoutDb();
-  res.json({
-    success: true,
-    data: {
-      inserts: normalizePlanLayoutInsertPresetList(db.insertPresets),
-      exclusions: normalizePlanLayoutExcludePresetList(db.excludePresets),
-    },
-  });
-});
-
-router.put('/exhibition-plan-layout/presets/inserts', (req, res) => {
-  const user = req.user;
-  if (!isAdminRole(user?.role)) {
-    return res.status(403).json({ success: false, error: '只有系统管理员或经理可以维护平面自动布局植入项预设' });
-  }
-  const db = readPlanLayoutDb();
-  const presets = normalizePlanLayoutInsertPresetList(req.body?.presets);
-  writePlanLayoutDb({ ...db, insertPresets: presets });
-  res.json({ success: true, data: presets });
-});
-
-router.put('/exhibition-plan-layout/presets/exclusions', (req, res) => {
-  const user = req.user;
-  if (!isAdminRole(user?.role)) {
-    return res.status(403).json({ success: false, error: '只有系统管理员或经理可以维护平面自动布局排除项预设' });
-  }
-  const db = readPlanLayoutDb();
-  const presets = normalizePlanLayoutExcludePresetList(req.body?.presets);
-  writePlanLayoutDb({ ...db, excludePresets: presets });
-  res.json({ success: true, data: presets });
-});
-
-router.get('/exhibition-ai-plan-layout/presets', (_req, res) => {
-  const db = readAiPlanLayoutDb();
-  res.json({
-    success: true,
-    data: {
-      styles: normalizeAiPlanLayoutPresetList(db.stylePresets, DEFAULT_EXHIBITION_AI_PLAN_LAYOUT_STYLE_PRESETS, 'style'),
-      requirements: normalizeAiPlanLayoutPresetList(db.requirementPresets, DEFAULT_EXHIBITION_AI_PLAN_LAYOUT_REQUIREMENT_PRESETS, 'requirement'),
-    },
-  });
-});
-
-router.put('/exhibition-ai-plan-layout/presets/styles', (req, res) => {
-  const user = req.user;
-  if (!isAdminRole(user?.role)) {
-    return res.status(403).json({ success: false, error: '只有系统管理员或经理可以维护平面AI布局风格预设' });
-  }
-  const db = readAiPlanLayoutDb();
-  const presets = normalizeAiPlanLayoutPresetList(req.body?.presets, DEFAULT_EXHIBITION_AI_PLAN_LAYOUT_STYLE_PRESETS, 'style');
-  writeAiPlanLayoutDb({ ...db, stylePresets: presets });
-  res.json({ success: true, data: presets });
-});
-
-router.put('/exhibition-ai-plan-layout/presets/requirements', (req, res) => {
-  const user = req.user;
-  if (!isAdminRole(user?.role)) {
-    return res.status(403).json({ success: false, error: '只有系统管理员或经理可以维护平面AI布局特殊要求预设' });
-  }
-  const db = readAiPlanLayoutDb();
-  const presets = normalizeAiPlanLayoutPresetList(req.body?.presets, DEFAULT_EXHIBITION_AI_PLAN_LAYOUT_REQUIREMENT_PRESETS, 'requirement');
-  writeAiPlanLayoutDb({ ...db, requirementPresets: presets });
   res.json({ success: true, data: presets });
 });
 

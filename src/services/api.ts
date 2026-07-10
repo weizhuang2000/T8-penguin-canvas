@@ -567,35 +567,6 @@ export interface ExhibitionImg2ImgPromptPresetMap {
   exclusions: ExhibitionImg2ImgExcludePresetItem[];
 }
 
-export interface ExhibitionPlanLayoutInsertPresetItem {
-  id: string;
-  label: string;
-  order: number;
-}
-
-export interface ExhibitionPlanLayoutExcludePresetItem {
-  id: string;
-  label: string;
-  order: number;
-}
-
-export interface ExhibitionPlanLayoutPromptPresetMap {
-  inserts: ExhibitionPlanLayoutInsertPresetItem[];
-  exclusions: ExhibitionPlanLayoutExcludePresetItem[];
-}
-
-export interface ExhibitionAiPlanLayoutPresetItem {
-  id: string;
-  label: string;
-  prompt: string;
-  order: number;
-}
-
-export interface ExhibitionAiPlanLayoutPromptPresetMap {
-  styles: ExhibitionAiPlanLayoutPresetItem[];
-  requirements: ExhibitionAiPlanLayoutPresetItem[];
-}
-
 export interface ExhibitionRecolorPalettePresetItem {
   id: string;
   label: string;
@@ -847,72 +818,6 @@ export async function updateExhibitionImg2ImgExcludePresets(
 ): Promise<ExhibitionImg2ImgExcludePresetItem[]> {
   const res = await request<{ success: boolean; data: ExhibitionImg2ImgExcludePresetItem[] }>(
     `${BASE}/prompt-library/exhibition-img2img/presets/exclusions`,
-    {
-      method: 'PUT',
-      body: JSON.stringify({ presets }),
-    },
-  );
-  return res.data || [];
-}
-
-export async function getExhibitionPlanLayoutPromptPresets(): Promise<ExhibitionPlanLayoutPromptPresetMap> {
-  const res = await request<{ success: boolean; data: ExhibitionPlanLayoutPromptPresetMap }>(
-    `${BASE}/prompt-library/exhibition-plan-layout/presets`,
-  );
-  return res.data || { inserts: [], exclusions: [] };
-}
-
-export async function updateExhibitionPlanLayoutInsertPresets(
-  presets: Array<Pick<ExhibitionPlanLayoutInsertPresetItem, 'label'> & Partial<Pick<ExhibitionPlanLayoutInsertPresetItem, 'id' | 'order'>>>,
-): Promise<ExhibitionPlanLayoutInsertPresetItem[]> {
-  const res = await request<{ success: boolean; data: ExhibitionPlanLayoutInsertPresetItem[] }>(
-    `${BASE}/prompt-library/exhibition-plan-layout/presets/inserts`,
-    {
-      method: 'PUT',
-      body: JSON.stringify({ presets }),
-    },
-  );
-  return res.data || [];
-}
-
-export async function updateExhibitionPlanLayoutExcludePresets(
-  presets: Array<Pick<ExhibitionPlanLayoutExcludePresetItem, 'label'> & Partial<Pick<ExhibitionPlanLayoutExcludePresetItem, 'id' | 'order'>>>,
-): Promise<ExhibitionPlanLayoutExcludePresetItem[]> {
-  const res = await request<{ success: boolean; data: ExhibitionPlanLayoutExcludePresetItem[] }>(
-    `${BASE}/prompt-library/exhibition-plan-layout/presets/exclusions`,
-    {
-      method: 'PUT',
-      body: JSON.stringify({ presets }),
-    },
-  );
-  return res.data || [];
-}
-
-export async function getExhibitionAiPlanLayoutPromptPresets(): Promise<ExhibitionAiPlanLayoutPromptPresetMap> {
-  const res = await request<{ success: boolean; data: ExhibitionAiPlanLayoutPromptPresetMap }>(
-    `${BASE}/prompt-library/exhibition-ai-plan-layout/presets`,
-  );
-  return res.data || { styles: [], requirements: [] };
-}
-
-export async function updateExhibitionAiPlanLayoutStylePresets(
-  presets: Array<Pick<ExhibitionAiPlanLayoutPresetItem, 'label' | 'prompt'> & Partial<Pick<ExhibitionAiPlanLayoutPresetItem, 'id' | 'order'>>>,
-): Promise<ExhibitionAiPlanLayoutPresetItem[]> {
-  const res = await request<{ success: boolean; data: ExhibitionAiPlanLayoutPresetItem[] }>(
-    `${BASE}/prompt-library/exhibition-ai-plan-layout/presets/styles`,
-    {
-      method: 'PUT',
-      body: JSON.stringify({ presets }),
-    },
-  );
-  return res.data || [];
-}
-
-export async function updateExhibitionAiPlanLayoutRequirementPresets(
-  presets: Array<Pick<ExhibitionAiPlanLayoutPresetItem, 'label' | 'prompt'> & Partial<Pick<ExhibitionAiPlanLayoutPresetItem, 'id' | 'order'>>>,
-): Promise<ExhibitionAiPlanLayoutPresetItem[]> {
-  const res = await request<{ success: boolean; data: ExhibitionAiPlanLayoutPresetItem[] }>(
-    `${BASE}/prompt-library/exhibition-ai-plan-layout/presets/requirements`,
     {
       method: 'PUT',
       body: JSON.stringify({ presets }),

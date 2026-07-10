@@ -13,7 +13,6 @@ const EXHIBITION_NODE_FILES = [
   'src/components/nodes/ExhibitionImg2ImgNode.tsx',
   'src/components/nodes/ExhibitionLightingHeatmapNode.tsx',
   'src/components/nodes/ExhibitionOutlineSplitNode.tsx',
-  'src/components/nodes/ExhibitionPlanLayoutNode.tsx',
   'src/components/nodes/ExhibitionRecolorNode.tsx',
   'src/components/nodes/ExhibitionRenderToElevationNode.tsx',
   'src/components/nodes/ExhibitionStyleTransferNode.tsx',

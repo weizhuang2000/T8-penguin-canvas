@@ -76,7 +76,6 @@ test('exhibition nodes carry compact section markers', () => {
     'src/components/nodes/ExhibitionRenderToElevationNode.tsx',
     'src/components/nodes/ExhibitionTextImageLoopNode.tsx',
     'src/components/nodes/ExhibitionOutlineSplitNode.tsx',
-    'src/components/nodes/ExhibitionPlanLayoutNode.tsx',
     'src/components/nodes/UnitPanelDesignNode.tsx',
     'src/components/nodes/ShowcaseInteriorDesignNode.tsx',
   ];

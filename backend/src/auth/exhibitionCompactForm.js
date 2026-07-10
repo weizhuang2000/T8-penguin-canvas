@@ -149,12 +149,6 @@ const EXHIBITION_COMPACT_FORM_DEFINITIONS = [
     { id: 'output', label: '\u8f93\u51fa\u683c\u5f0f', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
     { id: 'result', label: '\u62c6\u5206\u7ed3\u679c', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
   ] },
-  { nodeType: 'exhibition-ai-plan-layout', label: '平面AI布局', sections: [
-    { id: 'input', label: '输入素材', items: [{ id: 'main', label: '主控件' }] },
-    { id: 'layout', label: 'AI布局策略', items: [{ id: 'main', label: '主控件' }] },
-    { id: 'model', label: '模型参数', items: [{ id: 'main', label: '主控件' }] },
-    { id: 'result', label: '结果预览', items: [{ id: 'main', label: '主控件' }] },
-  ] },
   { nodeType: 'unit-panel-design', label: '\u5355\u5143\u677f\u8bbe\u8ba1', sections: [
     { id: 'source', label: '\u6587\u672c\u8d44\u6599', items: [
       { id: 'parameter-input', label: '\u53c2\u6570\u8f93\u5165' },

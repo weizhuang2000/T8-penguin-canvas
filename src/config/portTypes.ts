@@ -160,7 +160,6 @@ export const NODE_PORTS: Record<string, NodePorts> = {
   'exhibition-render-to-elevation': { inputs: ['text', 'image'], outputs: ['image'] },
   'exhibition-text-image-loop': { inputs: ['text', 'image'], outputs: ['text', 'image'] },
   'exhibition-outline-split': { inputs: ['text'], outputs: ['text', 'image'] },
-  'exhibition-ai-plan-layout': { inputs: ['text', 'image'], outputs: ['image', 'text'] },
   'unit-panel-design': { inputs: ['text', 'image'], outputs: ['image'] },
   'sculpture-relief-design': { inputs: ['text', 'image'], outputs: ['image'] },
   'exhibition-wayfinding-design': { inputs: ['text', 'image'], outputs: ['image', 'text'] },

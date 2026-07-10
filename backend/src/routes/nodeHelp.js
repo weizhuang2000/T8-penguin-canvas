@@ -21,7 +21,6 @@ const EXHIBITION_NODE_TYPES = new Set([
   'exhibition-render-to-elevation',
   'exhibition-text-image-loop',
   'exhibition-outline-split',
-  'exhibition-ai-plan-layout',
   'unit-panel-design',
   'sculpture-relief-design',
   'exhibition-wayfinding-design',
