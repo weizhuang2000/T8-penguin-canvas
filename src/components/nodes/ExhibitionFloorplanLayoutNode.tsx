@@ -1,7 +1,9 @@
-import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
 import { Download, Image as ImageIcon, LayoutDashboard, Loader2, Lock, LockOpen, Play, RotateCw, Upload } from 'lucide-react';
-import { generateImage, generateLlm } from '../../services/generation';
+import { generateExternalImage, generateImage, generateLlm, queryExternalImageStatus } from '../../services/generation';
+import { useApiKeysStore } from '../../stores/apiKeys';
+import { advancedProviderModelOptions, advancedProvidersForNode, externalImageSizeFor, resolveAdvancedProviderSelection } from '../../utils/advancedProviders';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { buildFloorplanSvg, svgDataUrl } from '../../utils/floorplanSvg';
@@ -10,6 +12,8 @@ import type { FloorplanArchitecture, FloorplanCandidate, FloorplanRequirement, F
 const FIELD = 'nodrag w-full rounded border border-white/10 bg-black/25 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60';
 const BUTTON = 'nodrag inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.07] px-2 text-[10px] text-white/80 hover:bg-white/[0.14] disabled:opacity-40';
 const DEFAULT_REQUIREMENT: FloorplanRequirement = { projectType: '综合主题展厅', capacity: 80, zones: [{ name: '序厅', areaRatio: .15 }, { name: '核心展区', areaRatio: .55 }, { name: '互动区', areaRatio: .3 }], facilities: [{ type: '展柜', quantity: 6, size: [1200, 600], clearance: 1200 }, { type: '互动屏', quantity: 3, size: [1600, 800], clearance: 1500 }], style: { keywords: ['克制', '清晰'], materials: [] }, routePreference: 'loop' };
+const EXTERNAL_IMAGE_MAX_POLLS = 300;
+const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
 
 async function jsonRequest<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -35,6 +39,23 @@ function fileDataUrl(file: File): Promise<string> {
 function ExhibitionFloorplanLayoutNode({ id, data }: NodeProps) {
   const d = data as any;
   const update = useUpdateNodeData(id);
+  const advancedProviders = useApiKeysStore((state) => state.settings.advancedProviders);
+  const allowZhenzhenFallback = useApiKeysStore((state) => state.settings.enableZhenzhenFallback !== false);
+  const imageAdvancedProviders = useMemo(() => advancedProvidersForNode(advancedProviders, 'image'), [advancedProviders]);
+  const firstImageAdvancedProvider = imageAdvancedProviders[0] || null;
+  const firstImageModel = firstImageAdvancedProvider ? advancedProviderModelOptions(firstImageAdvancedProvider, 'image')[0] || '' : '';
+  const effectiveProvider = d.providerSource === 'zhenzhen'
+    ? { providerSource: 'zhenzhen' as const, providerId: '', providerModel: '' }
+    : d.providerId
+      ? { providerSource: d.providerSource, providerId: d.providerId, providerModel: d.providerModel }
+      : firstImageAdvancedProvider
+        ? { providerSource: firstImageAdvancedProvider.protocol, providerId: firstImageAdvancedProvider.id, providerModel: firstImageModel }
+        : { providerSource: 'zhenzhen' as const, providerId: '', providerModel: '' };
+  const providerSelection = useMemo(() => resolveAdvancedProviderSelection(advancedProviders, 'image', effectiveProvider), [advancedProviders, effectiveProvider.providerId, effectiveProvider.providerModel, effectiveProvider.providerSource]);
+  const isExternalSelected = providerSelection.available && providerSelection.providerSource !== 'zhenzhen';
+  const externalModelOptions = providerSelection.provider ? advancedProviderModelOptions(providerSelection.provider, 'image') : [];
+  const externalProviderModel = providerSelection.providerModel || externalModelOptions[0] || '';
+  const providerSelectValue = isExternalSelected ? providerSelection.providerId : (allowZhenzhenFallback ? 'zhenzhen' : (firstImageAdvancedProvider?.id || ''));
   const architecture = d.architecture as FloorplanArchitecture | undefined;
   const candidates = (d.candidates || []) as FloorplanCandidate[];
   const activeId = d.activeCandidateId || candidates[0]?.id;
@@ -56,6 +77,10 @@ function ExhibitionFloorplanLayoutNode({ id, data }: NodeProps) {
   const sourceText = String(d.sourceText || upstreamText || '');
   const locked = !!d.architectureLocked;
   const svg = useMemo(() => architecture ? buildFloorplanSvg(architecture, active) : '', [architecture, active]);
+
+  useEffect(() => {
+    if (!d.providerSource && !d.providerId && firstImageAdvancedProvider) update({ providerSource: firstImageAdvancedProvider.protocol, providerId: firstImageAdvancedProvider.id, providerModel: firstImageModel, providerParams: d.providerParams || {} });
+  }, [d.providerId, d.providerParams, d.providerSource, firstImageAdvancedProvider, firstImageModel, update]);
 
   const patchCandidate = useCallback((next: FloorplanCandidate, validation?: FloorplanValidation) => {
     const version = `layout-v${Math.max(1, Number((next.layoutVersion || '').match(/\d+/)?.[0] || 1) + 1)}`;
@@ -131,8 +156,43 @@ function ExhibitionFloorplanLayoutNode({ id, data }: NodeProps) {
     setBusy('生成 AI 表现图');
     try {
       const prompt = `根据参考图和布局 JSON 生成展厅正交俯视平面表现图。严格保持墙体、柱、入口、出口的位置和比例，不得新增、删除或移动建筑结构，不得添加 JSON 中不存在的展项。主通道连续清晰。布局 JSON：${JSON.stringify(active.items)}。风格：${JSON.stringify(requirement.style)}`;
-      const result = await generateImage({ model: 'gpt-image-2', apiModel: 'gpt-image-2-all', prompt, images: [svgDataUrl(svg), ...upstreamImages.slice(0, 4)], aspectRatio: '16:9', image_size: '2K', n: 1 });
-      const imageUrl = result.urls[0]; update({ render: { provider: 'gpt-image-2', imageUrl, layoutVersion: active.layoutVersion, promptVersion: 'prompt-v1', stale: false }, imageUrls: [svgDataUrl(svg), imageUrl], urls: [svgDataUrl(svg), imageUrl] });
+      const referenceImages = [svgDataUrl(svg), ...upstreamImages.slice(0, 4)];
+      let imageUrl = '';
+      let renderProvider = 'gpt-image-2';
+      if (isExternalSelected && providerSelection.provider) {
+        if (!externalProviderModel) throw new Error('扩展平台未配置可用图像模型');
+        renderProvider = `${providerSelection.provider.label || providerSelection.provider.id} · ${externalProviderModel}`;
+        let result = await generateExternalImage({
+          providerId: providerSelection.provider.id,
+          providerModel: externalProviderModel,
+          model: externalProviderModel,
+          prompt,
+          images: referenceImages,
+          size: externalImageSizeFor('16:9', '2K'),
+          aspect_ratio: '16:9',
+          image_size: '2K',
+          n: 1,
+          outputFormat: 'jpg',
+          providerParams: { ...(d.providerParams || {}), aspect_ratio: '16:9', aspectRatio: '16:9', image_size: '2K', imageSize: '2K' },
+          async: true,
+          historyContext: { sourceNodeId: id, sourceNodeType: 'exhibition-floorplan-layout', nodeTitle: '展陈平面布局 AI 表现图', outputTitle: '平面表现图' },
+        });
+        if (result.taskId && !result.imageUrls?.length && (result.code === 'running' || result.status === 'running')) {
+          const taskId = result.taskId;
+          for (let index = 0; index < EXTERNAL_IMAGE_MAX_POLLS; index += 1) {
+            await new Promise((resolve) => setTimeout(resolve, EXTERNAL_IMAGE_POLL_INTERVAL_MS));
+            result = await queryExternalImageStatus({ providerId: providerSelection.provider.id, providerModel: externalProviderModel, taskId, outputFormat: 'jpg' });
+            if (result.imageUrls?.length) break;
+            if (['failed', 'failure', 'error'].includes(String(result.code || result.status || '').toLowerCase())) throw new Error(result.error || '扩展平台生图失败');
+          }
+        }
+        imageUrl = result.imageUrls?.[0] || '';
+      } else {
+        const result = await generateImage({ model: 'gpt-image-2', apiModel: 'gpt-image-2-all', prompt, images: referenceImages, aspectRatio: '16:9', image_size: '2K', n: 1 });
+        imageUrl = result.urls[0] || '';
+      }
+      if (!imageUrl) throw new Error('生成完成但未返回图片');
+      update({ render: { provider: renderProvider, imageUrl, layoutVersion: active.layoutVersion, promptVersion: 'prompt-v1', stale: false }, imageUrls: [svgDataUrl(svg), imageUrl], urls: [svgDataUrl(svg), imageUrl], status: 'success', error: '' });
     } catch (e: any) { update({ status: 'error', error: `AI 表现图失败：${e.message}` }); } finally { setBusy(''); }
   };
 
@@ -160,6 +220,23 @@ function ExhibitionFloorplanLayoutNode({ id, data }: NodeProps) {
           <button className={`${BUTTON} mt-1 w-full ${locked ? 'border-emerald-400/40' : ''}`} disabled={!architecture} onClick={() => update({ architectureLocked: !locked, candidates: locked ? [] : candidates, render: locked ? null : d.render })}>{locked ? <><Lock size={12}/>底图已锁定（点击解锁）</> : <><LockOpen size={12}/>确认并锁定底图</>}</button>
         </div>
         <div className="rounded border border-white/10 p-2"><div className="mb-1 text-[10px] text-cyan-200">2. 展陈需求</div><textarea className={`${FIELD} h-24 resize-none`} value={sourceText} placeholder="粘贴展陈大纲；运行时由 LLM 提炼结构化需求" onChange={(e) => update({ sourceText: e.target.value })}/><label className="mt-1 block text-[9px] text-white/50">最小通道宽度（mm）</label><input className={FIELD} type="number" min={600} value={d.minimumPathWidth || 1200} onChange={(e) => update({ minimumPathWidth: Number(e.target.value) })}/></div>
+        <div className="rounded border border-white/10 p-2">
+          <div className="mb-1 text-[10px] text-cyan-200">3. 生图模型</div>
+          <label className="mb-1 block text-[9px] text-white/50">生图平台</label>
+          <select className={FIELD} value={providerSelectValue} disabled={!allowZhenzhenFallback && imageAdvancedProviders.length === 0} onChange={(e) => {
+            const nextId = e.target.value;
+            if (nextId === 'zhenzhen') { update({ providerSource: 'zhenzhen', providerId: '', providerModel: '' }); return; }
+            const provider = imageAdvancedProviders.find((item) => item.id === nextId);
+            if (!provider) return;
+            const models = advancedProviderModelOptions(provider, 'image');
+            update({ providerSource: provider.protocol, providerId: provider.id, providerModel: models[0] || '', providerParams: {} });
+          }}>
+            {imageAdvancedProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label || provider.id}</option>)}
+            {allowZhenzhenFallback && <option value="zhenzhen">内置生图平台</option>}
+          </select>
+          <label className="mb-1 mt-1 block text-[9px] text-white/50">生图模型</label>
+          {isExternalSelected ? <select className={FIELD} value={externalProviderModel} disabled={!externalModelOptions.length} onChange={(e) => update({ providerModel: e.target.value })}>{externalModelOptions.length ? externalModelOptions.map((model) => <option key={model} value={model}>{model}</option>) : <option value="">未配置图像模型</option>}</select> : <select className={FIELD} value="gpt-image-2-all" disabled><option value="gpt-image-2-all">gpt-image-2-all</option></select>}
+        </div>
         <button className={`${BUTTON} w-full border-cyan-400/30`} disabled={!locked || !!busy} onClick={() => void runLayout()}>{busy ? <Loader2 size={12} className="animate-spin"/> : <Play size={12}/>}生成 3 套布局</button>
         {active && <div className="rounded border border-white/10 p-2 text-[9px] text-white/65"><div>评分 {active.score} · {active.validation.status === 'passed' ? '规则通过' : active.validation.status === 'warning' ? '存在风险' : '规则未通过'}</div><div>利用率 {(active.validation.metrics.areaUtilization * 100).toFixed(1)}% · 拥堵 {active.validation.metrics.congestionPoints} · 最小通道 {active.validation.metrics.minimumPathWidth}mm</div><div className="mt-1 max-h-16 overflow-auto text-red-300">{active.validation.errors.join('；')}</div></div>}
         <div className="text-[9px] leading-4 text-amber-200/70">仅进行方案级校验；最终设计须由具备资质的建筑、消防和展陈设计人员审核。</div>

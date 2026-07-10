@@ -23,6 +23,12 @@ test('node enforces architecture lock and separates AI render action', () => {
   assert.match(source, /buildFloorplanSvg/);
   assert.match(source, /validate-layout/);
   assert.match(source, /layoutVersion/);
+  assert.match(source, /advancedProvidersForNode\(advancedProviders, 'image'\)/);
+  assert.match(source, /generateExternalImage/);
+  assert.match(source, /providerModel: models\[0\] \|\| ''/);
+  assert.match(source, /生图平台/);
+  assert.match(source, /生图模型/);
+  assert.match(read('src/components/Canvas.tsx'), /EXHIBITION_IMAGE_PROVIDER_NODE_TYPES[\s\S]*'exhibition-floorplan-layout'/);
 });
 
 test('backend exposes all floorplan endpoints', () => {
