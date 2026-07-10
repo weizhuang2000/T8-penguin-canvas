@@ -57,6 +57,7 @@ export interface ScienceExhibitAnalysis {
   safetyMaintenance: string;
   visualBrief: string;
   drawingNotes: string;
+  dimensions?: ScienceExhibitDimensions;
 }
 
 export interface ScienceExhibitDimensions {

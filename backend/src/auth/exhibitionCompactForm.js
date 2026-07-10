@@ -297,6 +297,7 @@ const EXHIBITION_COMPACT_FORM_DEFINITIONS = [
       { id: 'aspect-size', label: '\u6bd4\u4f8b/\u5c3a\u5bf8' },
     ] },
     { id: 'dimensions', label: '\u5c3a\u5bf8\u8bbe\u7f6e', items: [
+      { id: 'auto-dimensions', label: '\u81ea\u52a8\u5c3a\u5bf8' },
       { id: 'size-input', label: '\u5c3a\u5bf8/\u529f\u7387\u8f93\u5165' },
     ] },
     { id: 'color-material', label: '\u8272\u5f69\u4e0e\u6750\u8d28', items: [

@@ -363,6 +363,7 @@ function interactionPromptText(interactions) {
 export function buildScienceExhibitExtractPrompt(values = {}) {
   const sourceText = cleanScienceExhibitText(values.sourceText, 50000);
   const sizeText = dimensionsText(values.dimensions, values.spatialScale);
+  const autoDimensions = values.autoDimensions === true;
   const domain = scienceExhibitDomainMeta(values.scienceDomain, values.domainOptions);
   const exhibitType = scienceExhibitTypeMeta(values.exhibitType, values.typeOptions);
   const interactions = scienceExhibitInteractionMetas(interactionValues(values), values.interactionOptions);
@@ -382,18 +383,41 @@ export function buildScienceExhibitExtractPrompt(values = {}) {
     `空间尺度：${scale.label}；请让结构尺度、维护方式和图纸约束贴合 ${scale.prompt}。`,
     bgText,
     colorMaterial,
+    autoDimensions
+      ? '尺寸设置模式：自动。请根据展项真实科学原理、装置构成、全部互动方式、目标观众人体工学、空间尺度、安全距离、维护方式和设备功耗，计算一组可直接用于概念设计的实际尺寸与功率数值；不要照抄当前尺寸基准，不要把数值写成“待工程校核”。'
+      : `尺寸设置模式：手动。必须沿用当前尺寸基准：${sizeText}，不要自行改写这些尺寸和功率。`,
+    autoDimensions
+      ? '自动尺寸 JSON 要求：顶层必须额外包含 "dimensions":{"widthMm":整数,"depthMm":整数,"heightMm":整数,"operationHeightMm":整数,"safetyClearanceMm":整数,"maintenanceClearanceMm":整数,"estimatedPowerW":整数}；尺寸单位为 mm，功率单位为 W，所有字段必须是大于或等于 0 的数字。'
+      : '',
     '输出 JSON，不要 Markdown，不要解释。',
     'JSON 结构：{"titleText":"展项名称","sciencePrinciple":"真实科学原理说明","keyParameters":[{"name":"参数名称","range":"建议范围","unit":"单位","effect":"该参数如何影响演示结果"}],"interactionFlow":"观众操作流程","mechanismDesign":"机械/电子/软件/媒体构成","safetyMaintenance":"安全、耐久、维护要点","visualBrief":"效果图视觉说明","drawingNotes":"后续爆炸图、原理图、三视图、参数表必须保持一致的结构约束"}',
-    `已知尺寸基准：${sizeText}。请优先给出可执行的建议数值或建议范围，不要把参数全部写成“待工程校核”；仅对确实依赖深化设计的项标注“需工程校核”。`,
+    autoDimensions
+      ? `当前界面尺寸仅是自动计算前的占位参考：${sizeText}。不得直接照抄，必须根据本次资料与展项设计重新计算并输出完整 dimensions。`
+      : `已知尺寸基准：${sizeText}。请优先给出可执行的建议数值或建议范围，不要把参数全部写成“待工程校核”；仅对确实依赖深化设计的项标注“需工程校核”。`,
     '要求：科学原理、参数、互动流程、安全维护、图纸约束都要明确；语言适合展陈方案汇报和图像生成。',
     '',
     sourceText,
   ].filter(Boolean).join('\n');
 }
 
-export function parseScienceExhibitExtractJson(text) {
+export function parseScienceExhibitExtractJson(text, scaleValue) {
   const parsed = extractJsonObject(text);
-  if (parsed && typeof parsed === 'object') return normalizeScienceExhibitAnalysis(parsed);
+  if (parsed && typeof parsed === 'object') {
+    const analysis = normalizeScienceExhibitAnalysis(parsed);
+    const dimensionSource = parsed.dimensions || parsed.dimensionSettings || parsed.sizeSettings;
+    const hasDimensionValue = dimensionSource && typeof dimensionSource === 'object' && [
+      'widthMm',
+      'depthMm',
+      'heightMm',
+      'operationHeightMm',
+      'safetyClearanceMm',
+      'maintenanceClearanceMm',
+      'estimatedPowerW',
+    ].every((key) => dimensionSource[key] !== null && dimensionSource[key] !== '' && Number.isFinite(Number(dimensionSource[key])));
+    return hasDimensionValue
+      ? { ...analysis, dimensions: normalizeScienceExhibitDimensions(dimensionSource, scaleValue) }
+      : analysis;
+  }
   const lines = String(text || '').split(/\r?\n/).map((line) => cleanScienceExhibitText(line, 4000)).filter(Boolean);
   return normalizeScienceExhibitAnalysis({
     titleText: lines[0] || '',

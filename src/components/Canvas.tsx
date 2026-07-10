@@ -1045,6 +1045,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     audience: 'general',
     spatialScale: 'island',
     backgroundMode: 'white',
+    autoDimensions: false,
     dimensions: {
       widthMm: 2200,
       depthMm: 1600,

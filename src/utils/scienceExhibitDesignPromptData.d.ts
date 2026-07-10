@@ -20,6 +20,7 @@ export interface ScienceExhibitPromptAnalysis {
   safetyMaintenance: string;
   visualBrief: string;
   drawingNotes: string;
+  dimensions?: ScienceExhibitPromptDimensions;
 }
 
 export interface ScienceExhibitPromptDimensions {
@@ -63,7 +64,7 @@ export function scienceExhibitDrawingMeta(value: unknown): ScienceExhibitPromptO
 export function scienceExhibitBackgroundMeta(value: unknown): ScienceExhibitPromptOption;
 export function normalizeScienceExhibitAnalysis(value?: unknown): ScienceExhibitPromptAnalysis;
 export function buildScienceExhibitExtractPrompt(values?: Record<string, unknown>): string;
-export function parseScienceExhibitExtractJson(text: string): ScienceExhibitPromptAnalysis;
+export function parseScienceExhibitExtractJson(text: string, scaleValue?: unknown): ScienceExhibitPromptAnalysis;
 export function buildScienceExhibitParameterMarkdown(values?: Record<string, unknown>): string;
 export function buildScienceExhibitImagePrompt(values?: Record<string, unknown>): string;
 export function buildScienceExhibitDrawingPrompt(values?: Record<string, unknown>): string;

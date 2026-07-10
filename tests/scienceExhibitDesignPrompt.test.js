@@ -80,6 +80,49 @@ test('science exhibit extract prompt and parser cover required fields', () => {
   assert.equal(fallback.drawingNotes, '图纸约束');
 });
 
+test('science exhibit automatic dimensions are requested and parsed as numeric values', () => {
+  const prompt = buildScienceExhibitExtractPrompt({
+    sourceText: 'interactive wind exhibit',
+    spatialScale: 'island',
+    dimensions,
+    autoDimensions: true,
+  });
+  assert.match(prompt, /尺寸设置模式：自动/);
+  assert.match(prompt, /自动计算尺寸与功率|计算一组可直接用于概念设计的实际尺寸与功率数值/);
+  assert.match(prompt, /不得直接照抄/);
+  for (const key of ['widthMm', 'depthMm', 'heightMm', 'operationHeightMm', 'safetyClearanceMm', 'maintenanceClearanceMm', 'estimatedPowerW']) {
+    assert.match(prompt, new RegExp(key));
+  }
+
+  const parsed = parseScienceExhibitExtractJson(JSON.stringify({
+    ...analysis,
+    dimensions: {
+      widthMm: 2600,
+      depthMm: 1800,
+      heightMm: 1700,
+      operationHeightMm: 920,
+      safetyClearanceMm: 1000,
+      maintenanceClearanceMm: 700,
+      estimatedPowerW: 1200,
+    },
+  }), 'island');
+  assert.deepEqual(parsed.dimensions, {
+    widthMm: 2600,
+    depthMm: 1800,
+    heightMm: 1700,
+    operationHeightMm: 920,
+    safetyClearanceMm: 1000,
+    maintenanceClearanceMm: 700,
+    estimatedPowerW: 1200,
+  });
+
+  const incomplete = parseScienceExhibitExtractJson(JSON.stringify({
+    ...analysis,
+    dimensions: { widthMm: 2600 },
+  }), 'island');
+  assert.equal(incomplete.dimensions, undefined);
+});
+
 test('normalizers use stable defaults', () => {
   assert.equal(normalizeScienceExhibitDomain('bad'), 'physics');
   assert.equal(normalizeScienceExhibitAudience('bad'), 'general');

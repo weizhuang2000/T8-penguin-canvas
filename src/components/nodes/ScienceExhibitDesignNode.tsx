@@ -329,6 +329,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
   const spatialScale = normalizeScienceExhibitScale(d.spatialScale, scaleOptions);
   const canManageScienceOptions = currentUser?.role === 'admin' || currentUser?.role === 'manager';
   const backgroundMode = normalizeScienceExhibitBackground(d.backgroundMode);
+  const autoDimensions = d.autoDimensions === true;
   const dimensions = useMemo(() => normalizeScienceExhibitDimensions(d.dimensions, spatialScale), [d.dimensions, spatialScale]);
   const drawingSelection = useMemo(() => normalizeScienceExhibitDrawingSelection(d.drawingSelection), [d.drawingSelection]);
   const paginatedOutput = d.paginatedOutput !== false;
@@ -484,7 +485,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
       update({ status: 'error', error: '请先输入、上传或连接上游科技展项资料' });
       return null;
     }
-    update({ status: 'analyzing', progress: 'LLM 正在提炼科学原理、参数和图纸约束...', error: '' });
+    update({ status: 'analyzing', progress: autoDimensions ? 'LLM 正在提炼科学分析并自动计算尺寸与功率...' : 'LLM 正在提炼科学原理、参数和图纸约束...', error: '' });
     try {
       const response = await generateLlm({
         model: llmModel,
@@ -500,6 +501,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
           spatialScale,
           backgroundMode,
           dimensions,
+          autoDimensions,
           colorMaterial: colorMaterialText,
           colorMaterialPalette,
           colorMaterialTextures,
@@ -511,29 +513,33 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
           scaleOptions,
         }) }],
       });
-      const parsed = parseScienceExhibitExtractJson(response.content || '');
-      if (!analysisHasContent(parsed)) throw new Error('LLM 未返回有效科技展项分析');
+      const parsed = parseScienceExhibitExtractJson(response.content || '', spatialScale);
+      const parsedAnalysis = normalizeScienceExhibitAnalysis(parsed);
+      if (!analysisHasContent(parsedAnalysis)) throw new Error('LLM 未返回有效科技展项分析');
+      if (autoDimensions && !parsed.dimensions) throw new Error('LLM 未返回有效自动尺寸，请重新提炼');
+      const nextDimensions = autoDimensions && parsed.dimensions ? parsed.dimensions : dimensions;
       update({
-        analysis: parsed,
-        titleText: parsed.titleText,
-        sciencePrinciple: parsed.sciencePrinciple,
-        keyParameters: parsed.keyParameters,
-        interactionFlow: parsed.interactionFlow,
-        mechanismDesign: parsed.mechanismDesign,
-        safetyMaintenance: parsed.safetyMaintenance,
-        visualBrief: parsed.visualBrief,
-        drawingNotes: parsed.drawingNotes,
+        analysis: parsedAnalysis,
+        titleText: parsedAnalysis.titleText,
+        sciencePrinciple: parsedAnalysis.sciencePrinciple,
+        keyParameters: parsedAnalysis.keyParameters,
+        interactionFlow: parsedAnalysis.interactionFlow,
+        mechanismDesign: parsedAnalysis.mechanismDesign,
+        safetyMaintenance: parsedAnalysis.safetyMaintenance,
+        visualBrief: parsedAnalysis.visualBrief,
+        drawingNotes: parsedAnalysis.drawingNotes,
+        dimensions: nextDimensions,
         outputText: buildScienceExhibitParameterMarkdown({
-          analysis: parsed,
-          dimensions,
+          analysis: parsedAnalysis,
+          dimensions: nextDimensions,
           spatialScale,
           colorMaterial: colorMaterialText,
           colorMaterialPalette,
           colorMaterialTextures,
         }),
         text: buildScienceExhibitParameterMarkdown({
-          analysis: parsed,
-          dimensions,
+          analysis: parsedAnalysis,
+          dimensions: nextDimensions,
           spatialScale,
           colorMaterial: colorMaterialText,
           colorMaterialPalette,
@@ -543,12 +549,12 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
         progress: '',
         error: '',
       });
-      return parsed;
+      return autoDimensions ? { ...parsedAnalysis, dimensions: nextDimensions } : parsedAnalysis;
     } catch (error: any) {
       update({ status: 'error', error: llmErrorMessage(error), progress: '' });
       return null;
     }
-  }, [activeLlmConfig?.id, audience, audienceOptions, backgroundMode, busy, colorMaterialPalette, colorMaterialText, colorMaterialTextures, dimensions, domainOptions, effectiveSourceText, exhibitType, hasColorMaterialPreset, interactionMode, interactionModes, interactionOptions, isReadonly, llmModel, scaleOptions, scienceDomain, spatialScale, typeOptions, update]);
+  }, [activeLlmConfig?.id, audience, audienceOptions, autoDimensions, backgroundMode, busy, colorMaterialPalette, colorMaterialText, colorMaterialTextures, dimensions, domainOptions, effectiveSourceText, exhibitType, hasColorMaterialPreset, interactionMode, interactionModes, interactionOptions, isReadonly, llmModel, scaleOptions, scienceDomain, spatialScale, typeOptions, update]);
 
   const generateOneImage = useCallback(async ({
     kind,
@@ -668,6 +674,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
     const src = `science-exhibit-design:${id.slice(0, 6)}`;
     const extractBeforeGenerate = d.extractBeforeGenerate === true;
     let runtimeAnalysis: ScienceExhibitAnalysis | null = finishedRenderMode ? analysis : (analysisHasContent(analysis) ? analysis : null);
+    let runtimeDimensions = dimensions;
     const userReferenceImages = finishedRenderMode ? [finishedRenderImage] : [...spaceReferenceImages, ...deviceReferenceImages];
     const generatedUrls: string[] = [];
     const results: ScienceExhibitResult[] = [];
@@ -689,11 +696,12 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
       if (!finishedRenderMode && (extractBeforeGenerate || !runtimeAnalysis)) {
         runtimeAnalysis = await runExtract({ force: true });
         if (!runtimeAnalysis) throw new Error('未获得科技展项科学分析');
+        if (runtimeAnalysis.dimensions) runtimeDimensions = runtimeAnalysis.dimensions;
       }
-      const effectiveAnalysis = runtimeAnalysis || analysis;
+      const effectiveAnalysis = normalizeScienceExhibitAnalysis(runtimeAnalysis || analysis);
       const markdown = buildScienceExhibitParameterMarkdown({
         analysis: effectiveAnalysis,
-        dimensions,
+        dimensions: runtimeDimensions,
         spatialScale,
         colorMaterial: colorMaterialText,
         colorMaterialPalette,
@@ -747,7 +755,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
             audience,
             spatialScale,
             backgroundMode,
-            dimensions,
+            dimensions: runtimeDimensions,
             analysis: effectiveAnalysis,
             drawingSelection,
             spaceReferenceImages,
@@ -767,7 +775,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
             drawingType: kind,
             analysis: effectiveAnalysis,
             backgroundMode,
-            dimensions,
+            dimensions: runtimeDimensions,
             spatialScale,
             renderImage,
             previousDrawingImage,
@@ -1004,8 +1012,14 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
 
         <section data-exhibition-compact-section="dimensions" className="grid grid-cols-3 gap-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div className="col-span-3 flex items-center justify-between">
-            <div className="text-[11px] font-semibold text-cyan-100">尺寸设置</div>
-            <div className="text-[10px] text-white/45">单位 mm / W，进入效果图、图纸和参数表</div>
+            <div>
+              <div className="text-[11px] font-semibold text-cyan-100">尺寸设置</div>
+              <div className="text-[9px] text-white/45">{autoDimensions ? 'LLM 提炼时自动计算并回填，当前数值不可手动调整' : '单位 mm / W，进入效果图、图纸和参数表'}</div>
+            </div>
+            <label data-exhibition-compact-item="auto-dimensions" className="inline-flex h-7 items-center gap-1.5 rounded border border-white/10 bg-black/15 px-2 text-[10px] text-white/70">
+              <input type="checkbox" checked={autoDimensions} disabled={isReadonly || busy} onChange={(event) => update({ autoDimensions: event.target.checked })} />
+              <span>自动</span>
+            </label>
           </div>
           {[
             ['widthMm', '宽度 mm'],
@@ -1023,7 +1037,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
                 type="number"
                 min={0}
                 value={dimensions[key as keyof ScienceExhibitDimensions]}
-                disabled={isReadonly || busy}
+                disabled={isReadonly || busy || autoDimensions}
                 onChange={(event) => patchDimensions({ [key]: Math.max(0, Math.round(Number(event.target.value) || 0)) } as Partial<ScienceExhibitDimensions>)}
               />
             </label>

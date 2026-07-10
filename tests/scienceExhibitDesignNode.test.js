@@ -17,6 +17,7 @@ test('science exhibit design node is registered across frontend and permissions'
   assert.match(read('src/components/Canvas.tsx'), /scienceDomain: 'physics'/);
   assert.match(read('src/components/Canvas.tsx'), /interactionModes: \['turn-handle'\]/);
   assert.match(read('src/components/Canvas.tsx'), /backgroundMode: 'white'/);
+  assert.match(read('src/components/Canvas.tsx'), /autoDimensions: false/);
   assert.match(read('src/components/Canvas.tsx'), /colorMaterialPreset: ''/);
   assert.match(read('src/components/Canvas.tsx'), /colorMaterialPalette: ''/);
   assert.match(read('src/components/Canvas.tsx'), /colorMaterialTextures: ''/);
@@ -68,6 +69,14 @@ test('science exhibit component exposes handles, llm extraction and generation s
   assert.match(source, /analysis: effectiveAnalysis,\s*\n\s*drawingSelection,/);
   assert.match(source, /buildScienceExhibitDrawingPrompt/);
   assert.match(source, /normalizeScienceExhibitDimensions/);
+  assert.match(source, /autoDimensions = d\.autoDimensions === true/);
+  assert.match(source, /data-exhibition-compact-item="auto-dimensions"/);
+  assert.match(source, /checked=\{autoDimensions\}/);
+  assert.match(source, /disabled=\{isReadonly \|\| busy \|\| autoDimensions\}/);
+  assert.match(source, /parseScienceExhibitExtractJson\(response\.content \|\| '', spatialScale\)/);
+  assert.match(source, /dimensions: nextDimensions/);
+  assert.match(source, /runtimeAnalysis\.dimensions/);
+  assert.match(source, /dimensions: runtimeDimensions/);
   assert.match(source, /normalizeScienceExhibitBackground/);
   assert.match(source, /SCIENCE_EXHIBIT_BACKGROUNDS/);
   assert.match(source, /data-exhibition-compact-item=\{String\(key\) === 'backgroundMode' \? 'background-mode' : 'parameter-input'\}/);
@@ -128,6 +137,7 @@ test('compact form exposes science exhibit sections and references', () => {
     assert.match(source, /id: 'option-editor'/);
     assert.match(source, /id: 'background-mode'/);
     assert.match(source, /id: 'dimensions'/);
+    assert.match(source, /id: 'auto-dimensions'/);
     assert.match(source, /id: 'color-material'/);
     assert.match(source, /id: 'preset-select'/);
     assert.match(source, /id: 'manual-input'/);
