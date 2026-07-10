@@ -65,6 +65,7 @@ test('science exhibit component exposes handles, llm extraction and generation s
   assert.match(source, /runExtract\(\{ force: true \}\)/);
   assert.match(source, /!finishedRenderMode && \(extractBeforeGenerate \|\| !runtimeAnalysis\)/);
   assert.match(source, /buildScienceExhibitImagePrompt/);
+  assert.match(source, /analysis: effectiveAnalysis,\s*\n\s*drawingSelection,/);
   assert.match(source, /buildScienceExhibitDrawingPrompt/);
   assert.match(source, /normalizeScienceExhibitDimensions/);
   assert.match(source, /normalizeScienceExhibitBackground/);
@@ -83,6 +84,7 @@ test('science exhibit component exposes handles, llm extraction and generation s
   assert.match(source, /useRunTrigger\(id, runGenerate, 'image'\)/);
   assert.match(source, /data-exhibition-compact-item="paginated-output"/);
   assert.match(source, /checked=\{paginatedOutput\}/);
+  assert.match(source, /grid grid-cols-4 gap-1\.5/);
   assert.match(optionEditor, /批量导入/);
   assert.match(optionEditor, /parseScienceExhibitOptionBatchText/);
   assert.match(optionEditor, /mergeScienceExhibitOptionBatchItems/);

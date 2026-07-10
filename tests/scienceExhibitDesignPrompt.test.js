@@ -100,6 +100,7 @@ test('main image prompt keeps real science and parameter consistency', () => {
     audience: 'teenagers',
     spatialScale: 'island',
     backgroundMode: 'white',
+    drawingSelection: [],
     dimensions,
     colorMaterial: '银灰金属外壳；透明亚克力防护罩；蓝绿色灯带',
     colorMaterialPalette: '银灰、冷白、蓝绿色点缀',
@@ -123,6 +124,25 @@ test('main image prompt keeps real science and parameter consistency', () => {
   assert.match(prompt, /拉丝金属/);
   assert.match(prompt, /白背景|白底/);
   assert.match(prompt, /叶片角度/);
+  assert.match(prompt, /SINGLE HERO RENDER ONLY/);
+  assert.match(prompt, /NO EXPLODED VIEW/);
+  assert.match(prompt, /当前未选择任何其它技术图纸/);
+  assert.match(prompt, /不得出现爆炸分析、原理示意、三视图、参数表/);
+});
+
+test('main image prompt keeps selected drawings as later outputs only', () => {
+  const prompt = buildScienceExhibitImagePrompt({
+    drawingSelection: ['orthographic'],
+    analysis: {
+      ...analysis,
+      drawingNotes: 'SHOULD_NOT_ENTER_RENDER_PROMPT',
+    },
+  });
+  assert.match(prompt, /后续将另行生成/);
+  assert.match(prompt, /三视图/);
+  assert.match(prompt, /只能作为后续独立输出/);
+  assert.match(prompt, /NO ORTHOGRAPHIC VIEWS/);
+  assert.doesNotMatch(prompt, /SHOULD_NOT_ENTER_RENDER_PROMPT/);
 });
 
 test('science exhibit prompts use dynamic option definitions when provided', () => {

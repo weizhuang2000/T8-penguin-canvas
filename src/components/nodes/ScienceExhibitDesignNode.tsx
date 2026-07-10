@@ -398,6 +398,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
     backgroundMode,
     dimensions,
     analysis,
+    drawingSelection,
     spaceReferenceImages,
     deviceReferenceImages,
     supplement: resolvedSupplement,
@@ -410,7 +411,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
     interactionOptions,
     audienceOptions,
     scaleOptions,
-  }), [analysis, audience, audienceOptions, backgroundMode, colorMaterialPalette, colorMaterialText, colorMaterialTextures, deviceReferenceImages, dimensions, domainOptions, exhibitType, hasColorMaterialPreset, interactionMode, interactionModes, interactionOptions, resolvedSupplement, scaleOptions, scienceDomain, spaceReferenceImages, spatialScale, typeOptions]);
+  }), [analysis, audience, audienceOptions, backgroundMode, colorMaterialPalette, colorMaterialText, colorMaterialTextures, deviceReferenceImages, dimensions, domainOptions, drawingSelection, exhibitType, hasColorMaterialPreset, interactionMode, interactionModes, interactionOptions, resolvedSupplement, scaleOptions, scienceDomain, spaceReferenceImages, spatialScale, typeOptions]);
 
   useEffect(() => {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
@@ -748,6 +749,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
             backgroundMode,
             dimensions,
             analysis: effectiveAnalysis,
+            drawingSelection,
             spaceReferenceImages,
             deviceReferenceImages,
             supplement: resolvedSupplement,
@@ -983,7 +985,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
           ))}
           <div data-exhibition-compact-item="interaction-modes" className="col-span-3 space-y-1">
             <div className="text-[10px] text-white/55">互动方式（可多选）</div>
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-4 gap-1.5">
               {interactionOptions.map((item) => (
                 <label key={item.id} className="flex min-h-7 items-center gap-1 rounded border border-white/10 bg-black/15 px-2 py-1 text-[10px] text-white/70">
                   <input type="checkbox" checked={selectedInteractionSet.has(item.id)} disabled={isReadonly || busy} onChange={() => toggleInteraction(item.id)} />

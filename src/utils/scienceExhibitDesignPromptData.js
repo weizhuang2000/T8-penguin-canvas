@@ -461,7 +461,7 @@ function referenceOrderText(urls, labelPrefix, offset = 0) {
   return urls.map((url, index) => `@img${offset + index + 1}: ${labelPrefix}${index + 1} = ${url}`).join('\n');
 }
 
-function analysisText(analysis) {
+function analysisText(analysis, includeDrawingNotes = true) {
   const normalized = normalizeScienceExhibitAnalysis(analysis);
   return [
     normalized.titleText ? `展项名称：${normalized.titleText}` : '',
@@ -471,7 +471,7 @@ function analysisText(analysis) {
     normalized.mechanismDesign ? `构成设计：${normalized.mechanismDesign}` : '',
     normalized.safetyMaintenance ? `安全维护：${normalized.safetyMaintenance}` : '',
     normalized.visualBrief ? `视觉说明：${normalized.visualBrief}` : '',
-    normalized.drawingNotes ? `图纸一致性约束：${normalized.drawingNotes}` : '',
+    includeDrawingNotes && normalized.drawingNotes ? `图纸一致性约束：${normalized.drawingNotes}` : '',
   ].filter(Boolean).join('\n');
 }
 
@@ -489,9 +489,17 @@ export function buildScienceExhibitImagePrompt(values = {}) {
   const deviceReferences = Array.isArray(values.deviceReferenceImages) ? values.deviceReferenceImages.filter(Boolean) : [];
   const allReferences = [...spaceReferences, ...deviceReferences];
   const supplement = cleanScienceExhibitText(values.supplement, 3000);
+  const selectedDrawings = normalizeScienceExhibitDrawingSelection(values.drawingSelection);
+  const selectedDrawingLabels = selectedDrawings
+    .map((id) => scienceExhibitDrawingMeta(id).label)
+    .filter(Boolean);
 
   return [
     '核心要求：生成专业科技馆/科学中心“科技展项设计”主效果图，画面应能用于方案汇报，必须围绕真实科学原理设计，不要伪科学、不要随机炫酷装置、不要错误公式或乱码文字。',
+    '输出类型强约束：只输出一张完整、连续的主效果图，只表现真实展项装置及其所在背景；禁止拼版、分栏、多面板、图纸页、方案汇报板或九宫格。严禁在主效果图中嵌入爆炸分析图、展项原理图、三视图、正投影图、参数表、流程图、尺寸图、CAD 线稿或任何技术图纸缩略图。SINGLE HERO RENDER ONLY, NO CONTACT SHEET, NO EXPLODED VIEW, NO SCHEMATIC, NO ORTHOGRAPHIC VIEWS, NO PARAMETER TABLE.',
+    selectedDrawingLabels.length
+      ? `后续将另行生成：${selectedDrawingLabels.join('、')}。这些内容只能作为后续独立输出，绝不能出现在主效果图画面中。`
+      : '当前未选择任何其它技术图纸；主效果图中不得出现爆炸分析、原理示意、三视图、参数表或类似技术制图内容。',
     `科学领域：${domain.label}，${domain.prompt}`,
     `展项类型：${exhibitType.label}，${exhibitType.prompt}`,
     `互动方式：${interactionText}。画面中的操作台、输入部件、传感器、执行器、反馈屏幕和观众动线必须同时支持所有选中的互动方式。`,
@@ -499,13 +507,13 @@ export function buildScienceExhibitImagePrompt(values = {}) {
     `空间尺度：${scale.label}，${scale.prompt}`,
     bgText,
     `尺寸设置：${dimensionText}。画面中的展项比例、观众尺度、操作高度、安全边界和维护门位置必须与这些尺寸一致。`,
-    analysisText(analysis),
+    analysisText(analysis, false),
     colorMaterialContext(values),
     spaceReferences.length ? `高优先级参考：整体空间/风格参考图必须生效，必须从 @img1 起的空间参考中提取并应用整体设计语言、色彩倾向、材质质感、灯光层次、尺度关系、展厅气质和动线秩序；即使选择白背景或黑背景，也要把这些风格特征迁移到展项本体、操作台、屏幕边框、支架、标识板和材质细节上。只排除无关展品、文字、logo 或品牌，不要忽略空间/风格参考图。HIGH PRIORITY style reference must influence the design.\n${referenceOrderText(spaceReferences, '整体空间/风格参考')}` : '未提供整体空间/风格参考图，请自行设计清晰可落地的科技馆展项环境。',
     deviceReferences.length ? `装置/结构参考图只参考机械结构、交互部件、屏幕/传感器/支架关系，不复制无关 logo 或文字。\n${referenceOrderText(deviceReferences, '装置/结构参考', spaceReferences.length)}` : '未提供装置/结构参考图，请基于科学原理设计合理的机械、电子和媒体构成。',
     allReferences.length ? `参考图总顺序：${allReferences.map((_, index) => `@img${index + 1}`).join('、')}` : '',
     supplement ? `补充要求：${supplement}` : '',
-    '构图要求：展项主体完整，包含观众操作点、反馈显示、科学解释图文区域、维护检修边界和安全距离；材质、结构、线缆/传感器/屏幕位置要可信。',
+    '构图要求：展项主体完整，包含观众操作点、反馈显示、简洁说明牌、维护检修边界和安全距离；说明牌只作为展项表面的少量科普文字载体，不得画成原理图、流程图或技术图纸；材质、结构、线缆/传感器/屏幕位置要可信。',
     '质量约束：参数关系前后一致；不要把科技展项画成普通商场互动屏；不要低清模糊、随机品牌 logo、乱码文字、无法施工的悬浮结构或与科学原理无关的装饰。',
   ].filter(Boolean).join('\n');
 }
