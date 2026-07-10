@@ -1055,6 +1055,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
       estimatedPowerW: 800,
     },
     drawingSelection: ['exploded', 'principle', 'orthographic', 'parameter-table'],
+    paginatedOutput: true,
     colorMaterialPreset: '',
     colorMaterial: '',
     colorMaterialPalette: '',

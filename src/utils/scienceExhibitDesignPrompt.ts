@@ -70,9 +70,10 @@ export interface ScienceExhibitDimensions {
 }
 
 export type ScienceExhibitDrawingType = 'render' | 'exploded' | 'principle' | 'orthographic' | 'parameter-table';
+export type ScienceExhibitResultKind = ScienceExhibitDrawingType | 'combined-sheet';
 
 export interface ScienceExhibitResult {
-  kind: ScienceExhibitDrawingType;
+  kind: ScienceExhibitResultKind;
   name: string;
   imageUrl: string;
   prompt: string;

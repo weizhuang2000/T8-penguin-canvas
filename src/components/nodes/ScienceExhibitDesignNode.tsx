@@ -19,6 +19,7 @@ import {
   type ScienceExhibitPromptPresetMap,
 } from '../../services/api';
 import { generateExternalImage, generateLlm, queryExternalImageStatus, queryImageStatus, submitImageAsync } from '../../services/generation';
+import { opGridCompose } from '../../services/imageOps';
 import {
   advancedProviderModelOptions,
   advancedProvidersForNode,
@@ -227,6 +228,29 @@ function sciencePresetItems(options: ScienceExhibitOption[]): ScienceExhibitOpti
   }));
 }
 
+function scienceExhibitSheetLayout(count: number, ratioText: string) {
+  const safeCount = Math.max(1, Math.min(12, Math.floor(count) || 1));
+  const ratioMatch = /^(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)$/.exec(String(ratioText || '16:9'));
+  const ratio = ratioMatch ? Number(ratioMatch[1]) / Math.max(1, Number(ratioMatch[2])) : 16 / 9;
+  const cols = safeCount <= 2 ? safeCount : Math.ceil(Math.sqrt(safeCount));
+  const rows = Math.ceil(safeCount / cols);
+  const gap = 24;
+  const captionHeight = 64;
+  const cellWidth = 1280;
+  const cellHeight = Math.max(480, Math.round(cellWidth / Math.max(0.4, ratio))) + captionHeight;
+  const rawWidth = cols * cellWidth + (cols - 1) * gap;
+  const rawHeight = rows * cellHeight + (rows - 1) * gap;
+  const scale = Math.min(1, 4096 / rawWidth, 4096 / rawHeight);
+  return {
+    rows,
+    cols,
+    gap,
+    captionHeight: Math.max(24, Math.round(captionHeight * scale)),
+    width: Math.max(64, Math.round(rawWidth * scale)),
+    height: Math.max(64, Math.round(rawHeight * scale)),
+  };
+}
+
 const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const update = useUpdateNodeData(id);
@@ -307,6 +331,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
   const backgroundMode = normalizeScienceExhibitBackground(d.backgroundMode);
   const dimensions = useMemo(() => normalizeScienceExhibitDimensions(d.dimensions, spatialScale), [d.dimensions, spatialScale]);
   const drawingSelection = useMemo(() => normalizeScienceExhibitDrawingSelection(d.drawingSelection), [d.drawingSelection]);
+  const paginatedOutput = d.paginatedOutput !== false;
   const selectedColorMaterialPreset = useMemo(
     () => colorMaterialPresets.find((preset) => preset.id === d.colorMaterialPreset) || null,
     [colorMaterialPresets, d.colorMaterialPreset],
@@ -336,7 +361,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
   const upstreamText = useMemo(() => upstream.texts.map((item) => item.url).join('\n\n'), [upstream.texts]);
   const effectiveSourceText = [d.useUpstream !== false ? upstreamText : '', sourceText].filter((item) => item.trim()).join('\n\n');
   const status = String(d.status || 'idle');
-  const busy = ['uploading', 'analyzing', 'generating-render', 'generating-exploded', 'generating-principle', 'generating-orthographic', 'generating-parameter-table'].includes(status);
+  const busy = ['uploading', 'analyzing', 'generating-render', 'generating-exploded', 'generating-principle', 'generating-orthographic', 'generating-parameter-table', 'composing-sheet'].includes(status);
 
   const mentionMaterials: Material[] = useMemo(() => deviceReferenceItems.map((item, index) => ({
     id: item.id,
@@ -657,6 +682,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
         imageUrls: [],
         urls: [],
         scienceExhibitResults: [],
+        scienceExhibitPageResults: [],
         referenceImages: userReferenceImages,
       });
       if (!finishedRenderMode && (extractBeforeGenerate || !runtimeAnalysis)) {
@@ -692,6 +718,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
           imageUrls: generatedUrls.slice(),
           urls: generatedUrls.slice(),
           scienceExhibitResults: results.slice(),
+          scienceExhibitPageResults: results.slice(),
           outputText: markdown,
           text: markdown,
           analysis: effectiveAnalysis,
@@ -785,6 +812,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
           imageUrls: generatedUrls.slice(),
           urls: generatedUrls.slice(),
           scienceExhibitResults: results.slice(),
+          scienceExhibitPageResults: results.slice(),
           prompt,
           outputText: markdown,
           text: markdown,
@@ -798,8 +826,46 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
         });
         if (index + 1 < sequence.length) await new Promise((resolve) => setTimeout(resolve, NEXT_DRAWING_SETTLE_MS));
       }
-      update({ status: 'success', progress: '100%', taskId: latestTaskId });
-      logBus.success(`科技展项设计图包完成: ${generatedUrls.length} 张`, src);
+      let finalUrls = generatedUrls.slice();
+      let finalResults = results.slice();
+      if (!paginatedOutput && generatedUrls.length > 1) {
+        update({ status: 'composing-sheet', progress: '正在把主效果图与已选图纸合并到一页...' });
+        const layout = scienceExhibitSheetLayout(generatedUrls.length, aspectRatio);
+        const composed = await opGridCompose({
+          ...layout,
+          background: '#ffffff',
+          fit: 'contain',
+          showIndexes: false,
+          showCaptions: true,
+          captionTextColor: '#111827',
+          captionBackground: '#f3f4f6',
+          cells: results.map((item) => ({
+            imageUrl: item.imageUrl,
+            fit: 'contain',
+            caption: item.name,
+          })),
+        });
+        finalUrls = [composed.imageUrl];
+        finalResults = [{
+          kind: 'combined-sheet',
+          name: '科技展项合并图纸页',
+          imageUrl: composed.imageUrl,
+          prompt: `分页输出关闭：合并 ${results.map((item) => item.name).join('、')}`,
+          seed: 0,
+          taskId: '',
+        }];
+      }
+      update({
+        status: 'success',
+        progress: '100%',
+        taskId: latestTaskId,
+        imageUrl: finalUrls[0] || '',
+        imageUrls: finalUrls,
+        urls: finalUrls,
+        scienceExhibitResults: finalResults,
+        scienceExhibitPageResults: results.slice(),
+      });
+      logBus.success(`科技展项设计图包完成: ${finalUrls.length} 张输出，${generatedUrls.length} 张分页结果`, src);
       taskCompletionSound.notifyComplete(id, 'image');
     } catch (error: any) {
       const msg = error?.message || '生成失败';
@@ -807,7 +873,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`科技展项设计失败: ${msg}`, src);
       throw error;
     }
-  }, [analysis, audience, audienceOptions, backgroundMode, busy, colorMaterialPalette, colorMaterialText, colorMaterialTextures, d.extractBeforeGenerate, deviceReferenceImages, dimensions, domainOptions, drawingSelection, effectiveSourceText, exhibitType, finishedRenderImage, finishedRenderMode, finishedRenderReferenceImages, generateOneImage, hasColorMaterialPreset, id, interactionMode, interactionModes, interactionOptions, isReadonly, resolvedSupplement, runExtract, scaleOptions, scienceDomain, seed, spaceReferenceImages, spatialScale, typeOptions, update]);
+  }, [analysis, aspectRatio, audience, audienceOptions, backgroundMode, busy, colorMaterialPalette, colorMaterialText, colorMaterialTextures, d.extractBeforeGenerate, deviceReferenceImages, dimensions, domainOptions, drawingSelection, effectiveSourceText, exhibitType, finishedRenderImage, finishedRenderMode, finishedRenderReferenceImages, generateOneImage, hasColorMaterialPreset, id, interactionMode, interactionModes, interactionOptions, isReadonly, paginatedOutput, resolvedSupplement, runExtract, scaleOptions, scienceDomain, seed, spaceReferenceImages, spatialScale, typeOptions, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -1093,7 +1159,14 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
         </section>
 
         <section data-exhibition-compact-section="drawings" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} /> 图纸输出</div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} /> 图纸输出</div>
+            <label data-exhibition-compact-item="paginated-output" className="inline-flex h-7 items-center gap-1.5 rounded border border-white/10 bg-black/15 px-2 text-[10px] text-white/70">
+              <input type="checkbox" checked={paginatedOutput} disabled={isReadonly || busy} onChange={(event) => update({ paginatedOutput: event.target.checked })} />
+              <span>分页输出</span>
+            </label>
+          </div>
+          <div className="text-[9px] text-white/40">{paginatedOutput ? '主效果图与已选图纸分别输出' : '主效果图与已选图纸合并为一页输出'}</div>
           <div data-exhibition-compact-item="drawing-selection" className="grid grid-cols-4 gap-1.5">
             {SCIENCE_EXHIBIT_DRAWING_TYPES.filter((item: ScienceExhibitOption) => item.id !== 'render').map((item: ScienceExhibitOption) => (
               <label key={item.id} className="flex items-center gap-1 rounded border border-white/10 bg-black/15 px-2 py-1 text-[10px] text-white/70">

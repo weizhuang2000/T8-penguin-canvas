@@ -311,6 +311,7 @@ const EXHIBITION_COMPACT_FORM_DEFINITIONS = [
     ] },
     { id: 'drawings', label: '\u56fe\u7eb8\u8f93\u51fa', items: [
       { id: 'drawing-selection', label: '\u56fe\u7eb8\u9009\u62e9' },
+      { id: 'paginated-output', label: '\u5206\u9875\u8f93\u51fa' },
       { id: 'parameter-table', label: '\u53c2\u6570\u8868' },
     ] },
     { id: 'references', label: '\u53c2\u8003\u56fe', items: [

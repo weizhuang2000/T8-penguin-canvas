@@ -24,6 +24,7 @@ test('science exhibit design node is registered across frontend and permissions'
   assert.match(read('src/components/Canvas.tsx'), /widthMm: 2200/);
   assert.match(read('src/components/Canvas.tsx'), /estimatedPowerW: 800/);
   assert.match(read('src/components/Canvas.tsx'), /drawingSelection: \['exploded', 'principle', 'orthographic', 'parameter-table'\]/);
+  assert.match(read('src/components/Canvas.tsx'), /paginatedOutput: true/);
   assert.match(read('src/config/portTypes.ts'), /'science-exhibit-design': \{ inputs: \['text', 'image'\], outputs: \['image', 'text'\] \}/);
   assert.match(read('src/utils/nodePlacement.ts'), /'science-exhibit-design': \{ w: 660, h: 820 \}/);
   assert.match(read('src/components/NodeActionBar.tsx'), /'science-exhibit-design'/);
@@ -78,7 +79,10 @@ test('science exhibit component exposes handles, llm extraction and generation s
   assert.match(source, /generateLlm/);
   assert.match(source, /generateExternalImage/);
   assert.match(source, /submitImageAsync/);
+  assert.match(source, /opGridCompose/);
   assert.match(source, /useRunTrigger\(id, runGenerate, 'image'\)/);
+  assert.match(source, /data-exhibition-compact-item="paginated-output"/);
+  assert.match(source, /checked=\{paginatedOutput\}/);
   assert.match(optionEditor, /批量导入/);
   assert.match(optionEditor, /parseScienceExhibitOptionBatchText/);
   assert.match(optionEditor, /mergeScienceExhibitOptionBatchItems/);
@@ -101,6 +105,12 @@ test('science exhibit generation preserves fixed drawing order and output text',
   assert.match(source, /renderImage = generated\.imageUrl/);
   assert.match(source, /previousDrawingImage = generated\.imageUrl/);
   assert.match(source, /scienceExhibitResults: results\.slice\(\)/);
+  assert.match(source, /scienceExhibitPageResults: results\.slice\(\)/);
+  assert.match(source, /!paginatedOutput && generatedUrls\.length > 1/);
+  assert.match(source, /cells: results\.map/);
+  assert.match(source, /kind: 'combined-sheet'/);
+  assert.match(source, /imageUrls: finalUrls/);
+  assert.match(source, /const sequence: ScienceExhibitDrawingType\[\] = DRAWING_ORDER\.filter\(\(item\) => finishedRenderMode \? item !== 'render' && drawingSelection\.includes\(item\) : item === 'render' \|\| drawingSelection\.includes\(item\)\)/);
   assert.match(source, /imageUrls: generatedUrls\.slice\(\)/);
   assert.match(source, /urls: generatedUrls\.slice\(\)/);
   assert.match(source, /outputText: markdown/);
@@ -123,6 +133,7 @@ test('compact form exposes science exhibit sections and references', () => {
     assert.match(source, /id: 'language'/);
     assert.match(source, /id: 'extract-before-generate'/);
     assert.match(source, /id: 'drawings'/);
+    assert.match(source, /id: 'paginated-output'/);
     assert.match(source, /id: 'references'/);
     assert.match(source, /id: 'finished-render-reference'/);
     assert.match(source, /id: 'space-reference'/);
