@@ -17,6 +17,8 @@ export interface SculptureReliefImagePromptValues {
   designKind?: SculptureReliefDesignKind;
   sculptureType?: string;
   reliefType?: string;
+  sculptureTypeOption?: SculptureReliefOption;
+  reliefTypeOption?: SculptureReliefOption;
   dimensions?: Partial<SculptureReliefDimensions>;
   materialId?: string;
   manualMaterial?: string;
@@ -30,6 +32,7 @@ export interface SculptureReliefImagePromptValues {
   hasPeoplePropsReferenceImage?: boolean;
   peoplePropsReferenceImages?: string[];
   viewAngles?: string[];
+  viewAngleOptions?: SculptureReliefOption[];
   material?: Partial<SculptureReliefOption> & {
     description?: string;
     texture?: string;

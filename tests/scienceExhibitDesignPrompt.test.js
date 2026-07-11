@@ -285,7 +285,25 @@ test('technical drawing prompts bind later drawings to render reference', () => 
       colorMaterialTextures: '拉丝金属、磨砂亚克力',
     });
     assert.match(prompt, /800W/);
+    assert.match(prompt, /SINGLE CONTINUOUS|ONE UNIFIED TECHNICAL SHEET/);
+    assert.match(prompt, /NO COLLAGE/);
+    if (drawingType === 'exploded') {
+      assert.match(prompt, /EXPLODED ANALYSIS ONLY/);
+      assert.match(prompt, /NO PRINCIPLE DIAGRAM/);
+      assert.match(prompt, /NO ORTHOGRAPHIC OR CAD VIEWS/);
+      assert.match(prompt, /NO PARAMETER TABLE/);
+    }
+    if (drawingType === 'principle') {
+      assert.match(prompt, /PRINCIPLE DIAGRAM ONLY/);
+      assert.match(prompt, /NO EXPLODED VIEW/);
+      assert.match(prompt, /NO ORTHOGRAPHIC OR CAD VIEWS/);
+      assert.match(prompt, /NO PARAMETER TABLE/);
+    }
     if (drawingType === 'parameter-table') {
+      assert.match(prompt, /PARAMETER TABLE ONLY/);
+      assert.match(prompt, /NO EXPLODED VIEW/);
+      assert.match(prompt, /NO PRINCIPLE DIAGRAM/);
+      assert.match(prompt, /NO ORTHOGRAPHIC OR CAD VIEWS/);
       assert.match(prompt, /TABLE ONLY/);
       assert.match(prompt, /no render image/);
       assert.match(prompt, /no orthographic views/);
@@ -293,6 +311,10 @@ test('technical drawing prompts bind later drawings to render reference', () => 
       assert.match(prompt, /Parameter table note/);
     }
     if (drawingType === 'orthographic') {
+      assert.match(prompt, /ORTHOGRAPHIC CAD SHEET ONLY/);
+      assert.match(prompt, /NO EXPLODED VIEW/);
+      assert.match(prompt, /NO PRINCIPLE FLOWCHART/);
+      assert.match(prompt, /NO PARAMETER TABLE/);
       assert.match(prompt, /CAD/);
       assert.match(prompt, /Orthographic CAD note/);
       assert.match(prompt, /orthographic projection|正交投影|正投影/);

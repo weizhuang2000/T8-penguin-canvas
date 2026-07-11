@@ -1,18 +1,22 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
-import { Brain, FileText, Image as ImageIcon, Landmark, Loader2, Play, Upload } from 'lucide-react';
+import { Brain, FileText, Image as ImageIcon, Landmark, Loader2, Pencil, Play, Upload } from 'lucide-react';
 import { EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
 import {
   extractDocument,
+  getDesignOptionPresets,
   getCurrentUser,
   getSculptureReliefMaterials,
   MAX_DOCUMENT_FILE_SIZE,
   MAX_DOCUMENT_FILE_SIZE_MB,
   updateSculptureReliefMaterials,
+  updateDesignOptionPresets,
   type AuthUser,
   type ExtractedDocument,
   type SculptureReliefMaterialItem,
+  type DesignOptionPresetItem,
+  type SculptureReliefOptionGroup,
 } from '../../services/api';
 import { generateExternalImage, generateLlm, queryExternalImageStatus, queryImageStatus, submitImageAsync } from '../../services/generation';
 import {
@@ -33,11 +37,10 @@ import SculptureReliefMaterialEditorModal from './SculptureReliefMaterialEditorM
 import MentionPromptInput from './MentionPromptInput';
 import { resolveMediaMentions, type MediaMention } from './mediaMentions';
 import NodeHelpButton from './NodeHelpButton';
+import DesignOptionEditorModal from './DesignOptionEditorModal';
 import {
   buildSculptureReliefExtractPrompt,
   buildSculptureReliefImagePrompt,
-  normalizeReliefDesignType,
-  normalizeSculptureDesignType,
   normalizeSculptureReliefDesignKind,
   normalizeSculptureReliefDimensions,
   normalizeSculptureReliefMaterial,
@@ -56,6 +59,17 @@ const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border
 const MAX_IMAGE_SEED = 2147483647;
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
+const SCULPTURE_OPTION_GROUPS = [
+  { id: 'sculptureTypes', label: '雕塑类型' },
+  { id: 'reliefTypes', label: '浮雕类型' },
+  { id: 'viewAngles', label: '多视角' },
+];
+const DEFAULT_SCULPTURE_OPTIONS: Record<string, DesignOptionPresetItem[]> = {
+  sculptureTypes: SCULPTURE_DESIGN_TYPES.map((item, order) => ({ ...item, order })),
+  reliefTypes: RELIEF_DESIGN_TYPES.map((item, order) => ({ ...item, order })),
+  viewAngles: SCULPTURE_RELIEF_VIEW_ANGLES.map((item, order) => ({ ...item, order })),
+};
+const optionValue = (value: unknown, options: DesignOptionPresetItem[]) => options.some((item) => item.id === value) ? String(value) : options[0]?.id || '';
 
 interface InputImageItem {
   id: string;
@@ -174,6 +188,10 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
   const [materialsOpen, setMaterialsOpen] = useState(false);
   const [materialsSaving, setMaterialsSaving] = useState(false);
   const [materialsError, setMaterialsError] = useState('');
+  const [designOptions, setDesignOptions] = useState<Record<string, DesignOptionPresetItem[]>>(DEFAULT_SCULPTURE_OPTIONS);
+  const [optionEditorOpen, setOptionEditorOpen] = useState(false);
+  const [optionSaving, setOptionSaving] = useState(false);
+  const [optionError, setOptionError] = useState('');
 
   const llmConfigOptions = useMemo(() => {
     const saved = llmConfigs.filter((item) => item && (item.hasApiKey || item.apiKey || item.baseUrl || item.model));
@@ -213,8 +231,13 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
 
   const designKind = normalizeSculptureReliefDesignKind(d.designKind) as SculptureReliefDesignKind;
-  const sculptureType = normalizeSculptureDesignType(d.sculptureType);
-  const reliefType = normalizeReliefDesignType(d.reliefType);
+  const sculptureTypeOptions = designOptions.sculptureTypes || DEFAULT_SCULPTURE_OPTIONS.sculptureTypes;
+  const reliefTypeOptions = designOptions.reliefTypes || DEFAULT_SCULPTURE_OPTIONS.reliefTypes;
+  const viewAngleOptions = designOptions.viewAngles || DEFAULT_SCULPTURE_OPTIONS.viewAngles;
+  const sculptureType = optionValue(d.sculptureType, sculptureTypeOptions);
+  const reliefType = optionValue(d.reliefType, reliefTypeOptions);
+  const sculptureTypeOption = sculptureTypeOptions.find((item) => item.id === sculptureType)!;
+  const reliefTypeOption = reliefTypeOptions.find((item) => item.id === reliefType)!;
   const dimensions = normalizeSculptureReliefDimensions(d.dimensions);
   const materialOptions = useMemo(() => mergeMaterialOptions(materials), [materials]);
   const materialId = materialOptions.some((item) => item.id === d.materialId)
@@ -224,7 +247,12 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
     () => materialOptions.find((item) => item.id === materialId) || null,
     [materialId, materialOptions],
   );
-  const viewAngles = useMemo(() => normalizeSculptureReliefViewAngles(d.viewAngles), [d.viewAngles]);
+  const viewAngles = useMemo(() => {
+    const allowed = new Set(viewAngleOptions.map((item) => item.id));
+    const source = Array.isArray(d.viewAngles) ? d.viewAngles : normalizeSculptureReliefViewAngles(d.viewAngles);
+    const selected = source.filter((item: unknown, index: number, values: unknown[]) => allowed.has(String(item)) && values.indexOf(item) === index).slice(0, 4) as string[];
+    return selected.length ? selected : [viewAngleOptions[0]?.id || 'front'];
+  }, [d.viewAngles, viewAngleOptions]);
   const titleText = String(d.titleText || '').trim();
   const themeText = String(d.themeText || '').trim();
   const bodyText = String(d.bodyText || '').trim();
@@ -259,6 +287,8 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
     designKind,
     sculptureType,
     reliefType,
+    sculptureTypeOption,
+    reliefTypeOption,
     dimensions,
     materialId,
     material: selectedMaterial || undefined,
@@ -273,12 +303,28 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
     peoplePropsReferenceImages,
     hasPeoplePropsReferenceImage: peoplePropsReferenceImages.length > 0,
     viewAngles,
-  }), [bodyText, d.backgroundMode, d.dimensionMarksEnabled, d.manualMaterial, designKind, dimensions, materialId, patternReferenceImage, peoplePropsReferenceImages, reliefType, resolvedPeoplePropsText, sculptureType, selectedMaterial, themeText, titleText, viewAngles]);
+    viewAngleOptions,
+  }), [bodyText, d.backgroundMode, d.dimensionMarksEnabled, d.manualMaterial, designKind, dimensions, materialId, patternReferenceImage, peoplePropsReferenceImages, reliefType, reliefTypeOption, resolvedPeoplePropsText, sculptureType, sculptureTypeOption, selectedMaterial, themeText, titleText, viewAngleOptions, viewAngles]);
 
   useEffect(() => {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
     getSculptureReliefMaterials().then(setMaterials).catch(() => setMaterials([]));
+    getDesignOptionPresets('sculpture-relief-design')
+      .then((presets) => setDesignOptions(Object.fromEntries(Object.entries(DEFAULT_SCULPTURE_OPTIONS).map(([group, defaults]) => [group, presets[group]?.length ? presets[group] : defaults]))))
+      .catch(() => setDesignOptions(DEFAULT_SCULPTURE_OPTIONS));
   }, []);
+
+  const saveDesignOptions = async (group: string, presets: DesignOptionPresetItem[]) => {
+    if (!canManageMaterials || isReadonly) return;
+    setOptionSaving(true); setOptionError('');
+    try {
+      const saved = await updateDesignOptionPresets('sculpture-relief-design', group as SculptureReliefOptionGroup, presets);
+      setDesignOptions((current) => ({ ...current, [group]: saved }));
+      setOptionEditorOpen(false);
+    } catch (error: any) {
+      setOptionError(error?.message || '保存雕塑/浮雕关键参数失败');
+    } finally { setOptionSaving(false); }
+  };
 
   useEffect(() => {
     if (
@@ -351,6 +397,8 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
       designKind,
       sculptureType,
       reliefType,
+      sculptureTypeOption,
+      reliefTypeOption,
       dimensions,
       materialId,
       material: selectedMaterial || undefined,
@@ -365,6 +413,7 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
       peoplePropsReferenceImages,
       hasPeoplePropsReferenceImage: peoplePropsReferenceImages.length > 0,
       viewAngles,
+      viewAngleOptions,
     });
     pollAbortRef.current = false;
     taskCompletionSound.primeAudio();
@@ -478,7 +527,7 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`雕塑/浮雕设计生图失败: ${msg}`, src);
       throw error;
     }
-  }, [activeCanvasId, apiModel, aspectRatio, bodyText, busy, d.backgroundMode, d.dimensionMarksEnabled, d.manualMaterial, d.providerParams, designKind, dimensions, externalProviderModel, id, isExternalSelected, isReadonly, materialId, modelDef.id, modelDef.paramKind, outputFormat, patternReferenceImage, peoplePropsReferenceImages, providerSelection.provider, reliefType, resolvedPeoplePropsText, sculptureType, seed, selectedMaterial, sizeLevel, themeText, titleText, update, viewAngles]);
+  }, [activeCanvasId, apiModel, aspectRatio, bodyText, busy, d.backgroundMode, d.dimensionMarksEnabled, d.manualMaterial, d.providerParams, designKind, dimensions, externalProviderModel, id, isExternalSelected, isReadonly, materialId, modelDef.id, modelDef.paramKind, outputFormat, patternReferenceImage, peoplePropsReferenceImages, providerSelection.provider, reliefType, reliefTypeOption, resolvedPeoplePropsText, sculptureType, sculptureTypeOption, seed, selectedMaterial, sizeLevel, themeText, titleText, update, viewAngleOptions, viewAngles]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -534,6 +583,7 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
         {d.error && <div className="rounded border border-red-300/25 bg-red-400/10 px-2 py-1.5 text-[10px] text-red-200">{d.error}</div>}
 
         <section data-exhibition-compact-section="source" className="grid grid-cols-2 gap-2 rounded border border-white/10 bg-white/[0.035] p-2">
+          {canManageMaterials && <div className="col-span-2 flex justify-end"><button data-exhibition-compact-item="option-editor" type="button" className={BUTTON} disabled={isReadonly || busy} onClick={() => setOptionEditorOpen(true)}><Pencil size={13} /> 编辑关键参数</button></div>}
           <label data-exhibition-compact-item="parameter-input" className="space-y-1">
             <span className="text-[10px] text-white/55">设计类型</span>
             <select className={FIELD} value={designKind} disabled={isReadonly || busy} onChange={(e) => update({ designKind: normalizeSculptureReliefDesignKind(e.target.value) })}>
@@ -548,11 +598,11 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
               value={designKind === 'relief' ? reliefType : sculptureType}
               disabled={isReadonly || busy}
               onChange={(e) => {
-                if (designKind === 'relief') update({ reliefType: normalizeReliefDesignType(e.target.value) });
-                else update({ sculptureType: normalizeSculptureDesignType(e.target.value) });
+                if (designKind === 'relief') update({ reliefType: e.target.value });
+                else update({ sculptureType: e.target.value });
               }}
             >
-              {(designKind === 'relief' ? RELIEF_DESIGN_TYPES : SCULPTURE_DESIGN_TYPES).map((item: SculptureReliefOption) => <option key={item.id} value={item.id}>{item.label}</option>)}
+              {(designKind === 'relief' ? reliefTypeOptions : sculptureTypeOptions).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
             </select>
           </label>
           <label data-exhibition-compact-item="toggles" className="flex items-center gap-1.5 text-[10px] text-white/70">
@@ -652,7 +702,7 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
               <span>{viewAngles.length}/4</span>
             </div>
             <div className="grid grid-cols-2 gap-1.5">
-              {SCULPTURE_RELIEF_VIEW_ANGLES.map((item: SculptureReliefOption) => {
+              {viewAngleOptions.map((item) => {
                 const checked = viewAngles.includes(item.id);
                 const disabled = isReadonly || busy || (!checked && viewAngles.length >= 4);
                 return (
@@ -779,6 +829,7 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
         onClose={() => setMaterialsOpen(false)}
         onSave={saveMaterials}
       />
+      {canManageMaterials && <DesignOptionEditorModal open={optionEditorOpen} title="雕塑/浮雕设计关键参数管理" groups={SCULPTURE_OPTION_GROUPS} presets={designOptions} saving={optionSaving} error={optionError} onClose={() => setOptionEditorOpen(false)} onSave={saveDesignOptions} />}
     </div>
   );
 };

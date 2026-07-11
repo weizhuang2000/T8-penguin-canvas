@@ -46,6 +46,10 @@ test('sculpture relief component exposes pattern reference and generation servic
   assert.match(source, /queryExternalImageStatus/);
   assert.match(source, /submitImageAsync/);
   assert.match(source, /queryImageStatus/);
+  assert.match(source, /DesignOptionEditorModal/);
+  assert.match(source, /getDesignOptionPresets\('sculpture-relief-design'\)/);
+  assert.match(source, /updateDesignOptionPresets\('sculpture-relief-design'/);
+  assert.match(source, /编辑关键参数/);
   assert.match(source, /images: referenceImages/);
   assert.match(source, /referenceImages = \[\.\.\.\(patternReferenceImage \? \[patternReferenceImage\] : \[\]\), \.\.\.peoplePropsReferenceImages\]/);
   assert.doesNotMatch(source, /color-material-reference/);

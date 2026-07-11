@@ -565,12 +565,19 @@ export function buildScienceExhibitDrawingPrompt(values = {}) {
     orthographic: '生成三视图：必须是单色 CAD 技术图纸形式，只允许正投影/正交投影 orthographic projection，no perspective，不允许任何透视关系、轴测角度、摄影阴影、材质渲染或环境背景。同一张图纸内按正视图、侧视图、俯视图排列；每个视图中操作台 operating table、整机设备 device、零部件 parts、屏幕、按钮、传感器和维护门必须使用同一个视角方向：正视图全部为正视，侧视图全部为侧视，俯视图全部为俯视，禁止出现“操作台是左视图但单设备是正视图”这类混合视角。侧视图必须是真正从左侧或右侧看的投影视角 side elevation / left or right side projection：沿设备宽度 X 方向投影到深度 Y × 高度 Z 平面，侧视图横向尺寸必须对应 depth / D，不对应 width / W；侧视图只能显示侧面轮廓、前后层叠关系、侧向可见的立柱/轨道/外壳厚度/维护门位置，绝不能把正视图横向缩短、压扁或裁切成侧视图。比例和部件位置与主效果图一致，标注主要外形尺寸、操作高度、安全边界和维护空间。',
     'parameter-table': '生成参数表图：只生成表格版式的技术参数表，画面中只能有表格、分组标题、字段和值；不要嵌入主效果图、不要嵌入三视图、不要嵌入爆炸图、不要放任何设备缩略图或装饰性渲染图。表格包含尺寸、互动方式、传感器/执行器、媒体系统、结构材质、关键科学变量、安全维护和待工程校核项。TABLE ONLY, no render image, no orthographic views, no thumbnails.',
   };
+  const pageExclusivityRequirements = {
+    exploded: '页面独占约束：本页只能是一张连续、完整的爆炸分析图，禁止拼版、分栏、多面板、宫格、效果图插图或其它图纸缩略图；禁止展项原理图、因果流程图、三视图、正投影/CAD 图、参数表和与爆炸装配关系无关的图形。EXPLODED ANALYSIS ONLY, SINGLE CONTINUOUS SHEET, NO COLLAGE, NO PRINCIPLE DIAGRAM, NO FLOWCHART, NO ORTHOGRAPHIC OR CAD VIEWS, NO PARAMETER TABLE.',
+    principle: '页面独占约束：本页只能是一张连续、完整的展项原理图，仅允许为解释真实科学原理所必需的箭头、因果链路和流程示意；禁止拼版、分栏、多面板、宫格、效果图插图、爆炸分析图、三视图、正投影/CAD 图、参数表和无关缩略图。PRINCIPLE DIAGRAM ONLY, SINGLE CONTINUOUS SHEET, NO COLLAGE, NO EXPLODED VIEW, NO ORTHOGRAPHIC OR CAD VIEWS, NO PARAMETER TABLE.',
+    orthographic: '页面独占约束：本页只能是一张统一、连续的单色 CAD 三视图图纸；正视图、真正侧投影图和俯视图是同一图纸内的三个正交投影视图，不属于拼版。禁止效果图插图、爆炸分析图、展项原理图、因果流程图、参数表、透视图、轴测图和其它无关图纸。ORTHOGRAPHIC CAD SHEET ONLY, ONE UNIFIED TECHNICAL SHEET, NO COLLAGE, NO EXPLODED VIEW, NO PRINCIPLE FLOWCHART, NO PARAMETER TABLE, NO PERSPECTIVE RENDER.',
+    'parameter-table': '页面独占约束：本页只能是一张连续、完整的纯参数表页面，只允许表格、分组标题、字段和值；禁止拼版、分栏、多面板、宫格、效果图、设备缩略图、爆炸分析图、展项原理图、流程图、三视图、正投影/CAD 图和装饰图形。PARAMETER TABLE ONLY, SINGLE CONTINUOUS TABLE SHEET, NO COLLAGE, NO EXPLODED VIEW, NO PRINCIPLE DIAGRAM, NO FLOWCHART, NO ORTHOGRAPHIC OR CAD VIEWS.',
+  };
 
   return [
     `核心要求：根据同一科技展项生成“${drawing.label}”，必须和主效果图保持同一装置、同一科学原理、同一参数体系；不要伪科学、不要乱标文字、不要改变展项主体结构。`,
     `图纸类型：${drawing.prompt}`,
     bgText,
     typeRequirements[drawing.id] || drawing.prompt,
+    pageExclusivityRequirements[drawing.id] || '',
     drawing.id === 'parameter-table' ? '参数表一致性说明：可以读取 @img1 主效果图和其它参考图来提取名称、材质和结构信息，但最终画面只允许输出纯表格，不得把任何参考图、效果图、三视图或设备图形画进参数表。' : '',
     `尺寸设置：${dimensionText}。三视图、爆炸图、原理图和参数表中的外形尺寸、操作高度、安全净距、维护净距和功率估算必须沿用这些实际值。`,
     finishedRenderMode

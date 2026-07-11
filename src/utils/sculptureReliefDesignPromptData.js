@@ -195,9 +195,17 @@ export function parseSculptureReliefExtractJson(text) {
 export function buildSculptureReliefImagePrompt(values = {}) {
   const designKind = normalizeSculptureReliefDesignKind(values.designKind);
   const kindMeta = sculptureReliefDesignKindMeta(designKind);
-  const typeMeta = designKind === 'relief'
+  const fallbackTypeMeta = designKind === 'relief'
     ? reliefDesignTypeMeta(values.reliefType)
     : sculptureDesignTypeMeta(values.sculptureType);
+  const suppliedTypeMeta = designKind === 'relief' ? values.reliefTypeOption : values.sculptureTypeOption;
+  const typeMeta = suppliedTypeMeta && typeof suppliedTypeMeta === 'object'
+    ? {
+      id: cleanSculptureReliefText(suppliedTypeMeta.id, 96) || fallbackTypeMeta.id,
+      label: cleanSculptureReliefText(suppliedTypeMeta.label, 120) || fallbackTypeMeta.label,
+      prompt: cleanSculptureReliefText(suppliedTypeMeta.prompt, 1600) || fallbackTypeMeta.prompt,
+    }
+    : fallbackTypeMeta;
   const material = values.material && typeof values.material === 'object'
     ? {
       label: cleanSculptureReliefText(values.material.label, 120) || sculptureReliefMaterialMeta(values.materialId).label,
@@ -224,9 +232,18 @@ export function buildSculptureReliefImagePrompt(values = {}) {
   const peoplePropsOrderText = peoplePropsImages
     .map((url, index) => `@img${peoplePropsOffset + index + 1}: 人物/道具参考${index + 1} = ${url}`)
     .join('\n');
-  const viewAngles = normalizeSculptureReliefViewAngles(values.viewAngles);
+  const suppliedViewAngles = Array.isArray(values.viewAngleOptions) ? values.viewAngleOptions : [];
+  const allowedViewAngles = new Set(suppliedViewAngles.map((item) => item?.id).filter(Boolean));
+  const customViewAngles = Array.isArray(values.viewAngles)
+    ? values.viewAngles.filter((id, index, source) => allowedViewAngles.has(id) && source.indexOf(id) === index).slice(0, 4)
+    : [];
+  const viewAngles = customViewAngles.length ? customViewAngles : normalizeSculptureReliefViewAngles(values.viewAngles);
   const viewAngleText = viewAngles
-    .map((id, index) => `${index + 1}. ${sculptureReliefViewAngleMeta(id).label}: ${sculptureReliefViewAngleMeta(id).prompt}`)
+    .map((id, index) => {
+      const supplied = suppliedViewAngles.find((item) => item?.id === id);
+      const meta = supplied || sculptureReliefViewAngleMeta(id);
+      return `${index + 1}. ${cleanSculptureReliefText(meta.label, 120)}: ${cleanSculptureReliefText(meta.prompt, 1600)}`;
+    })
     .join('\n');
   const dimensionText = dimensionMarksEnabled
     ? `尺寸标注：开启。画面中加入清晰的工程尺寸线和 mm 标注，标注这些关键尺寸：${dimensions}。`

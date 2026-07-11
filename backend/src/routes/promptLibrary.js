@@ -16,6 +16,11 @@ const RECOLOR_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_exhibition_re
 const UNIT_PANEL_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_unit_panel.json');
 const SCULPTURE_RELIEF_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_sculpture_relief.json');
 const SCIENCE_EXHIBIT_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_science_exhibit.json');
+const DESIGN_OPTIONS_DB_FILE = path.join(config.DATA_DIR, 'prompt_library_design_options.json');
+const DESIGN_OPTION_GROUPS = {
+  'exhibition-scene-design': new Set(['sceneCategories', 'presentationForms', 'spatialScales', 'atmospheres', 'crowdDensities']),
+  'sculpture-relief-design': new Set(['sculptureTypes', 'reliefTypes', 'viewAngles']),
+};
 const DIMENSIONS = new Set([
   'spaceType',
   'functionalZones',
@@ -1070,6 +1075,21 @@ function writeScienceExhibitDb(db) {
   );
 }
 
+function readDesignOptionsDb() {
+  try {
+    if (!fs.existsSync(DESIGN_OPTIONS_DB_FILE)) return {};
+    const raw = JSON.parse(fs.readFileSync(DESIGN_OPTIONS_DB_FILE, 'utf-8'));
+    return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeDesignOptionsDb(db) {
+  fs.mkdirSync(path.dirname(DESIGN_OPTIONS_DB_FILE), { recursive: true });
+  fs.writeFileSync(DESIGN_OPTIONS_DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
+}
+
 function publicItem(item) {
   return {
     id: safeText(item.id, 96),
@@ -1301,6 +1321,30 @@ router.put('/science-exhibit/presets/:group', (req, res) => {
   const presets = normalizeScienceExhibitOptionPresetList(req.body?.presets, DEFAULT_SCIENCE_EXHIBIT_PROMPT_PRESETS[group]);
   const next = { ...db, [group]: presets };
   writeScienceExhibitDb(next);
+  res.json({ success: true, data: presets });
+});
+
+router.get('/design-options/:nodeType', (req, res) => {
+  const nodeType = safeText(req.params.nodeType, 80);
+  const groups = DESIGN_OPTION_GROUPS[nodeType];
+  if (!groups) return res.status(404).json({ success: false, error: '不支持的设计节点' });
+  const stored = readDesignOptionsDb()[nodeType] || {};
+  const data = {};
+  for (const group of groups) data[group] = normalizeScienceExhibitOptionPresetList(stored[group], []);
+  res.json({ success: true, data });
+});
+
+router.put('/design-options/:nodeType/:group', (req, res) => {
+  const user = req.user;
+  if (!isAdminRole(user?.role)) return res.status(403).json({ success: false, error: '只有系统管理员可以维护设计节点关键参数' });
+  const nodeType = safeText(req.params.nodeType, 80);
+  const group = safeText(req.params.group, 80);
+  if (!DESIGN_OPTION_GROUPS[nodeType]?.has(group)) return res.status(400).json({ success: false, error: '无效的设计节点参数分组' });
+  const presets = normalizeScienceExhibitOptionPresetList(req.body?.presets, []);
+  if (!presets.length) return res.status(400).json({ success: false, error: '至少保留一个有效选项' });
+  const db = readDesignOptionsDb();
+  db[nodeType] = { ...(db[nodeType] || {}), [group]: presets };
+  writeDesignOptionsDb(db);
   res.json({ success: true, data: presets });
 });
 

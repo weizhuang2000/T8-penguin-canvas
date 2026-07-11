@@ -532,6 +532,17 @@ export interface ScienceExhibitOptionPresetItem {
 
 export type ScienceExhibitPromptPresetMap = Record<ScienceExhibitPresetGroup, ScienceExhibitOptionPresetItem[]>;
 
+export interface DesignOptionPresetItem {
+  id: string;
+  label: string;
+  prompt: string;
+  order: number;
+}
+
+export type ExhibitionSceneOptionGroup = 'sceneCategories' | 'presentationForms' | 'spatialScales' | 'atmospheres' | 'crowdDensities';
+export type SculptureReliefOptionGroup = 'sculptureTypes' | 'reliefTypes' | 'viewAngles';
+export type DesignOptionPresetMap = Record<string, DesignOptionPresetItem[]>;
+
 export interface ExhibitionCreativeInsertPresetItem {
   id: string;
   category?: string;
@@ -756,6 +767,25 @@ export async function updateScienceExhibitPromptPresets(
       method: 'PUT',
       body: JSON.stringify({ presets }),
     },
+  );
+  return res.data || [];
+}
+
+export async function getDesignOptionPresets(nodeType: 'exhibition-scene-design' | 'sculpture-relief-design'): Promise<DesignOptionPresetMap> {
+  const res = await request<{ success: boolean; data: DesignOptionPresetMap }>(
+    `${BASE}/prompt-library/design-options/${encodeURIComponent(nodeType)}`,
+  );
+  return res.data || {};
+}
+
+export async function updateDesignOptionPresets(
+  nodeType: 'exhibition-scene-design' | 'sculpture-relief-design',
+  group: ExhibitionSceneOptionGroup | SculptureReliefOptionGroup,
+  presets: DesignOptionPresetItem[],
+): Promise<DesignOptionPresetItem[]> {
+  const res = await request<{ success: boolean; data: DesignOptionPresetItem[] }>(
+    `${BASE}/prompt-library/design-options/${encodeURIComponent(nodeType)}/${encodeURIComponent(group)}`,
+    { method: 'PUT', body: JSON.stringify({ presets }) },
   );
   return res.data || [];
 }

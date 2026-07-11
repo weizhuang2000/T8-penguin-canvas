@@ -115,3 +115,13 @@ test('scene people props prompt uses runtime @img order in Chinese notes', () =>
   assert.match(prompt, /人物\/道具补充说明：@img3 中的女子在探坑里考古/);
   assert.doesNotMatch(prompt, /@image1 中的女子/);
 });
+
+test('scene prompt accepts administrator-defined key parameter prompts', () => {
+  const prompt = buildExhibitionSceneImagePrompt({
+    sceneCategory: 'custom-scene',
+    sceneCategoryOption: { id: 'custom-scene', label: '定制场景', prompt: 'CUSTOM_SCENE_PROMPT' },
+    presentationFormOption: { id: 'custom-form', label: '定制形式', prompt: 'CUSTOM_FORM_PROMPT' },
+  });
+  assert.match(prompt, /CUSTOM_SCENE_PROMPT/);
+  assert.match(prompt, /CUSTOM_FORM_PROMPT/);
+});

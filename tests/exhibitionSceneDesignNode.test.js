@@ -50,6 +50,10 @@ test('exhibition scene component exposes dedicated handles and @ mention control
   assert.match(source, /generateLlm/);
   assert.match(source, /generateExternalImage/);
   assert.match(source, /submitImageAsync/);
+  assert.match(source, /DesignOptionEditorModal/);
+  assert.match(source, /getDesignOptionPresets\('exhibition-scene-design'\)/);
+  assert.match(source, /updateDesignOptionPresets\('exhibition-scene-design'/);
+  assert.match(source, /编辑关键参数/);
 });
 
 test('exhibition scene text fields use stable prompt textarea for IME input', () => {

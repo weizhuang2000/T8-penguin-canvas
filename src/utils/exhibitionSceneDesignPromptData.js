@@ -160,11 +160,18 @@ function referenceOrderText(urls, labelPrefix) {
 }
 
 export function buildExhibitionSceneImagePrompt(values = {}) {
-  const category = exhibitionSceneCategoryMeta(values.sceneCategory);
-  const form = exhibitionScenePresentationFormMeta(values.presentationForm);
-  const scale = exhibitionSceneSpatialScaleMeta(values.spatialScale);
-  const atmosphere = exhibitionSceneAtmosphereMeta(values.atmosphere);
-  const crowd = exhibitionSceneCrowdDensityMeta(values.crowdDensity);
+  const optionMeta = (value, fallback) => value && typeof value === 'object'
+    ? {
+      id: cleanExhibitionSceneText(value.id, 96) || fallback.id,
+      label: cleanExhibitionSceneText(value.label, 120) || fallback.label,
+      prompt: cleanExhibitionSceneText(value.prompt, 1600) || fallback.prompt,
+    }
+    : fallback;
+  const category = optionMeta(values.sceneCategoryOption, exhibitionSceneCategoryMeta(values.sceneCategory));
+  const form = optionMeta(values.presentationFormOption, exhibitionScenePresentationFormMeta(values.presentationForm));
+  const scale = optionMeta(values.spatialScaleOption, exhibitionSceneSpatialScaleMeta(values.spatialScale));
+  const atmosphere = optionMeta(values.atmosphereOption, exhibitionSceneAtmosphereMeta(values.atmosphere));
+  const crowd = optionMeta(values.crowdDensityOption, exhibitionSceneCrowdDensityMeta(values.crowdDensity));
   const titleText = cleanExhibitionSceneText(values.titleText, 500);
   const themeText = cleanExhibitionSceneText(values.themeText, 1200);
   const sceneText = cleanExhibitionSceneText(values.sceneText, 4000);

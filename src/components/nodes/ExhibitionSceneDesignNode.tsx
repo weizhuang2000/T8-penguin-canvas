@@ -1,18 +1,22 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
-import { Brain, FileText, Image as ImageIcon, Loader2, Play, Settings2, Theater, Upload } from 'lucide-react';
+import { Brain, FileText, Image as ImageIcon, Loader2, Pencil, Play, Settings2, Theater, Upload } from 'lucide-react';
 import { EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR, EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
 import {
   extractDocument,
+  getDesignOptionPresets,
   getCurrentUser,
   getElevationPromptPresets,
   MAX_DOCUMENT_FILE_SIZE,
   MAX_DOCUMENT_FILE_SIZE_MB,
   updateElevationColorMaterialPresets,
+  updateDesignOptionPresets,
   type AuthUser,
   type ElevationColorMaterialPresetItem,
   type ExtractedDocument,
+  type DesignOptionPresetItem,
+  type ExhibitionSceneOptionGroup,
 } from '../../services/api';
 import { generateExternalImage, generateLlm, queryExternalImageStatus, queryImageStatus, submitImageAsync } from '../../services/generation';
 import {
@@ -29,11 +33,6 @@ import {
   EXHIBITION_SCENE_CROWD_DENSITIES,
   EXHIBITION_SCENE_PRESENTATION_FORMS,
   EXHIBITION_SCENE_SPATIAL_SCALES,
-  normalizeExhibitionSceneAtmosphere,
-  normalizeExhibitionSceneCategory,
-  normalizeExhibitionSceneCrowdDensity,
-  normalizeExhibitionScenePresentationForm,
-  normalizeExhibitionSceneSpatialScale,
   parseExhibitionSceneExtractJson,
   type ExhibitionSceneOption,
 } from '../../utils/exhibitionSceneDesignPrompt';
@@ -50,12 +49,28 @@ import { resolveMediaMentions, type MediaMention } from './mediaMentions';
 import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
 import NodeHelpButton from './NodeHelpButton';
+import DesignOptionEditorModal from './DesignOptionEditorModal';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
 const MAX_IMAGE_SEED = 2147483647;
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
+const SCENE_OPTION_GROUPS = [
+  { id: 'sceneCategories', label: '场景分类' },
+  { id: 'presentationForms', label: '表现形式' },
+  { id: 'spatialScales', label: '空间尺度' },
+  { id: 'atmospheres', label: '氛围/灯光' },
+  { id: 'crowdDensities', label: '人群密度' },
+];
+const DEFAULT_SCENE_OPTIONS: Record<string, DesignOptionPresetItem[]> = {
+  sceneCategories: EXHIBITION_SCENE_CATEGORIES.map((item, order) => ({ ...item, order })),
+  presentationForms: EXHIBITION_SCENE_PRESENTATION_FORMS.map((item, order) => ({ ...item, order })),
+  spatialScales: EXHIBITION_SCENE_SPATIAL_SCALES.map((item, order) => ({ ...item, order })),
+  atmospheres: EXHIBITION_SCENE_ATMOSPHERES.map((item, order) => ({ ...item, order })),
+  crowdDensities: EXHIBITION_SCENE_CROWD_DENSITIES.map((item, order) => ({ ...item, order })),
+};
+const optionValue = (value: unknown, options: DesignOptionPresetItem[]) => options.some((item) => item.id === value) ? String(value) : options[0]?.id || '';
 
 interface InputImageItem {
   id: string;
@@ -191,6 +206,10 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
   const [colorMaterialEditorOpen, setColorMaterialEditorOpen] = useState(false);
   const [colorMaterialSaving, setColorMaterialSaving] = useState(false);
   const [colorMaterialError, setColorMaterialError] = useState('');
+  const [designOptions, setDesignOptions] = useState<Record<string, DesignOptionPresetItem[]>>(DEFAULT_SCENE_OPTIONS);
+  const [optionEditorOpen, setOptionEditorOpen] = useState(false);
+  const [optionSaving, setOptionSaving] = useState(false);
+  const [optionError, setOptionError] = useState('');
   const activeCanvas = useCanvasStore((state) => state.canvases.find((canvas) => canvas.id === state.activeId) || null);
   const activeCanvasId = useCanvasStore((state) => state.activeId);
   const isReadonly = activeCanvas?.access?.canEdit === false;
@@ -236,11 +255,21 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
 
-  const sceneCategory = normalizeExhibitionSceneCategory(d.sceneCategory);
-  const presentationForm = normalizeExhibitionScenePresentationForm(d.presentationForm);
-  const spatialScale = normalizeExhibitionSceneSpatialScale(d.spatialScale);
-  const atmosphere = normalizeExhibitionSceneAtmosphere(d.atmosphere);
-  const crowdDensity = normalizeExhibitionSceneCrowdDensity(d.crowdDensity);
+  const sceneCategoryOptions = designOptions.sceneCategories || DEFAULT_SCENE_OPTIONS.sceneCategories;
+  const presentationFormOptions = designOptions.presentationForms || DEFAULT_SCENE_OPTIONS.presentationForms;
+  const spatialScaleOptions = designOptions.spatialScales || DEFAULT_SCENE_OPTIONS.spatialScales;
+  const atmosphereOptions = designOptions.atmospheres || DEFAULT_SCENE_OPTIONS.atmospheres;
+  const crowdDensityOptions = designOptions.crowdDensities || DEFAULT_SCENE_OPTIONS.crowdDensities;
+  const sceneCategory = optionValue(d.sceneCategory, sceneCategoryOptions);
+  const presentationForm = optionValue(d.presentationForm, presentationFormOptions);
+  const spatialScale = optionValue(d.spatialScale, spatialScaleOptions);
+  const atmosphere = optionValue(d.atmosphere, atmosphereOptions);
+  const crowdDensity = optionValue(d.crowdDensity, crowdDensityOptions);
+  const sceneCategoryOption = sceneCategoryOptions.find((item) => item.id === sceneCategory)!;
+  const presentationFormOption = presentationFormOptions.find((item) => item.id === presentationForm)!;
+  const spatialScaleOption = spatialScaleOptions.find((item) => item.id === spatialScale)!;
+  const atmosphereOption = atmosphereOptions.find((item) => item.id === atmosphere)!;
+  const crowdDensityOption = crowdDensityOptions.find((item) => item.id === crowdDensity)!;
   const colorMaterialPriorityMode: 'frontend' | 'llm' = d.colorMaterialPriorityMode === 'llm' ? 'llm' : 'frontend';
   const selectedColorMaterialPreset = colorMaterialPresets.find((preset) => preset.id === d.colorMaterialPreset) || null;
   const hasColorMaterialReference = colorMaterialReferenceImages.length > 0;
@@ -306,6 +335,11 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
     spatialScale,
     atmosphere,
     crowdDensity,
+    sceneCategoryOption,
+    presentationFormOption,
+    spatialScaleOption,
+    atmosphereOption,
+    crowdDensityOption,
     titleText,
     themeText,
     sceneText,
@@ -322,7 +356,7 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
     hasEnvironmentReferenceImage: environmentReferenceImages.length > 0,
     hasColorMaterialReferenceImage: colorMaterialReferenceImages.length > 0,
     hasPeoplePropsReferenceImage: peoplePropsReferenceImages.length > 0,
-  }), [atmosphere, colorMaterialPriorityMode, colorMaterialReferenceImages, crowdDensity, d.colorMaterial, environmentReferenceImages, interactionText, peoplePropsReferenceImages, presentationForm, resolvedColorMaterialPalette, resolvedColorMaterialReferenceTone, resolvedColorMaterialTextures, resolvedPeoplePropsText, sceneCategory, sceneText, spatialScale, themeText, titleText]);
+  }), [atmosphere, atmosphereOption, colorMaterialPriorityMode, colorMaterialReferenceImages, crowdDensity, crowdDensityOption, d.colorMaterial, environmentReferenceImages, interactionText, peoplePropsReferenceImages, presentationForm, presentationFormOption, resolvedColorMaterialPalette, resolvedColorMaterialReferenceTone, resolvedColorMaterialTextures, resolvedPeoplePropsText, sceneCategory, sceneCategoryOption, sceneText, spatialScale, spatialScaleOption, themeText, titleText]);
 
   const previewReferenceImages = useMemo(
     () => [...environmentReferenceImages, ...colorMaterialReferenceImages, ...peoplePropsReferenceImages],
@@ -356,7 +390,22 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
     getElevationPromptPresets()
       .then((presets) => setColorMaterialPresets(presets.colorMaterial || []))
       .catch(() => setColorMaterialPresets([]));
+    getDesignOptionPresets('exhibition-scene-design')
+      .then((presets) => setDesignOptions(Object.fromEntries(Object.entries(DEFAULT_SCENE_OPTIONS).map(([group, defaults]) => [group, presets[group]?.length ? presets[group] : defaults]))))
+      .catch(() => setDesignOptions(DEFAULT_SCENE_OPTIONS));
   }, []);
+
+  const saveDesignOptions = async (group: string, presets: DesignOptionPresetItem[]) => {
+    if (!canManageTeam || isReadonly) return;
+    setOptionSaving(true); setOptionError('');
+    try {
+      const saved = await updateDesignOptionPresets('exhibition-scene-design', group as ExhibitionSceneOptionGroup, presets);
+      setDesignOptions((current) => ({ ...current, [group]: saved }));
+      setOptionEditorOpen(false);
+    } catch (error: any) {
+      setOptionError(error?.message || '保存场景设计关键参数失败');
+    } finally { setOptionSaving(false); }
+  };
 
   useEffect(() => {
     if (!colorMaterialEditorOpen) return;
@@ -438,6 +487,11 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
       spatialScale,
       atmosphere,
       crowdDensity,
+      sceneCategoryOption,
+      presentationFormOption,
+      spatialScaleOption,
+      atmosphereOption,
+      crowdDensityOption,
       titleText,
       themeText,
       sceneText,
@@ -569,7 +623,7 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`场景设计生图失败: ${msg}`, src);
       throw error;
     }
-  }, [activeCanvasId, apiModel, aspectRatio, atmosphere, busy, colorMaterialPriorityMode, colorMaterialReferenceImages, crowdDensity, d.colorMaterial, d.providerParams, environmentReferenceImages, externalProviderModel, id, interactionText, isExternalSelected, isReadonly, modelDef.id, modelDef.paramKind, outputFormat, peoplePropsReferenceImages, presentationForm, providerSelection.provider, resolvedColorMaterialPalette, resolvedColorMaterialReferenceTone, resolvedColorMaterialTextures, resolvedPeoplePropsText, sceneCategory, sceneText, seed, sizeLevel, spatialScale, themeText, titleText, update]);
+  }, [activeCanvasId, apiModel, aspectRatio, atmosphere, atmosphereOption, busy, colorMaterialPriorityMode, colorMaterialReferenceImages, crowdDensity, crowdDensityOption, d.colorMaterial, d.providerParams, environmentReferenceImages, externalProviderModel, id, interactionText, isExternalSelected, isReadonly, modelDef.id, modelDef.paramKind, outputFormat, peoplePropsReferenceImages, presentationForm, presentationFormOption, providerSelection.provider, resolvedColorMaterialPalette, resolvedColorMaterialReferenceTone, resolvedColorMaterialTextures, resolvedPeoplePropsText, sceneCategory, sceneCategoryOption, sceneText, seed, sizeLevel, spatialScale, spatialScaleOption, themeText, titleText, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -600,23 +654,24 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
         {d.error && <div className="rounded border border-red-300/25 bg-red-400/10 px-2 py-1.5 text-[10px] text-red-200">{d.error}</div>}
 
         <section data-exhibition-compact-section="scene" className="grid grid-cols-2 gap-2 rounded border border-white/10 bg-white/[0.035] p-2">
+          {canManageTeam && <div className="col-span-2 flex justify-end"><button data-exhibition-compact-item="option-editor" type="button" className={BUTTON} disabled={isReadonly || busy} onClick={() => setOptionEditorOpen(true)}><Pencil size={13} /> 编辑关键参数</button></div>}
           {[
-            ['sceneCategory', '场景分类', sceneCategory, EXHIBITION_SCENE_CATEGORIES, normalizeExhibitionSceneCategory],
-            ['presentationForm', '表现形式', presentationForm, EXHIBITION_SCENE_PRESENTATION_FORMS, normalizeExhibitionScenePresentationForm],
-            ['spatialScale', '空间尺度', spatialScale, EXHIBITION_SCENE_SPATIAL_SCALES, normalizeExhibitionSceneSpatialScale],
-            ['atmosphere', '氛围/灯光', atmosphere, EXHIBITION_SCENE_ATMOSPHERES, normalizeExhibitionSceneAtmosphere],
-          ].map(([key, label, value, options, normalize]) => (
+            ['sceneCategory', '场景分类', sceneCategory, sceneCategoryOptions],
+            ['presentationForm', '表现形式', presentationForm, presentationFormOptions],
+            ['spatialScale', '空间尺度', spatialScale, spatialScaleOptions],
+            ['atmosphere', '氛围/灯光', atmosphere, atmosphereOptions],
+          ].map(([key, label, value, options]) => (
             <label key={String(key)} data-exhibition-compact-item="parameter-input" className="space-y-1">
               <span className="text-[10px] text-white/55">{String(label)}</span>
-              <select className={FIELD} value={String(value)} disabled={isReadonly || busy} onChange={(event) => update({ [String(key)]: (normalize as (raw: string) => string)(event.target.value) })}>
+              <select className={FIELD} value={String(value)} disabled={isReadonly || busy} onChange={(event) => update({ [String(key)]: event.target.value })}>
                 {(options as ExhibitionSceneOption[]).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
               </select>
             </label>
           ))}
           <label data-exhibition-compact-item="parameter-input" className="space-y-1">
             <span className="text-[10px] text-white/55">人群密度</span>
-            <select className={FIELD} value={crowdDensity} disabled={isReadonly || busy} onChange={(event) => update({ crowdDensity: normalizeExhibitionSceneCrowdDensity(event.target.value) })}>
-              {EXHIBITION_SCENE_CROWD_DENSITIES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+            <select className={FIELD} value={crowdDensity} disabled={isReadonly || busy} onChange={(event) => update({ crowdDensity: event.target.value })}>
+              {crowdDensityOptions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
             </select>
           </label>
           <label data-exhibition-compact-item="aspect-size" className="space-y-1">
@@ -918,6 +973,7 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
           <div className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words text-[10px] leading-relaxed text-white/72">{previewPrompt}</div>
         </section>
       </div>
+      {canManageTeam && <DesignOptionEditorModal open={optionEditorOpen} title="场景设计关键参数管理" groups={SCENE_OPTION_GROUPS} presets={designOptions} saving={optionSaving} error={optionError} onClose={() => setOptionEditorOpen(false)} onSave={saveDesignOptions} />}
     </div>
   );
 };

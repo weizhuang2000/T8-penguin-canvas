@@ -17,6 +17,11 @@ export interface ExhibitionSceneImagePromptValues {
   spatialScale?: string;
   atmosphere?: string;
   crowdDensity?: string;
+  sceneCategoryOption?: ExhibitionSceneOption;
+  presentationFormOption?: ExhibitionSceneOption;
+  spatialScaleOption?: ExhibitionSceneOption;
+  atmosphereOption?: ExhibitionSceneOption;
+  crowdDensityOption?: ExhibitionSceneOption;
   titleText?: string;
   themeText?: string;
   sceneText?: string;

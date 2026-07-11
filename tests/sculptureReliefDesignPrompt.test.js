@@ -88,3 +88,15 @@ test('pattern reference is limited to outline silhouette and composition', () =>
   assert.match(prompt, /仅参考轮廓、剪影、外形节奏和大致构图/);
   assert.match(prompt, /不要复制参考图案的细节、色彩、材质、文字、logo/);
 });
+
+test('sculpture prompt accepts administrator-defined type and view prompts', () => {
+  const prompt = buildSculptureReliefImagePrompt({
+    designKind: 'sculpture',
+    sculptureType: 'custom-sculpture',
+    sculptureTypeOption: { id: 'custom-sculpture', label: '定制雕塑', prompt: 'CUSTOM_SCULPTURE_PROMPT' },
+    viewAngles: ['hero-view'],
+    viewAngleOptions: [{ id: 'hero-view', label: '主视觉视角', prompt: 'CUSTOM_VIEW_PROMPT' }],
+  });
+  assert.match(prompt, /CUSTOM_SCULPTURE_PROMPT/);
+  assert.match(prompt, /CUSTOM_VIEW_PROMPT/);
+});
