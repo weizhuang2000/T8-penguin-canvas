@@ -5,7 +5,7 @@ import { EXHIBITION_IMAGE_HANDLE_COLOR } from '../../config/portTypes';
 import { IMAGE_MODELS } from '../../providers/models';
 import { generateExternalImage, queryExternalImageStatus, queryImageStatus, submitImageAsync } from '../../services/generation';
 import { advancedProviderModelOptions, advancedProvidersForNode, externalImageSizeFor, resolveAdvancedProviderSelection } from '../../utils/advancedProviders';
-import { buildFusionRenderPrompt } from '../../utils/fusionRenderDesignData.js';
+import { FUSION_RENDER_AUTO_CEILING_CRAFT, FUSION_RENDER_CEILING_CRAFTS, buildFusionRenderPrompt } from '../../utils/fusionRenderDesignData.js';
 import {
   REVERSE_ISOMETRIC_DIRECTIONS,
   REVERSE_ISOMETRIC_FLOOR_MATERIALS,
@@ -86,11 +86,12 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
   const sizeLevel = d.sizeLevel || '2K';
   const hallHeightMm = Math.min(12000, Math.max(2400, Math.round(Number(d.hallHeightMm) || 4200)));
   const floorMaterial = REVERSE_ISOMETRIC_FLOOR_MATERIALS.includes(d.floorMaterial) ? d.floorMaterial : REVERSE_ISOMETRIC_FLOOR_MATERIALS[0];
+  const ceilingCraft = FUSION_RENDER_CEILING_CRAFTS.includes(d.ceilingCraft) ? d.ceilingCraft : FUSION_RENDER_AUTO_CEILING_CRAFT;
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
   const busy = d.status === 'generating';
   const wallPlacementText = useMemo(() => describeWallAdjacentExhibits(layoutItems), [layoutItems]);
-  const previewPrompt = useMemo(() => buildFusionRenderPrompt({ hasPlan: Boolean(planImage), viewDirection, hallHeightMm, floorMaterial, wallPlacementText, exhibitCount: layoutItems.length }), [floorMaterial, hallHeightMm, layoutItems.length, planImage, viewDirection, wallPlacementText]);
+  const previewPrompt = useMemo(() => buildFusionRenderPrompt({ hasPlan: Boolean(planImage), viewDirection, hallHeightMm, floorMaterial, ceilingCraft, wallPlacementText, exhibitCount: layoutItems.length }), [ceilingCraft, floorMaterial, hallHeightMm, layoutItems.length, planImage, viewDirection, wallPlacementText]);
 
   useEffect(() => {
     const connected = new Set(exhibitImages.map((item) => item.url));
@@ -193,6 +194,7 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
       </section>
       <section data-exhibition-compact-section="view" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
         <div className="text-[11px] font-semibold text-cyan-100">透视相机观察方向</div><div className="grid grid-cols-4 gap-1">{REVERSE_ISOMETRIC_DIRECTIONS.map((item) => <button key={item.value} className={`rounded px-1 py-1.5 text-[10px] ${viewDirection === item.value ? 'bg-cyan-300/20 text-cyan-100' : 'bg-black/20 text-white/50'}`} disabled={isReadonly || busy} onClick={() => update({ viewDirection: item.value })}>{item.label}</button>)}</div>
+        <label className="block space-y-1"><span className="text-[10px] text-white/55">顶部工艺</span><select className={FIELD} value={ceilingCraft} disabled={isReadonly || busy} onChange={(e) => update({ ceilingCraft: e.target.value })}><option value={FUSION_RENDER_AUTO_CEILING_CRAFT}>{FUSION_RENDER_AUTO_CEILING_CRAFT}</option>{FUSION_RENDER_CEILING_CRAFTS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
         <div className="grid grid-cols-2 gap-2"><label className="space-y-1"><span className="text-[10px] text-white/55">展厅净高 mm</span><input className={FIELD} type="number" min={2400} max={12000} step={100} value={hallHeightMm} disabled={isReadonly || busy} onChange={(e) => update({ hallHeightMm: Math.min(12000, Math.max(2400, Math.round(Number(e.target.value) || 4200))) })} /></label><label className="space-y-1"><span className="text-[10px] text-white/55">地面材质</span><select className={FIELD} value={floorMaterial} disabled={isReadonly || busy} onChange={(e) => update({ floorMaterial: e.target.value })}>{REVERSE_ISOMETRIC_FLOOR_MATERIALS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label></div>
       </section>
       <section data-exhibition-compact-section="model" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">

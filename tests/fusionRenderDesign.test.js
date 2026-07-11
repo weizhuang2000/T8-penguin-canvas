@@ -2,7 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildFusionRenderPrompt } from '../src/utils/fusionRenderDesignData.js';
+import {
+  FUSION_RENDER_AUTO_CEILING_CRAFT,
+  FUSION_RENDER_CEILING_CRAFTS,
+  buildFusionRenderPrompt,
+} from '../src/utils/fusionRenderDesignData.js';
 
 const root = path.resolve('.');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
@@ -64,4 +68,23 @@ test('prompt describes both structural modes and always requests one realistic p
   assert.match(blank, /@img2 至 @img3/);
   assert.match(blank, /简洁、完整的矩形展厅/);
   for (const term of ['写实', '空间透视效果图', '底座落地', '禁止拼版', '不得输出俯视平面图、轴侧图']) assert.match(blank, new RegExp(term));
+});
+
+test('ceiling craft offers automatic styling first plus twenty common crafts', () => {
+  assert.equal(FUSION_RENDER_AUTO_CEILING_CRAFT, '根据所有展项风格自动调整');
+  assert.equal(FUSION_RENDER_CEILING_CRAFTS.length, 20);
+  assert.equal(new Set(FUSION_RENDER_CEILING_CRAFTS).size, 20);
+
+  const automatic = buildFusionRenderPrompt({ ceilingCraft: FUSION_RENDER_AUTO_CEILING_CRAFT, exhibitCount: 2 });
+  assert.match(automatic, /根据全部展项原始外观参考的设计风格、色彩、材质、造型语言和灯光气质自动选择/);
+
+  const specified = buildFusionRenderPrompt({ ceilingCraft: '铝方通吊顶' });
+  assert.match(specified, /明确采用“铝方通吊顶”/);
+  assert.match(specified, /真实可施工/);
+
+  const node = read('src/components/nodes/FusionRenderDesignNode.tsx');
+  assert.match(node, /顶部工艺/);
+  assert.match(node, /FUSION_RENDER_AUTO_CEILING_CRAFT/);
+  assert.match(node, /FUSION_RENDER_CEILING_CRAFTS\.map/);
+  assert.match(read('src/components/Canvas.tsx'), /'fusion-render-design':[\s\S]*ceilingCraft: '根据所有展项风格自动调整'/);
 });

@@ -1199,6 +1199,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     viewDirection: 'front-left',
     hallHeightMm: 4200,
     floorMaterial: '浅灰哑光环氧地坪',
+    ceilingCraft: '根据所有展项风格自动调整',
     manualLayoutItems: [],
     excludedLayoutUrls: [],
     manualLayoutReferenceImage: '',

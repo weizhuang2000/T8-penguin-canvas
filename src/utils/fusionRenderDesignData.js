@@ -4,6 +4,31 @@ import {
   normalizeReverseIsometricDirection,
 } from './reverseIsometricDesignData.js';
 
+export const FUSION_RENDER_AUTO_CEILING_CRAFT = '根据所有展项风格自动调整';
+
+export const FUSION_RENDER_CEILING_CRAFTS = [
+  '无吊顶裸顶喷涂',
+  '平面石膏板吊顶',
+  '双层跌级石膏板吊顶',
+  '弧形石膏板吊顶',
+  '异形造型石膏板吊顶',
+  '铝方通吊顶',
+  '木纹铝方通吊顶',
+  '铝格栅吊顶',
+  '金属网吊顶',
+  '铝扣板吊顶',
+  '矿棉吸音板吊顶',
+  '穿孔石膏吸音板吊顶',
+  '穿孔金属吸音板吊顶',
+  '木质吸音板吊顶',
+  '软膜天花',
+  '透光膜发光天花',
+  '模块化灯膜天花',
+  '镜面不锈钢吊顶',
+  '拉丝不锈钢吊顶',
+  '生态木格栅吊顶',
+];
+
 function finite(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -18,6 +43,7 @@ export function buildFusionRenderPrompt({
   viewDirection = 'front-left',
   hallHeightMm = 4200,
   floorMaterial = REVERSE_ISOMETRIC_FLOOR_MATERIALS[0],
+  ceilingCraft = FUSION_RENDER_AUTO_CEILING_CRAFT,
   wallPlacementText = '',
   exhibitCount = 0,
 } = {}) {
@@ -26,6 +52,12 @@ export function buildFusionRenderPrompt({
   const safeFloorMaterial = REVERSE_ISOMETRIC_FLOOR_MATERIALS.includes(floorMaterial)
     ? floorMaterial
     : REVERSE_ISOMETRIC_FLOOR_MATERIALS[0];
+  const safeCeilingCraft = FUSION_RENDER_CEILING_CRAFTS.includes(ceilingCraft)
+    ? ceilingCraft
+    : FUSION_RENDER_AUTO_CEILING_CRAFT;
+  const ceilingConstraint = safeCeilingCraft === FUSION_RENDER_AUTO_CEILING_CRAFT
+    ? '顶部工艺：根据全部展项原始外观参考的设计风格、色彩、材质、造型语言和灯光气质自动选择并统一设计顶部工艺；顶部应服务整体展陈氛围，不得与任何主要展项风格冲突。'
+    : `顶部工艺：明确采用“${safeCeilingCraft}”；保持该工艺真实可施工，正确表现构造尺度、收边、拼接、吊装关系及与灯光设备的整合。`;
   const firstExhibitIndex = hasPlan ? 3 : 2;
   const lastExhibitIndex = firstExhibitIndex + Math.max(0, exhibitCount) - 1;
   const referenceRoles = hasPlan
@@ -41,6 +73,7 @@ export function buildFusionRenderPrompt({
       ? '最高优先级结构锁定：墙体中心线、墙厚关系、连接拓扑、柱网、出入口、门、窗的数量和相对位置必须与 @img1 一致。严禁补墙、拆墙、封门、开洞、移动柱体或重新规划平面。'
       : '空间边界：把 @img1 的矩形边界理解为一个简洁、完整的矩形展厅；不得擅自增加复杂隔墙、异形建筑边界、额外房间或未提供的主要展项。',
     `展厅净高按 ${safeHeight} mm 表现；地面统一采用“${safeFloorMaterial}”，材质尺度、反射、粗糙度和拼缝真实克制。`,
+    ceilingConstraint,
     '所有展项必须从各自原始外观参考恢复成可信的三维展陈装置，保持识别特征、色彩、材质和比例；底座落地、立面竖直、尺度可信，不得悬浮。',
     '严禁把整张展项图片水平平铺、压扁或贴在地面、矮台顶面上；不得把排版截图、选择框、控制点或白色底板直接渲染进最终空间。',
     `靠近空间边界的展项应按靠墙装置处理：背面与相邻墙面平行、底部落地、正立面朝向主要参观空间。${wallPlacementText ? `当前排版中检测到：${wallPlacementText}。` : ''}`,
@@ -48,4 +81,3 @@ export function buildFusionRenderPrompt({
     '只输出一张连续、完整的写实空间效果图；禁止拼版、分栏、对比图、平面图、轴侧图、技术图纸、文字说明、水印或尺寸表。',
   ].join('\n');
 }
-
