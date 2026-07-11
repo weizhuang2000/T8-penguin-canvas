@@ -344,8 +344,8 @@ const EXHIBITION_COMPACT_FORM_DEFINITIONS = [
   { nodeType: 'reverse-isometric-design', label: '\u53cd\u63a8\u8f74\u4fa7', sections: [
     { id: 'inputs', label: '\u8f93\u5165\u4e0e\u6392\u7248', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
     { id: 'view', label: '\u8f74\u4fa7\u65b9\u5411', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
-    { id: 'model', label: '\u6a21\u578b\u4e0e\u6821\u9a8c', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
-    { id: 'validation', label: '\u6821\u9a8c\u72b6\u6001', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'model', label: '\u6a21\u578b\u4e0e\u5c3a\u5bf8', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'status', label: '\u8fd0\u884c\u72b6\u6001', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
     { id: 'result', label: '\u7ed3\u679c\u9884\u89c8', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
     { id: 'prompt', label: '\u7ed3\u6784\u7ea6\u675f', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
   ] },

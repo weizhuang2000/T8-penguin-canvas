@@ -96,7 +96,7 @@ export function describeWallAdjacentExhibits(items = [], threshold = 0.08) {
   }).filter(Boolean).join('；');
 }
 
-export function buildReverseIsometricPrompt({ viewDirection = 'front-left', hallHeightMm = 4200, floorMaterial = REVERSE_ISOMETRIC_FLOOR_MATERIALS[0], wallPlacementText = '', exhibitCount = 0, correction = '' } = {}) {
+export function buildReverseIsometricPrompt({ viewDirection = 'front-left', hallHeightMm = 4200, floorMaterial = REVERSE_ISOMETRIC_FLOOR_MATERIALS[0], wallPlacementText = '', exhibitCount = 0 } = {}) {
   const direction = REVERSE_ISOMETRIC_DIRECTIONS.find((item) => item.value === normalizeReverseIsometricDirection(viewDirection));
   const safeHeight = clamp(Math.round(finite(hallHeightMm, 4200)), 2400, 12000);
   const safeFloorMaterial = REVERSE_ISOMETRIC_FLOOR_MATERIALS.includes(floorMaterial) ? floorMaterial : REVERSE_ISOMETRIC_FLOOR_MATERIALS[0];
@@ -113,53 +113,5 @@ export function buildReverseIsometricPrompt({ viewDirection = 'front-left', hall
     '所有展项外观参考都必须理解为真实三维展陈装置的正面或斜前方照片，保持正常重力方向：底座落地、立面竖直。严禁把整张展项图片水平平铺、压扁或贴在地面/矮台顶面上，严禁生成“图片躺在台子上”的状态。',
     `靠墙布置的展项必须竖立：展项背板或背面必须与对应墙面平行并紧贴对应墙面，底部落地，正立面朝向主要参观空间；不得平躺、仰面、悬浮或把正面朝墙。${wallPlacementText ? `当前排版中检测到的靠墙展项：${wallPlacementText}。` : ''}`,
     '输出单张高完成度展陈轴侧效果图，不输出平面图、对比图、拼图、文字说明、水印或尺寸表。',
-    correction ? `上一次结构校验发现以下问题，本次必须逐项修正且不得引入新变化：${correction}` : '',
   ].filter(Boolean).join('\n');
-}
-
-export function parseReverseIsometricValidationReport(content) {
-  const raw = String(content || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return { pass: false, confidence: 0, violations: [{ kind: 'invalid-report', message: '结构校验模型未返回有效 JSON' }] };
-  }
-  const violations = Array.isArray(parsed?.violations)
-    ? parsed.violations.map((item) => typeof item === 'string'
-      ? { kind: 'structure', message: item }
-      : { kind: String(item?.kind || 'structure'), message: String(item?.message || item?.evidence || '未说明的结构差异') })
-    : [];
-  const pass = parsed?.pass === true && violations.length === 0;
-  return {
-    pass,
-    confidence: clamp(finite(parsed?.confidence, 0), 0, 1),
-    violations: pass ? [] : (violations.length ? violations : [{ kind: 'structure', message: '校验未通过，但模型未提供差异说明' }]),
-  };
-}
-
-export function validationCorrectionText(report) {
-  return (report?.violations || []).map((item, index) => `${index + 1}. [${item.kind}] ${item.message}`).join('；');
-}
-
-export async function runReverseIsometricValidationLoop({ initialPrompt, viewDirection, hallHeightMm, floorMaterial, wallPlacementText, exhibitCount, generateCandidate, validateCandidate, onPhase }) {
-  let prompt = String(initialPrompt || '');
-  let candidate = '';
-  let report = null;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    onPhase?.({ phase: 'generate', attempt });
-    candidate = await generateCandidate(prompt, attempt);
-    onPhase?.({ phase: 'validate', attempt, candidate });
-    report = await validateCandidate(candidate, attempt);
-    if (report?.pass === true) return { passed: true, candidate, report, prompt, attempts: attempt + 1 };
-    prompt = buildReverseIsometricPrompt({
-      viewDirection,
-      hallHeightMm,
-      floorMaterial,
-      wallPlacementText,
-      exhibitCount,
-      correction: validationCorrectionText(report || { violations: [] }),
-    });
-  }
-  return { passed: false, candidate, report, prompt, attempts: 2 };
 }

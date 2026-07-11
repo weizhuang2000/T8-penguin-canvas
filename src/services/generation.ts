@@ -46,19 +46,6 @@ export interface GenerationHistoryContext {
   seed?: number;
 }
 
-export async function recordGenerationHistory(
-  items: Array<{ url: string; kind?: 'image' | 'video' | 'audio'; title?: string; prompt?: string; model?: string; seed?: number }>,
-  context: GenerationHistoryContext & { prompt?: string; model?: string; provider?: string; seed?: number },
-): Promise<void> {
-  const response = await fetch('/api/generation-history/items', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items, context }),
-  });
-  const data = await parseJsonResponse(response);
-  if (!response.ok || !data.success) throw new Error(data?.error || `HTTP ${response.status}`);
-}
-
 export interface GenerateImageResult {
   urls: string[]; // 鏈湴鐩稿 URL,濡?/files/output/xxx.png
   raw: any;

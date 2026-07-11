@@ -1175,7 +1175,6 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     manualLayoutItems: [],
     excludedLayoutUrls: [],
     manualLayoutReferenceImage: '',
-    validationReport: null,
     providerSource: 'zhenzhen',
     providerId: '',
     providerModel: '',

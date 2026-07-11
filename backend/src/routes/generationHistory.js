@@ -3,7 +3,6 @@
 const express = require('express');
 const config = require('../config');
 const {
-  addHistoryItems,
   deleteHistoryItem,
   listProjects,
   listVisibleItems,
@@ -11,24 +10,6 @@ const {
 } = require('../utils/generationHistory');
 
 const router = express.Router();
-
-router.post('/items', express.json({ limit: '256kb' }), (req, res) => {
-  try {
-    const items = Array.isArray(req.body?.items) ? req.body.items : [];
-    if (!items.length || items.length > 20) {
-      return res.status(400).json({ success: false, error: 'items must contain 1-20 history entries' });
-    }
-    const invalid = items.some((item) => {
-      const url = typeof item === 'string' ? item : item?.url;
-      return typeof url !== 'string' || !url.startsWith('/files/output/');
-    });
-    if (invalid) return res.status(400).json({ success: false, error: 'Only local output URLs can be recorded' });
-    const recorded = addHistoryItems(items, req.body?.context || {}, req.user);
-    res.json({ success: true, data: recorded });
-  } catch (e) {
-    res.status(500).json({ success: false, error: e?.message || String(e) });
-  }
-});
 
 router.get('/projects', (req, res) => {
   try {

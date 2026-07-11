@@ -8,9 +8,7 @@ import {
   buildReverseIsometricPrompt,
   describeWallAdjacentExhibits,
   normalizeReverseIsometricLayoutItems,
-  parseReverseIsometricValidationReport,
   patchReverseIsometricLayoutItem,
-  runReverseIsometricValidationLoop,
 } from '../src/utils/reverseIsometricDesignData.js';
 
 const root = path.resolve('.');
@@ -88,7 +86,6 @@ test('prompt locks every architectural category and supports all four directions
     for (const term of ['墙体中心线', '墙厚关系', '柱网', '出入口', '门', '窗', '连接拓扑', '无顶整体']) assert.match(prompt, new RegExp(term));
     assert.match(prompt, /严禁补墙、拆墙/);
   }
-  assert.match(buildReverseIsometricPrompt({ correction: '门的位置错误' }), /上一次结构校验[\s\S]*门的位置错误/);
   const configured = buildReverseIsometricPrompt({ hallHeightMm: 5600, floorMaterial: '深灰水磨石' });
   assert.match(configured, /5600 mm/);
   assert.match(configured, /深灰水磨石/);
@@ -126,73 +123,12 @@ test('manual layout preview and reference export share crop data', () => {
   assert.match(source, /\.\.\.layoutItems\.map\(\(item\) => item\.url\)/);
 });
 
-test('validation parser fails closed for violations and invalid JSON', () => {
-  assert.deepEqual(parseReverseIsometricValidationReport('{"pass":true,"confidence":0.98,"violations":[]}'), { pass: true, confidence: 0.98, violations: [] });
-  const violation = parseReverseIsometricValidationReport('```json\n{"pass":true,"confidence":0.8,"violations":[{"kind":"door","message":"少一扇门"}]}\n```');
-  assert.equal(violation.pass, false);
-  assert.equal(violation.violations[0].kind, 'door');
-  const invalid = parseReverseIsometricValidationReport('not json');
-  assert.equal(invalid.pass, false);
-  assert.equal(invalid.violations[0].kind, 'invalid-report');
-});
-
-test('node validates twice at most and restores previous output on rejection', () => {
+test('node generates once without vision validation and publishes directly', () => {
   const source = read('src/components/nodes/ReverseIsometricDesignNode.tsx');
-  assert.match(source, /runReverseIsometricValidationLoop\(/);
+  assert.doesNotMatch(source, /generateLlm|validateCandidate|runReverseIsometricValidationLoop|validationReport|结构校验模型/);
   assert.match(source, /const previousOutput = \{ imageUrl:/);
   assert.match(source, /update\(\{ \.\.\.previousOutput, status: 'error'/);
+  assert.match(source, /const candidate = await generateCandidate\(previewPrompt, references, runSeed\)/);
   assert.match(source, /imageUrl: candidate, imageUrls: \[candidate\], urls: \[candidate\]/);
-  assert.match(source, /await recordGenerationHistory\(/);
-  assert.ok(source.indexOf('await recordGenerationHistory(') > source.indexOf("if (!report?.pass || !candidate)"));
-  assert.match(source, /结构校验连续两次未通过/);
-  assert.match(source, /exhibit-orientation/);
-  assert.match(source, /camera/);
-  assert.match(source, /水平平铺、压扁/);
-});
-
-test('validation loop covers first pass, retry pass, double failure and vision errors', async () => {
-  let generated = 0;
-  const firstPass = await runReverseIsometricValidationLoop({
-    initialPrompt: 'base',
-    generateCandidate: async () => `candidate-${++generated}`,
-    validateCandidate: async () => ({ pass: true, confidence: 1, violations: [] }),
-  });
-  assert.equal(firstPass.passed, true);
-  assert.equal(firstPass.attempts, 1);
-  assert.equal(generated, 1);
-
-  generated = 0;
-  const retryPass = await runReverseIsometricValidationLoop({
-    initialPrompt: 'base',
-    viewDirection: 'back-right',
-    generateCandidate: async () => `candidate-${++generated}`,
-    validateCandidate: async (_candidate, attempt) => attempt === 0
-      ? { pass: false, confidence: 0.7, violations: [{ kind: 'door', message: '门位错误' }] }
-      : { pass: true, confidence: 0.95, violations: [] },
-  });
-  assert.equal(retryPass.passed, true);
-  assert.equal(retryPass.attempts, 2);
-  assert.equal(generated, 2);
-  assert.match(retryPass.prompt, /右后/);
-
-  const failed = await runReverseIsometricValidationLoop({
-    initialPrompt: 'base',
-    generateCandidate: async (_prompt, attempt) => `bad-${attempt}`,
-    validateCandidate: async () => ({ pass: false, confidence: 0.2, violations: [{ kind: 'wall', message: '墙体变化' }] }),
-  });
-  assert.equal(failed.passed, false);
-  assert.equal(failed.attempts, 2);
-
-  await assert.rejects(() => runReverseIsometricValidationLoop({
-    initialPrompt: 'base',
-    generateCandidate: async () => 'candidate',
-    validateCandidate: async () => { throw new Error('vision unavailable'); },
-  }), /vision unavailable/);
-});
-
-test('history endpoint only records validated local output URLs', () => {
-  const route = read('backend/src/routes/generationHistory.js');
-  assert.match(route, /router\.post\('\/items'/);
-  assert.match(route, /url\.startsWith\('\/files\/output\/'\)/);
-  assert.match(route, /addHistoryItems\(items, req\.body\?\.context/);
+  assert.match(source, /historyContext/);
 });
