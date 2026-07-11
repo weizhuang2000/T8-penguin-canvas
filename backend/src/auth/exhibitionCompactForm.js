@@ -341,6 +341,14 @@ const EXHIBITION_COMPACT_FORM_DEFINITIONS = [
     { id: 'model', label: '\u6a21\u578b\u53c2\u6570', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
     { id: 'result', label: '\u7ed3\u679c\u9884\u89c8', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
   ] },
+  { nodeType: 'reverse-isometric-design', label: '\u53cd\u63a8\u8f74\u4fa7', sections: [
+    { id: 'inputs', label: '\u8f93\u5165\u4e0e\u6392\u7248', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'view', label: '\u8f74\u4fa7\u65b9\u5411', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'model', label: '\u6a21\u578b\u4e0e\u6821\u9a8c', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'validation', label: '\u6821\u9a8c\u72b6\u6001', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'result', label: '\u7ed3\u679c\u9884\u89c8', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'prompt', label: '\u7ed3\u6784\u7ea6\u675f', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+  ] },
   { nodeType: 'cinema-auditorium-design', label: '\u5f71\u9662\u62a5\u544a\u5385\u8bbe\u8ba1', sections: [
     { id: 'venue', label: '\u7a7a\u95f4\u7c7b\u578b', items: [{ id: 'venue-type', label: '\u7c7b\u578b' }] },
     { id: 'plan-layout', label: '\u5e73\u9762\u5e03\u5c40', items: [{ id: 'screen-stage-side', label: '\u94f6\u5e55/\u821e\u53f0\u65b9\u5411' }, { id: 'size-input', label: '\u957f\u5bbd\u9ad8' }, { id: 'seat-count', label: '\u5ea7\u5e2d\u6570' }, { id: 'aisle-mode', label: '\u8d70\u9053' }, { id: 'seat-size', label: '\u5ea7\u6905\u5360\u5730' }, { id: 'row-spacing', label: '\u884c\u95f4\u8ddd' }, { id: 'front-clearance', label: '\u524d\u533a\u51c0\u8ddd' }, { id: 'aisle-widths', label: '\u8d70\u9053\u5bbd\u5ea6' }, { id: 'plan-preview', label: '\u5e03\u5c40\u9884\u89c8' }] },

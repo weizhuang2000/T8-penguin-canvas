@@ -21,6 +21,7 @@ test('new exhibition image generation nodes default to first advanced image prov
     'exhibition-render-to-elevation',
     'unit-panel-design',
     'showcase-interior-design',
+    'reverse-isometric-design',
   ]) {
     assert.match(canvas, new RegExp(`'${type}'`));
   }

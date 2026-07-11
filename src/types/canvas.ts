@@ -79,6 +79,7 @@ export type NodeType =
   | 'science-exhibit-design'
   | 'exhibition-floorplan-layout'
   | 'showcase-interior-design'
+  | 'reverse-isometric-design'
   | 'cinema-auditorium-design'
   | 'multi-angle-visual'
   | 'portrait-master'

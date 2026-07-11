@@ -135,6 +135,7 @@ import ExhibitionSceneDesignNode from './nodes/ExhibitionSceneDesignNode';
 import ScienceExhibitDesignNode from './nodes/ScienceExhibitDesignNode';
 import ExhibitionFloorplanLayoutNode from './nodes/ExhibitionFloorplanLayoutNode';
 import ShowcaseInteriorDesignNode from './nodes/ShowcaseInteriorDesignNode';
+import ReverseIsometricDesignNode from './nodes/ReverseIsometricDesignNode';
 import CinemaAuditoriumDesignNode from './nodes/CinemaAuditoriumDesignNode';
 import ArtistStyleMasterNode from './nodes/ArtistStyleMasterNode';
 import AnimeTagMasterNode from './nodes/AnimeTagMasterNode';
@@ -247,6 +248,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'science-exhibit-design': ScienceExhibitDesignNode,
   'exhibition-floorplan-layout': ExhibitionFloorplanLayoutNode,
   'showcase-interior-design': ShowcaseInteriorDesignNode,
+  'reverse-isometric-design': ReverseIsometricDesignNode,
   'cinema-auditorium-design': CinemaAuditoriumDesignNode,
   'artist-style-master': ArtistStyleMasterNode,
   'anime-tag-master': AnimeTagMasterNode,
@@ -1160,6 +1162,30 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     status: 'idle',
     error: '',
   },
+  'reverse-isometric-design': {
+    model: 'gpt-image-2',
+    apiModel: 'gpt-image-2-all',
+    aspectRatio: '1:1',
+    sizeLevel: '2K',
+    outputFormat: 'jpg',
+    seed: 0,
+    viewDirection: 'front-left',
+    manualLayoutItems: [],
+    excludedLayoutUrls: [],
+    manualLayoutReferenceImage: '',
+    validationReport: null,
+    providerSource: 'zhenzhen',
+    providerId: '',
+    providerModel: '',
+    providerParams: {},
+    imageUrl: '',
+    imageUrls: [],
+    urls: [],
+    referenceImages: [],
+    status: 'idle',
+    progress: '',
+    error: '',
+  },
   'cinema-auditorium-design': {
     model: 'gpt-image-2',
     apiModel: 'gpt-image-2-all',
@@ -1512,6 +1538,7 @@ const EXHIBITION_IMAGE_PROVIDER_NODE_TYPES = new Set<string>([
   'science-exhibit-design',
   'exhibition-floorplan-layout',
   'showcase-interior-design',
+  'reverse-isometric-design',
   'cinema-auditorium-design',
 ]);
 
@@ -1557,6 +1584,9 @@ function exclusiveTargetHandlesForConnection(
     (targetType === 'unit-panel-design' || targetType === 'showcase-interior-design')
     && handle === 'color-material-reference'
   ) {
+    return [handle];
+  }
+  if (targetType === 'reverse-isometric-design' && handle === 'plan-layout') {
     return [handle];
   }
   if (targetType === 'sculpture-relief-design' && handle === 'pattern-reference') {
@@ -1635,6 +1665,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'science-exhibit-design',
   'exhibition-floorplan-layout',
   'showcase-interior-design',
+  'reverse-isometric-design',
   'cinema-auditorium-design',
   'remove-ai-watermark',
 ]);

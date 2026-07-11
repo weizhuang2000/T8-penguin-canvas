@@ -46,6 +46,7 @@ const EXEC_TYPES = new Set<string>([
   'unit-panel-design',
   'exhibition-wayfinding-design',
   'showcase-interior-design',
+  'reverse-isometric-design',
 ]);
 
 const LOOP_NODE_WAIT_TIMEOUT_MS = 60 * 60 * 1000;

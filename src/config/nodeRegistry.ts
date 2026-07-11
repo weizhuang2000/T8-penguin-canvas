@@ -114,6 +114,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: 'science-exhibit-design', label: '科技展项设计', category: 'exhibition', description: '科技馆展项设计：LLM 提炼真实科学原理与参数，一键生成效果图、爆炸图、原理图、三视图和参数表', icon: 'Atom', color: 'cyan' },
   { type: 'exhibition-floorplan-layout', label: '展陈平面布局', category: 'exhibition', description: 'DXF/截图建筑底图锁定、规则排布、三套候选、约束校验和 AI 平面表现图', icon: 'LayoutDashboard', color: 'cyan' },
   { type: 'showcase-interior-design', label: '柜内设计', category: 'exhibition', description: '展柜内部陈列设计：展柜尺寸、展品图与展品高度、色彩材质预设、尺寸标注和爆炸图输出', icon: 'Archive', color: 'cyan' },
+  { type: 'reverse-isometric-design', label: '反推轴侧', category: 'exhibition', description: '锁定平面布局的墙柱、出入口和门窗，手动排布展项并生成通过结构校验的无顶展陈轴侧图', icon: 'Boxes', color: 'cyan' },
   { type: 'cinema-auditorium-design', label: '影院报告厅设计', category: 'exhibition', description: '影院、报告厅和特效影院空间设计：长宽高、银幕舞台方向、色彩材质预设，输出效果图、彩平图和系统设备原理图', icon: 'Theater', color: 'cyan' },
   { type: 'multi-angle-visual', label: '可视化多角度', category: 'toolbox', description: '可视化调节方位 / 俯仰 / 远近，支持批量角度、Prompt 模式、前后缀、镜头收藏、JSON 导入/导出与紧凑双栏 UI', icon: 'Compass', color: 'pink' },
   { type: 'portrait-master', label: '肖像大师', category: 'toolbox', description: '捏人 Prompt 设计器：五官、发型、服饰、配饰、气质神情等 9 大类词库，支持随机、锁定、权重和运行输出文本', icon: 'UserRoundCog', color: 'pink' },
