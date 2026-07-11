@@ -109,3 +109,15 @@ test('layout editor configures hall length and width and prompt uses physical di
   assert.match(prompt, /底面上的“展厅长\/展厅宽”尺寸线/);
   assert.match(read('src/components/Canvas.tsx'), /'fusion-render-design':[\s\S]*hallLengthMm: 12000,[\s\S]*hallWidthMm: 8000/);
 });
+
+test('prompt creates a coherent realistic ambience without inventing primary exhibits', () => {
+  const prompt = buildFusionRenderPrompt({ exhibitCount: 3 });
+  for (const term of ['环境氛围融合', '全部展项原始外观参考', '墙面处理', '基础照明', '重点照明', '空间色温', '收口节点', '真实自然约束', '接触阴影', '材质响应']) {
+    assert.match(prompt, new RegExp(term));
+  }
+  assert.match(prompt, /不是把展项放进空白房间/);
+  assert.match(prompt, /不得新增未提供的主要展项/);
+  assert.match(prompt, /不得用环境装饰改变展项位置、朝向、占比、间距和层级/);
+  assert.match(prompt, /已完成布展并经过专业摄影的真实展厅/);
+  assert.match(prompt, /不得遮挡展项、形成拥挤人群/);
+});
