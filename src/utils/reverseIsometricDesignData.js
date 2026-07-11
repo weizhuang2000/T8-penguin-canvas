@@ -7,6 +7,14 @@ export const REVERSE_ISOMETRIC_DIRECTIONS = [
   { value: 'back-right', label: '右后' },
 ];
 
+export const REVERSE_ISOMETRIC_FLOOR_MATERIALS = [
+  '浅灰哑光环氧地坪', '中灰哑光环氧地坪', '深灰哑光环氧地坪', '水泥自流平',
+  '清水混凝土地面', '浅灰水磨石', '深灰水磨石', '白色细颗粒水磨石',
+  '米白色石英砖', '浅灰色石英砖', '深灰色石英砖', '仿水泥瓷砖',
+  '浅色天然石材', '深色天然石材', '浅色橡木地板', '深色胡桃木地板',
+  '灰色商用地毯', '深蓝色商用地毯', '黑色橡胶地板', '浅灰色PVC地板',
+];
+
 function finite(value, fallback) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -36,6 +44,8 @@ export function normalizeReverseIsometricLayoutItems(value, exhibits = []) {
     const heightRatio = clamp(finite(old.heightRatio, 0.18), 0.02, 1);
     const xRatio = clamp(finite(old.xRatio, 0.1 + (index % 4) * 0.21), 0, Math.max(0, 1 - widthRatio));
     const yRatio = clamp(finite(old.yRatio, 0.18 + Math.floor(index / 4) * 0.22), 0, Math.max(0, 1 - heightRatio));
+    const cropX = clamp(finite(old.cropX, 0), 0, 0.98);
+    const cropY = clamp(finite(old.cropY, 0), 0, 0.98);
     return {
       id: String(old.id || exhibit.id || `exhibit-${index + 1}`),
       url: exhibit.url,
@@ -46,6 +56,10 @@ export function normalizeReverseIsometricLayoutItems(value, exhibits = []) {
       heightRatio: Math.round(heightRatio * 10000) / 10000,
       rotationDeg: cleanAngle(old.rotationDeg),
       zIndex: Math.max(0, Math.round(finite(old.zIndex, index + 1))),
+      cropX,
+      cropY,
+      cropWidth: clamp(finite(old.cropWidth, 1), 0.02, 1 - cropX),
+      cropHeight: clamp(finite(old.cropHeight, 1), 0.02, 1 - cropY),
     };
   });
 }
@@ -53,6 +67,10 @@ export function normalizeReverseIsometricLayoutItems(value, exhibits = []) {
 export function patchReverseIsometricLayoutItem(item, patch = {}) {
   const widthRatio = clamp(finite(patch.widthRatio, item.widthRatio), 0.02, 1);
   const heightRatio = clamp(finite(patch.heightRatio, item.heightRatio), 0.02, 1);
+  const cropX = clamp(finite(patch.cropX, item.cropX ?? 0), 0, 0.98);
+  const cropY = clamp(finite(patch.cropY, item.cropY ?? 0), 0, 0.98);
+  const cropWidth = clamp(finite(patch.cropWidth, item.cropWidth ?? 1), 0.02, 1 - cropX);
+  const cropHeight = clamp(finite(patch.cropHeight, item.cropHeight ?? 1), 0.02, 1 - cropY);
   return {
     ...item,
     ...patch,
@@ -61,11 +79,17 @@ export function patchReverseIsometricLayoutItem(item, patch = {}) {
     xRatio: clamp(finite(patch.xRatio, item.xRatio), 0, Math.max(0, 1 - widthRatio)),
     yRatio: clamp(finite(patch.yRatio, item.yRatio), 0, Math.max(0, 1 - heightRatio)),
     rotationDeg: cleanAngle(patch.rotationDeg ?? item.rotationDeg),
+    cropX,
+    cropY,
+    cropWidth,
+    cropHeight,
   };
 }
 
-export function buildReverseIsometricPrompt({ viewDirection = 'front-left', correction = '' } = {}) {
+export function buildReverseIsometricPrompt({ viewDirection = 'front-left', hallHeightMm = 4200, floorMaterial = REVERSE_ISOMETRIC_FLOOR_MATERIALS[0], correction = '' } = {}) {
   const direction = REVERSE_ISOMETRIC_DIRECTIONS.find((item) => item.value === normalizeReverseIsometricDirection(viewDirection));
+  const safeHeight = clamp(Math.round(finite(hallHeightMm, 4200)), 2400, 12000);
+  const safeFloorMaterial = REVERSE_ISOMETRIC_FLOOR_MATERIALS.includes(floorMaterial) ? floorMaterial : REVERSE_ISOMETRIC_FLOOR_MATERIALS[0];
   return [
     '任务：依据参考图生成一张博物馆/展馆的无顶整体展陈轴侧图。',
     `观察方向：${direction?.label || '左前'}，采用稳定的 45° 轴侧鸟瞰投影，完整展示全场。`,
@@ -74,7 +98,9 @@ export function buildReverseIsometricPrompt({ viewDirection = 'front-left', corr
     '严禁补墙、拆墙、移动墙体、改变墙厚关系、移动或缩放柱体、封门、开洞、增删或移动门窗、增删或移动入口与出口、合并空间或重新规划平面。',
     '轴侧投影只允许视角投影变化，不允许任何建筑平面几何变化。即使为了美观、对称、构图或展项摆放，也不得改动建筑结构。',
     '移除屋顶和遮挡视线的整体顶棚，但不得借此删除墙、柱、门窗或出入口；保留真实可施工的墙体高度与开口表达。',
+    `展厅净高按 ${safeHeight} mm 表现；地面统一采用“${safeFloorMaterial}”，材质尺度、拼缝、反射与粗糙度应真实克制。`,
     '展项只可在人工排版指定区域内深化为真实展陈装置，不得移动建筑构件来迁就展项，不得自行新增未提供的主要展项。',
+    '靠墙布置的展项，应尽量将展项的背面朝向并贴近对应墙面，正面朝向主要参观空间；除非排版参考明确表示为独立双面展项，不得让展项背对观众或与墙面形成不合理夹缝。',
     '输出单张高完成度展陈轴侧效果图，不输出平面图、对比图、拼图、文字说明、水印或尺寸表。',
     correction ? `上一次结构校验发现以下问题，本次必须逐项修正且不得引入新变化：${correction}` : '',
   ].filter(Boolean).join('\n');
@@ -105,7 +131,7 @@ export function validationCorrectionText(report) {
   return (report?.violations || []).map((item, index) => `${index + 1}. [${item.kind}] ${item.message}`).join('；');
 }
 
-export async function runReverseIsometricValidationLoop({ initialPrompt, viewDirection, generateCandidate, validateCandidate, onPhase }) {
+export async function runReverseIsometricValidationLoop({ initialPrompt, viewDirection, hallHeightMm, floorMaterial, generateCandidate, validateCandidate, onPhase }) {
   let prompt = String(initialPrompt || '');
   let candidate = '';
   let report = null;
@@ -117,6 +143,8 @@ export async function runReverseIsometricValidationLoop({ initialPrompt, viewDir
     if (report?.pass === true) return { passed: true, candidate, report, prompt, attempts: attempt + 1 };
     prompt = buildReverseIsometricPrompt({
       viewDirection,
+      hallHeightMm,
+      floorMaterial,
       correction: validationCorrectionText(report || { violations: [] }),
     });
   }

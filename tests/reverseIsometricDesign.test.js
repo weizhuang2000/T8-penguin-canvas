@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   REVERSE_ISOMETRIC_DIRECTIONS,
+  REVERSE_ISOMETRIC_FLOOR_MATERIALS,
   buildReverseIsometricPrompt,
   normalizeReverseIsometricLayoutItems,
   parseReverseIsometricValidationReport,
@@ -53,6 +54,7 @@ test('layout normalization restores matching URLs and drops disconnected exhibit
   assert.equal(result[0].xRatio, 0.5);
   assert.equal(result[0].yRatio, 0.6);
   assert.equal(result.some((item) => item.url === '/gone.png'), false);
+  assert.deepEqual({ x: result[0].cropX, y: result[0].cropY, width: result[0].cropWidth, height: result[0].cropHeight }, { x: 0, y: 0, width: 1, height: 1 });
 });
 
 test('node keeps disconnected transforms archived and tracks manually excluded layers', () => {
@@ -72,9 +74,12 @@ test('layout item patch clamps move, non-uniform stretch, scale and rotation', (
   assert.equal(stretched.rotationDeg, -180);
   const scaled = patchReverseIsometricLayoutItem(item, { widthRatio: 0.4, heightRatio: 0.6 });
   assert.equal(scaled.widthRatio / scaled.heightRatio, item.widthRatio / item.heightRatio);
+  const cropped = patchReverseIsometricLayoutItem(item, { cropX: 0.25, cropY: 0.1, cropWidth: 0.9, cropHeight: 0.95 });
+  assert.deepEqual({ x: cropped.cropX, y: cropped.cropY, width: cropped.cropWidth, height: cropped.cropHeight }, { x: 0.25, y: 0.1, width: 0.75, height: 0.9 });
 });
 
 test('prompt locks every architectural category and supports all four directions', () => {
+  assert.equal(REVERSE_ISOMETRIC_FLOOR_MATERIALS.length, 20);
   assert.deepEqual(REVERSE_ISOMETRIC_DIRECTIONS.map((item) => item.value), ['front-left', 'front-right', 'back-left', 'back-right']);
   for (const direction of REVERSE_ISOMETRIC_DIRECTIONS) {
     const prompt = buildReverseIsometricPrompt({ viewDirection: direction.value });
@@ -83,6 +88,21 @@ test('prompt locks every architectural category and supports all four directions
     assert.match(prompt, /严禁补墙、拆墙/);
   }
   assert.match(buildReverseIsometricPrompt({ correction: '门的位置错误' }), /上一次结构校验[\s\S]*门的位置错误/);
+  const configured = buildReverseIsometricPrompt({ hallHeightMm: 5600, floorMaterial: '深灰水磨石' });
+  assert.match(configured, /5600 mm/);
+  assert.match(configured, /深灰水磨石/);
+  assert.match(configured, /靠墙布置的展项[\s\S]*背面[\s\S]*贴近对应墙面/);
+});
+
+test('manual layout preview and reference export share crop data', () => {
+  const source = read('src/components/nodes/ReverseIsometricDesignNode.tsx');
+  assert.match(source, /item\.cropX \* sourceWidth/);
+  assert.match(source, /item\.cropWidth \* sourceWidth/);
+  assert.match(source, /源图裁剪/);
+  assert.match(source, /重置裁剪/);
+  assert.match(source, /100 \/ item\.cropWidth/);
+  assert.match(source, /REVERSE_ISOMETRIC_FLOOR_MATERIALS\.map/);
+  assert.match(source, /hallHeightMm/);
 });
 
 test('validation parser fails closed for violations and invalid JSON', () => {
@@ -129,6 +149,7 @@ test('validation loop covers first pass, retry pass, double failure and vision e
   assert.equal(retryPass.passed, true);
   assert.equal(retryPass.attempts, 2);
   assert.equal(generated, 2);
+  assert.match(retryPass.prompt, /右后/);
 
   const failed = await runReverseIsometricValidationLoop({
     initialPrompt: 'base',

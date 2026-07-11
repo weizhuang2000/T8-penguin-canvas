@@ -8,6 +8,7 @@ import { generateExternalImage, generateLlm, queryExternalImageStatus, queryImag
 import { advancedProviderModelOptions, advancedProvidersForNode, externalImageSizeFor, resolveAdvancedProviderSelection } from '../../utils/advancedProviders';
 import {
   REVERSE_ISOMETRIC_DIRECTIONS,
+  REVERSE_ISOMETRIC_FLOOR_MATERIALS,
   buildReverseIsometricPrompt,
   normalizeReverseIsometricDirection,
   normalizeReverseIsometricLayoutItems,
@@ -105,7 +106,19 @@ async function buildLayoutReference(planUrl: string, items: ReverseIsometricLayo
     context.save();
     context.translate(x + width / 2, y + height / 2);
     context.rotate(item.rotationDeg * Math.PI / 180);
-    context.drawImage(image, -width / 2, -height / 2, width, height);
+    const sourceWidth = image.naturalWidth || image.width || 1;
+    const sourceHeight = image.naturalHeight || image.height || 1;
+    context.drawImage(
+      image,
+      item.cropX * sourceWidth,
+      item.cropY * sourceHeight,
+      item.cropWidth * sourceWidth,
+      item.cropHeight * sourceHeight,
+      -width / 2,
+      -height / 2,
+      width,
+      height,
+    );
     context.restore();
   });
   return canvas.toDataURL('image/png');
@@ -208,7 +221,9 @@ function LayoutModal({ open, planUrl, items, disabled, onChange, onClose, onRese
               {[...draft].sort((a, b) => a.zIndex - b.zIndex).map((item) => {
                 const active = item.id === selectedId;
                 return <div key={item.id} className={`absolute touch-none ${active ? 'ring-2 ring-amber-300' : 'ring-1 ring-cyan-200/60'}`} style={{ left: `${item.xRatio * 100}%`, top: `${item.yRatio * 100}%`, width: `${item.widthRatio * 100}%`, height: `${item.heightRatio * 100}%`, zIndex: item.zIndex, transform: `rotate(${item.rotationDeg}deg)`, transformOrigin: 'center' }} onPointerDown={(event) => startDrag(event, item, 'move')}>
-                  <img src={item.url} alt={item.label} className="h-full w-full select-none object-fill" draggable={false} />
+                  <div className="relative h-full w-full overflow-hidden">
+                    <img src={item.url} alt={item.label} className="pointer-events-none absolute max-w-none select-none" draggable={false} style={{ left: `${-(item.cropX / item.cropWidth) * 100}%`, top: `${-(item.cropY / item.cropHeight) * 100}%`, width: `${100 / item.cropWidth}%`, height: `${100 / item.cropHeight}%` }} />
+                  </div>
                   {active && <>
                     <button className="absolute -right-2 top-1/2 h-5 w-4 -translate-y-1/2 cursor-ew-resize rounded bg-cyan-300" title="横向拉伸" onPointerDown={(event) => startDrag(event, item, 'stretch-x')} />
                     <button className="absolute bottom-[-8px] left-1/2 h-4 w-5 -translate-x-1/2 cursor-ns-resize rounded bg-cyan-300" title="纵向拉伸" onPointerDown={(event) => startDrag(event, item, 'stretch-y')} />
@@ -226,6 +241,13 @@ function LayoutModal({ open, planUrl, items, disabled, onChange, onClose, onRese
               <label className="block text-[10px] text-white/55">旋转角度<input className={FIELD} type="number" value={selected.rotationDeg} disabled={disabled} onChange={(e) => patchSelected({ rotationDeg: Number(e.target.value) })} /></label>
               <label className="block text-[10px] text-white/55">层级<input className={FIELD} type="number" min={0} value={selected.zIndex} disabled={disabled} onChange={(e) => patchSelected({ zIndex: Math.max(0, Math.round(Number(e.target.value) || 0)) })} /></label>
               <div className="grid grid-cols-2 gap-1"><button className={BUTTON} disabled={disabled} onClick={() => patchSelected({ zIndex: Math.max(0, selected.zIndex - 1) })}>下移一层</button><button className={BUTTON} disabled={disabled} onClick={() => patchSelected({ zIndex: selected.zIndex + 1 })}>上移一层</button></div>
+              <div className="space-y-1 border-t border-white/10 pt-2">
+                <div className="flex items-center justify-between"><span className="text-[10px] font-semibold text-cyan-100">源图裁剪</span><button className={BUTTON} disabled={disabled} onClick={() => patchSelected({ cropX: 0, cropY: 0, cropWidth: 1, cropHeight: 1 })}>重置裁剪</button></div>
+                <label className="block text-[9px] text-white/50">左侧裁掉 {Math.round(selected.cropX * 100)}%<input className="w-full accent-cyan-300" type="range" min={0} max={Math.max(0, (selected.cropX + selected.cropWidth - 0.02) * 100)} step={1} value={selected.cropX * 100} disabled={disabled} onChange={(e) => { const cropX = Number(e.target.value) / 100; patchSelected({ cropX, cropWidth: selected.cropX + selected.cropWidth - cropX }); }} /></label>
+                <label className="block text-[9px] text-white/50">右侧裁掉 {Math.round((1 - selected.cropX - selected.cropWidth) * 100)}%<input className="w-full accent-cyan-300" type="range" min={0} max={Math.max(0, (1 - selected.cropX - 0.02) * 100)} step={1} value={(1 - selected.cropX - selected.cropWidth) * 100} disabled={disabled} onChange={(e) => patchSelected({ cropWidth: 1 - selected.cropX - Number(e.target.value) / 100 })} /></label>
+                <label className="block text-[9px] text-white/50">顶部裁掉 {Math.round(selected.cropY * 100)}%<input className="w-full accent-cyan-300" type="range" min={0} max={Math.max(0, (selected.cropY + selected.cropHeight - 0.02) * 100)} step={1} value={selected.cropY * 100} disabled={disabled} onChange={(e) => { const cropY = Number(e.target.value) / 100; patchSelected({ cropY, cropHeight: selected.cropY + selected.cropHeight - cropY }); }} /></label>
+                <label className="block text-[9px] text-white/50">底部裁掉 {Math.round((1 - selected.cropY - selected.cropHeight) * 100)}%<input className="w-full accent-cyan-300" type="range" min={0} max={Math.max(0, (1 - selected.cropY - 0.02) * 100)} step={1} value={(1 - selected.cropY - selected.cropHeight) * 100} disabled={disabled} onChange={(e) => patchSelected({ cropHeight: 1 - selected.cropY - Number(e.target.value) / 100 })} /></label>
+              </div>
             </div>}
           </aside>
         </div>
@@ -269,10 +291,12 @@ const ReverseIsometricDesignNode = ({ id, data, selected }: NodeProps) => {
   const apiModel = d.apiModel || modelDef.apiModel;
   const aspectRatio = d.aspectRatio || '1:1';
   const sizeLevel = d.sizeLevel || '2K';
+  const hallHeightMm = Math.min(12000, Math.max(2400, Math.round(Number(d.hallHeightMm) || 4200)));
+  const floorMaterial = REVERSE_ISOMETRIC_FLOOR_MATERIALS.includes(d.floorMaterial) ? d.floorMaterial : REVERSE_ISOMETRIC_FLOOR_MATERIALS[0];
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
   const busy = d.status === 'generating' || d.status === 'validating';
-  const previewPrompt = useMemo(() => buildReverseIsometricPrompt({ viewDirection }), [viewDirection]);
+  const previewPrompt = useMemo(() => buildReverseIsometricPrompt({ viewDirection, hallHeightMm, floorMaterial }), [floorMaterial, hallHeightMm, viewDirection]);
 
   useEffect(() => {
     const connected = new Set(exhibitImages.map((item) => item.url));
@@ -363,6 +387,8 @@ const ReverseIsometricDesignNode = ({ id, data, selected }: NodeProps) => {
       const validationRun = await runReverseIsometricValidationLoop({
         initialPrompt: previewPrompt,
         viewDirection,
+        hallHeightMm,
+        floorMaterial,
         generateCandidate: (prompt, attempt) => generateCandidate(prompt, references, runSeed + attempt),
         validateCandidate,
         onPhase: ({ phase, attempt }) => update(phase === 'generate'
@@ -388,7 +414,7 @@ const ReverseIsometricDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`反推轴侧生成失败：${error?.message || error}`, `reverse-isometric:${id.slice(0, 6)}`);
       throw error;
     }
-  }, [activeCanvasId, apiModel, busy, d.imageUrl, d.imageUrls, d.urls, exhibitImages.length, externalModel, generateCandidate, id, isExternal, isReadonly, layoutItems, llmModel, planImage, previewPrompt, seed, update, validateCandidate, viewDirection]);
+  }, [activeCanvasId, apiModel, busy, d.imageUrl, d.imageUrls, d.urls, exhibitImages.length, externalModel, floorMaterial, generateCandidate, hallHeightMm, id, isExternal, isReadonly, layoutItems, llmModel, planImage, previewPrompt, seed, update, validateCandidate, viewDirection]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -408,6 +434,7 @@ const ReverseIsometricDesignNode = ({ id, data, selected }: NodeProps) => {
       </section>
       <section data-exhibition-compact-section="view" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
         <div className="text-[11px] font-semibold text-cyan-100">无顶整体轴侧方向</div><div className="grid grid-cols-4 gap-1">{REVERSE_ISOMETRIC_DIRECTIONS.map((item) => <button key={item.value} className={`rounded px-1 py-1.5 text-[10px] ${viewDirection === item.value ? 'bg-cyan-300/20 text-cyan-100' : 'bg-black/20 text-white/50'}`} disabled={isReadonly || busy} onClick={() => update({ viewDirection: item.value })}>{item.label}</button>)}</div>
+        <div className="grid grid-cols-2 gap-2"><label className="space-y-1"><span className="text-[10px] text-white/55">展厅净高 mm</span><input className={FIELD} type="number" min={2400} max={12000} step={100} value={hallHeightMm} disabled={isReadonly || busy} onChange={(e) => update({ hallHeightMm: Math.min(12000, Math.max(2400, Math.round(Number(e.target.value) || 4200))) })} /></label><label className="space-y-1"><span className="text-[10px] text-white/55">地面材质</span><select className={FIELD} value={floorMaterial} disabled={isReadonly || busy} onChange={(e) => update({ floorMaterial: e.target.value })}>{REVERSE_ISOMETRIC_FLOOR_MATERIALS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label></div>
       </section>
       <section data-exhibition-compact-section="model" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
         <div className="flex items-center justify-between"><div className="text-[11px] font-semibold text-cyan-100">模型、尺寸与校验</div><button className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy} onClick={() => void runGenerate()}>{busy ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}生成</button></div>

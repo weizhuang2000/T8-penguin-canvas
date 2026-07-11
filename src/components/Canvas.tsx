@@ -1170,6 +1170,8 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     outputFormat: 'jpg',
     seed: 0,
     viewDirection: 'front-left',
+    hallHeightMm: 4200,
+    floorMaterial: '浅灰哑光环氧地坪',
     manualLayoutItems: [],
     excludedLayoutUrls: [],
     manualLayoutReferenceImage: '',
