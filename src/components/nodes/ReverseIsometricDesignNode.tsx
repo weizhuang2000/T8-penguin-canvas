@@ -10,6 +10,7 @@ import {
   REVERSE_ISOMETRIC_DIRECTIONS,
   REVERSE_ISOMETRIC_FLOOR_MATERIALS,
   buildReverseIsometricPrompt,
+  describeWallAdjacentExhibits,
   normalizeReverseIsometricDirection,
   normalizeReverseIsometricLayoutItems,
   parseReverseIsometricValidationReport,
@@ -296,7 +297,8 @@ const ReverseIsometricDesignNode = ({ id, data, selected }: NodeProps) => {
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
   const busy = d.status === 'generating' || d.status === 'validating';
-  const previewPrompt = useMemo(() => buildReverseIsometricPrompt({ viewDirection, hallHeightMm, floorMaterial }), [floorMaterial, hallHeightMm, viewDirection]);
+  const wallPlacementText = useMemo(() => describeWallAdjacentExhibits(layoutItems), [layoutItems]);
+  const previewPrompt = useMemo(() => buildReverseIsometricPrompt({ viewDirection, hallHeightMm, floorMaterial, wallPlacementText, exhibitCount: layoutItems.length }), [floorMaterial, hallHeightMm, layoutItems.length, viewDirection, wallPlacementText]);
 
   useEffect(() => {
     const connected = new Set(exhibitImages.map((item) => item.url));
@@ -365,7 +367,7 @@ const ReverseIsometricDesignNode = ({ id, data, selected }: NodeProps) => {
       temperature: 0,
       max_tokens: 1200,
       messages: [
-        { role: 'system', content: '你是严格的建筑平面结构审查员。比较原始平面图与轴侧候选图，只判断建筑结构是否忠实。必须只返回 JSON：{"pass":boolean,"confidence":0到1,"violations":[{"kind":"wall|column|entrance|exit|door|window|topology|uncertain","message":"具体差异"}]}。检查墙体数量、中心线、厚度关系、连接拓扑、柱网、出入口、门、窗的数量、尺度和相对位置。轴侧投影和无顶表达本身不是差异；任何新增、删除、移动、缩放、合并、遮蔽到无法确认或不确定都必须 pass=false。' },
+        { role: 'system', content: '你是严格的建筑与展陈轴侧图审查员。比较原始平面图与轴侧候选图。必须只返回 JSON：{"pass":boolean,"confidence":0到1,"violations":[{"kind":"wall|column|entrance|exit|door|window|topology|camera|exhibit-orientation|uncertain","message":"具体差异"}]}。检查墙体数量、中心线、厚度关系、连接拓扑、柱网、出入口、门、窗的数量、尺度和相对位置；同时检查相机是否为约25°–30°低俯角、是否能看清展项正立面，以及靠墙展项是否背板紧贴墙面、底部落地、立面竖直。若画面接近顶视图，或任何展项图片被水平平铺、压扁、躺在地面/矮台顶面，必须 pass=false 并使用 camera 或 exhibit-orientation。轴侧投影和无顶表达本身不是结构差异；任何新增、删除、移动、缩放、合并、遮蔽到无法确认或不确定都必须 pass=false。' },
         { role: 'user', content: [{ type: 'text', text: '第1张是原始平面结构基准，第2张是轴侧候选。执行严格逐项校验。' }, { type: 'image_url', image_url: { url: planImage } }, { type: 'image_url', image_url: { url: candidateUrl } }] },
       ],
     });
@@ -383,12 +385,14 @@ const ReverseIsometricDesignNode = ({ id, data, selected }: NodeProps) => {
     update({ status: 'generating', progress: '正在生成排版参考图...', error: '', validationReport: null });
     try {
       const layoutReference = await buildLayoutReference(planImage, layoutItems);
-      const references = [planImage, layoutReference];
+      const references = [planImage, layoutReference, ...layoutItems.map((item) => item.url)];
       const validationRun = await runReverseIsometricValidationLoop({
         initialPrompt: previewPrompt,
         viewDirection,
         hallHeightMm,
         floorMaterial,
+        wallPlacementText,
+        exhibitCount: layoutItems.length,
         generateCandidate: (prompt, attempt) => generateCandidate(prompt, references, runSeed + attempt),
         validateCandidate,
         onPhase: ({ phase, attempt }) => update(phase === 'generate'
@@ -414,7 +418,7 @@ const ReverseIsometricDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`反推轴侧生成失败：${error?.message || error}`, `reverse-isometric:${id.slice(0, 6)}`);
       throw error;
     }
-  }, [activeCanvasId, apiModel, busy, d.imageUrl, d.imageUrls, d.urls, exhibitImages.length, externalModel, floorMaterial, generateCandidate, hallHeightMm, id, isExternal, isReadonly, layoutItems, llmModel, planImage, previewPrompt, seed, update, validateCandidate, viewDirection]);
+  }, [activeCanvasId, apiModel, busy, d.imageUrl, d.imageUrls, d.urls, exhibitImages.length, externalModel, floorMaterial, generateCandidate, hallHeightMm, id, isExternal, isReadonly, layoutItems, llmModel, planImage, previewPrompt, seed, update, validateCandidate, viewDirection, wallPlacementText]);
 
   useRunTrigger(id, runGenerate, 'image');
 

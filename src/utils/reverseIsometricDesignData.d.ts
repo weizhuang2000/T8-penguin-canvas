@@ -6,7 +6,8 @@ export const REVERSE_ISOMETRIC_FLOOR_MATERIALS: string[];
 export function normalizeReverseIsometricDirection(value: unknown): ReverseIsometricDirection;
 export function normalizeReverseIsometricLayoutItems(value: unknown, exhibits?: Array<{ id?: string; url: string; label?: string }>): ReverseIsometricLayoutItem[];
 export function patchReverseIsometricLayoutItem(item: ReverseIsometricLayoutItem, patch?: Partial<ReverseIsometricLayoutItem>): ReverseIsometricLayoutItem;
-export function buildReverseIsometricPrompt(options?: { viewDirection?: ReverseIsometricDirection; hallHeightMm?: number; floorMaterial?: string; correction?: string }): string;
+export function describeWallAdjacentExhibits(items?: ReverseIsometricLayoutItem[], threshold?: number): string;
+export function buildReverseIsometricPrompt(options?: { viewDirection?: ReverseIsometricDirection; hallHeightMm?: number; floorMaterial?: string; wallPlacementText?: string; exhibitCount?: number; correction?: string }): string;
 export function parseReverseIsometricValidationReport(content: unknown): ReverseIsometricValidationReport;
 export function validationCorrectionText(report: ReverseIsometricValidationReport): string;
 export function runReverseIsometricValidationLoop(options: {
@@ -14,6 +15,8 @@ export function runReverseIsometricValidationLoop(options: {
   viewDirection?: ReverseIsometricDirection;
   hallHeightMm?: number;
   floorMaterial?: string;
+  wallPlacementText?: string;
+  exhibitCount?: number;
   generateCandidate: (prompt: string, attempt: number) => Promise<string>;
   validateCandidate: (candidate: string, attempt: number) => Promise<ReverseIsometricValidationReport>;
   onPhase?: (event: { phase: 'generate' | 'validate'; attempt: number; candidate?: string }) => void;

@@ -6,6 +6,7 @@ import {
   REVERSE_ISOMETRIC_DIRECTIONS,
   REVERSE_ISOMETRIC_FLOOR_MATERIALS,
   buildReverseIsometricPrompt,
+  describeWallAdjacentExhibits,
   normalizeReverseIsometricLayoutItems,
   parseReverseIsometricValidationReport,
   patchReverseIsometricLayoutItem,
@@ -91,7 +92,26 @@ test('prompt locks every architectural category and supports all four directions
   const configured = buildReverseIsometricPrompt({ hallHeightMm: 5600, floorMaterial: '深灰水磨石' });
   assert.match(configured, /5600 mm/);
   assert.match(configured, /深灰水磨石/);
-  assert.match(configured, /靠墙布置的展项[\s\S]*背面[\s\S]*贴近对应墙面/);
+  assert.match(configured, /靠墙布置的展项[\s\S]*背面[\s\S]*紧贴对应墙面/);
+  assert.match(configured, /俯角约 25°–30°/);
+  assert.match(configured, /不得生成接近顶视图/);
+  assert.match(configured, /严禁把整张展项图片水平平铺/);
+  assert.match(configured, /底座落地、立面竖直/);
+});
+
+test('wall-adjacent exhibit descriptions identify the nearest plan boundary', () => {
+  const items = [
+    { label: '墙柜A', xRatio: 0.01, yRatio: 0.3, widthRatio: 0.2, heightRatio: 0.2 },
+    { label: '墙柜B', xRatio: 0.4, yRatio: 0.75, widthRatio: 0.2, heightRatio: 0.22 },
+    { label: '中央展项', xRatio: 0.4, yRatio: 0.4, widthRatio: 0.1, heightRatio: 0.1 },
+  ];
+  const description = describeWallAdjacentExhibits(items);
+  assert.match(description, /墙柜A靠近左侧墙/);
+  assert.match(description, /墙柜B靠近底部墙/);
+  assert.doesNotMatch(description, /中央展项/);
+  const prompt = buildReverseIsometricPrompt({ wallPlacementText: description, exhibitCount: 2 });
+  assert.match(prompt, /@img3 至 @img4/);
+  assert.match(prompt, /墙柜A靠近左侧墙/);
 });
 
 test('manual layout preview and reference export share crop data', () => {
@@ -103,6 +123,7 @@ test('manual layout preview and reference export share crop data', () => {
   assert.match(source, /100 \/ item\.cropWidth/);
   assert.match(source, /REVERSE_ISOMETRIC_FLOOR_MATERIALS\.map/);
   assert.match(source, /hallHeightMm/);
+  assert.match(source, /\.\.\.layoutItems\.map\(\(item\) => item\.url\)/);
 });
 
 test('validation parser fails closed for violations and invalid JSON', () => {
@@ -124,6 +145,9 @@ test('node validates twice at most and restores previous output on rejection', (
   assert.match(source, /await recordGenerationHistory\(/);
   assert.ok(source.indexOf('await recordGenerationHistory(') > source.indexOf("if (!report?.pass || !candidate)"));
   assert.match(source, /结构校验连续两次未通过/);
+  assert.match(source, /exhibit-orientation/);
+  assert.match(source, /camera/);
+  assert.match(source, /水平平铺、压扁/);
 });
 
 test('validation loop covers first pass, retry pass, double failure and vision errors', async () => {
