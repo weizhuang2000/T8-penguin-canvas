@@ -29,7 +29,7 @@ const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border
 const MAX_POLLS = 300;
 const POLL_INTERVAL = 3000;
 
-interface InputImageItem { id: string; url: string; label: string }
+export interface ReverseIsometricInputImageItem { id: string; url: string; label: string }
 type DragMode = 'move' | 'scale' | 'stretch-x' | 'stretch-y' | 'rotate';
 interface DragSession { mode: DragMode; item: ReverseIsometricLayoutItem; pointerId: number; startX: number; startY: number; stageWidth: number; stageHeight: number; centerX: number; centerY: number; startAngle: number }
 
@@ -46,7 +46,7 @@ function imagesFromData(data: any): string[] {
   return output;
 }
 
-function useHandleImages(nodeId: string, handle: string, firstOnly = false): InputImageItem[] {
+export function useHandleImages(nodeId: string, handle: string, firstOnly = false): ReverseIsometricInputImageItem[] {
   const connections = useNodeConnections({ id: nodeId, handleType: 'target' });
   const sourceIds = useMemo(() => Array.from(new Set(connections
     .filter((connection: any) => String(connection.targetHandle || '') === handle)
@@ -54,7 +54,7 @@ function useHandleImages(nodeId: string, handle: string, firstOnly = false): Inp
     .filter(Boolean))), [connections, handle]);
   const nodesData = useNodesData(sourceIds);
   return useMemo(() => {
-    const output: InputImageItem[] = [];
+    const output: ReverseIsometricInputImageItem[] = [];
     const seen = new Set<string>();
     const list = Array.isArray(nodesData) ? nodesData : [nodesData];
     for (const node of list) {
@@ -80,7 +80,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-async function buildLayoutReference(planUrl: string, items: ReverseIsometricLayoutItem[]): Promise<string> {
+export async function buildReverseIsometricLayoutReference(planUrl: string, items: ReverseIsometricLayoutItem[]): Promise<string> {
   const plan = await loadImage(planUrl);
   const naturalWidth = plan.naturalWidth || plan.width || 1;
   const naturalHeight = plan.naturalHeight || plan.height || 1;
@@ -121,8 +121,9 @@ async function buildLayoutReference(planUrl: string, items: ReverseIsometricLayo
   return canvas.toDataURL('image/png');
 }
 
-function LayoutModal({ open, planUrl, items, disabled, onChange, onClose, onReset }: {
+export function ReverseIsometricLayoutModal({ open, planUrl, allowBlankStage = false, aspectRatio = '1 / 1', title = '反推轴侧 · 手动排版', items, disabled, onChange, onClose, onReset }: {
   open: boolean; planUrl: string; items: ReverseIsometricLayoutItem[]; disabled: boolean;
+  allowBlankStage?: boolean; aspectRatio?: string; title?: string;
   onChange: (items: ReverseIsometricLayoutItem[]) => void; onClose: () => void; onReset: () => void;
 }) {
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -206,15 +207,15 @@ function LayoutModal({ open, planUrl, items, disabled, onChange, onClose, onRese
     <div className="fixed inset-0 z-[10035] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm nodrag nopan" onMouseDown={(event) => event.stopPropagation()}>
       <section className="flex max-h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-xl border border-white/15 bg-zinc-950 text-white shadow-2xl">
         <header className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
-          <div className="min-w-0 flex-1"><div className="text-sm font-semibold text-cyan-100">反推轴侧 · 手动排版</div><div className="text-[10px] text-white/45">平面布局为锁定底图；展项支持位移、旋转、等比缩放与横纵拉伸。</div></div>
+          <div className="min-w-0 flex-1"><div className="text-sm font-semibold text-cyan-100">{title}</div><div className="text-[10px] text-white/45">{planUrl ? '平面布局为锁定底图' : '空白矩形为空间排版范围'}；展项支持位移、旋转、等比缩放与横纵拉伸。</div></div>
           <button className={BUTTON} disabled={disabled} onClick={onReset}><Layers size={12} />重置</button>
           <button className={BUTTON} disabled={disabled || !selected} onClick={removeSelected}><Trash2 size={12} />删除选中</button>
           <button className="rounded p-1.5 text-white/60 hover:bg-white/10" onClick={onClose}><X size={16} /></button>
         </header>
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_260px]">
           <main className="flex min-h-0 items-center justify-center overflow-auto bg-slate-950/70 p-5">
-            {planUrl ? <div ref={stageRef} className="relative max-h-[78vh] max-w-full overflow-hidden border-2 border-cyan-300/60 bg-white shadow-2xl" style={{ aspectRatio: 'var(--plan-ratio, auto)' }} onPointerDown={() => setSelectedId('')}>
-              <img src={planUrl} alt="平面布局锁定底图" className="block max-h-[78vh] max-w-full select-none object-contain" draggable={false} />
+            {planUrl || allowBlankStage ? <div ref={stageRef} className={`relative max-h-[78vh] max-w-full overflow-hidden border-2 border-cyan-300/60 bg-white shadow-2xl ${planUrl ? '' : 'w-full max-w-5xl'}`} style={{ aspectRatio: planUrl ? 'auto' : aspectRatio }} onPointerDown={() => setSelectedId('')}>
+              {planUrl ? <img src={planUrl} alt="平面布局锁定底图" className="block max-h-[78vh] max-w-full select-none object-contain" draggable={false} /> : <div className="h-full w-full bg-white" aria-label="空白矩形空间" />}
               {[...draft].sort((a, b) => a.zIndex - b.zIndex).map((item) => {
                 const active = item.id === selectedId;
                 return <div key={item.id} className={`absolute touch-none ${active ? 'ring-2 ring-amber-300' : 'ring-1 ring-cyan-200/60'}`} style={{ left: `${item.xRatio * 100}%`, top: `${item.yRatio * 100}%`, width: `${item.widthRatio * 100}%`, height: `${item.heightRatio * 100}%`, zIndex: item.zIndex, transform: `rotate(${item.rotationDeg}deg)`, transformOrigin: 'center' }} onPointerDown={(event) => startDrag(event, item, 'move')}>
@@ -310,7 +311,7 @@ const ReverseIsometricDesignNode = ({ id, data, selected }: NodeProps) => {
       return;
     }
     let cancelled = false;
-    buildLayoutReference(planImage, layoutItems).then((value) => {
+    buildReverseIsometricLayoutReference(planImage, layoutItems).then((value) => {
       if (!cancelled && value !== d.manualLayoutReferenceImage) update({ manualLayoutReferenceImage: value });
     }).catch(() => undefined);
     return () => { cancelled = true; };
@@ -358,7 +359,7 @@ const ReverseIsometricDesignNode = ({ id, data, selected }: NodeProps) => {
     const previousOutput = { imageUrl: d.imageUrl || '', imageUrls: d.imageUrls || [], urls: d.urls || [] };
     update({ status: 'generating', progress: '正在生成排版参考图...', error: '' });
     try {
-      const layoutReference = await buildLayoutReference(planImage, layoutItems);
+      const layoutReference = await buildReverseIsometricLayoutReference(planImage, layoutItems);
       const references = [planImage, layoutReference, ...layoutItems.map((item) => item.url)];
       update({ status: 'generating', progress: '正在生成轴侧图...' });
       const candidate = await generateCandidate(previewPrompt, references, runSeed);
@@ -407,7 +408,7 @@ const ReverseIsometricDesignNode = ({ id, data, selected }: NodeProps) => {
       {d.imageUrl && <section data-exhibition-compact-section="result" data-exhibition-compact-item="main" className="rounded border border-white/10 bg-black/20 p-2"><img src={d.imageUrl} alt="展陈轴侧图" className="max-h-64 w-full rounded object-contain" /></section>}
       <section data-exhibition-compact-section="prompt" data-exhibition-compact-item="main" className="rounded border border-white/10 bg-white/[0.03] p-2"><div className="mb-1 text-[10px] font-semibold text-cyan-100">生成约束 Prompt</div><div className="max-h-36 overflow-y-auto whitespace-pre-wrap text-[9px] leading-relaxed text-white/55">{previewPrompt}</div></section>
     </div>
-    <LayoutModal open={layoutOpen} planUrl={planImage} items={layoutItems} disabled={isReadonly || busy} onChange={persistLayoutItems} onClose={() => setLayoutOpen(false)} onReset={() => update({ manualLayoutItems: normalizeReverseIsometricLayoutItems([], exhibitImages), excludedLayoutUrls: [] })} />
+    <ReverseIsometricLayoutModal open={layoutOpen} planUrl={planImage} items={layoutItems} disabled={isReadonly || busy} onChange={persistLayoutItems} onClose={() => setLayoutOpen(false)} onReset={() => update({ manualLayoutItems: normalizeReverseIsometricLayoutItems([], exhibitImages), excludedLayoutUrls: [] })} />
   </div>;
 };
 

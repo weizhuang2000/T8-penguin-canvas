@@ -80,6 +80,7 @@ export type NodeType =
   | 'exhibition-floorplan-layout'
   | 'showcase-interior-design'
   | 'reverse-isometric-design'
+  | 'fusion-render-design'
   | 'cinema-auditorium-design'
   | 'multi-angle-visual'
   | 'portrait-master'

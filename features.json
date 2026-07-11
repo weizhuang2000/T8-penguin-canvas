@@ -20,6 +20,23 @@
       "npm run build"
     ]
   },
+  "fusionRenderDesign": {
+    "status": "implemented",
+    "nodeType": "fusion-render-design",
+    "label": "融合效果图",
+    "capabilities": [
+      "可选平面布局单连接排他输入与多展项效果图输入",
+      "无平面图时使用跟随输出比例的空白矩形排版空间",
+      "位移、旋转、等比缩放、横纵拉伸、源图裁剪与层级排版",
+      "左前、右前、左后、右后四向写实空间透视效果图生成",
+      "有平面图时锁定墙柱、门窗和出入口，无平面图时保持简洁矩形展厅",
+      "展项立式落地与真实三维融合，禁止将参考图平铺到地面"
+    ],
+    "verification": [
+      "node --test tests/fusionRenderDesign.test.js tests/reverseIsometricDesign.test.js",
+      "npm run type-check"
+    ]
+  },
   "exhibitionFloorplanLayout": {
     "status": "implemented",
     "nodeType": "exhibition-floorplan-layout",

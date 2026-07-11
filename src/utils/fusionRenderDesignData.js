@@ -1,0 +1,51 @@
+import {
+  REVERSE_ISOMETRIC_DIRECTIONS,
+  REVERSE_ISOMETRIC_FLOOR_MATERIALS,
+  normalizeReverseIsometricDirection,
+} from './reverseIsometricDesignData.js';
+
+function finite(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+export function buildFusionRenderPrompt({
+  hasPlan = false,
+  viewDirection = 'front-left',
+  hallHeightMm = 4200,
+  floorMaterial = REVERSE_ISOMETRIC_FLOOR_MATERIALS[0],
+  wallPlacementText = '',
+  exhibitCount = 0,
+} = {}) {
+  const direction = REVERSE_ISOMETRIC_DIRECTIONS.find((item) => item.value === normalizeReverseIsometricDirection(viewDirection));
+  const safeHeight = clamp(Math.round(finite(hallHeightMm, 4200)), 2400, 12000);
+  const safeFloorMaterial = REVERSE_ISOMETRIC_FLOOR_MATERIALS.includes(floorMaterial)
+    ? floorMaterial
+    : REVERSE_ISOMETRIC_FLOOR_MATERIALS[0];
+  const firstExhibitIndex = hasPlan ? 3 : 2;
+  const lastExhibitIndex = firstExhibitIndex + Math.max(0, exhibitCount) - 1;
+  const referenceRoles = hasPlan
+    ? `@img1 是原始平面结构基准；@img2 是俯视排版定位图；${exhibitCount > 0 ? `@img${firstExhibitIndex} 至 @img${lastExhibitIndex} 是按排版顺序对应的展项原始外观参考。` : ''}`
+    : `@img1 是矩形空间内的俯视排版定位图；${exhibitCount > 0 ? `@img${firstExhibitIndex} 至 @img${lastExhibitIndex} 是按排版顺序对应的展项原始外观参考。` : ''}`;
+
+  return [
+    '任务：把参考展项融合进同一个博物馆/展馆空间，生成一张写实、完整、可用于方案汇报的展陈空间透视效果图。',
+    `相机观察方向：从${direction?.label || '左前'}方向观察空间。使用正常人眼高度的广角透视，画面需要同时表现空间关系与展项正立面；不得输出俯视平面图、轴侧图或高空鸟瞰图。`,
+    `参考图角色：${referenceRoles}`,
+    '排版定位图只约束展项的位置、朝向、显示占比、相对间距和前后层级；图片卡片不是地面纹理，也不是需要原样保留边框的广告牌。',
+    hasPlan
+      ? '最高优先级结构锁定：墙体中心线、墙厚关系、连接拓扑、柱网、出入口、门、窗的数量和相对位置必须与 @img1 一致。严禁补墙、拆墙、封门、开洞、移动柱体或重新规划平面。'
+      : '空间边界：把 @img1 的矩形边界理解为一个简洁、完整的矩形展厅；不得擅自增加复杂隔墙、异形建筑边界、额外房间或未提供的主要展项。',
+    `展厅净高按 ${safeHeight} mm 表现；地面统一采用“${safeFloorMaterial}”，材质尺度、反射、粗糙度和拼缝真实克制。`,
+    '所有展项必须从各自原始外观参考恢复成可信的三维展陈装置，保持识别特征、色彩、材质和比例；底座落地、立面竖直、尺度可信，不得悬浮。',
+    '严禁把整张展项图片水平平铺、压扁或贴在地面、矮台顶面上；不得把排版截图、选择框、控制点或白色底板直接渲染进最终空间。',
+    `靠近空间边界的展项应按靠墙装置处理：背面与相邻墙面平行、底部落地、正立面朝向主要参观空间。${wallPlacementText ? `当前排版中检测到：${wallPlacementText}。` : ''}`,
+    '使用真实建筑摄影级灯光、阴影、材质、景深和空间尺度，构图自然，不新增未提供的主要展项。',
+    '只输出一张连续、完整的写实空间效果图；禁止拼版、分栏、对比图、平面图、轴侧图、技术图纸、文字说明、水印或尺寸表。',
+  ].join('\n');
+}
+

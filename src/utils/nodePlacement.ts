@@ -88,6 +88,7 @@ export const NODE_DEFAULT_SIZE: Record<string, { w: number; h: number }> = {
   'exhibition-floorplan-layout': { w: 920, h: 720 },
   'showcase-interior-design': { w: 520, h: 680 },
   'reverse-isometric-design': { w: 520, h: 720 },
+  'fusion-render-design': { w: 520, h: 720 },
   'cinema-auditorium-design': { w: 640, h: 820 },
   'portrait-master': { w: 560, h: 360 },
   'pose-master': { w: 900, h: 720 },
