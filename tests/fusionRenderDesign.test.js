@@ -37,13 +37,13 @@ test('plan is optional and exclusive while exhibit references remain required an
   assert.doesNotMatch(node, /if \(!planImage\) throw/);
 });
 
-test('blank rectangle follows output ratio and layout transforms use the shared editor/exporter', () => {
+test('blank rectangle follows hall dimensions and layout transforms use the shared editor/exporter', () => {
   const node = read('src/components/nodes/FusionRenderDesignNode.tsx');
   const editor = read('src/components/nodes/ReverseIsometricDesignNode.tsx');
-  assert.match(node, /createBlankStage\(aspectRatio\)/);
-  assert.match(node, /aspectRatio=\{ratioCss\(aspectRatio\)\}/);
+  assert.match(node, /createBlankStage\(hallLengthMm, hallWidthMm\)/);
+  assert.match(node, /aspectRatio=\{`\$\{hallLengthMm\} \/ \$\{hallWidthMm\}`\}/);
   assert.match(node, /空白矩形空间/);
-  assert.match(node, /buildReverseIsometricLayoutReference\(planUrl \|\| createBlankStage\(aspectRatio\), items\)/);
+  assert.match(node, /buildReverseIsometricLayoutReference\(planUrl \|\| createBlankStage\(hallLengthMm, hallWidthMm\), items\)/);
   for (const term of ['stretch-x', 'stretch-y', 'scale', 'rotate', '源图裁剪', 'zIndex']) assert.match(editor, new RegExp(term));
 });
 
@@ -87,4 +87,20 @@ test('ceiling craft offers automatic styling first plus twenty common crafts', (
   assert.match(node, /FUSION_RENDER_AUTO_CEILING_CRAFT/);
   assert.match(node, /FUSION_RENDER_CEILING_CRAFTS\.map/);
   assert.match(read('src/components/Canvas.tsx'), /'fusion-render-design':[\s\S]*ceilingCraft: '根据所有展项风格自动调整'/);
+});
+
+test('layout editor configures hall length and width and prompt uses physical dimensions', () => {
+  const node = read('src/components/nodes/FusionRenderDesignNode.tsx');
+  const editor = read('src/components/nodes/ReverseIsometricDesignNode.tsx');
+  assert.match(node, /hallLengthMm=\{hallLengthMm\}/);
+  assert.match(node, /hallWidthMm=\{hallWidthMm\}/);
+  assert.match(node, /onDimensionsChange=\{\(dimensions\) => update\(dimensions\)\}/);
+  assert.match(editor, /展厅尺寸/);
+  assert.match(editor, />长 mm<input/);
+  assert.match(editor, />宽 mm<input/);
+
+  const prompt = buildFusionRenderPrompt({ hallLengthMm: 18000, hallWidthMm: 9000, hallHeightMm: 5000 });
+  assert.match(prompt, /长 18000 mm、宽 9000 mm、净高 5000 mm/);
+  assert.match(prompt, /长宽高比例/);
+  assert.match(read('src/components/Canvas.tsx'), /'fusion-render-design':[\s\S]*hallLengthMm: 12000,[\s\S]*hallWidthMm: 8000/);
 });

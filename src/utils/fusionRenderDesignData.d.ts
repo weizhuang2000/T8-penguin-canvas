@@ -6,6 +6,8 @@ export const FUSION_RENDER_CEILING_CRAFTS: string[];
 export function buildFusionRenderPrompt(options?: {
   hasPlan?: boolean;
   viewDirection?: ReverseIsometricDirection;
+  hallLengthMm?: number;
+  hallWidthMm?: number;
   hallHeightMm?: number;
   floorMaterial?: string;
   ceilingCraft?: string;

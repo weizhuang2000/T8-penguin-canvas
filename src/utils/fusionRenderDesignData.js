@@ -41,6 +41,8 @@ function clamp(value, min, max) {
 export function buildFusionRenderPrompt({
   hasPlan = false,
   viewDirection = 'front-left',
+  hallLengthMm = 12000,
+  hallWidthMm = 8000,
   hallHeightMm = 4200,
   floorMaterial = REVERSE_ISOMETRIC_FLOOR_MATERIALS[0],
   ceilingCraft = FUSION_RENDER_AUTO_CEILING_CRAFT,
@@ -48,6 +50,8 @@ export function buildFusionRenderPrompt({
   exhibitCount = 0,
 } = {}) {
   const direction = REVERSE_ISOMETRIC_DIRECTIONS.find((item) => item.value === normalizeReverseIsometricDirection(viewDirection));
+  const safeLength = clamp(Math.round(finite(hallLengthMm, 12000)), 1000, 100000);
+  const safeWidth = clamp(Math.round(finite(hallWidthMm, 8000)), 1000, 100000);
   const safeHeight = clamp(Math.round(finite(hallHeightMm, 4200)), 2400, 12000);
   const safeFloorMaterial = REVERSE_ISOMETRIC_FLOOR_MATERIALS.includes(floorMaterial)
     ? floorMaterial
@@ -72,7 +76,7 @@ export function buildFusionRenderPrompt({
     hasPlan
       ? '最高优先级结构锁定：墙体中心线、墙厚关系、连接拓扑、柱网、出入口、门、窗的数量和相对位置必须与 @img1 一致。严禁补墙、拆墙、封门、开洞、移动柱体或重新规划平面。'
       : '空间边界：把 @img1 的矩形边界理解为一个简洁、完整的矩形展厅；不得擅自增加复杂隔墙、异形建筑边界、额外房间或未提供的主要展项。',
-    `展厅净高按 ${safeHeight} mm 表现；地面统一采用“${safeFloorMaterial}”，材质尺度、反射、粗糙度和拼缝真实克制。`,
+    `展厅实际尺寸：长 ${safeLength} mm、宽 ${safeWidth} mm、净高 ${safeHeight} mm。必须按该长宽高比例建立可信的空间尺度和展项尺度；地面统一采用“${safeFloorMaterial}”，材质尺度、反射、粗糙度和拼缝真实克制。`,
     ceilingConstraint,
     '所有展项必须从各自原始外观参考恢复成可信的三维展陈装置，保持识别特征、色彩、材质和比例；底座落地、立面竖直、尺度可信，不得悬浮。',
     '严禁把整张展项图片水平平铺、压扁或贴在地面、矮台顶面上；不得把排版截图、选择框、控制点或白色底板直接渲染进最终空间。',

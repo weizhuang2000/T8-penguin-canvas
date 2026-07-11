@@ -1197,6 +1197,8 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     outputFormat: 'jpg',
     seed: 0,
     viewDirection: 'front-left',
+    hallLengthMm: 12000,
+    hallWidthMm: 8000,
     hallHeightMm: 4200,
     floorMaterial: '浅灰哑光环氧地坪',
     ceilingCraft: '根据所有展项风格自动调整',

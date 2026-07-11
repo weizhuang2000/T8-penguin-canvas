@@ -32,14 +32,8 @@ const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border
 const MAX_POLLS = 300;
 const POLL_INTERVAL = 3000;
 
-function ratioCss(value: string): string {
-  const match = String(value || '').match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
-  return match ? `${match[1]} / ${match[2]}` : '1 / 1';
-}
-
-function createBlankStage(aspectRatio: string): string {
-  const match = String(aspectRatio || '').match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
-  const ratio = match ? Number(match[1]) / Math.max(0.01, Number(match[2])) : 1;
+function createBlankStage(hallLengthMm: number, hallWidthMm: number): string {
+  const ratio = hallLengthMm / Math.max(1, hallWidthMm);
   const canvas = document.createElement('canvas');
   canvas.width = ratio >= 1 ? 1200 : Math.max(320, Math.round(1200 * ratio));
   canvas.height = ratio >= 1 ? Math.max(320, Math.round(1200 / ratio)) : 1200;
@@ -53,8 +47,8 @@ function createBlankStage(aspectRatio: string): string {
   return canvas.toDataURL('image/png');
 }
 
-async function buildFusionLayoutReference(planUrl: string, aspectRatio: string, items: ReverseIsometricLayoutItem[]): Promise<string> {
-  return buildReverseIsometricLayoutReference(planUrl || createBlankStage(aspectRatio), items);
+async function buildFusionLayoutReference(planUrl: string, hallLengthMm: number, hallWidthMm: number, items: ReverseIsometricLayoutItem[]): Promise<string> {
+  return buildReverseIsometricLayoutReference(planUrl || createBlankStage(hallLengthMm, hallWidthMm), items);
 }
 
 const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
@@ -84,6 +78,8 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
   const apiModel = d.apiModel || modelDef.apiModel;
   const aspectRatio = d.aspectRatio || '1:1';
   const sizeLevel = d.sizeLevel || '2K';
+  const hallLengthMm = Math.min(100000, Math.max(1000, Math.round(Number(d.hallLengthMm) || 12000)));
+  const hallWidthMm = Math.min(100000, Math.max(1000, Math.round(Number(d.hallWidthMm) || 8000)));
   const hallHeightMm = Math.min(12000, Math.max(2400, Math.round(Number(d.hallHeightMm) || 4200)));
   const floorMaterial = REVERSE_ISOMETRIC_FLOOR_MATERIALS.includes(d.floorMaterial) ? d.floorMaterial : REVERSE_ISOMETRIC_FLOOR_MATERIALS[0];
   const ceilingCraft = FUSION_RENDER_CEILING_CRAFTS.includes(d.ceilingCraft) ? d.ceilingCraft : FUSION_RENDER_AUTO_CEILING_CRAFT;
@@ -91,7 +87,7 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
   const busy = d.status === 'generating';
   const wallPlacementText = useMemo(() => describeWallAdjacentExhibits(layoutItems), [layoutItems]);
-  const previewPrompt = useMemo(() => buildFusionRenderPrompt({ hasPlan: Boolean(planImage), viewDirection, hallHeightMm, floorMaterial, ceilingCraft, wallPlacementText, exhibitCount: layoutItems.length }), [ceilingCraft, floorMaterial, hallHeightMm, layoutItems.length, planImage, viewDirection, wallPlacementText]);
+  const previewPrompt = useMemo(() => buildFusionRenderPrompt({ hasPlan: Boolean(planImage), viewDirection, hallLengthMm, hallWidthMm, hallHeightMm, floorMaterial, ceilingCraft, wallPlacementText, exhibitCount: layoutItems.length }), [ceilingCraft, floorMaterial, hallHeightMm, hallLengthMm, hallWidthMm, layoutItems.length, planImage, viewDirection, wallPlacementText]);
 
   useEffect(() => {
     const connected = new Set(exhibitImages.map((item) => item.url));
@@ -115,11 +111,11 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
       return;
     }
     let cancelled = false;
-    buildFusionLayoutReference(planImage, aspectRatio, layoutItems).then((value) => {
+    buildFusionLayoutReference(planImage, hallLengthMm, hallWidthMm, layoutItems).then((value) => {
       if (!cancelled && value !== d.manualLayoutReferenceImage) update({ manualLayoutReferenceImage: value });
     }).catch(() => undefined);
     return () => { cancelled = true; };
-  }, [aspectRatio, d.manualLayoutReferenceImage, layoutItems, planImage, update]);
+  }, [d.manualLayoutReferenceImage, hallLengthMm, hallWidthMm, layoutItems, planImage, update]);
 
   const generateCandidate = useCallback(async (prompt: string, references: string[], runSeed: number): Promise<string> => {
     const historyContext = { canvasId: activeCanvasId, sourceNodeId: id, sourceNodeType: 'fusion-render-design', nodeTitle: '融合效果图', outputTitle: '融合效果图', seed: runSeed };
@@ -162,7 +158,7 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
     const previousOutput = { imageUrl: d.imageUrl || '', imageUrls: d.imageUrls || [], urls: d.urls || [] };
     update({ status: 'generating', progress: '正在生成排版参考图...', error: '' });
     try {
-      const layoutReference = await buildFusionLayoutReference(planImage, aspectRatio, layoutItems);
+      const layoutReference = await buildFusionLayoutReference(planImage, hallLengthMm, hallWidthMm, layoutItems);
       const references = planImage ? [planImage, layoutReference, ...layoutItems.map((item) => item.url)] : [layoutReference, ...layoutItems.map((item) => item.url)];
       update({ status: 'generating', progress: '正在生成融合效果图...' });
       const candidate = await generateCandidate(previewPrompt, references, runSeed);
@@ -174,7 +170,7 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`融合效果图生成失败：${error?.message || error}`, `fusion-render:${id.slice(0, 6)}`);
       throw error;
     }
-  }, [aspectRatio, busy, d.imageUrl, d.imageUrls, d.urls, exhibitImages.length, generateCandidate, id, isReadonly, layoutItems, planImage, previewPrompt, seed, update]);
+  }, [busy, d.imageUrl, d.imageUrls, d.urls, exhibitImages.length, generateCandidate, hallLengthMm, hallWidthMm, id, isReadonly, layoutItems, planImage, previewPrompt, seed, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -187,7 +183,7 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
       <section data-exhibition-compact-section="inputs" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
         <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} />输入与排版</div>
         <div className="grid grid-cols-2 gap-2">
-          <div className="rounded border border-white/10 bg-black/20 p-1.5"><div className="mb-1 text-[9px] text-white/45">平面布局（可选、单图排他）</div>{planImage ? <img src={planImage} className="h-24 w-full rounded object-contain" /> : <div className="flex h-24 items-center justify-center rounded border border-dashed border-white/15 bg-white text-[10px] text-zinc-400" style={{ aspectRatio: ratioCss(aspectRatio) }}>空白矩形空间</div>}</div>
+          <div className="rounded border border-white/10 bg-black/20 p-1.5"><div className="mb-1 text-[9px] text-white/45">平面布局（可选、单图排他）</div>{planImage ? <img src={planImage} className="h-24 w-full rounded object-contain" /> : <div className="flex h-24 items-center justify-center rounded border border-dashed border-white/15 bg-white text-[10px] text-zinc-400" style={{ aspectRatio: `${hallLengthMm} / ${hallWidthMm}` }}>空白矩形空间</div>}</div>
           <div className="rounded border border-white/10 bg-black/20 p-1.5"><div className="mb-1 text-[9px] text-white/45">展项效果图（{exhibitImages.length}）</div><div className="grid h-24 grid-cols-3 gap-1 overflow-y-auto">{exhibitImages.map((item) => <img key={item.id + item.url} src={item.url} className="h-10 w-full rounded object-cover" />)}</div></div>
         </div>
         <button className={`${BUTTON} w-full border-cyan-300/30 bg-cyan-300/10 text-cyan-100`} disabled={isReadonly || busy || !exhibitImages.length} onClick={() => setLayoutOpen(true)}><Layers size={13} />打开手动排版</button>
@@ -212,7 +208,7 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
       {d.imageUrl && <section data-exhibition-compact-section="result" data-exhibition-compact-item="main" className="rounded border border-white/10 bg-black/20 p-2"><img src={d.imageUrl} alt="融合效果图" className="max-h-64 w-full rounded object-contain" /></section>}
       <section data-exhibition-compact-section="prompt" data-exhibition-compact-item="main" className="rounded border border-white/10 bg-white/[0.03] p-2"><div className="mb-1 text-[10px] font-semibold text-cyan-100">生成约束 Prompt</div><div className="max-h-36 overflow-y-auto whitespace-pre-wrap text-[9px] leading-relaxed text-white/55">{previewPrompt}</div></section>
     </div>
-    <ReverseIsometricLayoutModal open={layoutOpen} planUrl={planImage} allowBlankStage aspectRatio={ratioCss(aspectRatio)} title="融合效果图 · 手动排版" items={layoutItems} disabled={isReadonly || busy} onChange={persistLayoutItems} onClose={() => setLayoutOpen(false)} onReset={() => update({ manualLayoutItems: normalizeReverseIsometricLayoutItems([], exhibitImages), excludedLayoutUrls: [] })} />
+    <ReverseIsometricLayoutModal open={layoutOpen} planUrl={planImage} allowBlankStage aspectRatio={`${hallLengthMm} / ${hallWidthMm}`} title="融合效果图 · 手动排版" hallLengthMm={hallLengthMm} hallWidthMm={hallWidthMm} items={layoutItems} disabled={isReadonly || busy} onDimensionsChange={(dimensions) => update(dimensions)} onChange={persistLayoutItems} onClose={() => setLayoutOpen(false)} onReset={() => update({ manualLayoutItems: normalizeReverseIsometricLayoutItems([], exhibitImages), excludedLayoutUrls: [] })} />
   </div>;
 };
 

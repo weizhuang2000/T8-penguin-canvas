@@ -121,10 +121,11 @@ export async function buildReverseIsometricLayoutReference(planUrl: string, item
   return canvas.toDataURL('image/png');
 }
 
-export function ReverseIsometricLayoutModal({ open, planUrl, allowBlankStage = false, aspectRatio = '1 / 1', title = '反推轴侧 · 手动排版', items, disabled, onChange, onClose, onReset }: {
+export function ReverseIsometricLayoutModal({ open, planUrl, allowBlankStage = false, aspectRatio = '1 / 1', title = '反推轴侧 · 手动排版', hallLengthMm, hallWidthMm, items, disabled, onChange, onDimensionsChange, onClose, onReset }: {
   open: boolean; planUrl: string; items: ReverseIsometricLayoutItem[]; disabled: boolean;
-  allowBlankStage?: boolean; aspectRatio?: string; title?: string;
+  allowBlankStage?: boolean; aspectRatio?: string; title?: string; hallLengthMm?: number; hallWidthMm?: number;
   onChange: (items: ReverseIsometricLayoutItem[]) => void; onClose: () => void; onReset: () => void;
+  onDimensionsChange?: (dimensions: { hallLengthMm: number; hallWidthMm: number }) => void;
 }) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragSession | null>(null);
@@ -233,6 +234,14 @@ export function ReverseIsometricLayoutModal({ open, planUrl, allowBlankStage = f
             </div> : <div className="rounded border border-dashed border-white/20 px-6 py-10 text-sm text-white/45">请先连接平面布局图</div>}
           </main>
           <aside className="min-h-0 space-y-3 overflow-y-auto border-l border-white/10 p-3">
+            {onDimensionsChange && <div className="space-y-2 rounded border border-cyan-300/20 bg-cyan-300/[0.06] p-2">
+              <div className="text-[11px] font-semibold text-cyan-100">展厅尺寸</div>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block text-[9px] text-white/55">长 mm<input className={FIELD} type="number" min={1000} max={100000} step={100} value={hallLengthMm || 12000} disabled={disabled} onChange={(event) => onDimensionsChange({ hallLengthMm: Math.min(100000, Math.max(1000, Math.round(Number(event.target.value) || 12000))), hallWidthMm: hallWidthMm || 8000 })} /></label>
+                <label className="block text-[9px] text-white/55">宽 mm<input className={FIELD} type="number" min={1000} max={100000} step={100} value={hallWidthMm || 8000} disabled={disabled} onChange={(event) => onDimensionsChange({ hallLengthMm: hallLengthMm || 12000, hallWidthMm: Math.min(100000, Math.max(1000, Math.round(Number(event.target.value) || 8000))) })} /></label>
+              </div>
+              <div className="text-[9px] text-white/40">{planUrl ? '尺寸用于约束真实空间尺度，底图比例保持不变。' : '空白矩形按展厅长宽比例显示。'}</div>
+            </div>}
             <div className="text-[11px] font-semibold text-cyan-100">图层（{draft.length}）</div>
             {draft.map((item) => <button key={item.id} className={`flex w-full items-center gap-2 rounded border p-1.5 text-left ${item.id === selectedId ? 'border-cyan-300/60 bg-cyan-300/10' : 'border-white/10 bg-white/[0.03]'}`} onClick={() => setSelectedId(item.id)}><img src={item.url} className="h-9 w-9 rounded object-cover" /><span className="min-w-0 flex-1 truncate text-[10px]">{item.label}</span></button>)}
             {selected && <div className="space-y-2 rounded border border-white/10 bg-black/20 p-2">
