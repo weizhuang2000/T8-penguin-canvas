@@ -217,6 +217,14 @@ export function ReverseIsometricLayoutModal({ open, planUrl, allowBlankStage = f
           <main className="flex min-h-0 items-center justify-center overflow-auto bg-slate-950/70 p-5">
             {planUrl || allowBlankStage ? <div ref={stageRef} className={`relative max-h-[78vh] max-w-full overflow-hidden border-2 border-cyan-300/60 bg-white shadow-2xl ${planUrl ? '' : 'w-full max-w-5xl'}`} style={{ aspectRatio: planUrl ? 'auto' : aspectRatio }} onPointerDown={() => setSelectedId('')}>
               {planUrl ? <img src={planUrl} alt="平面布局锁定底图" className="block max-h-[78vh] max-w-full select-none object-contain" draggable={false} /> : <div className="h-full w-full bg-white" aria-label="空白矩形空间" />}
+              {onDimensionsChange && <div className="pointer-events-none absolute inset-0 z-[10000] text-cyan-950">
+                <div className="absolute bottom-2 left-4 right-4 flex items-center gap-1.5 drop-shadow-[0_1px_1px_rgba(255,255,255,0.95)]">
+                  <span className="h-px flex-1 bg-cyan-700/80" /><span className="h-2 w-px bg-cyan-700/80" /><span className="rounded bg-white/85 px-1.5 py-0.5 text-[10px] font-semibold">展厅长 {hallLengthMm || 12000} mm</span><span className="h-2 w-px bg-cyan-700/80" /><span className="h-px flex-1 bg-cyan-700/80" />
+                </div>
+                <div className="absolute bottom-4 left-2 top-4 flex flex-col items-center gap-1.5 drop-shadow-[0_1px_1px_rgba(255,255,255,0.95)]">
+                  <span className="w-px flex-1 bg-cyan-700/80" /><span className="h-px w-2 bg-cyan-700/80" /><span className="whitespace-nowrap rounded bg-white/85 px-1.5 py-0.5 text-[10px] font-semibold [writing-mode:vertical-rl]">展厅宽 {hallWidthMm || 8000} mm</span><span className="h-px w-2 bg-cyan-700/80" /><span className="w-px flex-1 bg-cyan-700/80" />
+                </div>
+              </div>}
               {[...draft].sort((a, b) => a.zIndex - b.zIndex).map((item) => {
                 const active = item.id === selectedId;
                 return <div key={item.id} className={`absolute touch-none ${active ? 'ring-2 ring-amber-300' : 'ring-1 ring-cyan-200/60'}`} style={{ left: `${item.xRatio * 100}%`, top: `${item.yRatio * 100}%`, width: `${item.widthRatio * 100}%`, height: `${item.heightRatio * 100}%`, zIndex: item.zIndex, transform: `rotate(${item.rotationDeg}deg)`, transformOrigin: 'center' }} onPointerDown={(event) => startDrag(event, item, 'move')}>

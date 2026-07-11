@@ -44,11 +44,86 @@ function createBlankStage(hallLengthMm: number, hallWidthMm: number): string {
   context.strokeStyle = '#d4d4d8';
   context.lineWidth = Math.max(2, Math.round(Math.min(canvas.width, canvas.height) * 0.004));
   context.strokeRect(context.lineWidth / 2, context.lineWidth / 2, canvas.width - context.lineWidth, canvas.height - context.lineWidth);
+  drawHallDimensions(context, canvas.width, canvas.height, hallLengthMm, hallWidthMm);
+  return canvas.toDataURL('image/png');
+}
+
+function loadStageImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('无法读取平面布局图'));
+    image.src = src;
+  });
+}
+
+function drawHallDimensions(context: CanvasRenderingContext2D, width: number, height: number, hallLengthMm: number, hallWidthMm: number) {
+  const margin = Math.max(18, Math.round(Math.min(width, height) * 0.035));
+  const inset = Math.max(28, margin * 2);
+  context.save();
+  context.strokeStyle = '#0e7490';
+  context.fillStyle = 'rgba(255,255,255,0.9)';
+  context.lineWidth = Math.max(2, Math.round(Math.min(width, height) * 0.0025));
+  context.font = `600 ${Math.max(14, Math.round(Math.min(width, height) * 0.025))}px sans-serif`;
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+
+  const bottomY = height - margin;
+  context.beginPath();
+  context.moveTo(inset, bottomY);
+  context.lineTo(width - inset, bottomY);
+  context.moveTo(inset, bottomY - margin / 3);
+  context.lineTo(inset, bottomY + margin / 3);
+  context.moveTo(width - inset, bottomY - margin / 3);
+  context.lineTo(width - inset, bottomY + margin / 3);
+  context.stroke();
+  const lengthText = `展厅长 ${hallLengthMm} mm`;
+  const lengthMetrics = context.measureText(lengthText);
+  context.fillRect(width / 2 - lengthMetrics.width / 2 - 8, bottomY - margin / 2, lengthMetrics.width + 16, margin);
+  context.fillStyle = '#164e63';
+  context.fillText(lengthText, width / 2, bottomY);
+
+  const leftX = margin;
+  context.strokeStyle = '#0e7490';
+  context.beginPath();
+  context.moveTo(leftX, inset);
+  context.lineTo(leftX, height - inset);
+  context.moveTo(leftX - margin / 3, inset);
+  context.lineTo(leftX + margin / 3, inset);
+  context.moveTo(leftX - margin / 3, height - inset);
+  context.lineTo(leftX + margin / 3, height - inset);
+  context.stroke();
+  context.translate(leftX, height / 2);
+  context.rotate(-Math.PI / 2);
+  const widthText = `展厅宽 ${hallWidthMm} mm`;
+  const widthMetrics = context.measureText(widthText);
+  context.fillStyle = 'rgba(255,255,255,0.9)';
+  context.fillRect(-widthMetrics.width / 2 - 8, -margin / 2, widthMetrics.width + 16, margin);
+  context.fillStyle = '#164e63';
+  context.fillText(widthText, 0, 0);
+  context.restore();
+}
+
+async function createDimensionedStage(planUrl: string, hallLengthMm: number, hallWidthMm: number): Promise<string> {
+  if (!planUrl) return createBlankStage(hallLengthMm, hallWidthMm);
+  const image = await loadStageImage(planUrl);
+  const naturalWidth = image.naturalWidth || image.width || 1;
+  const naturalHeight = image.naturalHeight || image.height || 1;
+  const scale = Math.min(1, 1600 / Math.max(naturalWidth, naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(320, Math.round(naturalWidth * scale));
+  canvas.height = Math.max(320, Math.round(naturalHeight * scale));
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('当前浏览器无法创建尺寸标注底图');
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  drawHallDimensions(context, canvas.width, canvas.height, hallLengthMm, hallWidthMm);
   return canvas.toDataURL('image/png');
 }
 
 async function buildFusionLayoutReference(planUrl: string, hallLengthMm: number, hallWidthMm: number, items: ReverseIsometricLayoutItem[]): Promise<string> {
-  return buildReverseIsometricLayoutReference(planUrl || createBlankStage(hallLengthMm, hallWidthMm), items);
+  const dimensionedStage = await createDimensionedStage(planUrl, hallLengthMm, hallWidthMm);
+  return buildReverseIsometricLayoutReference(dimensionedStage, items);
 }
 
 const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {

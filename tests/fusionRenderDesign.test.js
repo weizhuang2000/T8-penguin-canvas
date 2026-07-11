@@ -43,7 +43,8 @@ test('blank rectangle follows hall dimensions and layout transforms use the shar
   assert.match(node, /createBlankStage\(hallLengthMm, hallWidthMm\)/);
   assert.match(node, /aspectRatio=\{`\$\{hallLengthMm\} \/ \$\{hallWidthMm\}`\}/);
   assert.match(node, /空白矩形空间/);
-  assert.match(node, /buildReverseIsometricLayoutReference\(planUrl \|\| createBlankStage\(hallLengthMm, hallWidthMm\), items\)/);
+  assert.match(node, /createDimensionedStage\(planUrl, hallLengthMm, hallWidthMm\)/);
+  assert.match(node, /buildReverseIsometricLayoutReference\(dimensionedStage, items\)/);
   for (const term of ['stretch-x', 'stretch-y', 'scale', 'rotate', '源图裁剪', 'zIndex']) assert.match(editor, new RegExp(term));
 });
 
@@ -98,9 +99,13 @@ test('layout editor configures hall length and width and prompt uses physical di
   assert.match(editor, /展厅尺寸/);
   assert.match(editor, />长 mm<input/);
   assert.match(editor, />宽 mm<input/);
+  assert.match(editor, /展厅长 \{hallLengthMm \|\| 12000\} mm/);
+  assert.match(editor, /展厅宽 \{hallWidthMm \|\| 8000\} mm/);
+  assert.match(node, /drawHallDimensions\(context, canvas\.width, canvas\.height, hallLengthMm, hallWidthMm\)/);
 
   const prompt = buildFusionRenderPrompt({ hallLengthMm: 18000, hallWidthMm: 9000, hallHeightMm: 5000 });
   assert.match(prompt, /长 18000 mm、宽 9000 mm、净高 5000 mm/);
   assert.match(prompt, /长宽高比例/);
+  assert.match(prompt, /底面上的“展厅长\/展厅宽”尺寸线/);
   assert.match(read('src/components/Canvas.tsx'), /'fusion-render-design':[\s\S]*hallLengthMm: 12000,[\s\S]*hallWidthMm: 8000/);
 });
