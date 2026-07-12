@@ -2537,10 +2537,10 @@ router.post('/runninghub/video/submit', requireNodePermission(['video', 'running
   if (!apiKey) return res.status(400).json({ success: false, error: missingRhKeyError() });
   try {
     const normalized = normalizeRunningHubVideoRequest(req.body || {});
-    const body = {
-      ...normalized.body,
-      imageUrls: normalized.body.imageUrls.map((ref) => runningHubVideoImageRef(ref, normalized.maxImageBytes)),
-    };
+    const body = { ...normalized.body };
+    const convertedImages = normalized.imageUrls.map((ref) => runningHubVideoImageRef(ref, normalized.maxImageBytes));
+    if (normalized.imageField === 'imageUrl') body.imageUrl = convertedImages[0];
+    else if (normalized.imageField === 'imageUrls') body.imageUrls = convertedImages;
     const response = await fetch(`${config.RH_BASE_URL}${normalized.path}`, {
       method: 'POST',
       headers: {

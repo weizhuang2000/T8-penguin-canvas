@@ -784,6 +784,7 @@ export interface RunningHubVideoSubmitRequest {
   imageUrls?: string[];
   resolution: '480p' | '720p' | string;
   duration: number;
+  storyboard?: boolean;
   historyContext?: GenerationHistoryContext;
 }
 

@@ -186,6 +186,8 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
     : grokVideo15NewSizeFromRatio(ratio);
   const isSoraZhenzhen = !isExternalSelected && modelDef.kind === 'sora' && !isFal;
   const isRunningHubVideo = !isExternalSelected && modelDef.kind === 'runninghub';
+  const supportsReferenceImages = modelDef.supportImages && (!isRunningHubVideo || runningHubModel.maxRefImages > 0);
+  const runningHubStoryboard = d?.runningHubStoryboard === true;
   const isVeoOmni = !isExternalSelected && apiModel === 'veo-omni-10s';
   const showBuiltinFalControls = !isExternalSelected && isFal && !!falReg;
   const showGenericVideoControls = isExternalSelected || !isFal;
@@ -570,8 +572,12 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
 
       // === FAL 分支 ===
       if (isRunningHubVideo) {
-        if (finalPrompt.length < runningHubModel.promptMin || finalPrompt.length > runningHubModel.promptMax) {
-          throw new Error(`当前 RunningHub 模型的 Prompt 长度须为 ${runningHubModel.promptMin}-${runningHubModel.promptMax} 个字符`);
+        const promptTooLong = runningHubModel.promptMax !== undefined && finalPrompt.length > runningHubModel.promptMax;
+        if (finalPrompt.length < runningHubModel.promptMin || promptTooLong) {
+          const promptRange = runningHubModel.promptMax === undefined
+            ? `至少 ${runningHubModel.promptMin}`
+            : `${runningHubModel.promptMin}-${runningHubModel.promptMax}`;
+          throw new Error(`当前 RunningHub 模型的 Prompt 长度须为 ${promptRange} 个字符`);
         }
         if (imageUrls.length < runningHubModel.minRefImages) {
           throw new Error(`当前 RunningHub 模型至少需要 ${runningHubModel.minRefImages} 张参考图`);
@@ -588,6 +594,7 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
           imageUrls: refs,
           resolution: resolution || runningHubModel.defaultResolution,
           duration: Number(duration) || runningHubModel.defaultDuration,
+          storyboard: runningHubModel.supportsStoryboard ? runningHubStoryboard : undefined,
         });
         update({ status: 'polling', taskId: r.taskId, lastPrompt: finalPrompt, progress: '0%' });
         logBus.info(`RunningHub 视频任务已提交 taskId=${r.taskId}`, src);
@@ -1159,10 +1166,23 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
 
         {isRunningHubVideo && (
           <div className="rounded border border-cyan-400/20 bg-cyan-500/5 px-2 py-1.5 text-[10px] leading-relaxed text-white/50">
-            {runningHubModel.description}复用 API Key 管理中的企业级共享 RunningHub API Key；参考图
-            {runningHubModel.minRefImages > 0 ? `至少 ${runningHubModel.minRefImages} 张，` : '可选，'}
-            最多 {runningHubModel.maxRefImages} 张（单张 {runningHubModel.maxImageSizeMb}MB），结果会自动转存到本地 output。
+            {runningHubModel.description}复用 API Key 管理中的企业级共享 RunningHub API Key；
+            {runningHubModel.maxRefImages > 0
+              ? `参考图${runningHubModel.minRefImages > 0 ? `至少 ${runningHubModel.minRefImages} 张，` : '可选，'}最多 ${runningHubModel.maxRefImages} 张（单张 ${runningHubModel.maxImageSizeMb}MB）`
+              : '文生视频无需参考图'}，结果会自动转存到本地 output。
           </div>
+        )}
+
+        {isRunningHubVideo && runningHubModel.supportsStoryboard && (
+          <label className="flex items-center gap-1.5 text-[10px] text-white/60 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={runningHubStoryboard}
+              onChange={(e) => update({ runningHubStoryboard: e.target.checked })}
+              className="accent-cyan-400"
+            />
+            Storyboard 分镜模式
+          </label>
         )}
 
         {isVeoOmni && (
@@ -1313,7 +1333,7 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
         )}
 
         {/* 上游素材聚合预览区 (代替原「参考图(上游)」计数提示) */}
-        {modelDef.supportImages && (
+        {supportsReferenceImages && (
           <MaterialPreviewSection
             texts={orderedTexts}
             images={orderedImages}
@@ -1333,7 +1353,7 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
         )}
 
         {/* 本地拖入参考素材 (Ctrl+拖拽自其他节点) */}
-        {modelDef.supportImages && (localRefImages.length + localRefVideos.length + localRefAudios.length) > 0 && (
+        {supportsReferenceImages && (localRefImages.length + localRefVideos.length + localRefAudios.length) > 0 && (
           <div className="rounded border border-emerald-400/30 bg-emerald-500/5 p-1.5 space-y-1">
             <div className="text-[10px] text-emerald-200/80">
               本地拖入 · 图{localRefImages.length} 视{localRefVideos.length} 音{localRefAudios.length}

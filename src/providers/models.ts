@@ -419,6 +419,7 @@ export interface RunningHubVideoModelDef {
   value: string;
   label: string;
   description: string;
+  mode: 'image' | 'text';
   ratios: string[];
   defaultRatio: string;
   durations: number[];
@@ -426,10 +427,11 @@ export interface RunningHubVideoModelDef {
   resolutions: string[];
   defaultResolution: string;
   promptMin: number;
-  promptMax: number;
+  promptMax?: number;
   minRefImages: number;
   maxRefImages: number;
   maxImageSizeMb: number;
+  supportsStoryboard?: boolean;
 }
 
 export const RUNNINGHUB_VIDEO_MODELS: RunningHubVideoModelDef[] = [
@@ -437,6 +439,7 @@ export const RUNNINGHUB_VIDEO_MODELS: RunningHubVideoModelDef[] = [
     value: 'rhart-video-g/image-to-video',
     label: '全能视频X · 图生视频 v1.5',
     description: '低价渠道版 v1.5；参考图可选，支持 480p/720p 与 6-30 秒。',
+    mode: 'image',
     ratios: ['2:3', '3:2', '1:1', '16:9', '9:16'],
     defaultRatio: '16:9',
     durations: Array.from({ length: 25 }, (_, index) => index + 6),
@@ -450,9 +453,46 @@ export const RUNNINGHUB_VIDEO_MODELS: RunningHubVideoModelDef[] = [
     maxImageSizeMb: 10,
   },
   {
+    value: 'rhart-video-s/image-to-video',
+    label: '全能视频S · 图生视频低价渠道版',
+    description: '全能视频S低价渠道图生视频；固定 720p，支持音画同步与分镜模式。',
+    mode: 'image',
+    ratios: ['9:16', '16:9'],
+    defaultRatio: '9:16',
+    durations: [10, 15],
+    defaultDuration: 10,
+    resolutions: [],
+    defaultResolution: '',
+    promptMin: 5,
+    promptMax: 4000,
+    minRefImages: 1,
+    maxRefImages: 1,
+    maxImageSizeMb: 50,
+    supportsStoryboard: true,
+  },
+  {
+    value: 'rhart-video-s/text-to-video',
+    label: '全能视频S · 文生视频低价渠道版',
+    description: '全能视频S低价渠道文生视频；固定 720p，支持音画同步与分镜模式。',
+    mode: 'text',
+    ratios: ['9:16', '16:9'],
+    defaultRatio: '9:16',
+    durations: [10, 15],
+    defaultDuration: 10,
+    resolutions: [],
+    defaultResolution: '',
+    promptMin: 5,
+    promptMax: 4000,
+    minRefImages: 0,
+    maxRefImages: 0,
+    maxImageSizeMb: 0,
+    supportsStoryboard: true,
+  },
+  {
     value: 'rhart-video-v3.1-fast/image-to-video',
     label: '全能视频V3.1-fast · 图生视频低价渠道版',
     description: 'V3.1 高性价比速享版；固定 8 秒，支持原生音画同步与 720p/1080p/4k。',
+    mode: 'image',
     ratios: ['16:9', '9:16'],
     defaultRatio: '16:9',
     durations: [8],
@@ -464,6 +504,38 @@ export const RUNNINGHUB_VIDEO_MODELS: RunningHubVideoModelDef[] = [
     minRefImages: 1,
     maxRefImages: 3,
     maxImageSizeMb: 30,
+  },
+  {
+    value: 'rhart-video-s-official/image-to-video',
+    label: '全能视频S · 图生视频官方稳定版',
+    description: '官方稳定图生视频；固定 720p，图片须为 1280x720 或 720x1280。',
+    mode: 'image',
+    ratios: ['16:9', '9:16'],
+    defaultRatio: '16:9',
+    durations: [4, 8, 12],
+    defaultDuration: 4,
+    resolutions: [],
+    defaultResolution: '',
+    promptMin: 1,
+    minRefImages: 1,
+    maxRefImages: 1,
+    maxImageSizeMb: 10,
+  },
+  {
+    value: 'rhart-video-s-official/text-to-video',
+    label: '全能视频S · 文生视频官方稳定版',
+    description: '官方稳定文生视频；固定 720p，支持 4/8/12 秒与横竖屏。',
+    mode: 'text',
+    ratios: ['16:9', '9:16'],
+    defaultRatio: '16:9',
+    durations: [4, 8, 12],
+    defaultDuration: 4,
+    resolutions: [],
+    defaultResolution: '',
+    promptMin: 1,
+    minRefImages: 0,
+    maxRefImages: 0,
+    maxImageSizeMb: 0,
   },
 ];
 
