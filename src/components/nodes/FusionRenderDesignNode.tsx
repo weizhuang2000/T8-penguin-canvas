@@ -144,6 +144,7 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
   const layoutItems = useMemo(() => normalizeReverseIsometricLayoutItems(d.manualLayoutItems, activeExhibitImages), [activeExhibitImages, d.manualLayoutItems]);
   const viewDirection = normalizeReverseIsometricDirection(d.viewDirection);
   const venueType = FUSION_RENDER_VENUE_TYPES.includes(d.venueType) ? d.venueType : FUSION_RENDER_VENUE_TYPES[0];
+  const hallSubject = typeof d.hallSubject === 'string' ? d.hallSubject : '';
   const imageProviders = useMemo(() => advancedProvidersForNode(advancedProviders, 'image'), [advancedProviders]);
   const providerSelection = useMemo(() => resolveAdvancedProviderSelection(advancedProviders, 'image', { providerSource: d.providerSource, providerId: d.providerId, providerModel: d.providerModel }), [advancedProviders, d.providerId, d.providerModel, d.providerSource]);
   const isExternal = providerSelection.available && providerSelection.providerSource !== 'zhenzhen';
@@ -164,7 +165,7 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
   const busy = d.status === 'generating';
   const wallPlacementText = useMemo(() => describeWallAdjacentExhibits(layoutItems), [layoutItems]);
   const layoutDescription = useMemo(() => describeFusionRenderLayout(layoutItems), [layoutItems]);
-  const previewPrompt = useMemo(() => buildFusionRenderPrompt({ hasPlan: Boolean(planImage), venueType, viewDirection, hallLengthMm, hallWidthMm, hallHeightMm, floorMaterial, ceilingCraft, layoutDescription, wallPlacementText, exhibitCount: layoutItems.length }), [ceilingCraft, floorMaterial, hallHeightMm, hallLengthMm, hallWidthMm, layoutDescription, layoutItems.length, planImage, venueType, viewDirection, wallPlacementText]);
+  const previewPrompt = useMemo(() => buildFusionRenderPrompt({ hasPlan: Boolean(planImage), venueType, hallSubject, viewDirection, hallLengthMm, hallWidthMm, hallHeightMm, floorMaterial, ceilingCraft, layoutDescription, wallPlacementText, exhibitCount: layoutItems.length }), [ceilingCraft, floorMaterial, hallHeightMm, hallLengthMm, hallSubject, hallWidthMm, layoutDescription, layoutItems.length, planImage, venueType, viewDirection, wallPlacementText]);
 
   useEffect(() => {
     const connected = new Set(exhibitImages.map((item) => item.url));
@@ -267,6 +268,7 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
       </section>
       <section data-exhibition-compact-section="view" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
         <label className="block space-y-1"><span className="text-[10px] text-white/55">展馆类型</span><select className={FIELD} value={venueType} disabled={isReadonly || busy} onChange={(e) => update({ venueType: e.target.value })}>{FUSION_RENDER_VENUE_TYPES.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+        <label className="block space-y-1"><span className="text-[10px] text-white/55">展厅主体（留空则根据展项定义）</span><textarea className={`${FIELD} min-h-16 resize-y`} value={hallSubject} disabled={isReadonly || busy} placeholder="例如：未来能源科技互动体验；留空自动归纳" onChange={(e) => update({ hallSubject: e.target.value })} /></label>
         <div className="text-[11px] font-semibold text-cyan-100">透视相机观察方向</div><div className="grid grid-cols-4 gap-1">{REVERSE_ISOMETRIC_DIRECTIONS.map((item) => <button key={item.value} className={`rounded px-1 py-1.5 text-[10px] ${viewDirection === item.value ? 'bg-cyan-300/20 text-cyan-100' : 'bg-black/20 text-white/50'}`} disabled={isReadonly || busy} onClick={() => update({ viewDirection: item.value })}>{item.label}</button>)}</div>
         <label className="block space-y-1"><span className="text-[10px] text-white/55">顶部工艺</span><select className={FIELD} value={ceilingCraft} disabled={isReadonly || busy} onChange={(e) => update({ ceilingCraft: e.target.value })}><option value={FUSION_RENDER_AUTO_CEILING_CRAFT}>{FUSION_RENDER_AUTO_CEILING_CRAFT}</option>{FUSION_RENDER_CEILING_CRAFTS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
         <div className="grid grid-cols-2 gap-2"><label className="space-y-1"><span className="text-[10px] text-white/55">展厅净高 mm</span><input className={FIELD} type="number" min={2400} max={12000} step={100} value={hallHeightMm} disabled={isReadonly || busy} onChange={(e) => update({ hallHeightMm: Math.min(12000, Math.max(2400, Math.round(Number(e.target.value) || 4200))) })} /></label><label className="space-y-1"><span className="text-[10px] text-white/55">地面材质</span><select className={FIELD} value={floorMaterial} disabled={isReadonly || busy} onChange={(e) => update({ floorMaterial: e.target.value })}><option value={FUSION_RENDER_AUTO_FLOOR_MATERIAL}>{FUSION_RENDER_AUTO_FLOOR_MATERIAL}</option>{REVERSE_ISOMETRIC_FLOOR_MATERIALS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label></div>

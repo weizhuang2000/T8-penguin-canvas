@@ -1197,6 +1197,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     outputFormat: 'jpg',
     seed: 0,
     venueType: '科技馆',
+    hallSubject: '',
     viewDirection: 'front-left',
     hallLengthMm: 12000,
     hallWidthMm: 8000,

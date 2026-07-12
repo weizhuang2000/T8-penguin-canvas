@@ -86,6 +86,7 @@ export function describeFusionRenderLayout(items = []) {
 export function buildFusionRenderPrompt({
   hasPlan = false,
   venueType = FUSION_RENDER_VENUE_TYPES[0],
+  hallSubject = '',
   viewDirection = 'front-left',
   hallLengthMm = 12000,
   hallWidthMm = 8000,
@@ -98,6 +99,10 @@ export function buildFusionRenderPrompt({
 } = {}) {
   const direction = REVERSE_ISOMETRIC_DIRECTIONS.find((item) => item.value === normalizeReverseIsometricDirection(viewDirection));
   const safeVenueType = FUSION_RENDER_VENUE_TYPES.includes(venueType) ? venueType : FUSION_RENDER_VENUE_TYPES[0];
+  const safeHallSubject = String(hallSubject || '').trim();
+  const subjectConstraint = safeHallSubject
+    ? `展厅主体：明确以“${safeHallSubject}”作为整个展厅的核心主题、空间叙事和氛围方向。所有空间设计、墙面内容、环境图形、色材、灯光与辅助展陈必须围绕该主体展开。`
+    : '展厅主体：当前未填写，由模型根据全部接入展项的共同主题、内容属性、视觉风格和科技方向自动归纳一个统一、明确的展厅主体，并以此组织空间叙事、墙面内容和环境氛围。';
   const safeLength = clamp(Math.round(finite(hallLengthMm, 12000)), 1000, 100000);
   const safeWidth = clamp(Math.round(finite(hallWidthMm, 8000)), 1000, 100000);
   const safeHeight = clamp(Math.round(finite(hallHeightMm, 4200)), 2400, 12000);
@@ -120,9 +125,11 @@ export function buildFusionRenderPrompt({
     : `@img1 是矩形空间内的俯视排版定位图；${exhibitCount > 0 ? `@img${firstExhibitIndex} 至 @img${lastExhibitIndex} 是按排版顺序对应的展项原始外观参考。` : ''}`;
 
   return [
-    '任务：把参考展项融合进同一个博物馆/展馆空间，生成一张写实、完整、可用于方案汇报的展陈空间效果图。',
+    `核心任务：以生成一张“${safeVenueType}”类型的完整展厅效果图为主，先建立真实、自然、有明确空间设计和环境氛围的展厅，再把所有接入的展项参考图作为展陈素材，按照排版定位图指定的底面关系融入该效果图中。接入图像是展项外观与内容素材，不是要求逐张完整展示的独立画面。`,
     `展馆类型：${safeVenueType}。空间设计、环境氛围、辅助内容、专业设施和空档填充必须符合该类型展馆的功能属性与行业特征。`,
-    `相机观察方向：从${direction?.label || '左前'}方向观察空间。使用正常人眼高度的广角透视，画面需要同时表现空间关系与展项；不得输出俯视平面图、轴侧图或高空鸟瞰图。`,
+    subjectConstraint,
+    `相机观察方向：从${direction?.label || '左前'}方向观察空间。相机必须保持约 1.4–1.6 米的较低正常人眼高度，使用平视或轻微仰视的自然广角透视，不得采用架高机位、俯拍、鸟瞰或接近轴侧的视角。不要为了让所有展项同时完整出现在画面中而提高相机、扩大俯角或压缩空间纵深；不得输出俯视平面图、轴侧图或高空鸟瞰图。`,
+    '遮挡与构图：展项可以按照真实空间前后关系被其他展项、墙体、辅助结构或画面边缘自然局部遮挡，也可以有部分展项位于画面之外；无需强行让每个展项完整露脸。遮挡不能改变展项的真实底面位置、占地比例和层级，也不能把被遮挡展项从空间中删除。最终画面应优先呈现可信的人眼游览体验和自然空间纵深。',
     `参考图角色：${referenceRoles}`,
     '主展项排版是最高优先级硬约束：必须逐一严格复现排版定位图中每个已接入展项相对于底面的中心位置、占地宽深比例、彼此间距、前后遮挡和层级关系。禁止为了构图、透视、美观、补充环境或填充空档而移动、交换、聚拢、分散、放大、缩小、旋转或删除任何主展项。',
     layoutDescription ? `主展项排版数值清单（底面左上角为 0%,0%，右下角为 100%,100%；这些数值与排版定位图共同构成硬约束）：\n${layoutDescription}` : '',

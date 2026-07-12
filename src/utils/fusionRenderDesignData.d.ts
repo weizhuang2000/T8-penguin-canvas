@@ -10,6 +10,7 @@ export function describeFusionRenderLayout(items?: ReverseIsometricLayoutItem[])
 export function buildFusionRenderPrompt(options?: {
   hasPlan?: boolean;
   venueType?: string;
+  hallSubject?: string;
   viewDirection?: ReverseIsometricDirection;
   hallLengthMm?: number;
   hallWidthMm?: number;

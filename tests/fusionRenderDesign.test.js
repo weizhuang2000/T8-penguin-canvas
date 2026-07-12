@@ -71,7 +71,7 @@ test('prompt describes both structural modes and always requests one realistic p
   assert.match(blank, /@img1 是矩形空间内的俯视排版定位图/);
   assert.match(blank, /@img2 至 @img3/);
   assert.match(blank, /简洁、完整的矩形展厅/);
-  for (const term of ['写实', '展陈空间效果图', '底座落地', '禁止拼版', '不得输出俯视平面图、轴侧图']) assert.match(blank, new RegExp(term));
+  for (const term of ['完整展厅效果图', '底座落地', '禁止拼版', '不得输出俯视平面图、轴侧图']) assert.match(blank, new RegExp(term));
 });
 
 test('ceiling craft offers automatic styling first plus twenty common crafts', () => {
@@ -168,7 +168,7 @@ test('venue type defaults to science museum and offers twenty common choices', (
   assert.match(prompt, /符合“自然博物馆”属性/);
   assert.doesNotMatch(prompt, /展陈空间透视效果图/);
   assert.doesNotMatch(prompt, /展项正立面/);
-  assert.match(prompt, /画面需要同时表现空间关系与展项；/);
+  assert.match(prompt, /相机必须保持约 1\.4–1\.6 米的较低正常人眼高度/);
   assert.match(prompt, /中心位置、占地宽深比例、彼此间距、前后遮挡和层级关系/);
   assert.doesNotMatch(prompt, /占地宽深比例、旋转朝向、彼此间距/);
   assert.match(prompt, /禁止为了构图、透视、美观、补充环境或填充空档而移动、交换、聚拢、分散、放大、缩小、旋转或删除任何主展项/);
@@ -195,4 +195,27 @@ test('floor design defaults to exhibit-driven styling and visible walls are neve
   const node = read('src/components/nodes/FusionRenderDesignNode.tsx');
   assert.match(node, /<option value=\{FUSION_RENDER_AUTO_FLOOR_MATERIAL\}>\{FUSION_RENDER_AUTO_FLOOR_MATERIAL\}<\/option>\{REVERSE_ISOMETRIC_FLOOR_MATERIALS\.map/);
   assert.match(read('src/components/Canvas.tsx'), /'fusion-render-design':[\s\S]*floorMaterial: '根据展项来设计'/);
+});
+
+test('hall subject can be explicit or inferred while camera stays low and allows occlusion', () => {
+  const inferred = buildFusionRenderPrompt({ venueType: '科技馆', hallSubject: '', exhibitCount: 3 });
+  assert.match(inferred, /当前未填写，由模型根据全部接入展项的共同主题、内容属性、视觉风格和科技方向自动归纳/);
+
+  const explicit = buildFusionRenderPrompt({ venueType: '科技馆', hallSubject: '未来能源科技互动体验', exhibitCount: 3 });
+  assert.match(explicit, /核心任务：以生成一张“科技馆”类型的完整展厅效果图为主/);
+  assert.match(explicit, /把所有接入的展项参考图作为展陈素材/);
+  assert.match(explicit, /接入图像是展项外观与内容素材，不是要求逐张完整展示的独立画面/);
+  assert.match(explicit, /展厅主体：明确以“未来能源科技互动体验”作为整个展厅的核心主题/);
+  assert.match(explicit, /1\.4–1\.6 米的较低正常人眼高度/);
+  assert.match(explicit, /平视或轻微仰视/);
+  assert.match(explicit, /不要为了让所有展项同时完整出现在画面中而提高相机/);
+  assert.match(explicit, /展项可以按照真实空间前后关系被其他展项、墙体、辅助结构或画面边缘自然局部遮挡/);
+  assert.match(explicit, /也可以有部分展项位于画面之外/);
+  assert.match(explicit, /无需强行让每个展项完整露脸/);
+  assert.match(explicit, /遮挡不能改变展项的真实底面位置、占地比例和层级/);
+
+  const node = read('src/components/nodes/FusionRenderDesignNode.tsx');
+  assert.match(node, /展厅主体（留空则根据展项定义）/);
+  assert.match(node, /placeholder="例如：未来能源科技互动体验；留空自动归纳"/);
+  assert.match(read('src/components/Canvas.tsx'), /'fusion-render-design':[\s\S]*hallSubject: ''/);
 });
