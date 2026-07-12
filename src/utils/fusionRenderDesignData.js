@@ -5,6 +5,7 @@ import {
 } from './reverseIsometricDesignData.js';
 
 export const FUSION_RENDER_AUTO_CEILING_CRAFT = '根据所有展项风格自动调整';
+export const FUSION_RENDER_AUTO_FLOOR_MATERIAL = '根据展项来设计';
 
 export const FUSION_RENDER_VENUE_TYPES = [
   '科技馆',
@@ -89,7 +90,7 @@ export function buildFusionRenderPrompt({
   hallLengthMm = 12000,
   hallWidthMm = 8000,
   hallHeightMm = 4200,
-  floorMaterial = REVERSE_ISOMETRIC_FLOOR_MATERIALS[0],
+  floorMaterial = FUSION_RENDER_AUTO_FLOOR_MATERIAL,
   ceilingCraft = FUSION_RENDER_AUTO_CEILING_CRAFT,
   layoutDescription = '',
   wallPlacementText = '',
@@ -102,7 +103,10 @@ export function buildFusionRenderPrompt({
   const safeHeight = clamp(Math.round(finite(hallHeightMm, 4200)), 2400, 12000);
   const safeFloorMaterial = REVERSE_ISOMETRIC_FLOOR_MATERIALS.includes(floorMaterial)
     ? floorMaterial
-    : REVERSE_ISOMETRIC_FLOOR_MATERIALS[0];
+    : FUSION_RENDER_AUTO_FLOOR_MATERIAL;
+  const floorConstraint = safeFloorMaterial === FUSION_RENDER_AUTO_FLOOR_MATERIAL
+    ? '地面设计：根据全部主展项的主题、风格、色彩、材质、造型语言和灯光气质自动设计与之协调的展厅地面；地面应真实可施工，具有克制的材质分区、拼缝、反射和粗糙度，不得出现与展项无关的抢眼图案。'
+    : `地面设计：统一采用“${safeFloorMaterial}”，材质尺度、反射、粗糙度和拼缝必须真实克制。`;
   const safeCeilingCraft = FUSION_RENDER_CEILING_CRAFTS.includes(ceilingCraft)
     ? ceilingCraft
     : FUSION_RENDER_AUTO_CEILING_CRAFT;
@@ -127,10 +131,12 @@ export function buildFusionRenderPrompt({
     hasPlan
       ? '最高优先级结构锁定：墙体中心线、墙厚关系、连接拓扑、柱网、出入口、门、窗的数量和相对位置必须与 @img1 一致。严禁补墙、拆墙、封门、开洞、移动柱体或重新规划平面。'
       : '空间边界：把 @img1 的矩形边界理解为一个简洁、完整的矩形展厅；不得擅自增加复杂隔墙、异形建筑边界、额外房间或未提供的主要展项。',
-    `展厅实际尺寸：长 ${safeLength} mm、宽 ${safeWidth} mm、净高 ${safeHeight} mm。必须按该长宽高比例建立可信的空间尺度和展项尺度；地面统一采用“${safeFloorMaterial}”，材质尺度、反射、粗糙度和拼缝真实克制。`,
+    `展厅实际尺寸：长 ${safeLength} mm、宽 ${safeWidth} mm、净高 ${safeHeight} mm。必须按该长宽高比例建立可信的空间尺度和展项尺度。`,
+    floorConstraint,
     ceilingConstraint,
     '所有展项必须从各自原始外观参考恢复成可信的三维展陈装置，保持识别特征、色彩、材质和比例；底座落地、立面竖直、尺度可信，不得悬浮。',
     '环境氛围融合：综合全部展项原始外观参考的设计风格、年代气质、主题内容、色彩体系、材质语言和灯光倾向，为整个展厅补齐相符且统一的环境氛围。墙面处理、顶部造型、基础照明、重点照明、空间色温、地面细节、收口节点、踢脚、必要的护栏或参观边界、克制的导向元素及少量辅助环境陈设应形成完整设计，而不是把展项放进空白房间。',
+    `墙面内容硬约束：最终画面中不得出现大面积无内容、无设计的空白墙面。所有可见墙面必须结合“${safeVenueType}”属性和全部主展项主题，采用有明确内容层级的主题图文、科普信息图形、材质肌理、灯光洗墙、嵌入式展示、异形图文墙或与展项协调的空间结构进行完整设计。墙面内容应丰富但克制、远端适度虚化，不得生成乱码或不可读的伪文字，不得遮挡、替代或抢夺主展项视觉中心。`,
     '真实自然约束：环境细节必须尺度合理、可施工、有人使用过的自然状态，光照具有真实的明暗层次、反射、接触阴影和材质响应；允许加入少量不抢主体的参观者剪影或生活化尺度参照，但不得遮挡展项、形成拥挤人群或破坏人工排版。',
     '环境只能服务并衬托已提供的主展项：不得新增未提供的主要展项、与主展项竞争的主题装置、大型雕塑或抢眼视觉中心；不得用环境装饰改变展项位置、朝向、占比、间距和层级。',
     `大空档填充规则：仅当排版底面确实存在连续的大面积空白区域时，才允许在这些空档内补充少量符合“${safeVenueType}”属性、并与全部主展项同主题、同类型、同设计语言的次要互动展项、轻量展示装置或异形图文墙体。补充物只能填补空档，必须与所有主展项保持安全间距和清晰通道，不得覆盖、穿插、遮挡或挤压主展项，不得改变原有动线和主次关系。`,

@@ -5,7 +5,7 @@ import { EXHIBITION_IMAGE_HANDLE_COLOR } from '../../config/portTypes';
 import { IMAGE_MODELS } from '../../providers/models';
 import { generateExternalImage, queryExternalImageStatus, queryImageStatus, submitImageAsync } from '../../services/generation';
 import { advancedProviderModelOptions, advancedProvidersForNode, externalImageSizeFor, resolveAdvancedProviderSelection } from '../../utils/advancedProviders';
-import { FUSION_RENDER_AUTO_CEILING_CRAFT, FUSION_RENDER_CEILING_CRAFTS, FUSION_RENDER_VENUE_TYPES, buildFusionRenderPrompt, describeFusionRenderLayout } from '../../utils/fusionRenderDesignData.js';
+import { FUSION_RENDER_AUTO_CEILING_CRAFT, FUSION_RENDER_AUTO_FLOOR_MATERIAL, FUSION_RENDER_CEILING_CRAFTS, FUSION_RENDER_VENUE_TYPES, buildFusionRenderPrompt, describeFusionRenderLayout } from '../../utils/fusionRenderDesignData.js';
 import {
   REVERSE_ISOMETRIC_DIRECTIONS,
   REVERSE_ISOMETRIC_FLOOR_MATERIALS,
@@ -157,7 +157,7 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
   const hallLengthMm = Math.min(100000, Math.max(1000, Math.round(Number(d.hallLengthMm) || 12000)));
   const hallWidthMm = Math.min(100000, Math.max(1000, Math.round(Number(d.hallWidthMm) || 8000)));
   const hallHeightMm = Math.min(12000, Math.max(2400, Math.round(Number(d.hallHeightMm) || 4200)));
-  const floorMaterial = REVERSE_ISOMETRIC_FLOOR_MATERIALS.includes(d.floorMaterial) ? d.floorMaterial : REVERSE_ISOMETRIC_FLOOR_MATERIALS[0];
+  const floorMaterial = REVERSE_ISOMETRIC_FLOOR_MATERIALS.includes(d.floorMaterial) ? d.floorMaterial : FUSION_RENDER_AUTO_FLOOR_MATERIAL;
   const ceilingCraft = FUSION_RENDER_CEILING_CRAFTS.includes(d.ceilingCraft) ? d.ceilingCraft : FUSION_RENDER_AUTO_CEILING_CRAFT;
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
@@ -269,7 +269,7 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
         <label className="block space-y-1"><span className="text-[10px] text-white/55">展馆类型</span><select className={FIELD} value={venueType} disabled={isReadonly || busy} onChange={(e) => update({ venueType: e.target.value })}>{FUSION_RENDER_VENUE_TYPES.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
         <div className="text-[11px] font-semibold text-cyan-100">透视相机观察方向</div><div className="grid grid-cols-4 gap-1">{REVERSE_ISOMETRIC_DIRECTIONS.map((item) => <button key={item.value} className={`rounded px-1 py-1.5 text-[10px] ${viewDirection === item.value ? 'bg-cyan-300/20 text-cyan-100' : 'bg-black/20 text-white/50'}`} disabled={isReadonly || busy} onClick={() => update({ viewDirection: item.value })}>{item.label}</button>)}</div>
         <label className="block space-y-1"><span className="text-[10px] text-white/55">顶部工艺</span><select className={FIELD} value={ceilingCraft} disabled={isReadonly || busy} onChange={(e) => update({ ceilingCraft: e.target.value })}><option value={FUSION_RENDER_AUTO_CEILING_CRAFT}>{FUSION_RENDER_AUTO_CEILING_CRAFT}</option>{FUSION_RENDER_CEILING_CRAFTS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-        <div className="grid grid-cols-2 gap-2"><label className="space-y-1"><span className="text-[10px] text-white/55">展厅净高 mm</span><input className={FIELD} type="number" min={2400} max={12000} step={100} value={hallHeightMm} disabled={isReadonly || busy} onChange={(e) => update({ hallHeightMm: Math.min(12000, Math.max(2400, Math.round(Number(e.target.value) || 4200))) })} /></label><label className="space-y-1"><span className="text-[10px] text-white/55">地面材质</span><select className={FIELD} value={floorMaterial} disabled={isReadonly || busy} onChange={(e) => update({ floorMaterial: e.target.value })}>{REVERSE_ISOMETRIC_FLOOR_MATERIALS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label></div>
+        <div className="grid grid-cols-2 gap-2"><label className="space-y-1"><span className="text-[10px] text-white/55">展厅净高 mm</span><input className={FIELD} type="number" min={2400} max={12000} step={100} value={hallHeightMm} disabled={isReadonly || busy} onChange={(e) => update({ hallHeightMm: Math.min(12000, Math.max(2400, Math.round(Number(e.target.value) || 4200))) })} /></label><label className="space-y-1"><span className="text-[10px] text-white/55">地面材质</span><select className={FIELD} value={floorMaterial} disabled={isReadonly || busy} onChange={(e) => update({ floorMaterial: e.target.value })}><option value={FUSION_RENDER_AUTO_FLOOR_MATERIAL}>{FUSION_RENDER_AUTO_FLOOR_MATERIAL}</option>{REVERSE_ISOMETRIC_FLOOR_MATERIALS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label></div>
       </section>
       <section data-exhibition-compact-section="model" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
         <div className="flex items-center justify-between"><div className="text-[11px] font-semibold text-cyan-100">模型与尺寸</div><button className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy || !exhibitImages.length} onClick={() => void runGenerate()}>{busy ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}生成</button></div>

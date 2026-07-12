@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   FUSION_RENDER_AUTO_CEILING_CRAFT,
+  FUSION_RENDER_AUTO_FLOOR_MATERIAL,
   FUSION_RENDER_CEILING_CRAFTS,
   FUSION_RENDER_VENUE_TYPES,
   buildFusionRenderPrompt,
@@ -176,4 +177,22 @@ test('venue type defaults to science museum and offers twenty common choices', (
   assert.match(node, /展馆类型/);
   assert.match(node, /FUSION_RENDER_VENUE_TYPES\.map/);
   assert.match(read('src/components/Canvas.tsx'), /'fusion-render-design':[\s\S]*venueType: '科技馆'/);
+});
+
+test('floor design defaults to exhibit-driven styling and visible walls are never empty', () => {
+  assert.equal(FUSION_RENDER_AUTO_FLOOR_MATERIAL, '根据展项来设计');
+  const automatic = buildFusionRenderPrompt({ floorMaterial: FUSION_RENDER_AUTO_FLOOR_MATERIAL, venueType: '科技馆', exhibitCount: 2 });
+  assert.match(automatic, /地面设计：根据全部主展项的主题、风格、色彩、材质、造型语言和灯光气质自动设计/);
+  assert.match(automatic, /不得出现与展项无关的抢眼图案/);
+  assert.match(automatic, /墙面内容硬约束/);
+  assert.match(automatic, /不得出现大面积无内容、无设计的空白墙面/);
+  assert.match(automatic, /主题图文、科普信息图形、材质肌理、灯光洗墙、嵌入式展示、异形图文墙/);
+  assert.match(automatic, /不得生成乱码或不可读的伪文字/);
+
+  const specified = buildFusionRenderPrompt({ floorMaterial: '深灰水磨石' });
+  assert.match(specified, /地面设计：统一采用“深灰水磨石”/);
+
+  const node = read('src/components/nodes/FusionRenderDesignNode.tsx');
+  assert.match(node, /<option value=\{FUSION_RENDER_AUTO_FLOOR_MATERIAL\}>\{FUSION_RENDER_AUTO_FLOOR_MATERIAL\}<\/option>\{REVERSE_ISOMETRIC_FLOOR_MATERIALS\.map/);
+  assert.match(read('src/components/Canvas.tsx'), /'fusion-render-design':[\s\S]*floorMaterial: '根据展项来设计'/);
 });
