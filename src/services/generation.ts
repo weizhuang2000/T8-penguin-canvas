@@ -777,6 +777,40 @@ export async function queryVideo(taskId: string, model?: string, historyContext?
   return data.data;
 }
 
+export interface RunningHubVideoSubmitRequest {
+  prompt: string;
+  aspectRatio: string;
+  imageUrls?: string[];
+  resolution: '480p' | '720p' | string;
+  duration: number;
+  historyContext?: GenerationHistoryContext;
+}
+
+export async function submitRunningHubVideo(req: RunningHubVideoSubmitRequest): Promise<{ taskId: string }> {
+  const r = await fetch('/api/proxy/runninghub/video/submit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  const data = await parseJsonResponse(r);
+  if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
+  return data.data;
+}
+
+export async function queryRunningHubVideo(
+  taskId: string,
+  historyContext?: GenerationHistoryContext,
+): Promise<VideoQueryResult> {
+  const r = await fetch('/api/proxy/runninghub/video/query', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId, historyContext }),
+  });
+  const data = await parseJsonResponse(r);
+  if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
+  return data.data;
+}
+
 // ========================================================================
 // Seedance 2.0 (寮傛) 鈥?瀹屽叏瀵归綈 gpt-image-2-web runSeedance / pollSeedance
 //   submit: POST /api/proxy/seedance/submit

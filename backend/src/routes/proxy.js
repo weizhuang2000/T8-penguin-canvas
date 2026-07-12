@@ -17,6 +17,13 @@ const { resolveLlmChatCompletionsUrl } = require('../utils/llmBaseUrl');
 const { mimeFromPath, resolveMediaRef } = require('../providers/mediaResolver');
 const { requireNodePermission } = require('../auth/toolPermissions');
 const settingsRouter = require('./settings');
+const {
+  RUNNINGHUB_VIDEO_PATH,
+  normalizeRunningHubVideoRequest,
+  normalizeRunningHubVideoStatus,
+  runningHubVideoFailReason,
+  extractRunningHubVideoUrl,
+} = require('../utils/runninghubVideo');
 
 const router = express.Router();
 
@@ -134,6 +141,15 @@ function bufferFromLocalMediaRef(ref) {
     avif: 'image/avif',
   }[ext] || 'image/png';
   return { buf, mime, ext: ext === 'jpeg' ? 'jpg' : ext };
+}
+
+function runningHubVideoImageRef(ref) {
+  const value = String(ref || '').trim();
+  if (/^https?:\/\//i.test(value) || /^data:image\//i.test(value)) return value;
+  const local = bufferFromLocalMediaRef(value);
+  if (!local) throw new Error(`无法读取 RunningHub 参考图: ${value}`);
+  if (local.buf.length > 10 * 1024 * 1024) throw new Error('RunningHub 单张参考图不能超过 10MB');
+  return `data:${local.mime};base64,${local.buf.toString('base64')}`;
 }
 
 function inferRemoteOutputExt(url, contentType) {
@@ -2498,6 +2514,113 @@ function pickRhApiKey(settings) {
 function missingRhKeyError() {
   return '未配置 RunningHub API Key（请在设置中填写 RunningHub API Key）';
 }
+
+// RunningHub 标准模型：全能视频X · 图生视频低价渠道版 v1.5。
+router.post('/runninghub/video/submit', requireNodePermission('video'), async (req, res) => {
+  const settings = loadRawSettings();
+  const apiKey = pickRhApiKey(settings);
+  if (!apiKey) return res.status(400).json({ success: false, error: missingRhKeyError() });
+  try {
+    const normalized = normalizeRunningHubVideoRequest(req.body || {});
+    const body = { ...normalized, imageUrls: normalized.imageUrls.map(runningHubVideoImageRef) };
+    const response = await fetch(`${config.RH_BASE_URL}${RUNNINGHUB_VIDEO_PATH}`, {
+      method: 'POST',
+      headers: {
+        Host: 'www.runninghub.cn',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+    const text = await response.text();
+    let data;
+    try { data = JSON.parse(text); } catch {
+      return res.status(502).json({ success: false, error: `RunningHub 响应不是 JSON: ${text.slice(0, 200)}` });
+    }
+    if (!response.ok || data?.errorCode || !data?.taskId) {
+      return res.status(response.ok ? 400 : response.status).json({
+        success: false,
+        error: runningHubVideoFailReason(data) || `RunningHub 提交失败 HTTP ${response.status}`,
+      });
+    }
+    rememberTaskKey(data.taskId, apiKey);
+    return res.json({ success: true, data: { taskId: String(data.taskId), raw: data } });
+  } catch (e) {
+    console.error('proxy/runninghub/video/submit 错误:', e);
+    return res.status(400).json({ success: false, error: e?.message || 'RunningHub 视频提交失败' });
+  }
+});
+
+router.post('/runninghub/video/query', requireNodePermission('video'), async (req, res) => {
+  const settings = loadRawSettings();
+  const taskId = String(req.body?.taskId || '').trim();
+  if (!taskId) return res.status(400).json({ success: false, error: 'taskId 必填' });
+  const apiKey = recallTaskKey(taskId) || pickRhApiKey(settings);
+  if (!apiKey) return res.status(400).json({ success: false, error: missingRhKeyError() });
+  try {
+    const response = await fetch(`${config.RH_BASE_URL}/openapi/v2/query`, {
+      method: 'POST',
+      headers: {
+        Host: 'www.runninghub.cn',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({ taskId }),
+    });
+    const text = await response.text();
+    let data;
+    try { data = JSON.parse(text); } catch {
+      return res.status(502).json({ success: false, error: `RunningHub 响应不是 JSON: ${text.slice(0, 200)}` });
+    }
+    if (!response.ok) {
+      return res.status(response.status).json({
+        success: false,
+        error: runningHubVideoFailReason(data) || `RunningHub 查询失败 HTTP ${response.status}`,
+      });
+    }
+
+    let status = normalizeRunningHubVideoStatus(data?.status);
+    let videoUrl = null;
+    const remote = status === 'SUCCESS' ? extractRunningHubVideoUrl(data) : '';
+    const missingVideoResult = status === 'SUCCESS' && !remote;
+    if (missingVideoResult) status = 'FAILURE';
+    if (remote) {
+      try {
+        const fileResponse = await fetch(remote);
+        if (fileResponse.ok) {
+          const contentType = fileResponse.headers.get('content-type');
+          const buffer = Buffer.from(await fileResponse.arrayBuffer());
+          const inferredExt = inferRemoteOutputExt(remote, contentType);
+          const ext = ['mp4', 'webm', 'mov', 'm4v', 'mkv'].includes(inferredExt) ? inferredExt : 'mp4';
+          const filename = `rh_video_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
+          fs.writeFileSync(path.join(config.OUTPUT_DIR, filename), buffer);
+          videoUrl = `/files/output/${filename}`;
+        } else videoUrl = remote;
+      } catch {
+        videoUrl = remote;
+      }
+    }
+    if (status === 'SUCCESS' && videoUrl) {
+      rememberGeneratedUrls(req, [videoUrl], {
+        kind: 'video', provider: 'runninghub', model: 'rhart-video-g/image-to-video', taskId,
+      });
+    }
+    return res.json({
+      success: true,
+      data: {
+        status,
+        progress: status === 'SUCCESS' ? '100%' : '',
+        videoUrl,
+        failReason: runningHubVideoFailReason(data)
+          || (missingVideoResult ? 'RunningHub 任务成功但未返回视频结果' : null),
+        raw: data,
+      },
+    });
+  } catch (e) {
+    console.error('proxy/runninghub/video/query 错误:', e);
+    return res.status(500).json({ success: false, error: e?.message || 'RunningHub 视频查询失败' });
+  }
+});
 
 router.post('/runninghub/submit', requireNodePermission(['runninghub', 'runninghub-wallet', 'rh-tools']), async (req, res) => {
   const settings = loadRawSettings();

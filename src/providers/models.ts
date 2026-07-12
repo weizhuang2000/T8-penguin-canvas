@@ -286,7 +286,7 @@ export const NBPRO_FAL_RESOLUTIONS = ['1K', '2K', '4K'];
 
 // ========== 视频 ==========
 // kind 决定上游 payload 协议(后端会根据 model 名自动识别,前端主要用于控制参数 UI 列表)
-export type VideoKind = 'veo' | 'grok' | 'sora' | 'seedance';
+export type VideoKind = 'veo' | 'grok' | 'sora' | 'seedance' | 'runninghub';
 
 // ---- Video FAL 渠道注册表 (1:1 对齐 gpt-image-2-web runVeo3Fal / runGrokFal / runSora2Fal) ----
 export interface VideoFalEndpointDef {
@@ -508,6 +508,24 @@ export const VIDEO_MODELS: VideoModelDef[] = [
     defaultDuration: 5,
     supportImages: true,
     maxRefImages: 3,
+  },
+  {
+    id: 'runninghub-video',
+    label: 'Running 视频',
+    kind: 'runninghub',
+    provider: 'runninghub',
+    description: 'RunningHub 全能视频X · 图生视频低价渠道版 v1.5',
+    apiModelOptions: [
+      { value: 'rhart-video-g/image-to-video', label: '全能视频X · 图生视频 v1.5' },
+    ],
+    ratios: ['2:3', '3:2', '1:1', '16:9', '9:16'],
+    defaultRatio: '16:9',
+    durations: Array.from({ length: 25 }, (_, index) => index + 6),
+    defaultDuration: 6,
+    resolutions: ['480p', '720p'],
+    defaultResolution: '480p',
+    supportImages: true,
+    maxRefImages: 7,
   },
 ];
 

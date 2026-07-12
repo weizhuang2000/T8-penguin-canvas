@@ -23,6 +23,8 @@ import {
   generateExternalVideo,
   submitVideo,
   queryVideo,
+  submitRunningHubVideo,
+  queryRunningHubVideo,
   submitVideoFal,
   queryVideoFal,
   type VideoSubmitRequest,
@@ -168,6 +170,7 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
     ? d.size
     : grokVideo15NewSizeFromRatio(ratio);
   const isSoraZhenzhen = !isExternalSelected && modelDef.kind === 'sora' && !isFal;
+  const isRunningHubVideo = !isExternalSelected && modelDef.kind === 'runninghub';
   const isVeoOmni = !isExternalSelected && apiModel === 'veo-omni-10s';
   const showBuiltinFalControls = !isExternalSelected && isFal && !!falReg;
   const showGenericVideoControls = isExternalSelected || !isFal;
@@ -398,7 +401,9 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
           return;
         }
         try {
-          const r = await queryVideo(tid, apiModel);
+          const r = isRunningHubVideo
+            ? await queryRunningHubVideo(tid)
+            : await queryVideo(tid, apiModel);
           if (r.progress && r.progress !== lastProgress) {
             lastProgress = r.progress;
             logBus.debug(`[${elapsed}/${MAX}] status=${r.status} progress=${r.progress}`, src);
@@ -541,6 +546,25 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
       }
 
       // === FAL 分支 ===
+      if (isRunningHubVideo) {
+        const refs = imageUrls.slice(0, 7);
+        logBus.info(
+          `提交 RunningHub 视频: model=${apiModel} ratio=${ratio} duration=${duration}s resolution=${resolution} refs=${refs.length}`,
+          src,
+        );
+        const r = await submitRunningHubVideo({
+          prompt: finalPrompt,
+          aspectRatio: ratio,
+          imageUrls: refs,
+          resolution: resolution || '480p',
+          duration: Number(duration) || 6,
+        });
+        update({ status: 'polling', taskId: r.taskId, lastPrompt: finalPrompt, progress: '0%' });
+        logBus.info(`RunningHub 视频任务已提交 taskId=${r.taskId}`, src);
+        await startPolling(r.taskId);
+        return;
+      }
+
       if (isFal && falReg) {
         const falMaxRefs =
           falReg.paramKind === 'grok-fal' && (isGrokFalV15 || gkfMode !== 'reference_to_video')
@@ -1088,6 +1112,12 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
           </div>
         )}
 
+        {isRunningHubVideo && (
+          <div className="rounded border border-cyan-400/20 bg-cyan-500/5 px-2 py-1.5 text-[10px] leading-relaxed text-white/50">
+            RunningHub 全能视频X · 图生视频低价渠道版 v1.5。复用 API Key 管理中的 RunningHub API Key，支持最多 7 张参考图；结果会自动转存到本地 output。
+          </div>
+        )}
+
         {isVeoOmni && (
           <div className="rounded border border-white/10 bg-white/5 px-2 py-1.5 text-[10px] leading-relaxed text-white/45">
             Veo Omni 走 /v1/videos，固定调用 omni_flash-10s，需要 1 张参考图；16:9=1280x720，9:16=720x1280。
@@ -1221,7 +1251,7 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
         )}
 
         {/* Seed(非FAL) */}
-        {showGenericVideoControls && (
+        {showGenericVideoControls && !isRunningHubVideo && (
         <div>
           <label className="text-[10px] text-white/50 block mb-1">Seed (0=随机)</label>
           <input

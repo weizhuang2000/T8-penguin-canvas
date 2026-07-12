@@ -70,7 +70,7 @@ interface KeySpec {
 
 const COMMON_KEYS: KeySpec[] = [
   { field: 'zhenzhenApiKey', label: '贞贞工坊 API Key', desc: '· 通用后备 · 用于图像/视频/音频生成', bullet: 'bg-amber-400' },
-  { field: 'rhApiKey', label: 'RunningHub API Key', desc: '· RunningHub 节点与 RH 钱包应用节点共用', bullet: 'bg-cyan-400' },
+  { field: 'rhApiKey', label: 'RunningHub API Key', desc: '· RunningHub / RH 钱包应用 / Running 视频共用', bullet: 'bg-cyan-400' },
   { field: 'llmApiKey', label: 'LLM 独立 API Key', desc: '· 额度隔离 · 用于 LLM/Vision', bullet: 'bg-emerald-400' },
 ];
 
