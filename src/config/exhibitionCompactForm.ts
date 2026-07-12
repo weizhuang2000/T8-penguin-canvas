@@ -526,8 +526,9 @@ export const EXHIBITION_COMPACT_FORM_DEFINITIONS: ExhibitionCompactNodeDefinitio
     { id: 'prompt', label: '\u7ed3\u6784\u7ea6\u675f', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
   ] },
   { nodeType: 'fusion-render-design', label: '\u878d\u5408\u6548\u679c\u56fe', sections: [
-    { id: 'inputs', label: '\u8f93\u5165\u4e0e\u6392\u7248', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
-    { id: 'view', label: '\u900f\u89c6\u65b9\u5411', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'inputs', label: '\u53c2\u8003\u7d20\u6750', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'view', label: '\u7a7a\u95f4\u8bbe\u7f6e', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
+    { id: 'color-material', label: '\u8272\u5f69\u4e0e\u6750\u8d28', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
     { id: 'model', label: '\u6a21\u578b\u4e0e\u5c3a\u5bf8', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
     { id: 'status', label: '\u8fd0\u884c\u72b6\u6001', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },
     { id: 'result', label: '\u7ed3\u679c\u9884\u89c8', items: [{ id: 'main', label: '\u4e3b\u63a7\u4ef6' }] },

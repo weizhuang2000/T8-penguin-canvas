@@ -1,5 +1,3 @@
-import type { ReverseIsometricDirection } from './reverseIsometricDesignData.js';
-
 export const FUSION_RENDER_AUTO_CEILING_CRAFT: string;
 export const FUSION_RENDER_AUTO_FLOOR_MATERIAL: string;
 export const FUSION_RENDER_VENUE_TYPES: string[];
@@ -9,11 +7,10 @@ export function buildFusionRenderPrompt(options?: {
   hasSpaceReference?: boolean;
   venueType?: string;
   hallSubject?: string;
-  viewDirection?: ReverseIsometricDirection;
-  hallLengthMm?: number;
-  hallWidthMm?: number;
   hallHeightMm?: number;
   floorMaterial?: string;
   ceilingCraft?: string;
+  colorMaterialPresetText?: string;
+  colorMaterial?: string;
   exhibitCount?: number;
 }): string;

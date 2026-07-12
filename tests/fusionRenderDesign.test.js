@@ -39,12 +39,11 @@ test('space reference is optional and exclusive while exhibit references remain 
   assert.doesNotMatch(node, /if \(!spaceReferenceImage\) throw/);
 });
 
-test('manual layout is removed and hall dimensions remain directly configurable', () => {
+test('manual layout, direction controls and hall length-width settings are removed', () => {
   const node = read('src/components/nodes/FusionRenderDesignNode.tsx');
   assert.doesNotMatch(node, /打开手动排版|ReverseIsometricLayoutModal|manualLayoutItems|layoutReference|describeFusionRenderLayout/);
-  assert.match(node, /展厅长 mm/);
-  assert.match(node, /展厅宽 mm/);
   assert.match(node, /展厅净高 mm/);
+  assert.doesNotMatch(node, /透视相机观察方向|REVERSE_ISOMETRIC_DIRECTIONS|hallLengthMm|hallWidthMm/);
 });
 
 test('reference ordering changes with space reference availability and previous output survives failures', () => {
@@ -88,15 +87,12 @@ test('ceiling craft offers automatic styling first plus twenty common crafts', (
   assert.match(read('src/components/Canvas.tsx'), /'fusion-render-design':[\s\S]*ceilingCraft: '根据所有展项风格自动调整'/);
 });
 
-test('node configures hall dimensions directly and prompt uses physical dimensions', () => {
+test('node keeps hall height and prompt uses it as the physical scale', () => {
   const node = read('src/components/nodes/FusionRenderDesignNode.tsx');
-  assert.match(node, /value=\{hallLengthMm\}/);
-  assert.match(node, /value=\{hallWidthMm\}/);
-
-  const prompt = buildFusionRenderPrompt({ hallLengthMm: 18000, hallWidthMm: 9000, hallHeightMm: 5000 });
-  assert.match(prompt, /长 18000 mm、宽 9000 mm、净高 5000 mm/);
-  assert.match(prompt, /长宽高比例/);
-  assert.match(read('src/components/Canvas.tsx'), /'fusion-render-design':[\s\S]*hallLengthMm: 12000,[\s\S]*hallWidthMm: 8000/);
+  assert.match(node, /value=\{hallHeightMm\}/);
+  const prompt = buildFusionRenderPrompt({ hallHeightMm: 5000 });
+  assert.match(prompt, /展厅净高：5000 mm/);
+  assert.doesNotMatch(read('src/components/Canvas.tsx'), /'fusion-render-design':[\s\S]*hallLengthMm: 12000/);
 });
 
 test('prompt creates a coherent realistic ambience without inventing primary exhibits', () => {
@@ -112,8 +108,8 @@ test('prompt creates a coherent realistic ambience without inventing primary exh
 });
 
 test('prompt automatically arranges exhibits and fills only large distant gaps', () => {
-  const prompt = buildFusionRenderPrompt({ hallLengthMm: 20000, hallWidthMm: 10000, exhibitCount: 2 });
-  assert.match(prompt, /根据展馆类型、展厅主体、空间参考图及设定长宽高自动完成专业展陈布置/);
+  const prompt = buildFusionRenderPrompt({ exhibitCount: 2 });
+  assert.match(prompt, /根据展馆类型、展厅主体、空间参考图及展厅净高自动完成专业展陈布置/);
   assert.match(prompt, /保证通道、观看距离、安全边界和主次层级自然可信/);
   assert.match(prompt, /仅当展厅确实存在连续的大面积空白区域时/);
   assert.match(prompt, /同主题、同类型、同设计语言/);
@@ -188,4 +184,22 @@ test('hall subject can be explicit or inferred while camera stays low and allows
   assert.match(node, /展厅主体（留空则根据展项定义）/);
   assert.match(node, /placeholder="例如：未来能源科技互动体验；留空自动归纳"/);
   assert.match(read('src/components/Canvas.tsx'), /'fusion-render-design':[\s\S]*hallSubject: ''/);
+});
+
+test('color and material presets reuse exhibition img2img shared data and selector', () => {
+  const node = read('src/components/nodes/FusionRenderDesignNode.tsx');
+  assert.match(node, /getElevationPromptPresets\(\)/);
+  assert.match(node, /presets\.colorMaterial \|\| \[\]/);
+  assert.match(node, /ColorMaterialPresetSelect/);
+  assert.match(node, /colorMaterialTextFromPreset/);
+  assert.match(node, /手动色彩与材质补充/);
+
+  const presetPrompt = buildFusionRenderPrompt({ colorMaterialPresetText: '未来科技蓝｜深灰金属｜冷白光' });
+  assert.match(presetPrompt, /色彩与材质预设：严格采用共享预设/);
+  assert.match(presetPrompt, /未来科技蓝｜深灰金属｜冷白光/);
+  assert.match(presetPrompt, /不要被空间参考图或展项自身背景色覆盖/);
+
+  const manualPrompt = buildFusionRenderPrompt({ colorMaterial: '墙面深蓝，金属拉丝，局部青色灯带' });
+  assert.match(manualPrompt, /色彩与材质补充：墙面深蓝，金属拉丝，局部青色灯带/);
+  assert.match(read('src/components/Canvas.tsx'), /'fusion-render-design':[\s\S]*colorMaterialPreset: '',[\s\S]*colorMaterial: ''/);
 });

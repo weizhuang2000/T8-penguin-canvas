@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Image as ImageIcon, Loader2, Play, Sparkles } from 'lucide-react';
 import { EXHIBITION_IMAGE_HANDLE_COLOR } from '../../config/portTypes';
@@ -7,10 +7,9 @@ import { generateExternalImage, queryExternalImageStatus, queryImageStatus, subm
 import { advancedProviderModelOptions, advancedProvidersForNode, externalImageSizeFor, resolveAdvancedProviderSelection } from '../../utils/advancedProviders';
 import { FUSION_RENDER_AUTO_CEILING_CRAFT, FUSION_RENDER_AUTO_FLOOR_MATERIAL, FUSION_RENDER_CEILING_CRAFTS, FUSION_RENDER_VENUE_TYPES, buildFusionRenderPrompt } from '../../utils/fusionRenderDesignData.js';
 import {
-  REVERSE_ISOMETRIC_DIRECTIONS,
   REVERSE_ISOMETRIC_FLOOR_MATERIALS,
-  normalizeReverseIsometricDirection,
 } from '../../utils/reverseIsometricDesignData.js';
+import { getElevationPromptPresets, type ElevationColorMaterialPresetItem } from '../../services/api';
 import { useApiKeysStore } from '../../stores/apiKeys';
 import { useCanvasStore } from '../../stores/canvas';
 import { logBus } from '../../stores/logs';
@@ -18,12 +17,17 @@ import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import NodeHelpButton from './NodeHelpButton';
+import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
 import { useHandleImages } from './ReverseIsometricDesignNode';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
 const MAX_POLLS = 300;
 const POLL_INTERVAL = 3000;
+
+function colorMaterialTextFromPreset(preset: ElevationColorMaterialPresetItem): string {
+  return [preset.label, String(preset.core || '').trim(), String(preset.features || '').trim(), String(preset.usage || '').trim()].filter(Boolean).join('；');
+}
 
 const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
@@ -36,9 +40,11 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
   const allowZhenzhenFallback = useApiKeysStore((state) => state.settings.enableZhenzhenFallback !== false);
   const spaceReferenceImage = useHandleImages(id, 'space-reference', true)[0]?.url || '';
   const exhibitImages = useHandleImages(id, 'exhibit-reference');
-  const viewDirection = normalizeReverseIsometricDirection(d.viewDirection);
   const venueType = FUSION_RENDER_VENUE_TYPES.includes(d.venueType) ? d.venueType : FUSION_RENDER_VENUE_TYPES[0];
   const hallSubject = typeof d.hallSubject === 'string' ? d.hallSubject : '';
+  const [colorMaterialPresets, setColorMaterialPresets] = useState<ElevationColorMaterialPresetItem[]>([]);
+  const selectedColorMaterialPreset = useMemo(() => colorMaterialPresets.find((preset) => preset.id === d.colorMaterialPreset) || null, [colorMaterialPresets, d.colorMaterialPreset]);
+  const colorMaterialPresetText = selectedColorMaterialPreset ? colorMaterialTextFromPreset(selectedColorMaterialPreset) : '';
   const imageProviders = useMemo(() => advancedProvidersForNode(advancedProviders, 'image'), [advancedProviders]);
   const providerSelection = useMemo(() => resolveAdvancedProviderSelection(advancedProviders, 'image', { providerSource: d.providerSource, providerId: d.providerId, providerModel: d.providerModel }), [advancedProviders, d.providerId, d.providerModel, d.providerSource]);
   const isExternal = providerSelection.available && providerSelection.providerSource !== 'zhenzhen';
@@ -49,15 +55,17 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
   const apiModel = d.apiModel || modelDef.apiModel;
   const aspectRatio = d.aspectRatio || '1:1';
   const sizeLevel = d.sizeLevel || '2K';
-  const hallLengthMm = Math.min(100000, Math.max(1000, Math.round(Number(d.hallLengthMm) || 12000)));
-  const hallWidthMm = Math.min(100000, Math.max(1000, Math.round(Number(d.hallWidthMm) || 8000)));
   const hallHeightMm = Math.min(12000, Math.max(2400, Math.round(Number(d.hallHeightMm) || 4200)));
   const floorMaterial = REVERSE_ISOMETRIC_FLOOR_MATERIALS.includes(d.floorMaterial) ? d.floorMaterial : FUSION_RENDER_AUTO_FLOOR_MATERIAL;
   const ceilingCraft = FUSION_RENDER_CEILING_CRAFTS.includes(d.ceilingCraft) ? d.ceilingCraft : FUSION_RENDER_AUTO_CEILING_CRAFT;
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
   const busy = d.status === 'generating';
-  const previewPrompt = useMemo(() => buildFusionRenderPrompt({ hasSpaceReference: Boolean(spaceReferenceImage), venueType, hallSubject, viewDirection, hallLengthMm, hallWidthMm, hallHeightMm, floorMaterial, ceilingCraft, exhibitCount: exhibitImages.length }), [ceilingCraft, exhibitImages.length, floorMaterial, hallHeightMm, hallLengthMm, hallSubject, hallWidthMm, spaceReferenceImage, venueType, viewDirection]);
+  const previewPrompt = useMemo(() => buildFusionRenderPrompt({ hasSpaceReference: Boolean(spaceReferenceImage), venueType, hallSubject, hallHeightMm, floorMaterial, ceilingCraft, colorMaterialPresetText, colorMaterial: String(d.colorMaterial || ''), exhibitCount: exhibitImages.length }), [ceilingCraft, colorMaterialPresetText, d.colorMaterial, exhibitImages.length, floorMaterial, hallHeightMm, hallSubject, spaceReferenceImage, venueType]);
+
+  useEffect(() => {
+    getElevationPromptPresets().then((presets) => setColorMaterialPresets(presets.colorMaterial || [])).catch(() => setColorMaterialPresets([]));
+  }, []);
 
   const generateCandidate = useCallback(async (prompt: string, references: string[], runSeed: number): Promise<string> => {
     const historyContext = { canvasId: activeCanvasId, sourceNodeId: id, sourceNodeType: 'fusion-render-design', nodeTitle: '融合效果图', outputTitle: '融合效果图', seed: runSeed };
@@ -131,10 +139,15 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
       <section data-exhibition-compact-section="view" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
         <label className="block space-y-1"><span className="text-[10px] text-white/55">展馆类型</span><select className={FIELD} value={venueType} disabled={isReadonly || busy} onChange={(e) => update({ venueType: e.target.value })}>{FUSION_RENDER_VENUE_TYPES.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
         <label className="block space-y-1"><span className="text-[10px] text-white/55">展厅主体（留空则根据展项定义）</span><textarea className={`${FIELD} min-h-16 resize-y`} value={hallSubject} disabled={isReadonly || busy} placeholder="例如：未来能源科技互动体验；留空自动归纳" onChange={(e) => update({ hallSubject: e.target.value })} /></label>
-        <div className="text-[11px] font-semibold text-cyan-100">透视相机观察方向</div><div className="grid grid-cols-4 gap-1">{REVERSE_ISOMETRIC_DIRECTIONS.map((item) => <button key={item.value} className={`rounded px-1 py-1.5 text-[10px] ${viewDirection === item.value ? 'bg-cyan-300/20 text-cyan-100' : 'bg-black/20 text-white/50'}`} disabled={isReadonly || busy} onClick={() => update({ viewDirection: item.value })}>{item.label}</button>)}</div>
         <label className="block space-y-1"><span className="text-[10px] text-white/55">顶部工艺</span><select className={FIELD} value={ceilingCraft} disabled={isReadonly || busy} onChange={(e) => update({ ceilingCraft: e.target.value })}><option value={FUSION_RENDER_AUTO_CEILING_CRAFT}>{FUSION_RENDER_AUTO_CEILING_CRAFT}</option>{FUSION_RENDER_CEILING_CRAFTS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-        <div className="grid grid-cols-3 gap-2"><label className="space-y-1"><span className="text-[10px] text-white/55">展厅长 mm</span><input className={FIELD} type="number" min={1000} max={100000} step={100} value={hallLengthMm} disabled={isReadonly || busy} onChange={(e) => update({ hallLengthMm: Math.min(100000, Math.max(1000, Math.round(Number(e.target.value) || 12000))) })} /></label><label className="space-y-1"><span className="text-[10px] text-white/55">展厅宽 mm</span><input className={FIELD} type="number" min={1000} max={100000} step={100} value={hallWidthMm} disabled={isReadonly || busy} onChange={(e) => update({ hallWidthMm: Math.min(100000, Math.max(1000, Math.round(Number(e.target.value) || 8000))) })} /></label><label className="space-y-1"><span className="text-[10px] text-white/55">展厅净高 mm</span><input className={FIELD} type="number" min={2400} max={12000} step={100} value={hallHeightMm} disabled={isReadonly || busy} onChange={(e) => update({ hallHeightMm: Math.min(12000, Math.max(2400, Math.round(Number(e.target.value) || 4200))) })} /></label></div>
+        <label className="block space-y-1"><span className="text-[10px] text-white/55">展厅净高 mm</span><input className={FIELD} type="number" min={2400} max={12000} step={100} value={hallHeightMm} disabled={isReadonly || busy} onChange={(e) => update({ hallHeightMm: Math.min(12000, Math.max(2400, Math.round(Number(e.target.value) || 4200))) })} /></label>
         <label className="block space-y-1"><span className="text-[10px] text-white/55">地面材质</span><select className={FIELD} value={floorMaterial} disabled={isReadonly || busy} onChange={(e) => update({ floorMaterial: e.target.value })}><option value={FUSION_RENDER_AUTO_FLOOR_MATERIAL}>{FUSION_RENDER_AUTO_FLOOR_MATERIAL}</option>{REVERSE_ISOMETRIC_FLOOR_MATERIALS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+      </section>
+      <section data-exhibition-compact-section="color-material" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <div className="text-[11px] font-semibold text-cyan-100">色彩与材质预设</div>
+        <ColorMaterialPresetSelect className={FIELD} presets={colorMaterialPresets} value={d.colorMaterialPreset || ''} disabled={isReadonly || busy} onChange={(presetId, preset) => update({ colorMaterialPreset: presetId, colorMaterial: preset ? colorMaterialTextFromPreset(preset) : '' })} />
+        {selectedColorMaterialPreset?.info && <div className="rounded border border-cyan-300/15 bg-cyan-300/5 px-2 py-1 text-[10px] leading-snug text-cyan-50/70">{selectedColorMaterialPreset.info}</div>}
+        <textarea className={`${FIELD} min-h-[50px] resize-y`} value={d.colorMaterial || ''} disabled={isReadonly || busy} placeholder="手动色彩与材质补充" onChange={(event) => update({ colorMaterial: event.target.value, colorMaterialPreset: '' })} />
       </section>
       <section data-exhibition-compact-section="model" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
         <div className="flex items-center justify-between"><div className="text-[11px] font-semibold text-cyan-100">模型与尺寸</div><button className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy || !exhibitImages.length} onClick={() => void runGenerate()}>{busy ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}生成</button></div>
