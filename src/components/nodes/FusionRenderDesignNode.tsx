@@ -5,7 +5,7 @@ import { EXHIBITION_IMAGE_HANDLE_COLOR } from '../../config/portTypes';
 import { IMAGE_MODELS } from '../../providers/models';
 import { generateExternalImage, queryExternalImageStatus, queryImageStatus, submitImageAsync } from '../../services/generation';
 import { advancedProviderModelOptions, advancedProvidersForNode, externalImageSizeFor, resolveAdvancedProviderSelection } from '../../utils/advancedProviders';
-import { FUSION_RENDER_AUTO_CEILING_CRAFT, FUSION_RENDER_CEILING_CRAFTS, buildFusionRenderPrompt } from '../../utils/fusionRenderDesignData.js';
+import { FUSION_RENDER_AUTO_CEILING_CRAFT, FUSION_RENDER_CEILING_CRAFTS, buildFusionRenderPrompt, describeFusionRenderLayout } from '../../utils/fusionRenderDesignData.js';
 import {
   REVERSE_ISOMETRIC_DIRECTIONS,
   REVERSE_ISOMETRIC_FLOOR_MATERIALS,
@@ -162,7 +162,8 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
   const busy = d.status === 'generating';
   const wallPlacementText = useMemo(() => describeWallAdjacentExhibits(layoutItems), [layoutItems]);
-  const previewPrompt = useMemo(() => buildFusionRenderPrompt({ hasPlan: Boolean(planImage), viewDirection, hallLengthMm, hallWidthMm, hallHeightMm, floorMaterial, ceilingCraft, wallPlacementText, exhibitCount: layoutItems.length }), [ceilingCraft, floorMaterial, hallHeightMm, hallLengthMm, hallWidthMm, layoutItems.length, planImage, viewDirection, wallPlacementText]);
+  const layoutDescription = useMemo(() => describeFusionRenderLayout(layoutItems), [layoutItems]);
+  const previewPrompt = useMemo(() => buildFusionRenderPrompt({ hasPlan: Boolean(planImage), viewDirection, hallLengthMm, hallWidthMm, hallHeightMm, floorMaterial, ceilingCraft, layoutDescription, wallPlacementText, exhibitCount: layoutItems.length }), [ceilingCraft, floorMaterial, hallHeightMm, hallLengthMm, hallWidthMm, layoutDescription, layoutItems.length, planImage, viewDirection, wallPlacementText]);
 
   useEffect(() => {
     const connected = new Set(exhibitImages.map((item) => item.url));

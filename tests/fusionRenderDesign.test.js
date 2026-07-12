@@ -6,6 +6,7 @@ import {
   FUSION_RENDER_AUTO_CEILING_CRAFT,
   FUSION_RENDER_CEILING_CRAFTS,
   buildFusionRenderPrompt,
+  describeFusionRenderLayout,
 } from '../src/utils/fusionRenderDesignData.js';
 
 const root = path.resolve('.');
@@ -120,4 +121,33 @@ test('prompt creates a coherent realistic ambience without inventing primary exh
   assert.match(prompt, /不得用环境装饰改变展项位置、朝向、占比、间距和层级/);
   assert.match(prompt, /已完成布展并经过专业摄影的真实展厅/);
   assert.match(prompt, /不得遮挡展项、形成拥挤人群/);
+});
+
+test('prompt hard-locks layout relations and fills only large distant gaps', () => {
+  const layoutDescription = describeFusionRenderLayout([
+    { label: '互动展项A', xRatio: 0.1, yRatio: 0.2, widthRatio: 0.25, heightRatio: 0.3, rotationDeg: 45, zIndex: 3 },
+    { label: '科技展项B', xRatio: 0.6, yRatio: 0.55, widthRatio: 0.2, heightRatio: 0.15, rotationDeg: -30, zIndex: 5 },
+  ]);
+  assert.match(layoutDescription, /互动展项A/);
+  assert.match(layoutDescription, /左上位置 x=10%, y=20%/);
+  assert.match(layoutDescription, /中心位置 x=23%, y=35%/);
+  assert.match(layoutDescription, /底面占比 宽=25%, 深=30%/);
+  assert.match(layoutDescription, /旋转=45°/);
+  assert.match(layoutDescription, /层级=3/);
+
+  const prompt = buildFusionRenderPrompt({ hallLengthMm: 20000, hallWidthMm: 10000, layoutDescription, exhibitCount: 2 });
+  assert.match(prompt, /主展项排版是最高优先级硬约束/);
+  assert.match(prompt, /禁止为了构图、透视、美观、补充环境或填充空档而移动/);
+  assert.match(prompt, /主展项排版数值清单/);
+  assert.match(prompt, /相同百分比在长、宽方向分别对应展厅实际长度和宽度/);
+  assert.match(prompt, /仅当排版底面确实存在连续的大面积空白区域时/);
+  assert.match(prompt, /同主题、同科技类型、同设计语言/);
+  assert.match(prompt, /异形图文墙体/);
+  assert.match(prompt, /画面远端或背景空档/);
+  assert.match(prompt, /较弱对比度、较低饱和度和真实景深虚化/);
+  assert.match(prompt, /近景和中景不得用新增物填满/);
+
+  const node = read('src/components/nodes/FusionRenderDesignNode.tsx');
+  assert.match(node, /describeFusionRenderLayout\(layoutItems\)/);
+  assert.match(node, /layoutDescription/);
 });
