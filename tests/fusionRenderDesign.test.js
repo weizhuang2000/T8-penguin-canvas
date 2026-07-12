@@ -5,6 +5,7 @@ import path from 'node:path';
 import {
   FUSION_RENDER_AUTO_CEILING_CRAFT,
   FUSION_RENDER_CEILING_CRAFTS,
+  FUSION_RENDER_VENUE_TYPES,
   buildFusionRenderPrompt,
   describeFusionRenderLayout,
 } from '../src/utils/fusionRenderDesignData.js';
@@ -69,7 +70,7 @@ test('prompt describes both structural modes and always requests one realistic p
   assert.match(blank, /@img1 是矩形空间内的俯视排版定位图/);
   assert.match(blank, /@img2 至 @img3/);
   assert.match(blank, /简洁、完整的矩形展厅/);
-  for (const term of ['写实', '空间透视效果图', '底座落地', '禁止拼版', '不得输出俯视平面图、轴侧图']) assert.match(blank, new RegExp(term));
+  for (const term of ['写实', '展陈空间效果图', '底座落地', '禁止拼版', '不得输出俯视平面图、轴侧图']) assert.match(blank, new RegExp(term));
 });
 
 test('ceiling craft offers automatic styling first plus twenty common crafts', () => {
@@ -141,7 +142,7 @@ test('prompt hard-locks layout relations and fills only large distant gaps', () 
   assert.match(prompt, /主展项排版数值清单/);
   assert.match(prompt, /相同百分比在长、宽方向分别对应展厅实际长度和宽度/);
   assert.match(prompt, /仅当排版底面确实存在连续的大面积空白区域时/);
-  assert.match(prompt, /同主题、同科技类型、同设计语言/);
+  assert.match(prompt, /同主题、同类型、同设计语言/);
   assert.match(prompt, /异形图文墙体/);
   assert.match(prompt, /画面远端或背景空档/);
   assert.match(prompt, /较弱对比度、较低饱和度和真实景深虚化/);
@@ -150,4 +151,29 @@ test('prompt hard-locks layout relations and fills only large distant gaps', () 
   const node = read('src/components/nodes/FusionRenderDesignNode.tsx');
   assert.match(node, /describeFusionRenderLayout\(layoutItems\)/);
   assert.match(node, /layoutDescription/);
+});
+
+test('venue type defaults to science museum and offers twenty common choices', () => {
+  assert.equal(FUSION_RENDER_VENUE_TYPES.length, 20);
+  assert.equal(new Set(FUSION_RENDER_VENUE_TYPES).size, 20);
+  assert.equal(FUSION_RENDER_VENUE_TYPES[0], '科技馆');
+  for (const type of ['博物馆', '自然博物馆', '艺术馆', '美术馆', '规划展示馆', '企业展厅', '纪念馆', '非遗展示馆']) {
+    assert.ok(FUSION_RENDER_VENUE_TYPES.includes(type));
+  }
+
+  const prompt = buildFusionRenderPrompt({ venueType: '自然博物馆', exhibitCount: 2 });
+  assert.match(prompt, /展馆类型：自然博物馆/);
+  assert.match(prompt, /环境氛围、辅助内容、专业设施和空档填充/);
+  assert.match(prompt, /符合“自然博物馆”属性/);
+  assert.doesNotMatch(prompt, /展陈空间透视效果图/);
+  assert.doesNotMatch(prompt, /展项正立面/);
+  assert.match(prompt, /画面需要同时表现空间关系与展项；/);
+  assert.match(prompt, /中心位置、占地宽深比例、彼此间距、前后遮挡和层级关系/);
+  assert.doesNotMatch(prompt, /占地宽深比例、旋转朝向、彼此间距/);
+  assert.match(prompt, /禁止为了构图、透视、美观、补充环境或填充空档而移动、交换、聚拢、分散、放大、缩小、旋转或删除任何主展项/);
+
+  const node = read('src/components/nodes/FusionRenderDesignNode.tsx');
+  assert.match(node, /展馆类型/);
+  assert.match(node, /FUSION_RENDER_VENUE_TYPES\.map/);
+  assert.match(read('src/components/Canvas.tsx'), /'fusion-render-design':[\s\S]*venueType: '科技馆'/);
 });
