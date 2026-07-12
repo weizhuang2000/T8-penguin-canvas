@@ -8,7 +8,6 @@ import {
   FUSION_RENDER_CEILING_CRAFTS,
   FUSION_RENDER_VENUE_TYPES,
   buildFusionRenderPrompt,
-  describeFusionRenderLayout,
 } from '../src/utils/fusionRenderDesignData.js';
 
 const root = path.resolve('.');
@@ -29,48 +28,44 @@ test('fusion render node is registered across canvas, permissions and compact fo
   assert.match(read('features.json'), /"nodeType": "fusion-render-design"/);
 });
 
-test('plan is optional and exclusive while exhibit references remain required and multi-source', () => {
+test('space reference is optional and exclusive while exhibit references remain required and multi-source', () => {
   const canvas = read('src/components/Canvas.tsx');
   const node = read('src/components/nodes/FusionRenderDesignNode.tsx');
-  assert.match(canvas, /targetType === 'fusion-render-design' && handle === 'plan-layout'[\s\S]*return \[handle\]/);
+  assert.match(canvas, /targetType === 'fusion-render-design' && handle === 'space-reference'[\s\S]*return \[handle\]/);
   assert.doesNotMatch(canvas, /targetType === 'fusion-render-design' && handle === 'exhibit-reference'/);
-  assert.match(node, /id="plan-layout"[^>]*type="target"/);
+  assert.match(node, /id="space-reference"[^>]*type="target"/);
   assert.match(node, /id="exhibit-reference"[^>]*type="target"/);
   assert.match(node, /if \(!exhibitImages\.length\) throw new Error\('请至少连接一张展项效果图'\)/);
-  assert.doesNotMatch(node, /if \(!planImage\) throw/);
+  assert.doesNotMatch(node, /if \(!spaceReferenceImage\) throw/);
 });
 
-test('blank rectangle follows hall dimensions and layout transforms use the shared editor/exporter', () => {
+test('manual layout is removed and hall dimensions remain directly configurable', () => {
   const node = read('src/components/nodes/FusionRenderDesignNode.tsx');
-  const editor = read('src/components/nodes/ReverseIsometricDesignNode.tsx');
-  assert.match(node, /createBlankStage\(hallLengthMm, hallWidthMm\)/);
-  assert.match(node, /aspectRatio=\{`\$\{hallLengthMm\} \/ \$\{hallWidthMm\}`\}/);
-  assert.match(node, /空白矩形空间/);
-  assert.match(node, /createDimensionedStage\(planUrl, hallLengthMm, hallWidthMm\)/);
-  assert.match(node, /buildReverseIsometricLayoutReference\(dimensionedStage, items\)/);
-  for (const term of ['stretch-x', 'stretch-y', 'scale', 'rotate', '源图裁剪', 'zIndex']) assert.match(editor, new RegExp(term));
+  assert.doesNotMatch(node, /打开手动排版|ReverseIsometricLayoutModal|manualLayoutItems|layoutReference|describeFusionRenderLayout/);
+  assert.match(node, /展厅长 mm/);
+  assert.match(node, /展厅宽 mm/);
+  assert.match(node, /展厅净高 mm/);
 });
 
-test('reference ordering changes with plan availability and previous output survives failures', () => {
+test('reference ordering changes with space reference availability and previous output survives failures', () => {
   const node = read('src/components/nodes/FusionRenderDesignNode.tsx');
-  assert.match(node, /planImage \? \[planImage, layoutReference, \.\.\.layoutItems\.map/);
-  assert.match(node, /: \[layoutReference, \.\.\.layoutItems\.map/);
+  assert.match(node, /spaceReferenceImage \? \[spaceReferenceImage, \.\.\.exhibitImages\.map/);
+  assert.match(node, /: exhibitImages\.map/);
   assert.match(node, /const previousOutput = \{ imageUrl:/);
   assert.match(node, /update\(\{ \.\.\.previousOutput, status: 'error'/);
   assert.match(node, /imageUrl: candidate, imageUrls: \[candidate\], urls: \[candidate\]/);
 });
 
 test('prompt describes both structural modes and always requests one realistic perspective render', () => {
-  const planned = buildFusionRenderPrompt({ hasPlan: true, exhibitCount: 2, hallHeightMm: 5600, floorMaterial: '深灰水磨石' });
-  assert.match(planned, /@img1 是原始平面结构基准/);
-  assert.match(planned, /@img2 是俯视排版定位图/);
-  assert.match(planned, /@img3 至 @img4/);
-  for (const term of ['墙体中心线', '柱网', '出入口', '门', '窗', '5600 mm', '深灰水磨石']) assert.match(planned, new RegExp(term));
+  const planned = buildFusionRenderPrompt({ hasSpaceReference: true, exhibitCount: 2, hallHeightMm: 5600, floorMaterial: '深灰水磨石' });
+  assert.match(planned, /@img1 是空间参考图/);
+  assert.match(planned, /@img2 至 @img3/);
+  for (const term of ['空间形态', '设计语言', '材质', '灯光', '环境氛围', '5600 mm', '深灰水磨石']) assert.match(planned, new RegExp(term));
+  assert.match(planned, /不得复制其中原有展项、人物、文字/);
 
-  const blank = buildFusionRenderPrompt({ hasPlan: false, exhibitCount: 2 });
-  assert.match(blank, /@img1 是矩形空间内的俯视排版定位图/);
-  assert.match(blank, /@img2 至 @img3/);
-  assert.match(blank, /简洁、完整的矩形展厅/);
+  const blank = buildFusionRenderPrompt({ hasSpaceReference: false, exhibitCount: 2 });
+  assert.match(blank, /@img1 至 @img2 是需要作为素材融入展厅的展项原始外观参考/);
+  assert.match(blank, /没有空间参考图时/);
   for (const term of ['完整展厅效果图', '底座落地', '禁止拼版', '不得输出俯视平面图、轴侧图']) assert.match(blank, new RegExp(term));
 });
 
@@ -93,23 +88,14 @@ test('ceiling craft offers automatic styling first plus twenty common crafts', (
   assert.match(read('src/components/Canvas.tsx'), /'fusion-render-design':[\s\S]*ceilingCraft: '根据所有展项风格自动调整'/);
 });
 
-test('layout editor configures hall length and width and prompt uses physical dimensions', () => {
+test('node configures hall dimensions directly and prompt uses physical dimensions', () => {
   const node = read('src/components/nodes/FusionRenderDesignNode.tsx');
-  const editor = read('src/components/nodes/ReverseIsometricDesignNode.tsx');
-  assert.match(node, /hallLengthMm=\{hallLengthMm\}/);
-  assert.match(node, /hallWidthMm=\{hallWidthMm\}/);
-  assert.match(node, /onDimensionsChange=\{\(dimensions\) => update\(dimensions\)\}/);
-  assert.match(editor, /展厅尺寸/);
-  assert.match(editor, />长 mm<input/);
-  assert.match(editor, />宽 mm<input/);
-  assert.match(editor, /展厅长 \{hallLengthMm \|\| 12000\} mm/);
-  assert.match(editor, /展厅宽 \{hallWidthMm \|\| 8000\} mm/);
-  assert.match(node, /drawHallDimensions\(context, canvas\.width, canvas\.height, hallLengthMm, hallWidthMm\)/);
+  assert.match(node, /value=\{hallLengthMm\}/);
+  assert.match(node, /value=\{hallWidthMm\}/);
 
   const prompt = buildFusionRenderPrompt({ hallLengthMm: 18000, hallWidthMm: 9000, hallHeightMm: 5000 });
   assert.match(prompt, /长 18000 mm、宽 9000 mm、净高 5000 mm/);
   assert.match(prompt, /长宽高比例/);
-  assert.match(prompt, /底面上的“展厅长\/展厅宽”尺寸线/);
   assert.match(read('src/components/Canvas.tsx'), /'fusion-render-design':[\s\S]*hallLengthMm: 12000,[\s\S]*hallWidthMm: 8000/);
 });
 
@@ -120,29 +106,16 @@ test('prompt creates a coherent realistic ambience without inventing primary exh
   }
   assert.match(prompt, /不是把展项放进空白房间/);
   assert.match(prompt, /不得新增未提供的主要展项/);
-  assert.match(prompt, /不得用环境装饰改变展项位置、朝向、占比、间距和层级/);
+  assert.match(prompt, /自动完成专业展陈布置/);
   assert.match(prompt, /已完成布展并经过专业摄影的真实展厅/);
   assert.match(prompt, /不得遮挡展项、形成拥挤人群/);
 });
 
-test('prompt hard-locks layout relations and fills only large distant gaps', () => {
-  const layoutDescription = describeFusionRenderLayout([
-    { label: '互动展项A', xRatio: 0.1, yRatio: 0.2, widthRatio: 0.25, heightRatio: 0.3, rotationDeg: 45, zIndex: 3 },
-    { label: '科技展项B', xRatio: 0.6, yRatio: 0.55, widthRatio: 0.2, heightRatio: 0.15, rotationDeg: -30, zIndex: 5 },
-  ]);
-  assert.match(layoutDescription, /互动展项A/);
-  assert.match(layoutDescription, /左上位置 x=10%, y=20%/);
-  assert.match(layoutDescription, /中心位置 x=23%, y=35%/);
-  assert.match(layoutDescription, /底面占比 宽=25%, 深=30%/);
-  assert.match(layoutDescription, /旋转=45°/);
-  assert.match(layoutDescription, /层级=3/);
-
-  const prompt = buildFusionRenderPrompt({ hallLengthMm: 20000, hallWidthMm: 10000, layoutDescription, exhibitCount: 2 });
-  assert.match(prompt, /主展项排版是最高优先级硬约束/);
-  assert.match(prompt, /禁止为了构图、透视、美观、补充环境或填充空档而移动/);
-  assert.match(prompt, /主展项排版数值清单/);
-  assert.match(prompt, /相同百分比在长、宽方向分别对应展厅实际长度和宽度/);
-  assert.match(prompt, /仅当排版底面确实存在连续的大面积空白区域时/);
+test('prompt automatically arranges exhibits and fills only large distant gaps', () => {
+  const prompt = buildFusionRenderPrompt({ hallLengthMm: 20000, hallWidthMm: 10000, exhibitCount: 2 });
+  assert.match(prompt, /根据展馆类型、展厅主体、空间参考图及设定长宽高自动完成专业展陈布置/);
+  assert.match(prompt, /保证通道、观看距离、安全边界和主次层级自然可信/);
+  assert.match(prompt, /仅当展厅确实存在连续的大面积空白区域时/);
   assert.match(prompt, /同主题、同类型、同设计语言/);
   assert.match(prompt, /异形图文墙体/);
   assert.match(prompt, /画面远端或背景空档/);
@@ -150,8 +123,7 @@ test('prompt hard-locks layout relations and fills only large distant gaps', () 
   assert.match(prompt, /近景和中景不得用新增物填满/);
 
   const node = read('src/components/nodes/FusionRenderDesignNode.tsx');
-  assert.match(node, /describeFusionRenderLayout\(layoutItems\)/);
-  assert.match(node, /layoutDescription/);
+  assert.doesNotMatch(node, /describeFusionRenderLayout|layoutItems|manualLayoutItems/);
 });
 
 test('venue type defaults to science museum and offers twenty common choices', () => {
@@ -169,9 +141,7 @@ test('venue type defaults to science museum and offers twenty common choices', (
   assert.doesNotMatch(prompt, /展陈空间透视效果图/);
   assert.doesNotMatch(prompt, /展项正立面/);
   assert.match(prompt, /相机必须保持约 1\.4–1\.6 米的较低正常人眼高度/);
-  assert.match(prompt, /中心位置、占地宽深比例、彼此间距、前后遮挡和层级关系/);
-  assert.doesNotMatch(prompt, /占地宽深比例、旋转朝向、彼此间距/);
-  assert.match(prompt, /禁止为了构图、透视、美观、补充环境或填充空档而移动、交换、聚拢、分散、放大、缩小、旋转或删除任何主展项/);
+  assert.match(prompt, /自动完成专业展陈布置/);
 
   const node = read('src/components/nodes/FusionRenderDesignNode.tsx');
   assert.match(node, /展馆类型/);
@@ -212,7 +182,7 @@ test('hall subject can be explicit or inferred while camera stays low and allows
   assert.match(explicit, /展项可以按照真实空间前后关系被其他展项、墙体、辅助结构或画面边缘自然局部遮挡/);
   assert.match(explicit, /也可以有部分展项位于画面之外/);
   assert.match(explicit, /无需强行让每个展项完整露脸/);
-  assert.match(explicit, /遮挡不能改变展项的真实底面位置、占地比例和层级/);
+  assert.match(explicit, /不能把被遮挡展项从空间中删除/);
 
   const node = read('src/components/nodes/FusionRenderDesignNode.tsx');
   assert.match(node, /展厅主体（留空则根据展项定义）/);

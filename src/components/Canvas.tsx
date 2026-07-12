@@ -1204,9 +1204,6 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     hallHeightMm: 4200,
     floorMaterial: '根据展项来设计',
     ceilingCraft: '根据所有展项风格自动调整',
-    manualLayoutItems: [],
-    excludedLayoutUrls: [],
-    manualLayoutReferenceImage: '',
     providerSource: 'zhenzhen',
     providerId: '',
     providerModel: '',
@@ -1623,7 +1620,7 @@ function exclusiveTargetHandlesForConnection(
   if (targetType === 'reverse-isometric-design' && handle === 'plan-layout') {
     return [handle];
   }
-  if (targetType === 'fusion-render-design' && handle === 'plan-layout') {
+  if (targetType === 'fusion-render-design' && handle === 'space-reference') {
     return [handle];
   }
   if (targetType === 'sculpture-relief-design' && handle === 'pattern-reference') {
