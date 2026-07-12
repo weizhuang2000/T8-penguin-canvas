@@ -96,7 +96,7 @@ const normalizeJimengSeedanceMode = (value: unknown): JimengSeedanceMode => {
   return 'omni';
 };
 
-const VideoNode = ({ id, data, selected }: NodeProps) => {
+const VideoNode = ({ id, data, selected, type }: NodeProps) => {
   const update = useUpdateNodeData(id);
   const hasAutoOutput = useHasAutoOutput(id);
   const { getEdges, getNodes } = useReactFlow();
@@ -110,6 +110,7 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
   const isPixel = themeStyle === 'pixel';
 
   const d = data as any;
+  const isRunningHubNodeType = type === 'runninghub-video';
   const providerParams = (d?.providerParams && typeof d.providerParams === 'object') ? d.providerParams : {};
   const advancedProviders = useApiKeysStore((s) => s.settings.advancedProviders);
   const allowZhenzhenFallback = useApiKeysStore((s) => s.settings.enableZhenzhenFallback !== false);
@@ -125,7 +126,9 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
     }),
     [advancedProviders, d?.providerSource, d?.providerId, d?.providerModel],
   );
-  const isExternalSelected = providerSelection.available && providerSelection.providerSource !== 'zhenzhen';
+  const isExternalSelected = !isRunningHubNodeType
+    && providerSelection.available
+    && providerSelection.providerSource !== 'zhenzhen';
   const savedExternalMissing = !!d?.providerSource && d.providerSource !== 'zhenzhen' && !providerSelection.available;
   const externalModelOptions = providerSelection.provider
     ? advancedProviderModelOptions(providerSelection.provider, 'video')
@@ -149,7 +152,9 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
   // 主模型 id (对应 VIDEO_MODELS 项)
   const rawModel = typeof d?.model === 'string' ? d.model : '';
   const isLegacySora2Model = /^sora-2(?:-\d{4}-\d{2}-\d{2})?$/.test(rawModel);
-  const mainId = d?.mainId || (isLegacySora2Model ? 'sora-2' : (d?.model && VIDEO_MODELS.find((m) => m.id === d.model || m.apiModelOptions.some((o) => o.value === d.model))?.id)) || VIDEO_MODELS[0].id;
+  const mainId = isRunningHubNodeType
+    ? 'runninghub-video'
+    : d?.mainId || (isLegacySora2Model ? 'sora-2' : (d?.model && VIDEO_MODELS.find((m) => m.id === d.model || m.apiModelOptions.some((o) => o.value === d.model))?.id)) || VIDEO_MODELS[0].id;
   const modelDef = useMemo(() => VIDEO_MODELS.find((m) => m.id === mainId) || VIDEO_MODELS[0], [mainId]);
   // 子模型(上游真实 model 名)
   const apiModel: string = d?.model && modelDef.apiModelOptions.some((o) => o.value === d.model) ? d.model : modelDef.apiModelOptions[0].value;
@@ -799,7 +804,7 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
           <VideoIcon size={13} />
         </div>
         <div className="flex-1">
-          <div className="text-sm font-semibold text-white">视频</div>
+          <div className="text-sm font-semibold text-white">{isRunningHubNodeType ? 'Running 视频' : '视频'}</div>
           <div className="text-[10px] text-white/40">
             {isExternalSelected && providerSelection.provider
               ? `${providerSelection.provider.label || providerSelection.provider.id} · ${externalProviderModel || '未选模型'}`
@@ -809,7 +814,7 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
       </div>
 
       <div className="p-2.5 space-y-2" onMouseDown={(e) => e.stopPropagation()}>
-        {videoAdvancedProviders.length > 0 && (
+        {!isRunningHubNodeType && videoAdvancedProviders.length > 0 && (
           <div className="rounded border border-white/10 bg-white/[0.03] p-2 space-y-2">
             <button
               type="button"
@@ -883,9 +888,10 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
           <select
             value={modelDef.id}
             onChange={(e) => switchMainModel(e.target.value)}
+            disabled={isRunningHubNodeType}
             className="w-full rounded bg-white/5 border border-white/10 px-2 py-1 text-xs text-white outline-none focus:border-white/30"
           >
-            {VIDEO_MODELS.filter((m) => m.kind !== 'seedance').map((m) => (
+            {VIDEO_MODELS.filter((m) => m.kind !== 'seedance' && (!isRunningHubNodeType || m.kind === 'runninghub')).map((m) => (
               <option key={m.id} value={m.id} className="bg-zinc-900">{m.label}</option>
             ))}
           </select>

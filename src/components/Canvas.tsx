@@ -188,6 +188,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   text: TextNode,
   image: ImageNode,
   video: VideoNode,
+  'runninghub-video': VideoNode,
   seedance: SeedanceNode, // 完全对齐 gpt-image-2-web Seedance2.0(独立 /seedance/v3 路径)
   'director-storyboard': DirectorStoryboardNode,
   audio: AudioNode,
@@ -1674,7 +1675,7 @@ function filterExclusiveTargetEdges(
 const EXECUTABLE_NODE_TYPES = new Set<string>([
   'image', 'edit',
   'multi-angle-3d', 'panorama-720', 'penguin-portrait',
-  'video', 'seedance', 'audio', 'llm', 'runninghub', 'runninghub-wallet',
+  'video', 'runninghub-video', 'seedance', 'audio', 'llm', 'runninghub', 'runninghub-wallet',
   // v1.2.10.1: rh-tools 与 RunningHub 同质，同样可被批量运行调起
   'rh-tools', 'rh-toolbox',
   'resize', 'upscale', 'grid-crop', 'mark', 'remove-bg', 'combine', 'image-compare', 'drawing-board',

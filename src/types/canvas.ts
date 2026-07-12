@@ -9,6 +9,7 @@ export type NodeType =
   | 'text'
   | 'image'
   | 'video'
+  | 'runninghub-video'
   | 'seedance'
   | 'director-storyboard'
   | 'audio'

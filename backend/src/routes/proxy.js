@@ -2516,7 +2516,7 @@ function missingRhKeyError() {
 }
 
 // RunningHub 标准模型：全能视频X · 图生视频低价渠道版 v1.5。
-router.post('/runninghub/video/submit', requireNodePermission('video'), async (req, res) => {
+router.post('/runninghub/video/submit', requireNodePermission(['video', 'runninghub-video']), async (req, res) => {
   const settings = loadRawSettings();
   const apiKey = pickRhApiKey(settings);
   if (!apiKey) return res.status(400).json({ success: false, error: missingRhKeyError() });
@@ -2551,7 +2551,7 @@ router.post('/runninghub/video/submit', requireNodePermission('video'), async (r
   }
 });
 
-router.post('/runninghub/video/query', requireNodePermission('video'), async (req, res) => {
+router.post('/runninghub/video/query', requireNodePermission(['video', 'runninghub-video']), async (req, res) => {
   const settings = loadRawSettings();
   const taskId = String(req.body?.taskId || '').trim();
   if (!taskId) return res.status(400).json({ success: false, error: 'taskId 必填' });

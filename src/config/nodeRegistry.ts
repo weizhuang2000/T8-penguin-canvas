@@ -11,6 +11,7 @@ const DEV_NODE_REGISTRY: NodeMeta[] = import.meta.env?.DEV ? [
  * 图标使用 lucide-react 名称(运行时由 Sidebar 动态查找)
  */
 export const NODE_REGISTRY: NodeMeta[] = [
+  { type: 'runninghub-video', label: 'Running 视频', category: 'rh', description: 'RunningHub 全能视频X · 图生视频低价渠道版 v1.5', icon: 'Video', color: 'cyan' },
   // ========== Input 素材资源 ==========
   { type: 'upload', label: '上传素材', category: 'input', description: '图像 / 视频 / 音频 三合一上传(自适应输出端口)', icon: 'Upload', color: 'emerald' },
   { type: 'model-3d-upload', label: '3D素材上传', category: 'input', description: '上传 glb/gltf/obj/stl/fbx/usdz/zip 3D 模型素材，并可一键生成 3D 模型预览节点', icon: 'Box', color: 'blue' },

@@ -44,6 +44,7 @@ export const NODE_DEFAULT_SIZE: Record<string, { w: number; h: number }> = {
   'material-set': { w: 320, h: 300 },
   'drawing-board': { w: 1120, h: 760 },
   video: { w: 320, h: 380 },
+  'runninghub-video': { w: 320, h: 380 },
   seedance: { w: 320, h: 380 },
   'director-storyboard': { w: 460, h: 760 },
   audio: { w: 320, h: 380 },

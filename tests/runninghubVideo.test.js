@@ -60,13 +60,22 @@ test('video node and API key management expose the RunningHub model', () => {
   const service = read('src/services/generation.ts');
   const settings = read('src/components/ApiSettings.tsx');
   const proxy = read('backend/src/routes/proxy.js');
+  const registry = read('src/config/nodeRegistry.ts');
+  const ports = read('src/config/portTypes.ts');
+  const canvas = read('src/components/Canvas.tsx');
+  const permissions = read('backend/src/auth/toolPermissions.js');
 
   assert.match(models, /id: 'runninghub-video'[\s\S]*rhart-video-g\/image-to-video/);
+  assert.match(registry, /type: 'runninghub-video'[\s\S]*label: 'Running 视频'/);
+  assert.match(ports, /'runninghub-video': \{ inputs: \['text', 'image'\], outputs: \['video'\] \}/);
+  assert.match(canvas, /'runninghub-video': VideoNode/);
+  assert.match(permissions, /'runninghub-video'/);
   assert.match(node, /submitRunningHubVideo/);
   assert.match(node, /queryRunningHubVideo/);
+  assert.match(node, /type === 'runninghub-video'/);
   assert.match(service, /\/api\/proxy\/runninghub\/video\/submit/);
   assert.match(service, /\/api\/proxy\/runninghub\/video\/query/);
   assert.match(settings, /RunningHub \/ RH 钱包应用 \/ Running 视频共用/);
   assert.match(proxy, /\/openapi\/v2\/query/);
-  assert.match(proxy, /requireNodePermission\('video'\)/);
+  assert.match(proxy, /requireNodePermission\(\['video', 'runninghub-video'\]\)/);
 });
