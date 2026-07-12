@@ -69,6 +69,7 @@ export function buildFusionRenderPrompt({
   ceilingCraft = FUSION_RENDER_AUTO_CEILING_CRAFT,
   colorMaterialPresetText = '',
   colorMaterial = '',
+  applyColorMaterialToExhibits = false,
   exhibitCount = 0,
 } = {}) {
   const safeVenueType = FUSION_RENDER_VENUE_TYPES.includes(venueType) ? venueType : FUSION_RENDER_VENUE_TYPES[0];
@@ -94,8 +95,11 @@ export function buildFusionRenderPrompt({
   const colorMaterialConstraint = presetText
     ? `色彩与材质预设：严格采用共享预设“${presetText}”。该预设控制墙面、顶部、地面、展台、辅助结构、灯光色温和整体空间材料语言；空间参考图的设计语言、色彩、材质、灯光和环境氛围一律不参与。不要被展项自身背景色覆盖。`
     : manualColorMaterial
-      ? `色彩与材质补充：${manualColorMaterial}。将这些要求统一应用于展厅环境与辅助结构，同时保持展项本体的识别色材。`
+      ? `色彩与材质补充：${manualColorMaterial}。将这些要求统一应用于展厅环境与辅助结构；是否同步影响展项色调由“展项色调联动”开关决定。`
       : '色彩与材质：未选择共享预设或手动补充时，只根据展馆类型、展厅主体和全部展项自动建立统一协调的色彩与材质体系；空间参考图的设计语言、色彩、材质、灯光和环境氛围一律不参与。';
+  const exhibitColorMaterialConstraint = applyColorMaterialToExhibits
+    ? '展项色调联动：开启。将当前色彩与材质预设或手动色材要求同步应用到所有主展项的整体色调、冷暖、明暗、饱和度、表面材质观感和环境反射，使展项与空间形成统一视觉体系；必须保留每个展项的结构、轮廓、主题内容、图形信息、核心识别特征和合理材质逻辑，不得因统一色调而把不同展项改成同一造型或丢失内容。'
+    : '展项色调联动：关闭。色彩与材质预设只控制展厅环境和辅助结构；各主展项保持原参考图的主体色调、材质和识别特征，仅接受真实环境光、阴影和反射影响。';
   const firstExhibitIndex = hasSpaceReference ? 2 : 1;
   const lastExhibitIndex = firstExhibitIndex + Math.max(0, exhibitCount) - 1;
   const referenceRoles = hasSpaceReference
@@ -117,6 +121,7 @@ export function buildFusionRenderPrompt({
     floorConstraint,
     ceilingConstraint,
     colorMaterialConstraint,
+    exhibitColorMaterialConstraint,
     '所有展项必须从各自原始外观参考恢复成可信的三维展陈装置，保持识别特征、色彩、材质和比例；底座落地、立面竖直、尺度可信，不得悬浮。',
     '环境氛围融合：综合全部展项原始外观参考的设计风格、年代气质、主题内容、色彩体系、材质语言和灯光倾向，为整个展厅补齐相符且统一的环境氛围。墙面处理、顶部造型、基础照明、重点照明、空间色温、地面细节、收口节点、踢脚、必要的护栏或参观边界、克制的导向元素及少量辅助环境陈设应形成完整设计，而不是把展项放进空白房间。',
     `墙面内容硬约束：最终画面中不得出现大面积无内容、无设计的空白墙面。所有可见墙面必须结合“${safeVenueType}”属性和全部主展项主题，采用有明确内容层级的主题图文、科普信息图形、材质肌理、灯光洗墙、嵌入式展示、异形图文墙或与展项协调的空间结构进行完整设计。墙面内容应丰富但克制、远端适度虚化，不得生成乱码或不可读的伪文字，不得遮挡、替代或抢夺主展项视觉中心。`,

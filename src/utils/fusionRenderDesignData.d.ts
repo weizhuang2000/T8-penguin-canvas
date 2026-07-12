@@ -12,5 +12,6 @@ export function buildFusionRenderPrompt(options?: {
   ceilingCraft?: string;
   colorMaterialPresetText?: string;
   colorMaterial?: string;
+  applyColorMaterialToExhibits?: boolean;
   exhibitCount?: number;
 }): string;

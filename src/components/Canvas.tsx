@@ -626,6 +626,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     density: '适中，图文层级均衡',
     colorMaterialPreset: '',
     colorMaterial: '',
+    applyColorMaterialToExhibits: false,
     colorMaterialPalette: '',
     colorMaterialPaletteMentions: [],
     colorMaterialTextures: '',

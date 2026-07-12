@@ -45,6 +45,7 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
   const [colorMaterialPresets, setColorMaterialPresets] = useState<ElevationColorMaterialPresetItem[]>([]);
   const selectedColorMaterialPreset = useMemo(() => colorMaterialPresets.find((preset) => preset.id === d.colorMaterialPreset) || null, [colorMaterialPresets, d.colorMaterialPreset]);
   const colorMaterialPresetText = selectedColorMaterialPreset ? colorMaterialTextFromPreset(selectedColorMaterialPreset) : '';
+  const applyColorMaterialToExhibits = d.applyColorMaterialToExhibits === true;
   const imageProviders = useMemo(() => advancedProvidersForNode(advancedProviders, 'image'), [advancedProviders]);
   const providerSelection = useMemo(() => resolveAdvancedProviderSelection(advancedProviders, 'image', { providerSource: d.providerSource, providerId: d.providerId, providerModel: d.providerModel }), [advancedProviders, d.providerId, d.providerModel, d.providerSource]);
   const isExternal = providerSelection.available && providerSelection.providerSource !== 'zhenzhen';
@@ -61,7 +62,7 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
   const busy = d.status === 'generating';
-  const previewPrompt = useMemo(() => buildFusionRenderPrompt({ hasSpaceReference: Boolean(spaceReferenceImage), venueType, hallSubject, hallHeightMm, floorMaterial, ceilingCraft, colorMaterialPresetText, colorMaterial: String(d.colorMaterial || ''), exhibitCount: exhibitImages.length }), [ceilingCraft, colorMaterialPresetText, d.colorMaterial, exhibitImages.length, floorMaterial, hallHeightMm, hallSubject, spaceReferenceImage, venueType]);
+  const previewPrompt = useMemo(() => buildFusionRenderPrompt({ hasSpaceReference: Boolean(spaceReferenceImage), venueType, hallSubject, hallHeightMm, floorMaterial, ceilingCraft, colorMaterialPresetText, colorMaterial: String(d.colorMaterial || ''), applyColorMaterialToExhibits, exhibitCount: exhibitImages.length }), [applyColorMaterialToExhibits, ceilingCraft, colorMaterialPresetText, d.colorMaterial, exhibitImages.length, floorMaterial, hallHeightMm, hallSubject, spaceReferenceImage, venueType]);
 
   useEffect(() => {
     getElevationPromptPresets().then((presets) => setColorMaterialPresets(presets.colorMaterial || [])).catch(() => setColorMaterialPresets([]));
@@ -148,6 +149,10 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
         <ColorMaterialPresetSelect className={FIELD} presets={colorMaterialPresets} value={d.colorMaterialPreset || ''} disabled={isReadonly || busy} onChange={(presetId, preset) => update({ colorMaterialPreset: presetId, colorMaterial: preset ? colorMaterialTextFromPreset(preset) : '' })} />
         {selectedColorMaterialPreset?.info && <div className="rounded border border-cyan-300/15 bg-cyan-300/5 px-2 py-1 text-[10px] leading-snug text-cyan-50/70">{selectedColorMaterialPreset.info}</div>}
         <textarea className={`${FIELD} min-h-[50px] resize-y`} value={d.colorMaterial || ''} disabled={isReadonly || busy} placeholder="手动色彩与材质补充" onChange={(event) => update({ colorMaterial: event.target.value, colorMaterialPreset: '' })} />
+        <div className="flex items-center justify-between gap-2 rounded border border-white/10 bg-black/15 p-2">
+          <div><div className="text-[10px] font-semibold text-cyan-100">同时影响展项色调</div><div className="text-[9px] text-white/40">开启后，预设同步影响展项冷暖、明暗与材质观感</div></div>
+          <button type="button" role="switch" aria-checked={applyColorMaterialToExhibits} disabled={isReadonly || busy} className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors ${applyColorMaterialToExhibits ? 'border-cyan-300/60 bg-cyan-300/25' : 'border-white/15 bg-white/10'} disabled:cursor-not-allowed disabled:opacity-45`} onClick={() => update({ applyColorMaterialToExhibits: !applyColorMaterialToExhibits })}><span className={`inline-block h-3.5 w-3.5 rounded-full transition-transform ${applyColorMaterialToExhibits ? 'translate-x-4.5 bg-cyan-200' : 'translate-x-0.5 bg-white/50'}`} /></button>
+        </div>
       </section>
       <section data-exhibition-compact-section="model" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
         <div className="flex items-center justify-between"><div className="text-[11px] font-semibold text-cyan-100">模型与尺寸</div><button className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy || !exhibitImages.length} onClick={() => void runGenerate()}>{busy ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}生成</button></div>

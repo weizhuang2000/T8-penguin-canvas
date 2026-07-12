@@ -218,3 +218,22 @@ test('space reference constrains only geometry while configured height is absolu
   assert.match(prompt, /空间参考图的设计语言、色彩、材质、灯光和环境氛围一律不参与/);
   assert.match(prompt, /色彩与材质预设：严格采用共享预设“暖白石材与深色金属”/);
 });
+
+test('color material can optionally influence exhibit tones', () => {
+  const disabled = buildFusionRenderPrompt({ colorMaterialPresetText: '深蓝银灰科技', applyColorMaterialToExhibits: false });
+  assert.match(disabled, /展项色调联动：关闭/);
+  assert.match(disabled, /各主展项保持原参考图的主体色调、材质和识别特征/);
+
+  const enabled = buildFusionRenderPrompt({ colorMaterialPresetText: '深蓝银灰科技', applyColorMaterialToExhibits: true });
+  assert.match(enabled, /展项色调联动：开启/);
+  assert.match(enabled, /同步应用到所有主展项的整体色调、冷暖、明暗、饱和度、表面材质观感和环境反射/);
+  assert.match(enabled, /保留每个展项的结构、轮廓、主题内容、图形信息、核心识别特征和合理材质逻辑/);
+  assert.match(enabled, /不得因统一色调而把不同展项改成同一造型或丢失内容/);
+
+  const node = read('src/components/nodes/FusionRenderDesignNode.tsx');
+  assert.match(node, /同时影响展项色调/);
+  assert.match(node, /role="switch"/);
+  assert.match(node, /aria-checked=\{applyColorMaterialToExhibits\}/);
+  assert.match(node, /applyColorMaterialToExhibits: !applyColorMaterialToExhibits/);
+  assert.match(read('src/components/Canvas.tsx'), /'fusion-render-design':[\s\S]*applyColorMaterialToExhibits: false/);
+});
