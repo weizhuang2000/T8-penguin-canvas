@@ -59,8 +59,8 @@ test('prompt describes both structural modes and always requests one realistic p
   const planned = buildFusionRenderPrompt({ hasSpaceReference: true, exhibitCount: 2, hallHeightMm: 5600, floorMaterial: '深灰水磨石' });
   assert.match(planned, /@img1 是空间参考图/);
   assert.match(planned, /@img2 至 @img3/);
-  for (const term of ['空间形态', '设计语言', '材质', '灯光', '环境氛围', '5600 mm', '深灰水磨石']) assert.match(planned, new RegExp(term));
-  assert.match(planned, /不得复制其中原有展项、人物、文字/);
+  for (const term of ['空间几何', '面积感', '平面长宽比例', '墙柱开口', '5600 mm', '深灰水磨石']) assert.match(planned, new RegExp(term));
+  assert.match(planned, /必须完全忽略 @img1 的设计语言、装饰风格、色彩、材质、灯光、曝光、环境氛围、原有展项、人物和文字/);
 
   const blank = buildFusionRenderPrompt({ hasSpaceReference: false, exhibitCount: 2 });
   assert.match(blank, /@img1 至 @img2 是需要作为素材融入展厅的展项原始外观参考/);
@@ -91,7 +91,7 @@ test('node keeps hall height and prompt uses it as the physical scale', () => {
   const node = read('src/components/nodes/FusionRenderDesignNode.tsx');
   assert.match(node, /value=\{hallHeightMm\}/);
   const prompt = buildFusionRenderPrompt({ hallHeightMm: 5000 });
-  assert.match(prompt, /展厅净高：5000 mm/);
+  assert.match(prompt, /展厅净高绝对硬约束：5000 mm/);
   assert.doesNotMatch(read('src/components/Canvas.tsx'), /'fusion-render-design':[\s\S]*hallLengthMm: 12000/);
 });
 
@@ -109,7 +109,7 @@ test('prompt creates a coherent realistic ambience without inventing primary exh
 
 test('prompt automatically arranges exhibits and fills only large distant gaps', () => {
   const prompt = buildFusionRenderPrompt({ exhibitCount: 2 });
-  assert.match(prompt, /根据展馆类型、展厅主体、空间参考图及展厅净高自动完成专业展陈布置/);
+  assert.match(prompt, /根据展馆类型、展厅主体、空间参考图提供的纯空间几何及展厅净高自动完成专业展陈布置/);
   assert.match(prompt, /保证通道、观看距离、安全边界和主次层级自然可信/);
   assert.match(prompt, /仅当展厅确实存在连续的大面积空白区域时/);
   assert.match(prompt, /同主题、同类型、同设计语言/);
@@ -197,9 +197,24 @@ test('color and material presets reuse exhibition img2img shared data and select
   const presetPrompt = buildFusionRenderPrompt({ colorMaterialPresetText: '未来科技蓝｜深灰金属｜冷白光' });
   assert.match(presetPrompt, /色彩与材质预设：严格采用共享预设/);
   assert.match(presetPrompt, /未来科技蓝｜深灰金属｜冷白光/);
-  assert.match(presetPrompt, /不要被空间参考图或展项自身背景色覆盖/);
+  assert.match(presetPrompt, /空间参考图的设计语言、色彩、材质、灯光和环境氛围一律不参与/);
+  assert.match(presetPrompt, /不要被展项自身背景色覆盖/);
 
   const manualPrompt = buildFusionRenderPrompt({ colorMaterial: '墙面深蓝，金属拉丝，局部青色灯带' });
   assert.match(manualPrompt, /色彩与材质补充：墙面深蓝，金属拉丝，局部青色灯带/);
   assert.match(read('src/components/Canvas.tsx'), /'fusion-render-design':[\s\S]*colorMaterialPreset: '',[\s\S]*colorMaterial: ''/);
+});
+
+test('space reference constrains only geometry while configured height is absolute', () => {
+  const prompt = buildFusionRenderPrompt({ hasSpaceReference: true, hallHeightMm: 6200, colorMaterialPresetText: '暖白石材与深色金属' });
+  assert.match(prompt, /只用于约束空间几何、面积感、平面长宽比例、面积与高度比例、墙柱开口、边界和纵深/);
+  assert.match(prompt, /严禁从中采用设计语言、色彩、材质、灯光或环境氛围/);
+  assert.match(prompt, /严格保持 @img1 的空间边界、平面长宽比例、总体面积感、面积与高度的相对比例/);
+  assert.match(prompt, /节点设置的净高 6200 mm 是唯一绝对高度基准/);
+  assert.match(prompt, /将参考图的面积—高度关系按 6200 mm 等比换算/);
+  assert.match(prompt, /不得擅自压低、抬高、拉长、压缩或扩大空间/);
+  assert.match(prompt, /展厅净高绝对硬约束：6200 mm/);
+  assert.match(prompt, /该数值优先于空间参考图中的视觉高度、透视错觉和原始建筑高度/);
+  assert.match(prompt, /空间参考图的设计语言、色彩、材质、灯光和环境氛围一律不参与/);
+  assert.match(prompt, /色彩与材质预设：严格采用共享预设“暖白石材与深色金属”/);
 });
