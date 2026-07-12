@@ -18,8 +18,8 @@ const { mimeFromPath, resolveMediaRef } = require('../providers/mediaResolver');
 const { requireNodePermission } = require('../auth/toolPermissions');
 const settingsRouter = require('./settings');
 const {
-  RUNNINGHUB_VIDEO_PATH,
   normalizeRunningHubVideoRequest,
+  resolveRunningHubVideoModel,
   normalizeRunningHubVideoStatus,
   runningHubVideoFailReason,
   extractRunningHubVideoUrl,
@@ -143,12 +143,27 @@ function bufferFromLocalMediaRef(ref) {
   return { buf, mime, ext: ext === 'jpeg' ? 'jpg' : ext };
 }
 
-function runningHubVideoImageRef(ref) {
+function runningHubVideoImageRef(ref, maxImageBytes) {
   const value = String(ref || '').trim();
-  if (/^https?:\/\//i.test(value) || /^data:image\//i.test(value)) return value;
+  if (/^https?:\/\//i.test(value)) return value;
+  if (/^data:image\//i.test(value)) {
+    const comma = value.indexOf(',');
+    if (comma < 0) throw new Error('RunningHub 参考图 Base64 Data URI 格式无效');
+    const meta = value.slice(0, comma);
+    const payload = value.slice(comma + 1);
+    const size = /;base64$/i.test(meta)
+      ? Buffer.from(payload, 'base64').length
+      : Buffer.byteLength(decodeURIComponent(payload));
+    if (size > maxImageBytes) {
+      throw new Error(`RunningHub 单张参考图不能超过 ${Math.round(maxImageBytes / 1024 / 1024)}MB`);
+    }
+    return value;
+  }
   const local = bufferFromLocalMediaRef(value);
   if (!local) throw new Error(`无法读取 RunningHub 参考图: ${value}`);
-  if (local.buf.length > 10 * 1024 * 1024) throw new Error('RunningHub 单张参考图不能超过 10MB');
+  if (local.buf.length > maxImageBytes) {
+    throw new Error(`RunningHub 单张参考图不能超过 ${Math.round(maxImageBytes / 1024 / 1024)}MB`);
+  }
   return `data:${local.mime};base64,${local.buf.toString('base64')}`;
 }
 
@@ -2515,15 +2530,18 @@ function missingRhKeyError() {
   return '未配置 RunningHub API Key（请在设置中填写 RunningHub API Key）';
 }
 
-// RunningHub 标准模型：全能视频X · 图生视频低价渠道版 v1.5。
+// RunningHub 标准视频模型；模型 ID 只允许 utils/runninghubVideo.js 中的固定白名单。
 router.post('/runninghub/video/submit', requireNodePermission(['video', 'runninghub-video']), async (req, res) => {
   const settings = loadRawSettings();
   const apiKey = pickRhApiKey(settings);
   if (!apiKey) return res.status(400).json({ success: false, error: missingRhKeyError() });
   try {
     const normalized = normalizeRunningHubVideoRequest(req.body || {});
-    const body = { ...normalized, imageUrls: normalized.imageUrls.map(runningHubVideoImageRef) };
-    const response = await fetch(`${config.RH_BASE_URL}${RUNNINGHUB_VIDEO_PATH}`, {
+    const body = {
+      ...normalized.body,
+      imageUrls: normalized.body.imageUrls.map((ref) => runningHubVideoImageRef(ref, normalized.maxImageBytes)),
+    };
+    const response = await fetch(`${config.RH_BASE_URL}${normalized.path}`, {
       method: 'POST',
       headers: {
         Host: 'www.runninghub.cn',
@@ -2544,7 +2562,7 @@ router.post('/runninghub/video/submit', requireNodePermission(['video', 'running
       });
     }
     rememberTaskKey(data.taskId, apiKey);
-    return res.json({ success: true, data: { taskId: String(data.taskId), raw: data } });
+    return res.json({ success: true, data: { taskId: String(data.taskId), model: normalized.model, raw: data } });
   } catch (e) {
     console.error('proxy/runninghub/video/submit 错误:', e);
     return res.status(400).json({ success: false, error: e?.message || 'RunningHub 视频提交失败' });
@@ -2558,6 +2576,7 @@ router.post('/runninghub/video/query', requireNodePermission(['video', 'runningh
   const apiKey = recallTaskKey(taskId) || pickRhApiKey(settings);
   if (!apiKey) return res.status(400).json({ success: false, error: missingRhKeyError() });
   try {
+    const queryModel = resolveRunningHubVideoModel(req.body?.model);
     const response = await fetch(`${config.RH_BASE_URL}/openapi/v2/query`, {
       method: 'POST',
       headers: {
@@ -2602,7 +2621,7 @@ router.post('/runninghub/video/query', requireNodePermission(['video', 'runningh
     }
     if (status === 'SUCCESS' && videoUrl) {
       rememberGeneratedUrls(req, [videoUrl], {
-        kind: 'video', provider: 'runninghub', model: 'rhart-video-g/image-to-video', taskId,
+        kind: 'video', provider: 'runninghub', model: queryModel.id, taskId,
       });
     }
     return res.json({

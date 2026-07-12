@@ -778,6 +778,7 @@ export async function queryVideo(taskId: string, model?: string, historyContext?
 }
 
 export interface RunningHubVideoSubmitRequest {
+  model: string;
   prompt: string;
   aspectRatio: string;
   imageUrls?: string[];
@@ -799,12 +800,13 @@ export async function submitRunningHubVideo(req: RunningHubVideoSubmitRequest): 
 
 export async function queryRunningHubVideo(
   taskId: string,
+  model?: string,
   historyContext?: GenerationHistoryContext,
 ): Promise<VideoQueryResult> {
   const r = await fetch('/api/proxy/runninghub/video/query', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ taskId, historyContext }),
+    body: JSON.stringify({ taskId, model, historyContext }),
   });
   const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);

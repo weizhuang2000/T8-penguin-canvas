@@ -415,6 +415,62 @@ export interface VideoModelDef {
   maxRefImages: number;
 }
 
+export interface RunningHubVideoModelDef {
+  value: string;
+  label: string;
+  description: string;
+  ratios: string[];
+  defaultRatio: string;
+  durations: number[];
+  defaultDuration: number;
+  resolutions: string[];
+  defaultResolution: string;
+  promptMin: number;
+  promptMax: number;
+  minRefImages: number;
+  maxRefImages: number;
+  maxImageSizeMb: number;
+}
+
+export const RUNNINGHUB_VIDEO_MODELS: RunningHubVideoModelDef[] = [
+  {
+    value: 'rhart-video-g/image-to-video',
+    label: '全能视频X · 图生视频 v1.5',
+    description: '低价渠道版 v1.5；参考图可选，支持 480p/720p 与 6-30 秒。',
+    ratios: ['2:3', '3:2', '1:1', '16:9', '9:16'],
+    defaultRatio: '16:9',
+    durations: Array.from({ length: 25 }, (_, index) => index + 6),
+    defaultDuration: 6,
+    resolutions: ['480p', '720p'],
+    defaultResolution: '480p',
+    promptMin: 1,
+    promptMax: 20000,
+    minRefImages: 0,
+    maxRefImages: 7,
+    maxImageSizeMb: 10,
+  },
+  {
+    value: 'rhart-video-v3.1-fast/image-to-video',
+    label: '全能视频V3.1-fast · 图生视频低价渠道版',
+    description: 'V3.1 高性价比速享版；固定 8 秒，支持原生音画同步与 720p/1080p/4k。',
+    ratios: ['16:9', '9:16'],
+    defaultRatio: '16:9',
+    durations: [8],
+    defaultDuration: 8,
+    resolutions: ['720p', '1080p', '4k'],
+    defaultResolution: '720p',
+    promptMin: 5,
+    promptMax: 8000,
+    minRefImages: 1,
+    maxRefImages: 3,
+    maxImageSizeMb: 30,
+  },
+];
+
+export function runningHubVideoModelDef(model: string): RunningHubVideoModelDef {
+  return RUNNINGHUB_VIDEO_MODELS.find((item) => item.value === model) || RUNNINGHUB_VIDEO_MODELS[0];
+}
+
 // Veo 系列子模型。第一项是切到 Veo 分类时的默认具体模型。
 const VEO_MODELS = [
   { value: 'veo-omni-10s', label: 'veo-omni-10s' },
@@ -514,18 +570,16 @@ export const VIDEO_MODELS: VideoModelDef[] = [
     label: 'Running 视频',
     kind: 'runninghub',
     provider: 'runninghub',
-    description: 'RunningHub 全能视频X · 图生视频低价渠道版 v1.5',
-    apiModelOptions: [
-      { value: 'rhart-video-g/image-to-video', label: '全能视频X · 图生视频 v1.5' },
-    ],
-    ratios: ['2:3', '3:2', '1:1', '16:9', '9:16'],
-    defaultRatio: '16:9',
-    durations: Array.from({ length: 25 }, (_, index) => index + 6),
-    defaultDuration: 6,
-    resolutions: ['480p', '720p'],
-    defaultResolution: '480p',
+    description: 'RunningHub 标准模型视频生成，复用企业级共享 API Key',
+    apiModelOptions: RUNNINGHUB_VIDEO_MODELS.map(({ value, label }) => ({ value, label })),
+    ratios: RUNNINGHUB_VIDEO_MODELS[0].ratios,
+    defaultRatio: RUNNINGHUB_VIDEO_MODELS[0].defaultRatio,
+    durations: RUNNINGHUB_VIDEO_MODELS[0].durations,
+    defaultDuration: RUNNINGHUB_VIDEO_MODELS[0].defaultDuration,
+    resolutions: RUNNINGHUB_VIDEO_MODELS[0].resolutions,
+    defaultResolution: RUNNINGHUB_VIDEO_MODELS[0].defaultResolution,
     supportImages: true,
-    maxRefImages: 7,
+    maxRefImages: RUNNINGHUB_VIDEO_MODELS[0].maxRefImages,
   },
 ];
 

@@ -3,6 +3,7 @@ import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react';
 import { AlertCircle, Loader2, Video as VideoIcon, Sparkles, Square, X } from 'lucide-react';
 import {
   VIDEO_MODELS,
+  runningHubVideoModelDef,
   GROK_VIDEO_1_5_NEW_SIZES,
   grokVideo15NewSizeFromRatio,
   isFalVideoModel,
@@ -158,10 +159,19 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
   const modelDef = useMemo(() => VIDEO_MODELS.find((m) => m.id === mainId) || VIDEO_MODELS[0], [mainId]);
   // 子模型(上游真实 model 名)
   const apiModel: string = d?.model && modelDef.apiModelOptions.some((o) => o.value === d.model) ? d.model : modelDef.apiModelOptions[0].value;
+  const runningHubModel = runningHubVideoModelDef(apiModel);
   // 各参数(跳过着调用 update 默认值)
-  const ratio: string = d?.ratio || modelDef.defaultRatio;
-  const duration: number = d?.duration ?? modelDef.defaultDuration ?? (modelDef.durations?.[0] || 0);
-  const resolution: string = d?.resolution || (isJimengSeedanceSelected ? '720p' : modelDef.defaultResolution || '');
+  const ratio: string = modelDef.kind === 'runninghub'
+    ? (runningHubModel.ratios.includes(d?.ratio) ? d.ratio : runningHubModel.defaultRatio)
+    : d?.ratio || modelDef.defaultRatio;
+  const duration: number = modelDef.kind === 'runninghub'
+    ? (runningHubModel.durations.includes(Number(d?.duration)) ? Number(d.duration) : runningHubModel.defaultDuration)
+    : d?.duration ?? modelDef.defaultDuration ?? (modelDef.durations?.[0] || 0);
+  const resolution: string = modelDef.kind === 'runninghub'
+    ? (runningHubModel.resolutions.includes(String(d?.resolution || '').toLowerCase())
+      ? String(d.resolution).toLowerCase()
+      : runningHubModel.defaultResolution)
+    : d?.resolution || (isJimengSeedanceSelected ? '720p' : modelDef.defaultResolution || '');
   const seed: number = typeof d?.seed === 'number' ? d.seed : 0;
   const enhancePrompt: boolean = d?.enhancePrompt ?? false;
   const enableUpsample: boolean = d?.enableUpsample ?? false;
@@ -183,16 +193,22 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
     ? ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']
     : isGrok15New
     ? ['16:9', '9:16']
+    : isRunningHubVideo
+    ? runningHubModel.ratios
     : modelDef.ratios;
   const durationOptions = isJimengSeedanceSelected
     ? [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     : isGrok15New
     ? []
+    : isRunningHubVideo
+    ? runningHubModel.durations
     : modelDef.durations || [];
   const resolutionOptions = isJimengSeedanceSelected
     ? ['480p', '720p', '1080p']
     : isGrok15New
     ? []
+    : isRunningHubVideo
+    ? runningHubModel.resolutions
     : modelDef.resolutions || [];
   // veo-fal 专属
   const vfRatio: string = d?.vfRatio || '16:9';
@@ -310,6 +326,8 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
       ? falReg.paramKind === 'grok-fal' && (isGrokFalV15 || gkfMode !== 'reference_to_video')
         ? 1
         : falReg.maxRefImages
+      : isRunningHubVideo
+      ? runningHubModel.maxRefImages
       : modelDef.maxRefImages;
   const maxMentionVideos = isJimengSeedanceSelected ? JIMENG_SEEDANCE_LIMITS.videos : 0;
   const maxMentionAudios = isJimengSeedanceSelected ? JIMENG_SEEDANCE_LIMITS.audios : 0;
@@ -407,7 +425,7 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
         }
         try {
           const r = isRunningHubVideo
-            ? await queryRunningHubVideo(tid)
+            ? await queryRunningHubVideo(tid, apiModel)
             : await queryVideo(tid, apiModel);
           if (r.progress && r.progress !== lastProgress) {
             lastProgress = r.progress;
@@ -552,17 +570,24 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
 
       // === FAL 分支 ===
       if (isRunningHubVideo) {
-        const refs = imageUrls.slice(0, 7);
+        if (finalPrompt.length < runningHubModel.promptMin || finalPrompt.length > runningHubModel.promptMax) {
+          throw new Error(`当前 RunningHub 模型的 Prompt 长度须为 ${runningHubModel.promptMin}-${runningHubModel.promptMax} 个字符`);
+        }
+        if (imageUrls.length < runningHubModel.minRefImages) {
+          throw new Error(`当前 RunningHub 模型至少需要 ${runningHubModel.minRefImages} 张参考图`);
+        }
+        const refs = imageUrls.slice(0, runningHubModel.maxRefImages);
         logBus.info(
           `提交 RunningHub 视频: model=${apiModel} ratio=${ratio} duration=${duration}s resolution=${resolution} refs=${refs.length}`,
           src,
         );
         const r = await submitRunningHubVideo({
+          model: apiModel,
           prompt: finalPrompt,
           aspectRatio: ratio,
           imageUrls: refs,
-          resolution: resolution || '480p',
-          duration: Number(duration) || 6,
+          resolution: resolution || runningHubModel.defaultResolution,
+          duration: Number(duration) || runningHubModel.defaultDuration,
         });
         update({ status: 'polling', taskId: r.taskId, lastPrompt: finalPrompt, progress: '0%' });
         logBus.info(`RunningHub 视频任务已提交 taskId=${r.taskId}`, src);
@@ -752,7 +777,13 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
     if (payload.kind === 'image' && payload.url) {
       const cur = Array.isArray(d?.localRefImages) ? d.localRefImages : [];
       if (cur.indexOf(payload.url) !== -1) return;
-      const cap = isGrok15New ? 1 : isJimengSeedanceSelected ? JIMENG_SEEDANCE_LIMITS.images : (modelDef.maxRefImages || 7) + 4;
+      const cap = isGrok15New
+        ? 1
+        : isRunningHubVideo
+        ? runningHubModel.maxRefImages
+        : isJimengSeedanceSelected
+        ? JIMENG_SEEDANCE_LIMITS.images
+        : (modelDef.maxRefImages || 7) + 4;
       if (cur.length >= cap) return;
       update({ localRefImages: [...cur, payload.url] });
     } else if (payload.kind === 'video' && payload.url && isJimengSeedanceSelected) {
@@ -906,8 +937,16 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
               value={apiModel}
               onChange={(e) => {
                 const nextModel = e.target.value;
+                const nextRunningHubModel = modelDef.kind === 'runninghub'
+                  ? runningHubVideoModelDef(nextModel)
+                  : null;
                 update({
                   model: nextModel,
+                  ...(nextRunningHubModel ? {
+                    ratio: nextRunningHubModel.defaultRatio,
+                    duration: nextRunningHubModel.defaultDuration,
+                    resolution: nextRunningHubModel.defaultResolution,
+                  } : {}),
                   ...(nextModel === 'grok-imagine-video-1.5' ? { gkfMode: 'image_to_video' } : {}),
                   ...(isGrokVideo15NewModel(nextModel) ? { ratio: '16:9', size: '1280x720', resolution: '' } : {}),
                   ...(nextModel === 'sora-2-zhenzhen' ? { ratio: '16:9', duration: 15, resolution: '' } : {}),
@@ -1120,7 +1159,9 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
 
         {isRunningHubVideo && (
           <div className="rounded border border-cyan-400/20 bg-cyan-500/5 px-2 py-1.5 text-[10px] leading-relaxed text-white/50">
-            RunningHub 全能视频X · 图生视频低价渠道版 v1.5。复用 API Key 管理中的 RunningHub API Key，支持最多 7 张参考图；结果会自动转存到本地 output。
+            {runningHubModel.description}复用 API Key 管理中的企业级共享 RunningHub API Key；参考图
+            {runningHubModel.minRefImages > 0 ? `至少 ${runningHubModel.minRefImages} 张，` : '可选，'}
+            最多 {runningHubModel.maxRefImages} 张（单张 {runningHubModel.maxImageSizeMb}MB），结果会自动转存到本地 output。
           </div>
         )}
 
