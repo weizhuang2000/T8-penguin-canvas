@@ -883,7 +883,7 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
   //   2. 防重复保存: ref Set 记录本节点生命周期内已请求过的 url(纯前端去重, 后端还会再一道同名跳过防护)
   //   3. 静默失败: saveAssetToDisk 不抛错, 避免干扰主生成链路
   //   4. 远端 http(s) URL 也照位部 —— 后端会 fetch 拉取后保存, 不依赖前端报三方
-  const savedUrlsRef = useRef<Set<string>>(new Set());
+  const savedUrlsRef = useRef<Set<string> | null>(null);
   useEffect(() => {
     const all: string[] = [
       ...collected.images,
@@ -891,10 +891,17 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
       ...collected.audios,
       ...collected.models,
     ].filter(Boolean);
+    // 恢复/切换画布时只登记已有素材，避免把历史输出再次批量复制或远程下载。
+    // 节点已挂载后新产生的 URL 仍会正常触发自动保存。
+    const savedUrls = savedUrlsRef.current;
+    if (savedUrls === null) {
+      savedUrlsRef.current = new Set(all);
+      return;
+    }
     if (all.length === 0) return;
-    const fresh = all.filter((u) => !savedUrlsRef.current.has(u));
+    const fresh = all.filter((u) => !savedUrls.has(u));
     if (fresh.length === 0) return;
-    fresh.forEach((u) => savedUrlsRef.current.add(u));
+    fresh.forEach((u) => savedUrls.add(u));
     // 不 await: 并发发送, 静默失败
     fresh.forEach((u) => {
       saveAssetToDisk(u).catch(() => {/* 静默 */});

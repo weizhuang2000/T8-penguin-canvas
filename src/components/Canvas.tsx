@@ -2379,8 +2379,9 @@ function CanvasInner({
   const [loaded, setLoaded] = useState(false);
   const [loadedCanvasId, setLoadedCanvasId] = useState<string | null>(null);
   const saveTimersByCanvasRef = useRef<Map<string, number>>(new Map());
-  const pendingSaveByCanvasRef = useRef<Map<string, { nodes: Node[]; edges: Edge[]; snapshot: string; nextNodeSerialId: number }>>(new Map());
+  const pendingSaveByCanvasRef = useRef<Map<string, { nodes: Node[]; edges: Edge[]; snapshot?: string; nextNodeSerialId: number }>>(new Map());
   const lastSavedByCanvasRef = useRef<Map<string, string>>(new Map());
+  const lastSavedNodeCountByCanvasRef = useRef<Map<string, number>>(new Map());
   const nextNodeSerialIdRef = useRef(1);
   const allowEmptySaveCanvasIdsRef = useRef<Set<string>>(new Set());
 
@@ -2610,6 +2611,7 @@ function CanvasInner({
           requestedCanvasId,
           normalized.changed || normalizedSnapshot !== loadedSnapshot ? loadedSnapshot : normalizedSnapshot,
         );
+        lastSavedNodeCountByCanvasRef.current.set(requestedCanvasId, Array.isArray(data.nodes) ? data.nodes.length : 0);
         allowEmptySaveCanvasIdsRef.current.delete(requestedCanvasId);
         histReset({ nodes: fixedNs, edges: es });
         const restoredViewport =
@@ -2701,16 +2703,8 @@ function CanvasInner({
       (ed) => ed.source !== BULK_PHANTOM_ID && ed.target !== BULK_PHANTOM_ID
     );
     const nextNodeSerialId = nextNodeSerialIdRef.current;
-    const snapshot = JSON.stringify({ nodes: persistNodes, edges: persistEdges, nextNodeSerialId });
     const canvasIdForSave = activeId;
-    const previousSnapshot = lastSavedByCanvasRef.current.get(canvasIdForSave) || '';
-    if (snapshot === previousSnapshot) return;
-    let previousNodeCount = 0;
-    try {
-      previousNodeCount = JSON.parse(previousSnapshot || '{}')?.nodes?.length || 0;
-    } catch {
-      previousNodeCount = 0;
-    }
+    const previousNodeCount = lastSavedNodeCountByCanvasRef.current.get(canvasIdForSave) || 0;
     const allowEmptySave = allowEmptySaveCanvasIdsRef.current.has(canvasIdForSave);
     if (persistNodes.length === 0 && previousNodeCount > 0 && !allowEmptySave) {
       // 防止空数据覆盖
@@ -2718,22 +2712,34 @@ function CanvasInner({
     }
     const previousTimer = saveTimersByCanvasRef.current.get(canvasIdForSave);
     if (previousTimer) window.clearTimeout(previousTimer);
-    pendingSaveByCanvasRef.current.set(canvasIdForSave, {
+    const pendingSave: { nodes: Node[]; edges: Edge[]; snapshot?: string; nextNodeSerialId: number } = {
       nodes: persistNodes,
       edges: persistEdges,
       nextNodeSerialId,
-      snapshot,
-    });
+    };
+    pendingSaveByCanvasRef.current.set(canvasIdForSave, pendingSave);
+    const viewport = getViewport();
     const timer = window.setTimeout(async () => {
-      const payload = { nodes: persistNodes, edges: persistEdges, viewport: getViewport(), nextNodeSerialId };
+      let snapshot = '';
       try {
+        // 大画布序列化必须放在防抖之后；拖动期间这里只会不断替换定时器。
+        snapshot = JSON.stringify({ nodes: persistNodes, edges: persistEdges, nextNodeSerialId });
+        if (snapshot === (lastSavedByCanvasRef.current.get(canvasIdForSave) || '')) {
+          if (pendingSaveByCanvasRef.current.get(canvasIdForSave) === pendingSave) {
+            pendingSaveByCanvasRef.current.delete(canvasIdForSave);
+          }
+          return;
+        }
+        pendingSave.snapshot = snapshot;
+        const payload = { nodes: persistNodes, edges: persistEdges, viewport, nextNodeSerialId };
         await api.saveCanvasData(canvasIdForSave, payload, { allowEmpty: allowEmptySave });
         api.autoSaveCanvasData(canvasIdForSave, payload).catch((e) => {
           console.warn('画布自动保存到本地路径失败', e);
         });
         if (allowEmptySave) allowEmptySaveCanvasIdsRef.current.delete(canvasIdForSave);
         lastSavedByCanvasRef.current.set(canvasIdForSave, snapshot);
-        if (pendingSaveByCanvasRef.current.get(canvasIdForSave)?.snapshot === snapshot) {
+        lastSavedNodeCountByCanvasRef.current.set(canvasIdForSave, persistNodes.length);
+        if (pendingSaveByCanvasRef.current.get(canvasIdForSave) === pendingSave) {
           pendingSaveByCanvasRef.current.delete(canvasIdForSave);
         }
         useCanvasStore.setState((state) => ({

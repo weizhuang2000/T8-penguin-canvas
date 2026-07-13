@@ -105,6 +105,57 @@ export interface ToolPermissionsConfig {
 const canvasDataCache = new Map<string, CanvasData>();
 const pendingCanvasDataRequests = new Map<string, Promise<CanvasData>>();
 const CANVAS_DATA_CACHE_PREFIX = 't8pc:canvas-data:v1:';
+const MAX_PERSISTED_CANVAS_CACHE_CHARS = 2_000_000;
+const canvasPersistVersions = new Map<string, number>();
+
+type SharedGetCacheEntry<T> = {
+  value?: T;
+  expiresAt: number;
+  pending?: Promise<T>;
+};
+
+const sharedGetCache = new Map<string, SharedGetCacheEntry<unknown>>();
+const sharedGetVersions = new Map<string, number>();
+const AUTH_ME_CACHE_KEY = 'auth/me';
+const ELEVATION_PRESETS_CACHE_KEY = 'prompt-library/elevation/presets';
+
+function cachedSharedGet<T>(key: string, loader: () => Promise<T>, ttlMs = 30_000): Promise<T> {
+  const now = Date.now();
+  const version = sharedGetVersions.get(key) || 0;
+  const cached = sharedGetCache.get(key) as SharedGetCacheEntry<T> | undefined;
+  if (cached?.pending) return cached.pending;
+  if (cached && cached.expiresAt > now && Object.prototype.hasOwnProperty.call(cached, 'value')) {
+    return Promise.resolve(cached.value as T);
+  }
+
+  const pending = loader()
+    .then((value) => {
+      if ((sharedGetVersions.get(key) || 0) === version) {
+        sharedGetCache.set(key, { value, expiresAt: Date.now() + ttlMs });
+      }
+      return value;
+    })
+    .catch((error) => {
+      if ((sharedGetCache.get(key) as SharedGetCacheEntry<T> | undefined)?.pending === pending) {
+        sharedGetCache.delete(key);
+      }
+      throw error;
+    });
+  sharedGetCache.set(key, { expiresAt: 0, pending });
+  return pending;
+}
+
+function invalidateSharedGet(key: string) {
+  sharedGetVersions.set(key, (sharedGetVersions.get(key) || 0) + 1);
+  sharedGetCache.delete(key);
+}
+
+function clearSharedGetCache() {
+  for (const key of sharedGetCache.keys()) {
+    sharedGetVersions.set(key, (sharedGetVersions.get(key) || 0) + 1);
+  }
+  sharedGetCache.clear();
+}
 
 function cloneCanvasData(data: CanvasData): CanvasData {
   if (typeof structuredClone === 'function') return structuredClone(data);
@@ -140,6 +191,10 @@ function readPersistedCanvasData(id: string): CanvasData | null {
   try {
     const raw = storage.getItem(canvasDataCacheKey(id));
     if (!raw) return null;
+    if (raw.length > MAX_PERSISTED_CANVAS_CACHE_CHARS) {
+      storage.removeItem(canvasDataCacheKey(id));
+      return null;
+    }
     const parsed = JSON.parse(raw);
     const data = parsed?.data || parsed;
     if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.edges)) return null;
@@ -150,20 +205,37 @@ function readPersistedCanvasData(id: string): CanvasData | null {
 }
 
 function persistCanvasData(id: string, data: CanvasData) {
-  const storage = canvasDataStorage();
-  if (!storage) return;
-  try {
-    storage.setItem(canvasDataCacheKey(id), JSON.stringify({ cachedAt: Date.now(), data }));
-  } catch {
-    // localStorage quota/security failures should never block canvas saving.
+  if (typeof window === 'undefined') return;
+  const version = (canvasPersistVersions.get(id) || 0) + 1;
+  canvasPersistVersions.set(id, version);
+  const run = () => {
+    if (canvasPersistVersions.get(id) !== version) return;
+    const storage = canvasDataStorage();
+    if (!storage) return;
+    try {
+      const serialized = JSON.stringify({ cachedAt: Date.now(), data });
+      if (serialized.length > MAX_PERSISTED_CANVAS_CACHE_CHARS) {
+        storage.removeItem(canvasDataCacheKey(id));
+        return;
+      }
+      storage.setItem(canvasDataCacheKey(id), serialized);
+    } catch {
+      // localStorage quota/security failures should never block canvas saving.
+    }
+  };
+  if (typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(run, { timeout: 2_000 });
+  } else {
+    window.setTimeout(run, 0);
   }
 }
 
-function writeCanvasDataCache(id: string, data: CanvasData) {
+function writeCanvasDataCache(id: string, data: CanvasData): CanvasData {
   const previous = canvasDataCache.get(id) || readPersistedCanvasData(id) || undefined;
   const normalized = normalizeCanvasData(data, previous);
   canvasDataCache.set(id, normalized);
   persistCanvasData(id, normalized);
+  return normalized;
 }
 
 export function primeCanvasDataCache(id: string, data: CanvasData): void {
@@ -171,15 +243,18 @@ export function primeCanvasDataCache(id: string, data: CanvasData): void {
 }
 
 export function getCachedCanvasData(id: string): CanvasData | null {
-  const cached = canvasDataCache.get(id) || readPersistedCanvasData(id);
+  const memoryCached = canvasDataCache.get(id);
+  if (memoryCached) return cloneCanvasData(memoryCached);
+  const cached = readPersistedCanvasData(id);
   if (!cached) return null;
-  if (!canvasDataCache.has(id)) canvasDataCache.set(id, cloneCanvasData(cached));
+  canvasDataCache.set(id, cached);
   return cloneCanvasData(cached);
 }
 
 export function invalidateCanvasDataCache(id: string): void {
   canvasDataCache.delete(id);
   pendingCanvasDataRequests.delete(id);
+  canvasPersistVersions.set(id, (canvasPersistVersions.get(id) || 0) + 1);
   try {
     canvasDataStorage()?.removeItem(canvasDataCacheKey(id));
   } catch {
@@ -227,6 +302,8 @@ export async function login(payload: { username: string; password: string }): Pr
     method: 'POST',
     body: JSON.stringify(payload),
   });
+  clearSharedGetCache();
+  sharedGetCache.set(AUTH_ME_CACHE_KEY, { value: res.data.user, expiresAt: Date.now() + 5_000 });
   return res.data;
 }
 
@@ -235,20 +312,28 @@ export async function ssoLogin(token: string): Promise<{ user: AuthUser; token: 
     method: 'POST',
     body: JSON.stringify({ token }),
   });
+  clearSharedGetCache();
+  sharedGetCache.set(AUTH_ME_CACHE_KEY, { value: res.data.user, expiresAt: Date.now() + 5_000 });
   return res.data;
 }
 
 export async function getCurrentUser(): Promise<AuthUser | null> {
-  try {
-    const res = await request<{ success: boolean; data: AuthUser }>(`${BASE}/auth/me`);
-    return res.data;
-  } catch {
-    return null;
-  }
+  return cachedSharedGet<AuthUser | null>(AUTH_ME_CACHE_KEY, async () => {
+    try {
+      const res = await request<{ success: boolean; data: AuthUser }>(`${BASE}/auth/me`);
+      return res.data;
+    } catch {
+      return null;
+    }
+  }, 5_000);
 }
 
 export async function logout(): Promise<void> {
-  await request(`${BASE}/auth/logout`, { method: 'POST' });
+  try {
+    await request(`${BASE}/auth/logout`, { method: 'POST' });
+  } finally {
+    clearSharedGetCache();
+  }
 }
 
 export async function searchUsers(q = ''): Promise<AuthUser[]> {
@@ -346,16 +431,15 @@ export async function createCanvas(name?: string): Promise<CanvasListItem> {
 }
 
 export async function getCanvasData(id: string, options?: { force?: boolean }): Promise<CanvasData> {
+  const inFlight = pendingCanvasDataRequests.get(id);
+  if (inFlight) return inFlight.then(cloneCanvasData);
   if (!options?.force) {
     const cached = getCachedCanvasData(id);
     if (cached) return cached;
-    const pending = pendingCanvasDataRequests.get(id);
-    if (pending) return pending.then(cloneCanvasData);
   }
   const pending = request<{ success: boolean; data: CanvasData }>(`${BASE}/canvas/${id}`)
     .then((res) => {
-      writeCanvasDataCache(id, res.data);
-      return getCachedCanvasData(id) || res.data;
+      return writeCanvasDataCache(id, res.data);
     })
     .finally(() => {
       if (pendingCanvasDataRequests.get(id) === pending) {
@@ -689,8 +773,10 @@ export async function updateExhibitionPromptPresets(
 }
 
 export async function getElevationPromptPresets(): Promise<ElevationPromptPresetMap> {
-  const res = await request<{ success: boolean; data: ElevationPromptPresetMap }>(`${BASE}/prompt-library/elevation/presets`);
-  return res.data || { colorMaterial: [], crafts: [] };
+  return cachedSharedGet(ELEVATION_PRESETS_CACHE_KEY, async () => {
+    const res = await request<{ success: boolean; data: ElevationPromptPresetMap }>(`${BASE}/prompt-library/elevation/presets`);
+    return res.data || { colorMaterial: [], crafts: [] };
+  });
 }
 
 export async function updateElevationColorMaterialPresets(
@@ -703,6 +789,7 @@ export async function updateElevationColorMaterialPresets(
       body: JSON.stringify({ presets }),
     },
   );
+  invalidateSharedGet(ELEVATION_PRESETS_CACHE_KEY);
   return res.data || [];
 }
 
@@ -716,6 +803,7 @@ export async function createElevationColorMaterialUserPreset(
       body: JSON.stringify(preset),
     },
   );
+  invalidateSharedGet(ELEVATION_PRESETS_CACHE_KEY);
   return res.data;
 }
 
@@ -730,6 +818,7 @@ export async function updateElevationColorMaterialUserPreset(
       body: JSON.stringify(preset),
     },
   );
+  invalidateSharedGet(ELEVATION_PRESETS_CACHE_KEY);
   return res.data;
 }
 
@@ -737,6 +826,7 @@ export async function deleteElevationColorMaterialUserPreset(id: string): Promis
   await request(`${BASE}/prompt-library/elevation/presets/colorMaterial/user/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });
+  invalidateSharedGet(ELEVATION_PRESETS_CACHE_KEY);
 }
 
 export async function updateElevationCraftPresets(
@@ -749,6 +839,7 @@ export async function updateElevationCraftPresets(
       body: JSON.stringify({ presets }),
     },
   );
+  invalidateSharedGet(ELEVATION_PRESETS_CACHE_KEY);
   return res.data || [];
 }
 
