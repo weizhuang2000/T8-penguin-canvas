@@ -24,6 +24,10 @@ const {
   runningHubVideoFailReason,
   extractRunningHubVideoUrl,
 } = require('../utils/runninghubVideo');
+const {
+  listRunningHubVideoCatalog,
+  resolveRunningHubVideoCatalogModel,
+} = require('../utils/runninghubVideoCatalog');
 
 const router = express.Router();
 
@@ -144,6 +148,11 @@ function bufferFromLocalMediaRef(ref) {
     mov: 'video/quicktime',
     m4v: 'video/x-m4v',
     mkv: 'video/x-matroska',
+    mp3: 'audio/mpeg',
+    wav: 'audio/wav',
+    ogg: 'audio/ogg',
+    m4a: 'audio/mp4',
+    flac: 'audio/flac',
   }[ext] || 'image/png';
   return { buf, mime, ext: ext === 'jpeg' ? 'jpg' : ext };
 }
@@ -174,26 +183,27 @@ function runningHubVideoImageRef(ref, maxImageBytes) {
 
 function runningHubVideoMediaRef(ref, maxBytes, kind) {
   if (kind === 'image') return runningHubVideoImageRef(ref, maxBytes);
+  const label = kind === 'audio' ? '参考音频' : '参考视频';
   const value = String(ref || '').trim();
   if (/^https?:\/\//i.test(value)) return value;
-  if (/^data:video\//i.test(value)) {
+  if (new RegExp(`^data:${kind}/`, 'i').test(value)) {
     const comma = value.indexOf(',');
-    if (comma < 0) throw new Error('RunningHub 参考视频 Base64 Data URI 格式无效');
+    if (comma < 0) throw new Error(`RunningHub ${label} Base64 Data URI 格式无效`);
     const meta = value.slice(0, comma);
     const payload = value.slice(comma + 1);
     const size = /;base64$/i.test(meta)
       ? Buffer.from(payload, 'base64').length
       : Buffer.byteLength(decodeURIComponent(payload));
     if (size > maxBytes) {
-      throw new Error(`RunningHub 单个参考视频不能超过 ${Math.round(maxBytes / 1024 / 1024)}MB`);
+      throw new Error(`RunningHub 单个${label}不能超过 ${Math.round(maxBytes / 1024 / 1024)}MB`);
     }
     return value;
   }
   const local = bufferFromLocalMediaRef(value);
-  if (!local) throw new Error(`无法读取 RunningHub 参考视频: ${value}`);
-  if (!String(local.mime).startsWith('video/')) throw new Error(`RunningHub 参考视频格式无效: ${value}`);
+  if (!local) throw new Error(`无法读取 RunningHub ${label}: ${value}`);
+  if (!String(local.mime).startsWith(`${kind}/`)) throw new Error(`RunningHub ${label}格式无效: ${value}`);
   if (local.buf.length > maxBytes) {
-    throw new Error(`RunningHub 单个参考视频不能超过 ${Math.round(maxBytes / 1024 / 1024)}MB`);
+    throw new Error(`RunningHub 单个${label}不能超过 ${Math.round(maxBytes / 1024 / 1024)}MB`);
   }
   return `data:${local.mime};base64,${local.buf.toString('base64')}`;
 }
@@ -2561,6 +2571,98 @@ function missingRhKeyError() {
   return '未配置 RunningHub API Key（请在设置中填写 RunningHub API Key）';
 }
 
+function normalizeRunningHubCatalogParams(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('RunningHub 模型参数必须是 JSON 对象');
+  const text = JSON.stringify(value);
+  if (text.length > 200 * 1024) throw new Error('RunningHub 模型参数不能超过 200KB');
+  const visit = (item, depth = 0) => {
+    if (depth > 8) throw new Error('RunningHub 模型参数层级不能超过 8 层');
+    if (Array.isArray(item)) return item.map((child) => visit(child, depth + 1));
+    if (!item || typeof item !== 'object') return item;
+    const output = {};
+    for (const [key, child] of Object.entries(item)) {
+      if (/^(apiKey|authorization)$/i.test(key)) continue;
+      output[key] = visit(child, depth + 1);
+    }
+    return output;
+  };
+  return visit(value);
+}
+
+function resolveRunningHubCatalogMediaParams(value, key = '') {
+  if (Array.isArray(value)) return value.map((item) => resolveRunningHubCatalogMediaParams(item, key));
+  if (!value || typeof value !== 'object') {
+    if (typeof value !== 'string') return value;
+    const field = String(key || '').toLowerCase();
+    const kind = /audio/.test(field) ? 'audio' : /video/.test(field) ? 'video' : /image|frame|portrait|face/.test(field) ? 'image' : '';
+    return kind ? runningHubVideoMediaRef(value, 100 * 1024 * 1024, kind) : value;
+  }
+  const output = {};
+  for (const [childKey, childValue] of Object.entries(value)) {
+    output[childKey] = resolveRunningHubCatalogMediaParams(childValue, childKey);
+  }
+  return output;
+}
+
+router.get('/runninghub/video/catalog', requireNodePermission(['video', 'runninghub-video']), async (_req, res) => {
+  try {
+    const models = await listRunningHubVideoCatalog(config.RH_BASE_URL);
+    return res.json({ success: true, data: models });
+  } catch (e) {
+    return res.status(502).json({ success: false, error: e?.message || '读取 RunningHub 视频模型目录失败' });
+  }
+});
+
+router.get('/runninghub/video/catalog/:modelId', requireNodePermission(['video', 'runninghub-video']), async (req, res) => {
+  try {
+    const model = await resolveRunningHubVideoCatalogModel(config.RH_BASE_URL, req.params.modelId);
+    return res.json({ success: true, data: {
+      id: model.id,
+      name: model.name,
+      category: model.category,
+      inputConfig: Array.isArray(model.inputConfig) ? model.inputConfig : [],
+    } });
+  } catch (e) {
+    return res.status(400).json({ success: false, error: e?.message || '读取 RunningHub 模型参数失败' });
+  }
+});
+
+router.post('/runninghub/video/catalog/submit', requireNodePermission(['video', 'runninghub-video']), async (req, res) => {
+  const settings = loadRawSettings();
+  const apiKey = pickRhApiKey(settings);
+  if (!apiKey) return res.status(400).json({ success: false, error: missingRhKeyError() });
+  try {
+    const model = await resolveRunningHubVideoCatalogModel(config.RH_BASE_URL, req.body?.catalogModelId);
+    const body = resolveRunningHubCatalogMediaParams(normalizeRunningHubCatalogParams(req.body?.params));
+    const response = await fetch(`${config.RH_BASE_URL}${model.endpoint}`, {
+      method: 'POST',
+      headers: {
+        Host: 'www.runninghub.cn',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+    const text = await response.text();
+    let data;
+    try { data = JSON.parse(text); } catch {
+      return res.status(502).json({ success: false, error: `RunningHub 响应不是 JSON: ${text.slice(0, 200)}` });
+    }
+    const taskId = data?.taskId || data?.data?.taskId;
+    if (!response.ok || data?.errorCode || !taskId) {
+      return res.status(response.ok ? 400 : response.status).json({
+        success: false,
+        error: runningHubVideoFailReason(data) || `RunningHub 提交失败 HTTP ${response.status}`,
+      });
+    }
+    rememberTaskKey(taskId, apiKey);
+    return res.json({ success: true, data: { taskId: String(taskId), model: `catalog:${model.id}`, raw: data } });
+  } catch (e) {
+    console.error('proxy/runninghub/video/catalog/submit 错误:', e);
+    return res.status(400).json({ success: false, error: e?.message || 'RunningHub 视频模型提交失败' });
+  }
+});
+
 // RunningHub 标准视频模型；模型 ID 只允许 utils/runninghubVideo.js 中的固定白名单。
 router.post('/runninghub/video/submit', requireNodePermission(['video', 'runninghub-video']), async (req, res) => {
   const settings = loadRawSettings();
@@ -2609,7 +2711,16 @@ router.post('/runninghub/video/query', requireNodePermission(['video', 'runningh
   const apiKey = recallTaskKey(taskId) || pickRhApiKey(settings);
   if (!apiKey) return res.status(400).json({ success: false, error: missingRhKeyError() });
   try {
-    const queryModel = resolveRunningHubVideoModel(req.body?.model);
+    const catalogModelId = String(req.body?.catalogModelId || '').trim()
+      || (String(req.body?.model || '').startsWith('catalog:') ? String(req.body.model).slice('catalog:'.length) : '');
+    let queryModel;
+    if (catalogModelId) {
+      const catalog = await listRunningHubVideoCatalog(config.RH_BASE_URL);
+      queryModel = catalog.find((item) => item.id === catalogModelId);
+      if (!queryModel) throw new Error('该模型不在 RunningHub 视频模型目录中');
+    } else {
+      queryModel = resolveRunningHubVideoModel(req.body?.model);
+    }
     const response = await fetch(`${config.RH_BASE_URL}/openapi/v2/query`, {
       method: 'POST',
       headers: {

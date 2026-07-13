@@ -19,6 +19,7 @@ import {
   SORA2_FAL_RATIOS,
   SORA2_FAL_DURATIONS,
   SORA2_FAL_RESOLUTIONS,
+  type RunningHubVideoModelDef,
 } from '../../providers/models';
 import {
   generateExternalVideo,
@@ -26,10 +27,15 @@ import {
   queryVideo,
   submitRunningHubVideo,
   queryRunningHubVideo,
+  getRunningHubVideoCatalog,
+  getRunningHubVideoCatalogDetail,
+  submitRunningHubCatalogVideo,
   submitVideoFal,
   queryVideoFal,
   type VideoSubmitRequest,
   type VideoFalSubmitRequest,
+  type RunningHubVideoCatalogModel,
+  type RunningHubVideoCatalogField,
 } from '../../services/generation';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useHasAutoOutput } from './useHasAutoOutput';
@@ -75,6 +81,21 @@ const VIDEO_MAX_POLL = Math.ceil((VIDEO_POLL_TIMEOUT_SECONDS * 1000) / VIDEO_POL
 const VIDEO_FAL_POLL_INTERVAL_MS = 6000;
 const VIDEO_FAL_MAX_POLL = Math.ceil((VIDEO_POLL_TIMEOUT_SECONDS * 1000) / VIDEO_FAL_POLL_INTERVAL_MS);
 const JIMENG_SEEDANCE_LIMITS = { images: 9, videos: 3, audios: 3 };
+const RUNNINGHUB_CATALOG_NAME_BY_STATIC_MODEL: Record<string, string> = {
+  'rhart-video-g/image-to-video': '全能视频X-图生视频-低价渠道版-v1.5',
+  'rhart-video-g/text-to-video': '全能视频X-文生视频-低价渠道版-v1.5',
+  'rhart-video-g-official/image-to-video': '全能视频X-图生视频-官方稳定版',
+  'rhart-video-g-official/image-to-video-v1.5': '全能视频X-图生视频-官方稳定版-v1.5',
+  'rhart-video-g-official/reference-to-video': '全能视频X-多图参考生视频-官方稳定版',
+  'rhart-video-g-official/edit-video': '全能视频X-编辑视频-官方稳定版',
+  'rhart-video-g-official/text-to-video': '全能视频X-文生视频-官方稳定版',
+  'rhart-video-g-official/video-extend': '全能视频X-视频续写-官方稳定版',
+  'rhart-video-s/image-to-video': '全能视频S-图生视频-低价渠道版',
+  'rhart-video-s/text-to-video': '全能视频S-文生视频-低价渠道版',
+  'rhart-video-v3.1-fast/image-to-video': '全能视频V3.1-fast-图生视频-低价渠道版',
+  'rhart-video-s-official/image-to-video': '全能视频S-图生视频-官方稳定版',
+  'rhart-video-s-official/text-to-video': '全能视频S-文生视频-官方稳定版',
+};
 type JimengSeedanceMode = 'omni' | 'first' | 'firstlast' | 'multiframe';
 const JIMENG_SEEDANCE_MODE_OPTIONS: Array<{ value: JimengSeedanceMode; label: string }> = [
   { value: 'omni', label: '全能参考' },
@@ -102,6 +123,9 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
   const hasAutoOutput = useHasAutoOutput(id);
   const { getEdges, getNodes } = useReactFlow();
   const [error, setError] = useState<string | null>(null);
+  const [runningHubCatalog, setRunningHubCatalog] = useState<RunningHubVideoCatalogModel[]>([]);
+  const [runningHubCatalogError, setRunningHubCatalogError] = useState<string | null>(null);
+  const [runningHubCatalogFields, setRunningHubCatalogFields] = useState<RunningHubVideoCatalogField[]>([]);
   const pollTimer = useRef<number | null>(null);
   const src = `video:${id.slice(0, 6)}`;
 
@@ -113,6 +137,14 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
   const d = data as any;
   const isRunningHubNodeType = type === 'runninghub-video';
   const providerParams = (d?.providerParams && typeof d.providerParams === 'object') ? d.providerParams : {};
+  useEffect(() => {
+    if (!isRunningHubNodeType) return;
+    let cancelled = false;
+    getRunningHubVideoCatalog()
+      .then((models) => { if (!cancelled) setRunningHubCatalog(models); })
+      .catch((e) => { if (!cancelled) setRunningHubCatalogError(e?.message || '读取 RunningHub 视频模型目录失败'); });
+    return () => { cancelled = true; };
+  }, [isRunningHubNodeType]);
   const advancedProviders = useApiKeysStore((s) => s.settings.advancedProviders);
   const allowZhenzhenFallback = useApiKeysStore((s) => s.settings.enableZhenzhenFallback !== false);
   const videoAdvancedProviders = useMemo(
@@ -159,7 +191,46 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
   const modelDef = useMemo(() => VIDEO_MODELS.find((m) => m.id === mainId) || VIDEO_MODELS[0], [mainId]);
   // 子模型(上游真实 model 名)
   const apiModel: string = d?.model && modelDef.apiModelOptions.some((o) => o.value === d.model) ? d.model : modelDef.apiModelOptions[0].value;
-  const runningHubModel = runningHubVideoModelDef(apiModel);
+  const catalogModelId = typeof d?.runningHubCatalogModelId === 'string' ? d.runningHubCatalogModelId : '';
+  const catalogModel = runningHubCatalog.find((item) => item.id === catalogModelId) || null;
+  const isCatalogRunningHubModel = isRunningHubNodeType && !!catalogModel;
+  useEffect(() => {
+    if (!catalogModelId) {
+      setRunningHubCatalogFields([]);
+      return;
+    }
+    let cancelled = false;
+    getRunningHubVideoCatalogDetail(catalogModelId)
+      .then((detail) => { if (!cancelled) setRunningHubCatalogFields(Array.isArray(detail.inputConfig) ? detail.inputConfig : []); })
+      .catch((e) => { if (!cancelled) setRunningHubCatalogError(e?.message || '读取模型参数失败'); });
+    return () => { cancelled = true; };
+  }, [catalogModelId]);
+  const catalogMode = catalogModel?.category === 'text-to-video' ? 'text'
+    : ['video-edit', 'video-to-video', 'video-extend', 'motion-control', 'audio-to-video', 'video-tools'].includes(catalogModel?.category || '') ? 'video'
+    : 'image';
+  const runningHubModel: RunningHubVideoModelDef = isCatalogRunningHubModel
+    ? {
+      ...runningHubVideoModelDef(apiModel),
+      value: `catalog:${catalogModel.id}`,
+      label: catalogModel.name,
+      description: catalogModel.description || catalogModel.highlights,
+      mode: catalogMode,
+      ratios: [],
+      defaultRatio: '',
+      durations: [],
+      defaultDuration: 0,
+      resolutions: [],
+      defaultResolution: '',
+      promptMin: 0,
+      promptMax: undefined,
+      minRefImages: 0,
+      maxRefImages: ['image-to-video', 'reference-to-video', 'video-to-video', 'motion-control'].includes(catalogModel.category) ? 9 : 0,
+      maxImageSizeMb: 100,
+      minRefVideos: 0,
+      maxRefVideos: ['reference-to-video', 'video-edit', 'video-to-video', 'video-extend', 'motion-control', 'video-tools'].includes(catalogModel.category) ? 3 : 0,
+      maxVideoSizeMb: 100,
+    }
+    : runningHubVideoModelDef(apiModel);
   // 各参数(跳过着调用 update 默认值)
   const ratio: string = modelDef.kind === 'runninghub'
     ? (runningHubModel.ratios.includes(d?.ratio) ? d.ratio : runningHubModel.defaultRatio)
@@ -188,7 +259,12 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
   const isRunningHubVideo = !isExternalSelected && modelDef.kind === 'runninghub';
   const supportsReferenceImages = modelDef.supportImages && (!isRunningHubVideo || runningHubModel.maxRefImages > 0);
   const supportsReferenceVideos = isRunningHubVideo && (runningHubModel.maxRefVideos || 0) > 0;
-  const supportsReferenceMedia = supportsReferenceImages || supportsReferenceVideos;
+  const supportsReferenceAudios = isCatalogRunningHubModel && ['reference-to-video', 'audio-to-video'].includes(catalogModel?.category || '');
+  const supportsReferenceMedia = supportsReferenceImages || supportsReferenceVideos || supportsReferenceAudios;
+  const runningHubCatalogParams = typeof d?.runningHubCatalogParams === 'string' ? d.runningHubCatalogParams : '';
+  const runningHubPrice = catalogModel?.priceLabel
+    || runningHubCatalog.find((item) => item.name === RUNNINGHUB_CATALOG_NAME_BY_STATIC_MODEL[apiModel])?.priceLabel
+    || '价格以 RunningHub 结算页为准';
   const runningHubStoryboard = d?.runningHubStoryboard === true;
   const isVeoOmni = !isExternalSelected && apiModel === 'veo-omni-10s';
   const showBuiltinFalControls = !isExternalSelected && isFal && !!falReg;
@@ -338,7 +414,7 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
     : isRunningHubVideo
     ? runningHubModel.maxRefVideos || 0
     : 0;
-  const maxMentionAudios = isJimengSeedanceSelected ? JIMENG_SEEDANCE_LIMITS.audios : 0;
+  const maxMentionAudios = isJimengSeedanceSelected ? JIMENG_SEEDANCE_LIMITS.audios : supportsReferenceAudios ? 3 : 0;
   const mentionMaterials = useMemo(
     () => [
       ...[...orderedImages, ...localRefMaterials.filter((m) => m.kind === 'image')].slice(0, maxMentionRefs),
@@ -352,10 +428,10 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
   const previewGroups = useMemo<ReadonlyArray<'text' | 'image' | 'video' | 'audio'>>(
     () => (modelDef.kind === 'seedance' || isJimengSeedanceSelected
       ? ['text', 'image', 'video', 'audio']
-      : isRunningHubVideo && supportsReferenceVideos
-      ? ['text', 'video']
+      : isRunningHubVideo && supportsReferenceMedia
+      ? ['text', ...(supportsReferenceImages ? ['image' as const] : []), ...(supportsReferenceVideos ? ['video' as const] : []), ...(supportsReferenceAudios ? ['audio' as const] : [])]
       : ['text', 'image']),
-    [modelDef.kind, isJimengSeedanceSelected, isRunningHubVideo, supportsReferenceVideos],
+    [modelDef.kind, isJimengSeedanceSelected, isRunningHubVideo, supportsReferenceMedia, supportsReferenceImages, supportsReferenceVideos, supportsReferenceAudios],
   );
 
   // 收集上游 prompt + 参考图/视频/音频 (按用户拖拽顺序), 合并本地拖入素材
@@ -437,7 +513,7 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
         }
         try {
           const r = isRunningHubVideo
-            ? await queryRunningHubVideo(tid, apiModel)
+            ? await queryRunningHubVideo(tid, isCatalogRunningHubModel ? `catalog:${catalogModelId}` : apiModel)
             : await queryVideo(tid, apiModel);
           if (r.progress && r.progress !== lastProgress) {
             lastProgress = r.progress;
@@ -518,7 +594,7 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
     const { prompt: upstreamPrompt, imageUrls, videoUrls, audioUrls } = collectUpstream();
     const resolvedLocalPrompt = resolveMediaMentions(localPrompt, promptMentions, mentionMaterials);
     const finalPrompt = (upstreamPrompt || resolvedLocalPrompt || '').trim();
-    if (!finalPrompt) {
+    if (!finalPrompt && !isCatalogRunningHubModel) {
       setError('未连接 text 节点也未填写 prompt');
       logBus.error('生成中止: 缺少 prompt', src);
       return;
@@ -582,6 +658,38 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
 
       // === FAL 分支 ===
       if (isRunningHubVideo) {
+        if (catalogModelId && !catalogModel) throw new Error('RunningHub 视频模型目录仍在加载，请稍后重试');
+        if (isCatalogRunningHubModel) {
+          let params: Record<string, any> = {};
+          if (runningHubCatalogParams.trim()) {
+            try {
+              const parsed = JSON.parse(runningHubCatalogParams);
+              if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
+              params = parsed;
+            } catch {
+              throw new Error('模型参数必须是合法的 JSON 对象');
+            }
+          }
+          if (finalPrompt && params.prompt === undefined) params.prompt = finalPrompt;
+          if (imageUrls.length && params.imageUrl === undefined && params.imageUrls === undefined && params.images === undefined) {
+            if (imageUrls.length === 1) params.imageUrl = imageUrls[0];
+            else params.imageUrls = imageUrls;
+          }
+          if (videoUrls.length && params.videoUrl === undefined && params.videoUrls === undefined && params.videos === undefined) {
+            if (videoUrls.length === 1) params.videoUrl = videoUrls[0];
+            else params.videoUrls = videoUrls;
+          }
+          if (audioUrls.length && params.audioUrl === undefined && params.audioUrls === undefined && params.audios === undefined) {
+            if (audioUrls.length === 1) params.audioUrl = audioUrls[0];
+            else params.audioUrls = audioUrls;
+          }
+          if (!Object.keys(params).length) throw new Error('请填写 Prompt、连接素材，或填写模型参数 JSON');
+          logBus.info(`提交 RunningHub 目录视频模型: ${catalogModel.name} · ${runningHubPrice}`, src);
+          const r = await submitRunningHubCatalogVideo({ catalogModelId: catalogModel.id, params });
+          update({ status: 'polling', taskId: r.taskId, lastPrompt: finalPrompt, progress: '0%' });
+          await startPolling(r.taskId);
+          return;
+        }
         const promptTooLong = runningHubModel.promptMax !== undefined && finalPrompt.length > runningHubModel.promptMax;
         if (finalPrompt.length < runningHubModel.promptMin || promptTooLong) {
           const promptRange = runningHubModel.promptMax === undefined
@@ -815,9 +923,10 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
       const cap = isJimengSeedanceSelected ? JIMENG_SEEDANCE_LIMITS.videos : runningHubModel.maxRefVideos || 0;
       if (cur.indexOf(payload.url) !== -1 || cur.length >= cap) return;
       update({ localRefVideos: [...cur, payload.url] });
-    } else if (payload.kind === 'audio' && payload.url && isJimengSeedanceSelected) {
+    } else if (payload.kind === 'audio' && payload.url && (isJimengSeedanceSelected || supportsReferenceAudios)) {
       const cur = Array.isArray(d?.localRefAudios) ? d.localRefAudios : [];
-      if (cur.indexOf(payload.url) !== -1 || cur.length >= JIMENG_SEEDANCE_LIMITS.audios) return;
+      const cap = isJimengSeedanceSelected ? JIMENG_SEEDANCE_LIMITS.audios : 3;
+      if (cur.indexOf(payload.url) !== -1 || cur.length >= cap) return;
       update({ localRefAudios: [...cur, payload.url] });
     } else if (payload.kind === 'text' && typeof payload.text === 'string') {
       update({ prompt: payload.text });
@@ -827,8 +936,13 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
     id,
     accepts: isJimengSeedanceSelected
       ? ['image', 'video', 'audio', 'text']
-      : supportsReferenceVideos
-      ? ['video', 'text']
+      : isCatalogRunningHubModel
+      ? [
+        ...(supportsReferenceImages ? ['image' as const] : []),
+        ...(supportsReferenceVideos ? ['video' as const] : []),
+        ...(supportsReferenceAudios ? ['audio' as const] : []),
+        'text',
+      ]
       : ['image', 'text'],
     onDrop: handleDrop,
   });
@@ -841,6 +955,8 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
     ? `上游素材 · 图${Math.min(refsCount, JIMENG_SEEDANCE_LIMITS.images)}/${JIMENG_SEEDANCE_LIMITS.images} 视${Math.min(videoRefsCount, JIMENG_SEEDANCE_LIMITS.videos)}/${JIMENG_SEEDANCE_LIMITS.videos} 音${Math.min(audioRefsCount, JIMENG_SEEDANCE_LIMITS.audios)}/${JIMENG_SEEDANCE_LIMITS.audios}`
     : supportsReferenceVideos
     ? `上游素材 · 参考视频 ${Math.min(videoRefsCount, maxMentionVideos)}/${maxMentionVideos}`
+    : supportsReferenceAudios
+    ? `上游素材 · 参考音频 ${Math.min(audioRefsCount, maxMentionAudios)}/${maxMentionAudios}`
     : `上游素材 · 参考图 ${Math.min(refsCount, maxMentionRefs)}/${maxMentionRefs}`;
 
   return (
@@ -965,14 +1081,24 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
           <div>
             <label className="text-[10px] text-white/50 block mb-1">具体模型</label>
             <select
-              value={apiModel}
+              value={isCatalogRunningHubModel ? `catalog:${catalogModel.id}` : apiModel}
               onChange={(e) => {
                 const nextModel = e.target.value;
+                if (modelDef.kind === 'runninghub' && nextModel.startsWith('catalog:')) {
+                  update({
+                    runningHubCatalogModelId: nextModel.slice('catalog:'.length),
+                    ratio: '',
+                    duration: 0,
+                    resolution: '',
+                  });
+                  return;
+                }
                 const nextRunningHubModel = modelDef.kind === 'runninghub'
                   ? runningHubVideoModelDef(nextModel)
                   : null;
                 update({
                   model: nextModel,
+                  ...(nextRunningHubModel ? { runningHubCatalogModelId: '' } : {}),
                   ...(nextRunningHubModel ? {
                     ratio: nextRunningHubModel.defaultRatio,
                     duration: nextRunningHubModel.defaultDuration,
@@ -986,7 +1112,19 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
               }}
               className="w-full rounded bg-white/5 border border-white/10 px-2 py-1 text-xs text-white outline-none focus:border-white/30"
             >
-              {modelDef.apiModelOptions.map((o) => (
+              {modelDef.kind === 'runninghub' ? <>
+                <optgroup label="已适配模型">
+                  {modelDef.apiModelOptions.map((o) => {
+                    const price = runningHubCatalog.find((item) => item.name === RUNNINGHUB_CATALOG_NAME_BY_STATIC_MODEL[o.value])?.priceLabel;
+                    return <option key={o.value} value={o.value} className="bg-zinc-900">{o.label}{price ? ` · ${price}` : ''}</option>;
+                  })}
+                </optgroup>
+                <optgroup label={`全能视频目录（${runningHubCatalog.length || '加载中'}）`}>
+                  {runningHubCatalog.filter((item) => !Object.values(RUNNINGHUB_CATALOG_NAME_BY_STATIC_MODEL).includes(item.name)).map((item) => (
+                    <option key={item.id} value={`catalog:${item.id}`} className="bg-zinc-900">{item.name} · {item.priceLabel}</option>
+                  ))}
+                </optgroup>
+              </> : modelDef.apiModelOptions.map((o) => (
                 <option key={o.value} value={o.value} className="bg-zinc-900">{o.label}</option>
               ))}
             </select>
@@ -1196,6 +1334,32 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
               : (runningHubModel.maxRefVideos || 0) > 0
               ? `参考视频至少 ${runningHubModel.minRefVideos || 0} 个，最多 ${runningHubModel.maxRefVideos} 个（单个 ${runningHubModel.maxVideoSizeMb}MB）`
               : '文生视频无需参考图'}，结果会自动转存到本地 output。
+            <div className="mt-1 text-cyan-200/80">当前计费：{runningHubPrice}</div>
+          </div>
+        )}
+
+        {isCatalogRunningHubModel && (
+          <div>
+            <label className="text-[10px] text-white/50 block mb-1">模型参数 JSON（可选）</label>
+            <textarea
+              value={runningHubCatalogParams}
+              onChange={(e) => update({ runningHubCatalogParams: e.target.value })}
+              placeholder={'例如：{\n  "duration": "6",\n  "resolution": "720p"\n}'}
+              rows={5}
+              className="w-full resize-y rounded border border-cyan-400/20 bg-black/20 px-2 py-1.5 font-mono text-[10px] text-white/80 outline-none focus:border-cyan-300/50"
+            />
+            <div className="mt-1 text-[10px] leading-relaxed text-white/40">节点会自动补充未填写的 prompt 与已连接素材；字段名、枚举和特殊参数请以 RunningHub 该模型的官方文档为准。</div>
+            {runningHubCatalogFields.length > 0 && (
+              <div className="mt-1 rounded border border-white/10 bg-black/10 px-2 py-1 text-[10px] leading-relaxed text-white/45">
+                官方参数：{runningHubCatalogFields.map((field) => {
+                  const options = Array.isArray(field.options) && field.options.length
+                    ? `（${field.options.map((item) => item.value).filter((value) => value !== undefined).join('/')}）`
+                    : '';
+                  return `${field.fieldKey || field.title || '参数'}${field.required ? '*' : ''}${options}`;
+                }).join(' · ')}
+              </div>
+            )}
+            {runningHubCatalogError && <div className="mt-1 text-[10px] text-amber-300/80">目录刷新失败：{runningHubCatalogError}</div>}
           </div>
         )}
 

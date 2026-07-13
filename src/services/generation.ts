@@ -789,6 +789,54 @@ export interface RunningHubVideoSubmitRequest {
   historyContext?: GenerationHistoryContext;
 }
 
+export interface RunningHubVideoCatalogModel {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  highlights: string;
+  priceLabel: string;
+  price?: Record<string, unknown> | null;
+}
+
+export interface RunningHubVideoCatalogField {
+  type?: string;
+  title?: string;
+  fieldKey?: string;
+  required?: boolean;
+  defaultValue?: unknown;
+  options?: Array<{ value?: string | number; description?: string }>;
+  paramDesc?: string;
+}
+
+export async function getRunningHubVideoCatalog(): Promise<RunningHubVideoCatalogModel[]> {
+  const r = await fetch('/api/proxy/runninghub/video/catalog');
+  const data = await parseJsonResponse(r);
+  if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
+  return Array.isArray(data.data) ? data.data : [];
+}
+
+export async function getRunningHubVideoCatalogDetail(modelId: string): Promise<{ inputConfig: RunningHubVideoCatalogField[] }> {
+  const r = await fetch(`/api/proxy/runninghub/video/catalog/${encodeURIComponent(modelId)}`);
+  const data = await parseJsonResponse(r);
+  if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
+  return data.data || { inputConfig: [] };
+}
+
+export async function submitRunningHubCatalogVideo(req: {
+  catalogModelId: string;
+  params: Record<string, unknown>;
+}): Promise<{ taskId: string }> {
+  const r = await fetch('/api/proxy/runninghub/video/catalog/submit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  const data = await parseJsonResponse(r);
+  if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
+  return data.data;
+}
+
 export async function submitRunningHubVideo(req: RunningHubVideoSubmitRequest): Promise<{ taskId: string }> {
   const r = await fetch('/api/proxy/runninghub/video/submit', {
     method: 'POST',

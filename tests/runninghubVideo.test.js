@@ -10,6 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const runninghubVideo = require('../backend/src/utils/runninghubVideo.js');
+const runninghubVideoCatalog = require('../backend/src/utils/runninghubVideoCatalog.js');
 
 const V15 = 'rhart-video-g/image-to-video';
 const X_TEXT = 'rhart-video-g/text-to-video';
@@ -310,6 +311,13 @@ test('RunningHub video result selects the video artifact and normalizes statuses
   assert.equal(runninghubVideo.normalizeRunningHubVideoStatus('RUNNING'), 'RUNNING');
 });
 
+test('RunningHub full-video catalog keeps only video categories and formats pricing', () => {
+  assert.equal(runninghubVideoCatalog.VIDEO_CATEGORIES.has('text-to-video'), true);
+  assert.equal(runninghubVideoCatalog.VIDEO_CATEGORIES.has('text-to-image'), false);
+  assert.equal(runninghubVideoCatalog.priceLabel({ price: 0.04, unitName: '秒', priceMode: 'UNIT' }), '¥0.04/秒');
+  assert.equal(runninghubVideoCatalog.priceLabel({ price: 1.5, priceMode: 'FIXED' }), '¥1.5');
+});
+
 test('Running video node and API key management expose all standard models', () => {
   const models = read('src/providers/models.ts');
   const node = read('src/components/nodes/VideoNode.tsx');
@@ -335,7 +343,7 @@ test('Running video node and API key management expose all standard models', () 
   assert.match(models, /rhart-video-s-official\/text-to-video/);
   assert.match(models, /全能视频V3\.1-fast · 图生视频低价渠道版/);
   assert.match(registry, /type: 'runninghub-video'[\s\S]*label: 'Running 视频'/);
-  assert.match(ports, /'runninghub-video': \{ inputs: \['text', 'image', 'video'\], outputs: \['video'\] \}/);
+  assert.match(ports, /'runninghub-video': \{ inputs: \['text', 'image', 'video', 'audio'\], outputs: \['video'\] \}/);
   assert.match(canvas, /'runninghub-video': VideoNode/);
   assert.match(permissions, /'runninghub-video'/);
   assert.match(node, /model: apiModel/);
@@ -344,6 +352,9 @@ test('Running video node and API key management expose all standard models', () 
   assert.match(service, /videoUrls\?: string\[\]/);
   assert.match(settings, /企业级-共享 API Key[\s\S]*Running 视频全部模型共用/);
   assert.match(proxy, /normalized\.path/);
+  assert.match(proxy, /runninghub\/video\/catalog/);
   assert.match(proxy, /resolveRunningHubVideoModel/);
   assert.match(proxy, /requireNodePermission\(\['video', 'runninghub-video'\]\)/);
+  assert.match(node, /全能视频目录/);
+  assert.match(node, /当前计费/);
 });
