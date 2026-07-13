@@ -1127,6 +1127,9 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
                 <option key={o.value} value={o.value} className="bg-zinc-900">{o.label}</option>
               ))}
             </select>
+            {modelDef.kind === 'runninghub' && runningHubCatalog.length > 0 && (
+              <div className="mt-1 text-[10px] text-white/40">已加载 {runningHubCatalog.length} 个“全能视频”模型，选项内显示官方收费标准。</div>
+            )}
           </div>
         )}
 

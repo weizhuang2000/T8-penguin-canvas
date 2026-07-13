@@ -88,7 +88,7 @@ function extractNuxtPayload(html) {
 
 async function fetchRunningHubVideoCatalog(baseUrl) {
   const root = String(baseUrl || 'https://www.runninghub.cn').replace(/\/+$/, '');
-  const response = await fetch(`${root}/call-api/search-api/standard-model?search=`, {
+  const response = await fetch(`${root}/call-api/search-api/standard-model?search=${encodeURIComponent('全能视频')}`, {
     headers: { Accept: 'text/html,application/xhtml+xml' },
   });
   if (!response.ok) throw new Error(`读取 RunningHub 标准模型目录失败 HTTP ${response.status}`);

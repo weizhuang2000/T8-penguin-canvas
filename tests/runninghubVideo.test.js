@@ -312,10 +312,12 @@ test('RunningHub video result selects the video artifact and normalizes statuses
 });
 
 test('RunningHub full-video catalog keeps only video categories and formats pricing', () => {
+  const catalogSource = read('backend/src/utils/runninghubVideoCatalog.js');
   assert.equal(runninghubVideoCatalog.VIDEO_CATEGORIES.has('text-to-video'), true);
   assert.equal(runninghubVideoCatalog.VIDEO_CATEGORIES.has('text-to-image'), false);
   assert.equal(runninghubVideoCatalog.priceLabel({ price: 0.04, unitName: '秒', priceMode: 'UNIT' }), '¥0.04/秒');
   assert.equal(runninghubVideoCatalog.priceLabel({ price: 1.5, priceMode: 'FIXED' }), '¥1.5');
+  assert.match(catalogSource, /encodeURIComponent\('全能视频'\)/);
 });
 
 test('Running video node and API key management expose all standard models', () => {
