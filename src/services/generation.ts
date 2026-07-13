@@ -782,6 +782,7 @@ export interface RunningHubVideoSubmitRequest {
   prompt: string;
   aspectRatio: string;
   imageUrls?: string[];
+  videoUrls?: string[];
   resolution: '480p' | '720p' | string;
   duration: number;
   storyboard?: boolean;

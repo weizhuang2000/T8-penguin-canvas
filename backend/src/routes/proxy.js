@@ -139,6 +139,11 @@ function bufferFromLocalMediaRef(ref) {
     gif: 'image/gif',
     bmp: 'image/bmp',
     avif: 'image/avif',
+    mp4: 'video/mp4',
+    webm: 'video/webm',
+    mov: 'video/quicktime',
+    m4v: 'video/x-m4v',
+    mkv: 'video/x-matroska',
   }[ext] || 'image/png';
   return { buf, mime, ext: ext === 'jpeg' ? 'jpg' : ext };
 }
@@ -163,6 +168,32 @@ function runningHubVideoImageRef(ref, maxImageBytes) {
   if (!local) throw new Error(`无法读取 RunningHub 参考图: ${value}`);
   if (local.buf.length > maxImageBytes) {
     throw new Error(`RunningHub 单张参考图不能超过 ${Math.round(maxImageBytes / 1024 / 1024)}MB`);
+  }
+  return `data:${local.mime};base64,${local.buf.toString('base64')}`;
+}
+
+function runningHubVideoMediaRef(ref, maxBytes, kind) {
+  if (kind === 'image') return runningHubVideoImageRef(ref, maxBytes);
+  const value = String(ref || '').trim();
+  if (/^https?:\/\//i.test(value)) return value;
+  if (/^data:video\//i.test(value)) {
+    const comma = value.indexOf(',');
+    if (comma < 0) throw new Error('RunningHub 参考视频 Base64 Data URI 格式无效');
+    const meta = value.slice(0, comma);
+    const payload = value.slice(comma + 1);
+    const size = /;base64$/i.test(meta)
+      ? Buffer.from(payload, 'base64').length
+      : Buffer.byteLength(decodeURIComponent(payload));
+    if (size > maxBytes) {
+      throw new Error(`RunningHub 单个参考视频不能超过 ${Math.round(maxBytes / 1024 / 1024)}MB`);
+    }
+    return value;
+  }
+  const local = bufferFromLocalMediaRef(value);
+  if (!local) throw new Error(`无法读取 RunningHub 参考视频: ${value}`);
+  if (!String(local.mime).startsWith('video/')) throw new Error(`RunningHub 参考视频格式无效: ${value}`);
+  if (local.buf.length > maxBytes) {
+    throw new Error(`RunningHub 单个参考视频不能超过 ${Math.round(maxBytes / 1024 / 1024)}MB`);
   }
   return `data:${local.mime};base64,${local.buf.toString('base64')}`;
 }
@@ -2538,9 +2569,11 @@ router.post('/runninghub/video/submit', requireNodePermission(['video', 'running
   try {
     const normalized = normalizeRunningHubVideoRequest(req.body || {});
     const body = { ...normalized.body };
-    const convertedImages = normalized.imageUrls.map((ref) => runningHubVideoImageRef(ref, normalized.maxImageBytes));
+    const convertedImages = normalized.imageUrls.map((ref) => runningHubVideoMediaRef(ref, normalized.maxImageBytes, 'image'));
     if (normalized.imageField === 'imageUrl') body.imageUrl = convertedImages[0];
     else if (normalized.imageField === 'imageUrls') body.imageUrls = convertedImages;
+    const convertedVideos = normalized.videoUrls.map((ref) => runningHubVideoMediaRef(ref, normalized.maxVideoBytes, 'video'));
+    if (normalized.videoField === 'videoUrl') body.videoUrl = convertedVideos[0];
     const response = await fetch(`${config.RH_BASE_URL}${normalized.path}`, {
       method: 'POST',
       headers: {

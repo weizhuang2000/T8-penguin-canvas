@@ -22,6 +22,122 @@ const RUNNINGHUB_VIDEO_MODELS = Object.freeze({
     defaultDuration: 6,
     defaultResolution: '480p',
   }),
+  'rhart-video-g/text-to-video': model('rhart-video-g/text-to-video', {
+    promptMin: 1,
+    promptMax: 20000,
+    aspectRatios: Object.freeze(['2:3', '3:2', '1:1', '16:9', '9:16']),
+    ratioField: 'aspectRatio',
+    resolutions: Object.freeze(['480p', '720p']),
+    resolutionField: 'resolution',
+    minImages: 0,
+    maxImages: 0,
+    maxImageBytes: 0,
+    imageField: null,
+    durationMin: 6,
+    durationMax: 30,
+    durationType: 'number',
+    defaultDuration: 6,
+    defaultResolution: '480p',
+  }),
+  'rhart-video-g-official/image-to-video': model('rhart-video-g-official/image-to-video', {
+    promptMin: 5,
+    promptMax: 800,
+    aspectRatios: Object.freeze([]),
+    ratioField: null,
+    resolutions: Object.freeze(['480p', '720p']),
+    resolutionField: 'resolution',
+    minImages: 1,
+    maxImages: 1,
+    maxImageBytes: 10 * 1024 * 1024,
+    imageField: 'imageUrl',
+    durations: Object.freeze(['6', '10']),
+    durationType: 'string',
+    defaultDuration: '6',
+    defaultResolution: '720p',
+  }),
+  'rhart-video-g-official/image-to-video-v1.5': model('rhart-video-g-official/image-to-video-v1.5', {
+    promptMin: 5,
+    promptMax: 2048,
+    aspectRatios: Object.freeze([]),
+    ratioField: null,
+    resolutions: Object.freeze(['480p', '720p']),
+    resolutionField: 'resolution',
+    minImages: 1,
+    maxImages: 1,
+    maxImageBytes: 100 * 1024 * 1024,
+    imageField: 'imageUrl',
+    durationMin: 1,
+    durationMax: 15,
+    durationType: 'number',
+    defaultDuration: 6,
+    defaultResolution: '720p',
+  }),
+  'rhart-video-g-official/reference-to-video': model('rhart-video-g-official/reference-to-video', {
+    promptMin: 1,
+    aspectRatios: Object.freeze([]),
+    ratioField: null,
+    resolutions: Object.freeze(['480p', '720p']),
+    resolutionField: 'resolution',
+    minImages: 1,
+    maxImages: 7,
+    maxImageBytes: 10 * 1024 * 1024,
+    imageField: 'imageUrls',
+    durations: Object.freeze(['6', '10']),
+    durationType: 'string',
+    defaultDuration: '6',
+    defaultResolution: '720p',
+  }),
+  'rhart-video-g-official/edit-video': model('rhart-video-g-official/edit-video', {
+    promptMin: 5,
+    promptMax: 800,
+    aspectRatios: Object.freeze([]),
+    ratioField: null,
+    resolutions: Object.freeze(['480p', '720p']),
+    resolutionField: 'resolution',
+    minImages: 0,
+    maxImages: 0,
+    maxImageBytes: 0,
+    imageField: null,
+    minVideos: 1,
+    maxVideos: 1,
+    maxVideoBytes: 50 * 1024 * 1024,
+    videoField: 'videoUrl',
+    defaultResolution: '480p',
+  }),
+  'rhart-video-g-official/text-to-video': model('rhart-video-g-official/text-to-video', {
+    promptMin: 5,
+    promptMax: 800,
+    aspectRatios: Object.freeze(['16:9', '9:16', '1:1']),
+    ratioField: 'aspectRatio',
+    resolutions: Object.freeze(['480p', '720p']),
+    resolutionField: 'resolution',
+    minImages: 0,
+    maxImages: 0,
+    maxImageBytes: 0,
+    imageField: null,
+    durations: Object.freeze(['6', '10']),
+    durationType: 'string',
+    defaultDuration: '6',
+    defaultResolution: '720p',
+  }),
+  'rhart-video-g-official/video-extend': model('rhart-video-g-official/video-extend', {
+    promptMin: 1,
+    aspectRatios: Object.freeze([]),
+    ratioField: null,
+    resolutions: Object.freeze([]),
+    minImages: 0,
+    maxImages: 0,
+    maxImageBytes: 0,
+    imageField: null,
+    minVideos: 1,
+    maxVideos: 1,
+    maxVideoBytes: 100 * 1024 * 1024,
+    videoField: 'videoUrl',
+    durations: Object.freeze(['6', '10']),
+    durationType: 'string',
+    defaultDuration: '6',
+    defaultResolution: '',
+  }),
   'rhart-video-s/image-to-video': model('rhart-video-s/image-to-video', {
     promptMin: 5,
     promptMax: 4000,
@@ -119,9 +235,12 @@ function normalizeRunningHubVideoRequest(value = {}) {
     throw new Error(`prompt 长度须为 ${range} 个字符`);
   }
 
-  const aspectRatio = String(value.aspectRatio || value.aspect_ratio || definition.aspectRatios[0]).trim();
-  if (!definition.aspectRatios.includes(aspectRatio)) {
-    throw new Error(`模型 ${definition.id} 不支持比例 ${aspectRatio}`);
+  let aspectRatio = '';
+  if (definition.aspectRatios.length) {
+    aspectRatio = String(value.aspectRatio || value.aspect_ratio || definition.aspectRatios[0]).trim();
+    if (!definition.aspectRatios.includes(aspectRatio)) {
+      throw new Error(`模型 ${definition.id} 不支持比例 ${aspectRatio}`);
+    }
   }
 
   let resolution = '';
@@ -132,14 +251,15 @@ function normalizeRunningHubVideoRequest(value = {}) {
     }
   }
 
-  const rawDuration = value.duration ?? definition.defaultDuration;
   let duration;
   if (definition.durationType === 'string') {
+    const rawDuration = value.duration ?? definition.defaultDuration;
     duration = String(rawDuration).trim();
     if (!definition.durations.includes(duration)) {
       throw new Error(`模型 ${definition.id} 仅支持 ${definition.durations.join('/')} 秒`);
     }
-  } else {
+  } else if (definition.durationType === 'number') {
+    const rawDuration = value.duration ?? definition.defaultDuration;
     duration = Number(rawDuration);
     if (!Number.isInteger(duration) || duration < definition.durationMin || duration > definition.durationMax) {
       throw new Error(`模型 ${definition.id} 时长须为 ${definition.durationMin}-${definition.durationMax} 秒的整数`);
@@ -156,7 +276,20 @@ function normalizeRunningHubVideoRequest(value = {}) {
     throw new Error(`模型 ${definition.id} 最多支持 ${definition.maxImages} 张参考图`);
   }
 
-  const body = { prompt, duration };
+  const videoUrls = (Array.isArray(value.videoUrls) ? value.videoUrls : value.videos || [])
+    .map((item) => String(item || '').trim())
+    .filter(Boolean);
+  const minVideos = definition.minVideos || 0;
+  const maxVideos = definition.maxVideos || 0;
+  if (videoUrls.length < minVideos) {
+    throw new Error(`模型 ${definition.id} 至少需要 ${minVideos} 个参考视频`);
+  }
+  if (videoUrls.length > maxVideos) {
+    throw new Error(`模型 ${definition.id} 最多支持 ${maxVideos} 个参考视频`);
+  }
+
+  const body = { prompt };
+  if (duration !== undefined) body.duration = duration;
   if (definition.ratioField) {
     body[definition.ratioField] = definition.ratioValues?.[aspectRatio] || aspectRatio;
   }
@@ -169,6 +302,9 @@ function normalizeRunningHubVideoRequest(value = {}) {
     maxImageBytes: definition.maxImageBytes,
     imageField: definition.imageField,
     imageUrls,
+    maxVideoBytes: definition.maxVideoBytes || 0,
+    videoField: definition.videoField || null,
+    videoUrls,
     body,
   };
 }

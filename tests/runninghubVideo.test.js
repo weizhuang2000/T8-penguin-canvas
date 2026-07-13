@@ -12,6 +12,13 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const runninghubVideo = require('../backend/src/utils/runninghubVideo.js');
 
 const V15 = 'rhart-video-g/image-to-video';
+const X_TEXT = 'rhart-video-g/text-to-video';
+const X_OFFICIAL_IMAGE = 'rhart-video-g-official/image-to-video';
+const X_OFFICIAL_IMAGE_V15 = 'rhart-video-g-official/image-to-video-v1.5';
+const X_OFFICIAL_REFERENCE = 'rhart-video-g-official/reference-to-video';
+const X_OFFICIAL_EDIT = 'rhart-video-g-official/edit-video';
+const X_OFFICIAL_TEXT = 'rhart-video-g-official/text-to-video';
+const X_OFFICIAL_EXTEND = 'rhart-video-g-official/video-extend';
 const S_IMAGE = 'rhart-video-s/image-to-video';
 const S_TEXT = 'rhart-video-s/text-to-video';
 const V31_FAST = 'rhart-video-v3.1-fast/image-to-video';
@@ -77,6 +84,90 @@ test('RunningHub S low-cost image-to-video uses one imageUrl and optional storyb
   assert.throws(
     () => runninghubVideo.normalizeRunningHubVideoRequest({ model: S_IMAGE, prompt: '12345', imageUrls: ['a', 'b'] }),
     /最多支持 1 张参考图/,
+  );
+});
+
+test('RunningHub X models normalize their distinct text, image, reference and video contracts', () => {
+  const text = runninghubVideo.normalizeRunningHubVideoRequest({
+    model: X_TEXT,
+    prompt: 'city at night',
+    aspectRatio: '1:1',
+    resolution: '720p',
+    duration: 30,
+  });
+  assert.deepEqual(text.body, {
+    prompt: 'city at night',
+    duration: 30,
+    aspectRatio: '1:1',
+    resolution: '720p',
+  });
+
+  const image = runninghubVideo.normalizeRunningHubVideoRequest({
+    model: X_OFFICIAL_IMAGE,
+    prompt: 'camera moves slowly',
+    imageUrls: ['image-a'],
+    resolution: '480p',
+    duration: 10,
+  });
+  assert.equal(image.imageField, 'imageUrl');
+  assert.deepEqual(image.body, { prompt: 'camera moves slowly', duration: '10', resolution: '480p' });
+
+  const imageV15 = runninghubVideo.normalizeRunningHubVideoRequest({
+    model: X_OFFICIAL_IMAGE_V15,
+    prompt: 'camera moves slowly',
+    imageUrls: ['image-a'],
+    duration: 15,
+  });
+  assert.equal(imageV15.maxImageBytes, 100 * 1024 * 1024);
+  assert.equal(imageV15.body.duration, 15);
+
+  const reference = runninghubVideo.normalizeRunningHubVideoRequest({
+    model: X_OFFICIAL_REFERENCE,
+    prompt: 'combine the characters',
+    imageUrls: ['image-a', 'image-b'],
+    duration: 6,
+  });
+  assert.equal(reference.imageField, 'imageUrls');
+  assert.deepEqual(reference.imageUrls, ['image-a', 'image-b']);
+  assert.equal(reference.body.duration, '6');
+
+  const edit = runninghubVideo.normalizeRunningHubVideoRequest({
+    model: X_OFFICIAL_EDIT,
+    prompt: 'convert to watercolor',
+    videoUrls: ['video-a'],
+    resolution: '720p',
+  });
+  assert.equal(edit.videoField, 'videoUrl');
+  assert.equal(edit.maxVideoBytes, 50 * 1024 * 1024);
+  assert.deepEqual(edit.videoUrls, ['video-a']);
+  assert.deepEqual(edit.body, { prompt: 'convert to watercolor', resolution: '720p' });
+
+  const officialText = runninghubVideo.normalizeRunningHubVideoRequest({
+    model: X_OFFICIAL_TEXT,
+    prompt: 'cinematic city skyline',
+    aspectRatio: '9:16',
+    duration: 10,
+  });
+  assert.equal(officialText.body.aspectRatio, '9:16');
+  assert.equal(officialText.body.duration, '10');
+
+  const extend = runninghubVideo.normalizeRunningHubVideoRequest({
+    model: X_OFFICIAL_EXTEND,
+    prompt: 'continue walking forward',
+    videoUrls: ['video-a'],
+    duration: 6,
+  });
+  assert.equal(extend.videoField, 'videoUrl');
+  assert.equal(extend.maxVideoBytes, 100 * 1024 * 1024);
+  assert.deepEqual(extend.body, { prompt: 'continue walking forward', duration: '6' });
+
+  assert.throws(
+    () => runninghubVideo.normalizeRunningHubVideoRequest({ model: X_OFFICIAL_EDIT, prompt: '12345' }),
+    /1 个参考视频/,
+  );
+  assert.throws(
+    () => runninghubVideo.normalizeRunningHubVideoRequest({ model: X_OFFICIAL_EXTEND, prompt: 'x', videoUrls: ['a', 'b'] }),
+    /最多支持 1 个参考视频/,
   );
 });
 
@@ -188,6 +279,13 @@ test('RunningHub S official text-to-video maps ratio to API size', () => {
 test('RunningHub video model path is allowlisted', () => {
   assert.deepEqual(Object.keys(runninghubVideo.RUNNINGHUB_VIDEO_MODELS).sort(), [
     V15,
+    X_TEXT,
+    X_OFFICIAL_IMAGE,
+    X_OFFICIAL_IMAGE_V15,
+    X_OFFICIAL_REFERENCE,
+    X_OFFICIAL_EDIT,
+    X_OFFICIAL_TEXT,
+    X_OFFICIAL_EXTEND,
     S_IMAGE,
     S_TEXT,
     V31_FAST,
@@ -224,6 +322,12 @@ test('Running video node and API key management expose all standard models', () 
   const permissions = read('backend/src/auth/toolPermissions.js');
 
   assert.match(models, /rhart-video-g\/image-to-video/);
+  assert.match(models, /rhart-video-g\/text-to-video/);
+  assert.match(models, /rhart-video-g-official\/image-to-video-v1\.5/);
+  assert.match(models, /rhart-video-g-official\/reference-to-video/);
+  assert.match(models, /rhart-video-g-official\/edit-video/);
+  assert.match(models, /rhart-video-g-official\/text-to-video/);
+  assert.match(models, /rhart-video-g-official\/video-extend/);
   assert.match(models, /rhart-video-s\/image-to-video/);
   assert.match(models, /rhart-video-s\/text-to-video/);
   assert.match(models, /rhart-video-v3\.1-fast\/image-to-video/);
@@ -231,12 +335,13 @@ test('Running video node and API key management expose all standard models', () 
   assert.match(models, /rhart-video-s-official\/text-to-video/);
   assert.match(models, /全能视频V3\.1-fast · 图生视频低价渠道版/);
   assert.match(registry, /type: 'runninghub-video'[\s\S]*label: 'Running 视频'/);
-  assert.match(ports, /'runninghub-video': \{ inputs: \['text', 'image'\], outputs: \['video'\] \}/);
+  assert.match(ports, /'runninghub-video': \{ inputs: \['text', 'image', 'video'\], outputs: \['video'\] \}/);
   assert.match(canvas, /'runninghub-video': VideoNode/);
   assert.match(permissions, /'runninghub-video'/);
   assert.match(node, /model: apiModel/);
   assert.match(node, /runningHubVideoModelDef\(nextModel\)/);
   assert.match(service, /interface RunningHubVideoSubmitRequest \{[\s\S]*model: string/);
+  assert.match(service, /videoUrls\?: string\[\]/);
   assert.match(settings, /企业级-共享 API Key[\s\S]*Running 视频全部模型共用/);
   assert.match(proxy, /normalized\.path/);
   assert.match(proxy, /resolveRunningHubVideoModel/);

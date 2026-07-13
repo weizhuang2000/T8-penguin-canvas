@@ -187,6 +187,8 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
   const isSoraZhenzhen = !isExternalSelected && modelDef.kind === 'sora' && !isFal;
   const isRunningHubVideo = !isExternalSelected && modelDef.kind === 'runninghub';
   const supportsReferenceImages = modelDef.supportImages && (!isRunningHubVideo || runningHubModel.maxRefImages > 0);
+  const supportsReferenceVideos = isRunningHubVideo && (runningHubModel.maxRefVideos || 0) > 0;
+  const supportsReferenceMedia = supportsReferenceImages || supportsReferenceVideos;
   const runningHubStoryboard = d?.runningHubStoryboard === true;
   const isVeoOmni = !isExternalSelected && apiModel === 'veo-omni-10s';
   const showBuiltinFalControls = !isExternalSelected && isFal && !!falReg;
@@ -331,7 +333,11 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
       : isRunningHubVideo
       ? runningHubModel.maxRefImages
       : modelDef.maxRefImages;
-  const maxMentionVideos = isJimengSeedanceSelected ? JIMENG_SEEDANCE_LIMITS.videos : 0;
+  const maxMentionVideos = isJimengSeedanceSelected
+    ? JIMENG_SEEDANCE_LIMITS.videos
+    : isRunningHubVideo
+    ? runningHubModel.maxRefVideos || 0
+    : 0;
   const maxMentionAudios = isJimengSeedanceSelected ? JIMENG_SEEDANCE_LIMITS.audios : 0;
   const mentionMaterials = useMemo(
     () => [
@@ -344,8 +350,12 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
 
   // 分组动态跟随子模型: Seedance / 即梦 CLI 支持 image/video/audio, 其他 (grok/veo/sora) 仅 image
   const previewGroups = useMemo<ReadonlyArray<'text' | 'image' | 'video' | 'audio'>>(
-    () => (modelDef.kind === 'seedance' || isJimengSeedanceSelected ? ['text', 'image', 'video', 'audio'] : ['text', 'image']),
-    [modelDef.kind, isJimengSeedanceSelected],
+    () => (modelDef.kind === 'seedance' || isJimengSeedanceSelected
+      ? ['text', 'image', 'video', 'audio']
+      : isRunningHubVideo && supportsReferenceVideos
+      ? ['text', 'video']
+      : ['text', 'image']),
+    [modelDef.kind, isJimengSeedanceSelected, isRunningHubVideo, supportsReferenceVideos],
   );
 
   // 收集上游 prompt + 参考图/视频/音频 (按用户拖拽顺序), 合并本地拖入素材
@@ -582,9 +592,15 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
         if (imageUrls.length < runningHubModel.minRefImages) {
           throw new Error(`当前 RunningHub 模型至少需要 ${runningHubModel.minRefImages} 张参考图`);
         }
+        const minRefVideos = runningHubModel.minRefVideos || 0;
+        const maxRefVideos = runningHubModel.maxRefVideos || 0;
+        if (videoUrls.length < minRefVideos) {
+          throw new Error(`当前 RunningHub 模型至少需要 ${minRefVideos} 个参考视频`);
+        }
         const refs = imageUrls.slice(0, runningHubModel.maxRefImages);
+        const videoRefs = videoUrls.slice(0, maxRefVideos);
         logBus.info(
-          `提交 RunningHub 视频: model=${apiModel} ratio=${ratio} duration=${duration}s resolution=${resolution} refs=${refs.length}`,
+          `提交 RunningHub 视频: model=${apiModel} ratio=${ratio} duration=${duration}s resolution=${resolution} images=${refs.length} videos=${videoRefs.length}`,
           src,
         );
         const r = await submitRunningHubVideo({
@@ -592,6 +608,7 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
           prompt: finalPrompt,
           aspectRatio: ratio,
           imageUrls: refs,
+          videoUrls: videoRefs,
           resolution: resolution || runningHubModel.defaultResolution,
           duration: Number(duration) || runningHubModel.defaultDuration,
           storyboard: runningHubModel.supportsStoryboard ? runningHubStoryboard : undefined,
@@ -793,9 +810,10 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
         : (modelDef.maxRefImages || 7) + 4;
       if (cur.length >= cap) return;
       update({ localRefImages: [...cur, payload.url] });
-    } else if (payload.kind === 'video' && payload.url && isJimengSeedanceSelected) {
+    } else if (payload.kind === 'video' && payload.url && (isJimengSeedanceSelected || supportsReferenceVideos)) {
       const cur = Array.isArray(d?.localRefVideos) ? d.localRefVideos : [];
-      if (cur.indexOf(payload.url) !== -1 || cur.length >= JIMENG_SEEDANCE_LIMITS.videos) return;
+      const cap = isJimengSeedanceSelected ? JIMENG_SEEDANCE_LIMITS.videos : runningHubModel.maxRefVideos || 0;
+      if (cur.indexOf(payload.url) !== -1 || cur.length >= cap) return;
       update({ localRefVideos: [...cur, payload.url] });
     } else if (payload.kind === 'audio' && payload.url && isJimengSeedanceSelected) {
       const cur = Array.isArray(d?.localRefAudios) ? d.localRefAudios : [];
@@ -807,7 +825,11 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
   };
   const { dropProps, isAccepting } = useMaterialDropTarget({
     id,
-    accepts: isJimengSeedanceSelected ? ['image', 'video', 'audio', 'text'] : ['image', 'text'],
+    accepts: isJimengSeedanceSelected
+      ? ['image', 'video', 'audio', 'text']
+      : supportsReferenceVideos
+      ? ['video', 'text']
+      : ['image', 'text'],
     onDrop: handleDrop,
   });
 
@@ -817,6 +839,8 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
   const audioRefsCount = orderedAudios.length + localRefAudios.length;
   const previewTitle = isJimengSeedanceSelected
     ? `上游素材 · 图${Math.min(refsCount, JIMENG_SEEDANCE_LIMITS.images)}/${JIMENG_SEEDANCE_LIMITS.images} 视${Math.min(videoRefsCount, JIMENG_SEEDANCE_LIMITS.videos)}/${JIMENG_SEEDANCE_LIMITS.videos} 音${Math.min(audioRefsCount, JIMENG_SEEDANCE_LIMITS.audios)}/${JIMENG_SEEDANCE_LIMITS.audios}`
+    : supportsReferenceVideos
+    ? `上游素材 · 参考视频 ${Math.min(videoRefsCount, maxMentionVideos)}/${maxMentionVideos}`
     : `上游素材 · 参考图 ${Math.min(refsCount, maxMentionRefs)}/${maxMentionRefs}`;
 
   return (
@@ -1169,6 +1193,8 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
             {runningHubModel.description}复用 API Key 管理中的企业级共享 RunningHub API Key；
             {runningHubModel.maxRefImages > 0
               ? `参考图${runningHubModel.minRefImages > 0 ? `至少 ${runningHubModel.minRefImages} 张，` : '可选，'}最多 ${runningHubModel.maxRefImages} 张（单张 ${runningHubModel.maxImageSizeMb}MB）`
+              : (runningHubModel.maxRefVideos || 0) > 0
+              ? `参考视频至少 ${runningHubModel.minRefVideos || 0} 个，最多 ${runningHubModel.maxRefVideos} 个（单个 ${runningHubModel.maxVideoSizeMb}MB）`
               : '文生视频无需参考图'}，结果会自动转存到本地 output。
           </div>
         )}
@@ -1245,9 +1271,9 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
         )}
 
         {/* 比例(非 FAL 时显示原始控件) */}
-        {showGenericVideoControls && !isGrok15New && (
+        {showGenericVideoControls && !isGrok15New && (ratioOptions.length > 0 || durationOptions.length > 0) && (
         <div className="grid grid-cols-2 gap-1.5">
-          <div>
+          {ratioOptions.length > 0 && <div>
             <label className="text-[10px] text-white/50 block mb-1">比例</label>
             <select
               value={ratio}
@@ -1258,7 +1284,7 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
                 <option key={r} value={r} className="bg-zinc-900">{r}</option>
               ))}
             </select>
-          </div>
+          </div>}
           {/* 时长(grok / seedance) */}
           {durationOptions.length > 0 && (
             <div>
@@ -1333,7 +1359,7 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
         )}
 
         {/* 上游素材聚合预览区 (代替原「参考图(上游)」计数提示) */}
-        {supportsReferenceImages && (
+        {supportsReferenceMedia && (
           <MaterialPreviewSection
             texts={orderedTexts}
             images={orderedImages}
@@ -1353,7 +1379,7 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
         )}
 
         {/* 本地拖入参考素材 (Ctrl+拖拽自其他节点) */}
-        {supportsReferenceImages && (localRefImages.length + localRefVideos.length + localRefAudios.length) > 0 && (
+        {supportsReferenceMedia && (localRefImages.length + localRefVideos.length + localRefAudios.length) > 0 && (
           <div className="rounded border border-emerald-400/30 bg-emerald-500/5 p-1.5 space-y-1">
             <div className="text-[10px] text-emerald-200/80">
               本地拖入 · 图{localRefImages.length} 视{localRefVideos.length} 音{localRefAudios.length}
