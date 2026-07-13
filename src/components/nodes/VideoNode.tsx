@@ -1116,17 +1116,13 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
               className="w-full rounded bg-white/5 border border-white/10 px-2 py-1 text-xs text-white outline-none focus:border-white/30"
             >
               {modelDef.kind === 'runninghub' ? <>
-                <optgroup label="已适配模型">
-                  {modelDef.apiModelOptions.map((o) => {
-                    const price = runningHubCatalog.find((item) => item.name === RUNNINGHUB_CATALOG_NAME_BY_STATIC_MODEL[o.value])?.priceLabel;
-                    return <option key={o.value} value={o.value} className="bg-zinc-900">{o.label}{price ? ` · ${price}` : ''}</option>;
-                  })}
-                </optgroup>
-                <optgroup label={`全能视频目录（${runningHubCatalog.length || '加载中'}）`}>
-                  {runningHubCatalog.filter((item) => !Object.values(RUNNINGHUB_CATALOG_NAME_BY_STATIC_MODEL).includes(item.name)).map((item) => (
-                    <option key={item.id} value={`catalog:${item.id}`} className="bg-zinc-900">{item.name} · {item.priceLabel}</option>
-                  ))}
-                </optgroup>
+                {modelDef.apiModelOptions.map((o) => {
+                  const price = runningHubCatalog.find((item) => item.name === RUNNINGHUB_CATALOG_NAME_BY_STATIC_MODEL[o.value])?.priceLabel;
+                  return <option key={o.value} value={o.value} className="bg-zinc-900">{o.label}{price ? ` · ${price}` : ''}</option>;
+                })}
+                {runningHubCatalog.filter((item) => !Object.values(RUNNINGHUB_CATALOG_NAME_BY_STATIC_MODEL).includes(item.name)).map((item) => (
+                  <option key={item.id} value={`catalog:${item.id}`} className="bg-zinc-900">{item.name} · {item.priceLabel}</option>
+                ))}
               </> : modelDef.apiModelOptions.map((o) => (
                 <option key={o.value} value={o.value} className="bg-zinc-900">{o.label}</option>
               ))}
