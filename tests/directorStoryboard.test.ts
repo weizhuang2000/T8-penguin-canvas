@@ -9,6 +9,14 @@ import {
   sanitizeDirectorStoryboardShots,
   type DirectorStoryboardJob,
 } from '../src/utils/directorStoryboard.ts';
+import {
+  buildDirectorRunningHubCatalogParams,
+  buildDirectorStoryboardModelOptions,
+  directorStoryboardPayloadMedia,
+  isRunningHubPerSecondPrice,
+  resolveDirectorStoryboardModel,
+} from '../src/data/directorStoryboardModels.ts';
+import { RUNNINGHUB_FULL_VIDEO_CATALOG_FALLBACK } from '../src/data/runninghubFullVideoCatalog.ts';
 
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), 'utf8');
 
@@ -24,7 +32,6 @@ test('director storyboard node is registered as a visible Seedance orchestration
   assert.match(types, /\|\s*'director-storyboard'/);
   assert.match(canvas, /import DirectorStoryboardNode from '\.\/nodes\/DirectorStoryboardNode'/);
   assert.match(canvas, /'director-storyboard': DirectorStoryboardNode/);
-  assert.match(canvas, /'director-storyboard':\s*\{/);
   assert.match(features, /director-storyboard/);
 });
 
@@ -110,6 +117,73 @@ test('director storyboard active shot can override global model ratio and resolu
   assert.match(node, /activeShot\.modelOverride \|\| ''/);
   assert.match(node, /activeShot\.ratioOverride \|\| ''/);
   assert.match(node, /activeShot\.resolutionOverride \|\| ''/);
+});
+
+test('director storyboard exposes only RunningHub models billed per second and shows their prices', () => {
+  const options = buildDirectorStoryboardModelOptions(RUNNINGHUB_FULL_VIDEO_CATALOG_FALLBACK);
+  const runningHub = options.filter((item) => item.provider !== 'seedance');
+
+  assert.equal(runningHub.length, 8);
+  assert.ok(runningHub.every((item) => isRunningHubPerSecondPrice(item.priceLabel)));
+  assert.ok(runningHub.every((item) => item.label.includes(item.priceLabel!)));
+  assert.ok(runningHub.some((item) => item.value === 'rhart-video-g/image-to-video'));
+  assert.ok(runningHub.some((item) => item.value === 'rhart-video-g-official/edit-video'));
+  assert.ok(runningHub.some((item) => item.value === 'catalog:2042415417236176903'));
+  assert.ok(runningHub.some((item) => item.value === 'catalog:2012065966164602881'));
+  assert.ok(!runningHub.some((item) => item.catalogModelId === '2005910264819793921'));
+});
+
+test('director storyboard resolves Seedance, static RunningHub and catalog RunningHub providers', () => {
+  const options = buildDirectorStoryboardModelOptions();
+  assert.equal(resolveDirectorStoryboardModel('doubao-seedance-2-0-260128', options).provider, 'seedance');
+  assert.equal(resolveDirectorStoryboardModel('rhart-video-g/image-to-video', options).provider, 'runninghub-static');
+  assert.deepEqual(
+    resolveDirectorStoryboardModel('catalog:2042415417236176902', options),
+    options.find((item) => item.value === 'catalog:2042415417236176902'),
+  );
+  assert.equal(resolveDirectorStoryboardModel('catalog:999', options).catalogModelId, '999');
+});
+
+test('director storyboard converts frames and reference media to RunningHub catalog params', () => {
+  const payload = {
+    model: 'catalog:2042415417236176903',
+    prompt: 'cinematic movement',
+    duration: 8,
+    ratio: '16:9',
+    resolution: '720p',
+    firstFrame: '/files/input/first.png',
+    lastFrame: '/files/input/last.png',
+    refImages: ['/files/input/first.png', '/files/input/ref.png'],
+    videos: ['/files/input/ref.mp4'],
+    audios: ['/files/input/ref.mp3'],
+  };
+
+  assert.deepEqual(directorStoryboardPayloadMedia(payload), {
+    images: ['/files/input/first.png', '/files/input/last.png', '/files/input/ref.png'],
+    videos: ['/files/input/ref.mp4'],
+    audios: ['/files/input/ref.mp3'],
+  });
+  assert.deepEqual(buildDirectorRunningHubCatalogParams(payload), {
+    prompt: 'cinematic movement',
+    duration: 8,
+    aspectRatio: '16:9',
+    resolution: '720p',
+    imageUrls: ['/files/input/first.png', '/files/input/last.png', '/files/input/ref.png'],
+    videoUrl: '/files/input/ref.mp4',
+    audioUrl: '/files/input/ref.mp3',
+  });
+});
+
+test('director storyboard node submits and polls both RunningHub model kinds', () => {
+  const node = read('../src/components/nodes/DirectorStoryboardNode.tsx');
+  const proxy = read('../backend/src/routes/proxy.js');
+  assert.match(node, /submitRunningHubVideo\(\{/);
+  assert.match(node, /submitRunningHubCatalogVideo\(\{/);
+  assert.match(node, /queryRunningHubVideo\(submitted\.taskId, runningHubQueryModel\)/);
+  assert.match(node, /当前模型计费/);
+  assert.match(node, /modelOptions\.map/);
+  assert.match(proxy, /runninghub\/video\/submit'[\s\S]*?requireNodePermission\(\['video', 'runninghub-video', 'director-storyboard'\]\)/);
+  assert.match(proxy, /seedance\/submit'[\s\S]*?requireNodePermission\(\['seedance', 'director-storyboard'\]\)/);
 });
 
 test('buildDirectorShotSeedancePayload compiles media mentions and first/last frame references', () => {

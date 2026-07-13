@@ -17,10 +17,15 @@ import {
   X,
 } from 'lucide-react';
 import {
+  getRunningHubVideoCatalog,
+  queryRunningHubVideo,
   querySeedance,
+  submitRunningHubCatalogVideo,
+  submitRunningHubVideo,
   submitSeedance,
   uploadFile,
 } from '../../services/generation';
+import { runningHubVideoModelDef } from '../../providers/models';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useMaterialDropTarget } from '../../hooks/useMaterialDropTarget';
 import { useThemeStore } from '../../stores/theme';
@@ -46,11 +51,14 @@ import {
   type DirectorStoryboardShot,
 } from '../../utils/directorStoryboard';
 import { materialMentionKey, type MediaMention } from './mediaMentions';
-
-const MODEL_OPTIONS = [
-  { value: 'doubao-seedance-2-0-fast-260128', label: 'seedance-2-0-fast' },
-  { value: 'doubao-seedance-2-0-260128', label: 'seedance-2-0' },
-];
+import {
+  buildDirectorRunningHubCatalogParams,
+  buildDirectorStoryboardModelOptions,
+  DIRECTOR_STORYBOARD_SEEDANCE_MODELS,
+  directorStoryboardPayloadMedia,
+  resolveDirectorStoryboardModel,
+} from '../../data/directorStoryboardModels';
+import { RUNNINGHUB_FULL_VIDEO_CATALOG_FALLBACK } from '../../data/runninghubFullVideoCatalog';
 const RATIO_OPTIONS = ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '9:21', 'adaptive'];
 const RESOLUTION_OPTIONS = ['480p', '720p', 'native1080p', '1080p', '2k', '4k'];
 const FRAME_MODE_OPTIONS = [
@@ -184,6 +192,39 @@ const DirectorStoryboardNode = ({ id, data, selected }: NodeProps) => {
   const isPixel = themeStyle === 'pixel';
   const d = (data as any) || {};
   const src = `director:${id.slice(0, 6)}`;
+  const [runningHubCatalog, setRunningHubCatalog] = useState(() => [...RUNNINGHUB_FULL_VIDEO_CATALOG_FALLBACK]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getRunningHubVideoCatalog()
+      .then((models) => {
+        if (cancelled || !models.length) return;
+        setRunningHubCatalog((current) => {
+          const merged = new Map(current.map((item) => [item.id, item]));
+          models.forEach((item) => {
+            const fallback = merged.get(item.id);
+            const onlinePrice = /^(?:¥\d|免费|价格以)/.test(item.priceLabel || '')
+              ? item.priceLabel
+              : fallback?.priceLabel;
+            merged.set(item.id, {
+              ...fallback,
+              ...item,
+              priceLabel: onlinePrice || item.priceLabel || '',
+            });
+          });
+          return Array.from(merged.values());
+        });
+      })
+      .catch((error) => logBus.warn(`RunningHub 按秒模型目录刷新失败，使用内置清单: ${error?.message || error}`, src));
+    return () => {
+      cancelled = true;
+    };
+  }, [src]);
+
+  const modelOptions = useMemo(
+    () => buildDirectorStoryboardModelOptions(runningHubCatalog),
+    [runningHubCatalog],
+  );
 
   const shots = useMemo(
     () => sanitizeDirectorStoryboardShots(Array.isArray(d.shots) ? d.shots : []),
@@ -194,7 +235,8 @@ const DirectorStoryboardNode = ({ id, data, selected }: NodeProps) => {
   const results: ResultsMap = d.shotResults && typeof d.shotResults === 'object' ? d.shotResults : {};
   const status: 'idle' | 'submitting' | 'polling' | 'success' | 'error' | 'cancelled' = d.status || 'idle';
   const isBusy = status === 'submitting' || status === 'polling';
-  const model = String(d.model || MODEL_OPTIONS[0].value);
+  const model = String(d.model || DIRECTOR_STORYBOARD_SEEDANCE_MODELS[0].value);
+  const selectedModelOption = resolveDirectorStoryboardModel(model, modelOptions);
   const ratio = String(d.ratio || '16:9');
   const resolution = String(d.resolution || '480p');
   const generateAudio = d.generateAudio !== false;
@@ -488,6 +530,46 @@ const DirectorStoryboardNode = ({ id, data, selected }: NodeProps) => {
     update({ shotResults: next });
   };
 
+  const updateGlobalModel = (nextModel: string) => {
+    const option = resolveDirectorStoryboardModel(nextModel, modelOptions);
+    if (option.provider !== 'runninghub-static' || !option.staticModelId) {
+      update({ model: nextModel });
+      return;
+    }
+    const definition = runningHubVideoModelDef(option.staticModelId);
+    update({
+      model: nextModel,
+      ratio: definition.defaultRatio || ratio,
+      resolution: definition.defaultResolution || resolution,
+      shots: definition.durations.length
+        ? shots.map((shot) => definition.durations.includes(shot.durationSec)
+          ? shot
+          : { ...shot, durationSec: definition.defaultDuration })
+        : shots,
+    });
+  };
+
+  const updateShotModel = (shot: DirectorStoryboardShot, nextModel: string) => {
+    if (!nextModel) {
+      patchShot(shot.id, { modelOverride: undefined });
+      return;
+    }
+    const option = resolveDirectorStoryboardModel(nextModel, modelOptions);
+    if (option.provider !== 'runninghub-static' || !option.staticModelId) {
+      patchShot(shot.id, { modelOverride: nextModel });
+      return;
+    }
+    const definition = runningHubVideoModelDef(option.staticModelId);
+    patchShot(shot.id, {
+      modelOverride: nextModel,
+      durationSec: definition.durations.length && !definition.durations.includes(shot.durationSec)
+        ? definition.defaultDuration
+        : shot.durationSec,
+      ratioOverride: definition.defaultRatio || shot.ratioOverride,
+      resolutionOverride: definition.defaultResolution || shot.resolutionOverride,
+    });
+  };
+
   const pollJob = async (job: DirectorStoryboardJob, signal?: AbortSignal): Promise<string> => {
     if (!String(job.payload.prompt || '').trim()) {
       throw new Error('这个分镜没有提示词');
@@ -498,19 +580,77 @@ const DirectorStoryboardNode = ({ id, data, selected }: NodeProps) => {
       src,
     );
     setJobPatch(job, { status: 'submitting', error: null, progress: '提交中' });
-    const submitted = await submitSeedance(job.payload);
+    const modelOption = resolveDirectorStoryboardModel(job.payload.model, modelOptions);
+    const media = directorStoryboardPayloadMedia(job.payload);
+    let submitted: { taskId: string };
+    let runningHubQueryModel = '';
+
+    if (modelOption.provider === 'runninghub-static' && modelOption.staticModelId) {
+      const definition = runningHubVideoModelDef(modelOption.staticModelId);
+      const promptLength = job.payload.prompt.trim().length;
+      if (promptLength < definition.promptMin || (definition.promptMax !== undefined && promptLength > definition.promptMax)) {
+        const range = definition.promptMax === undefined
+          ? `至少 ${definition.promptMin}`
+          : `${definition.promptMin}-${definition.promptMax}`;
+        throw new Error(`当前 RunningHub 模型的 Prompt 长度须为 ${range} 个字符`);
+      }
+      if (media.images.length < definition.minRefImages) {
+        throw new Error(`当前 RunningHub 模型至少需要 ${definition.minRefImages} 张参考图`);
+      }
+      if (media.videos.length < (definition.minRefVideos || 0)) {
+        throw new Error(`当前 RunningHub 模型至少需要 ${definition.minRefVideos} 个参考视频`);
+      }
+      const duration = Number(job.payload.duration) || definition.defaultDuration;
+      if (definition.durations.length && !definition.durations.includes(duration)) {
+        throw new Error(`当前 RunningHub 模型时长仅支持 ${definition.durations.join('/')} 秒`);
+      }
+      if (definition.ratios.length && !definition.ratios.includes(String(job.payload.ratio || ''))) {
+        throw new Error(`当前 RunningHub 模型比例仅支持 ${definition.ratios.join('、')}`);
+      }
+      if (definition.resolutions.length && !definition.resolutions.includes(String(job.payload.resolution || ''))) {
+        throw new Error(`当前 RunningHub 模型分辨率仅支持 ${definition.resolutions.join('、')}`);
+      }
+      runningHubQueryModel = modelOption.staticModelId;
+      submitted = await submitRunningHubVideo({
+        model: modelOption.staticModelId,
+        prompt: job.payload.prompt,
+        aspectRatio: job.payload.ratio || definition.defaultRatio,
+        imageUrls: media.images.slice(0, definition.maxRefImages),
+        videoUrls: media.videos.slice(0, definition.maxRefVideos || 0),
+        resolution: job.payload.resolution || definition.defaultResolution,
+        duration,
+        storyboard: definition.supportsStoryboard ? true : undefined,
+      });
+    } else if (modelOption.provider === 'runninghub-catalog' && modelOption.catalogModelId) {
+      if ((modelOption.category === 'image-to-video' || modelOption.category === 'reference-to-video') && media.images.length === 0) {
+        throw new Error('当前 RunningHub 模型至少需要 1 张参考图');
+      }
+      if ((modelOption.category === 'video-edit' || modelOption.category === 'video-extend') && media.videos.length === 0) {
+        throw new Error('当前 RunningHub 模型至少需要 1 个参考视频');
+      }
+      runningHubQueryModel = `catalog:${modelOption.catalogModelId}`;
+      submitted = await submitRunningHubCatalogVideo({
+        catalogModelId: modelOption.catalogModelId,
+        params: buildDirectorRunningHubCatalogParams(job.payload),
+      });
+    } else {
+      submitted = await submitSeedance(job.payload);
+    }
     setJobPatch(job, { status: 'polling', taskId: submitted.taskId, progress: '15%' });
-    logBus.info(`${job.title} taskId=${submitted.taskId} 已提交，进入轮询`, src);
+    logBus.info(`${job.title} · ${modelOption.label} taskId=${submitted.taskId} 已提交，进入轮询`, src);
 
     for (let elapsed = 1; elapsed <= maxPoll; elapsed += 1) {
       await sleep(pollInt * 1000, signal);
-      const result = await querySeedance(submitted.taskId);
+      const result = modelOption.provider === 'seedance'
+        ? await querySeedance(submitted.taskId)
+        : await queryRunningHubVideo(submitted.taskId, runningHubQueryModel);
       const pct = Math.min(95, Math.round(15 + (elapsed * 80) / maxPoll));
-      if (result.status === 'succeeded' && result.videoUrl) {
+      const normalizedStatus = String(result.status || '').toUpperCase();
+      if ((normalizedStatus === 'SUCCEEDED' || normalizedStatus === 'SUCCESS') && result.videoUrl) {
         logBus.success(`${job.title} 完成 → ${result.videoUrl}`, src);
         return result.videoUrl;
       }
-      if (result.status === 'failed') {
+      if (normalizedStatus === 'FAILED' || normalizedStatus === 'FAILURE') {
         throw new Error(result.failReason || '生成失败');
       }
       setJobPatch(job, {
@@ -751,7 +891,7 @@ const DirectorStoryboardNode = ({ id, data, selected }: NodeProps) => {
         <div className="min-w-0 flex-1">
           <div className="font-semibold leading-tight">导演分镜台</div>
           <div className="truncate text-[11px]" style={mutedStyle}>
-            {shots.length} 镜头 · {totalDuration}s · Seedance2.0 无限并发
+            {shots.length} 镜头 · {totalDuration}s · Seedance / RunningHub 并发
           </div>
         </div>
         <span
@@ -764,8 +904,8 @@ const DirectorStoryboardNode = ({ id, data, selected }: NodeProps) => {
 
       <div className="space-y-2 p-3">
         <div className="grid grid-cols-4 gap-1.5">
-          <select value={model} onChange={(event) => update({ model: event.target.value })} className="nodrag rounded border px-2 py-1 text-[11px] outline-none col-span-2" style={inputStyle}>
-            {MODEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+          <select value={model} onChange={(event) => updateGlobalModel(event.target.value)} className="nodrag rounded border px-2 py-1 text-[11px] outline-none col-span-2" style={inputStyle}>
+            {modelOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
           </select>
           <select value={ratio} onChange={(event) => update({ ratio: event.target.value })} className="nodrag rounded border px-2 py-1 text-[11px] outline-none" style={inputStyle}>
             {RATIO_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}
@@ -773,6 +913,10 @@ const DirectorStoryboardNode = ({ id, data, selected }: NodeProps) => {
           <select value={resolution} onChange={(event) => update({ resolution: event.target.value })} className="nodrag rounded border px-2 py-1 text-[11px] outline-none" style={inputStyle}>
             {RESOLUTION_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
+        </div>
+
+        <div className="text-[10px]" style={mutedStyle}>
+          当前模型计费：{selectedModelOption.priceLabel || '按所选 Seedance 服务配置结算'}
         </div>
 
         <div className="grid grid-cols-4 gap-1.5">
@@ -901,13 +1045,13 @@ const DirectorStoryboardNode = ({ id, data, selected }: NodeProps) => {
               <div className="grid grid-cols-3 gap-1.5">
                 <select
                   value={activeShot.modelOverride || ''}
-                  onChange={(event) => patchShot(activeShot.id, { modelOverride: event.target.value || undefined })}
+                  onChange={(event) => updateShotModel(activeShot, event.target.value)}
                   className="nodrag min-w-0 rounded border px-1.5 py-1 text-[10px] outline-none"
                   style={inputStyle}
                   title="单镜头模型，留空继承全局"
                 >
                   <option value="">继承模型</option>
-                  {MODEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                  {modelOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                 </select>
                 <select
                   value={activeShot.ratioOverride || ''}

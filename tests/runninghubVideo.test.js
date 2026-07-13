@@ -360,7 +360,7 @@ test('Running video node and API key management expose all standard models', () 
   assert.match(proxy, /normalized\.path/);
   assert.match(proxy, /runninghub\/video\/catalog/);
   assert.match(proxy, /resolveRunningHubVideoModel/);
-  assert.match(proxy, /requireNodePermission\(\['video', 'runninghub-video'\]\)/);
+  assert.match(proxy, /requireNodePermission\(\['video', 'runninghub-video', 'director-storyboard'\]\)/);
   assert.doesNotMatch(node, /<optgroup/);
   assert.match(node, /item\.name} · \{item\.priceLabel/);
   assert.match(node, /当前计费/);

@@ -1,5 +1,21 @@
 import type { RunningHubVideoCatalogModel } from '../services/generation';
 
+export const RUNNINGHUB_CATALOG_NAME_BY_STATIC_MODEL: Record<string, string> = {
+  'rhart-video-g/image-to-video': '全能视频X-图生视频-低价渠道版-v1.5',
+  'rhart-video-g/text-to-video': '全能视频X-文生视频-低价渠道版-v1.5',
+  'rhart-video-g-official/image-to-video': '全能视频X-图生视频-官方稳定版',
+  'rhart-video-g-official/image-to-video-v1.5': '全能视频X-图生视频-官方稳定版-v1.5',
+  'rhart-video-g-official/reference-to-video': '全能视频X-多图参考生视频-官方稳定版',
+  'rhart-video-g-official/edit-video': '全能视频X-编辑视频-官方稳定版',
+  'rhart-video-g-official/text-to-video': '全能视频X-文生视频-官方稳定版',
+  'rhart-video-g-official/video-extend': '全能视频X-视频续写-官方稳定版',
+  'rhart-video-s/image-to-video': '全能视频S-图生视频-低价渠道版',
+  'rhart-video-s/text-to-video': '全能视频S-文生视频-低价渠道版',
+  'rhart-video-v3.1-fast/image-to-video': '全能视频V3.1-fast-图生视频-低价渠道版',
+  'rhart-video-s-official/image-to-video': '全能视频S-图生视频-官方稳定版',
+  'rhart-video-s-official/text-to-video': '全能视频S-文生视频-官方稳定版',
+};
+
 const item = (id: string, name: string, category: string, priceLabel: string): RunningHubVideoCatalogModel => ({
   id,
   name,

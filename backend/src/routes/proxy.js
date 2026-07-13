@@ -2124,7 +2124,7 @@ router.get('/video/query', requireNodePermission('video'), async (req, res) => {
 //   { type:'video_url', video_url:{url}, role:'reference_video' }   // 需先 /v1/files 上传换 URL
 //   { type:'audio_url', audio_url:{url}, role:'reference_audio' }   // 需先 /v1/files 上传换 URL
 // ========================================================================
-router.post('/seedance/submit', requireNodePermission('seedance'), async (req, res) => {
+router.post('/seedance/submit', requireNodePermission(['seedance', 'director-storyboard']), async (req, res) => {
   const settings = loadRawSettings();
   // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
   if (!ensureKey(settings, res, 'seedance', 'Seedance')) return;
@@ -2238,7 +2238,7 @@ router.post('/seedance/submit', requireNodePermission('seedance'), async (req, r
   }
 });
 
-router.get('/seedance/query', requireNodePermission('seedance'), async (req, res) => {
+router.get('/seedance/query', requireNodePermission(['seedance', 'director-storyboard']), async (req, res) => {
   const settings = loadRawSettings();
   // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
   if (!ensureKey(settings, res, 'seedance', 'Seedance')) return;
@@ -2604,7 +2604,7 @@ function resolveRunningHubCatalogMediaParams(value, key = '') {
   return output;
 }
 
-router.get('/runninghub/video/catalog', requireNodePermission(['video', 'runninghub-video']), async (_req, res) => {
+router.get('/runninghub/video/catalog', requireNodePermission(['video', 'runninghub-video', 'director-storyboard']), async (_req, res) => {
   try {
     const models = await listRunningHubVideoCatalog(config.RH_BASE_URL);
     return res.json({ success: true, data: models });
@@ -2613,7 +2613,7 @@ router.get('/runninghub/video/catalog', requireNodePermission(['video', 'running
   }
 });
 
-router.get('/runninghub/video/catalog/:modelId', requireNodePermission(['video', 'runninghub-video']), async (req, res) => {
+router.get('/runninghub/video/catalog/:modelId', requireNodePermission(['video', 'runninghub-video', 'director-storyboard']), async (req, res) => {
   try {
     const model = await resolveRunningHubVideoCatalogModel(config.RH_BASE_URL, req.params.modelId);
     return res.json({ success: true, data: {
@@ -2627,7 +2627,7 @@ router.get('/runninghub/video/catalog/:modelId', requireNodePermission(['video',
   }
 });
 
-router.post('/runninghub/video/catalog/submit', requireNodePermission(['video', 'runninghub-video']), async (req, res) => {
+router.post('/runninghub/video/catalog/submit', requireNodePermission(['video', 'runninghub-video', 'director-storyboard']), async (req, res) => {
   const settings = loadRawSettings();
   const apiKey = pickRhApiKey(settings);
   if (!apiKey) return res.status(400).json({ success: false, error: missingRhKeyError() });
@@ -2664,7 +2664,7 @@ router.post('/runninghub/video/catalog/submit', requireNodePermission(['video', 
 });
 
 // RunningHub 标准视频模型；模型 ID 只允许 utils/runninghubVideo.js 中的固定白名单。
-router.post('/runninghub/video/submit', requireNodePermission(['video', 'runninghub-video']), async (req, res) => {
+router.post('/runninghub/video/submit', requireNodePermission(['video', 'runninghub-video', 'director-storyboard']), async (req, res) => {
   const settings = loadRawSettings();
   const apiKey = pickRhApiKey(settings);
   if (!apiKey) return res.status(400).json({ success: false, error: missingRhKeyError() });
@@ -2704,7 +2704,7 @@ router.post('/runninghub/video/submit', requireNodePermission(['video', 'running
   }
 });
 
-router.post('/runninghub/video/query', requireNodePermission(['video', 'runninghub-video']), async (req, res) => {
+router.post('/runninghub/video/query', requireNodePermission(['video', 'runninghub-video', 'director-storyboard']), async (req, res) => {
   const settings = loadRawSettings();
   const taskId = String(req.body?.taskId || '').trim();
   if (!taskId) return res.status(400).json({ success: false, error: 'taskId 必填' });
