@@ -136,15 +136,18 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
 
   const d = data as any;
   const isRunningHubNodeType = type === 'runninghub-video';
+  const hasRunningHubSelection = isRunningHubNodeType
+    || d?.mainId === 'runninghub-video'
+    || VIDEO_MODELS.some((item) => item.kind === 'runninghub' && item.apiModelOptions.some((option) => option.value === d?.model));
   const providerParams = (d?.providerParams && typeof d.providerParams === 'object') ? d.providerParams : {};
   useEffect(() => {
-    if (!isRunningHubNodeType) return;
+    if (!hasRunningHubSelection) return;
     let cancelled = false;
     getRunningHubVideoCatalog()
       .then((models) => { if (!cancelled) setRunningHubCatalog(models); })
       .catch((e) => { if (!cancelled) setRunningHubCatalogError(e?.message || '读取 RunningHub 视频模型目录失败'); });
     return () => { cancelled = true; };
-  }, [isRunningHubNodeType]);
+  }, [hasRunningHubSelection]);
   const advancedProviders = useApiKeysStore((s) => s.settings.advancedProviders);
   const allowZhenzhenFallback = useApiKeysStore((s) => s.settings.enableZhenzhenFallback !== false);
   const videoAdvancedProviders = useMemo(
@@ -159,7 +162,7 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
     }),
     [advancedProviders, d?.providerSource, d?.providerId, d?.providerModel],
   );
-  const isExternalSelected = !isRunningHubNodeType
+  const isExternalSelected = !hasRunningHubSelection
     && providerSelection.available
     && providerSelection.providerSource !== 'zhenzhen';
   const savedExternalMissing = !!d?.providerSource && d.providerSource !== 'zhenzhen' && !providerSelection.available;
@@ -193,7 +196,7 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
   const apiModel: string = d?.model && modelDef.apiModelOptions.some((o) => o.value === d.model) ? d.model : modelDef.apiModelOptions[0].value;
   const catalogModelId = typeof d?.runningHubCatalogModelId === 'string' ? d.runningHubCatalogModelId : '';
   const catalogModel = runningHubCatalog.find((item) => item.id === catalogModelId) || null;
-  const isCatalogRunningHubModel = isRunningHubNodeType && !!catalogModel;
+  const isCatalogRunningHubModel = modelDef.kind === 'runninghub' && !!catalogModel;
   useEffect(() => {
     if (!catalogModelId) {
       setRunningHubCatalogFields([]);
