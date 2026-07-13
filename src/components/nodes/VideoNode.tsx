@@ -65,6 +65,7 @@ import {
   normalizeExcludedMaterialIds,
 } from '../../utils/materialExclusion';
 import { LocalNodeAddonSlot } from 'virtual:t8-local-extensions';
+import { RUNNINGHUB_FULL_VIDEO_CATALOG_FALLBACK } from '../../data/runninghubFullVideoCatalog';
 
 /**
  * VideoNode - 异步视频生成(完全对齐 gpt-image-2-web)
@@ -123,7 +124,9 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
   const hasAutoOutput = useHasAutoOutput(id);
   const { getEdges, getNodes } = useReactFlow();
   const [error, setError] = useState<string | null>(null);
-  const [runningHubCatalog, setRunningHubCatalog] = useState<RunningHubVideoCatalogModel[]>([]);
+  const [runningHubCatalog, setRunningHubCatalog] = useState<RunningHubVideoCatalogModel[]>(
+    () => [...RUNNINGHUB_FULL_VIDEO_CATALOG_FALLBACK],
+  );
   const [runningHubCatalogError, setRunningHubCatalogError] = useState<string | null>(null);
   const [runningHubCatalogFields, setRunningHubCatalogFields] = useState<RunningHubVideoCatalogField[]>([]);
   const pollTimer = useRef<number | null>(null);
@@ -144,7 +147,19 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
     if (!hasRunningHubSelection) return;
     let cancelled = false;
     getRunningHubVideoCatalog()
-      .then((models) => { if (!cancelled) setRunningHubCatalog(models); })
+      .then((models) => {
+        if (cancelled || !models.length) return;
+        setRunningHubCatalog((current) => {
+          const merged = new Map(current.map((item) => [item.id, item]));
+          models.forEach((item) => {
+            const fallback = merged.get(item.id);
+            const onlinePrice = /^(?:¥\d|免费|价格以)/.test(item.priceLabel || '') ? item.priceLabel : fallback?.priceLabel;
+            merged.set(item.id, { ...fallback, ...item, priceLabel: onlinePrice || item.priceLabel });
+          });
+          return Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+        });
+        setRunningHubCatalogError(null);
+      })
       .catch((e) => { if (!cancelled) setRunningHubCatalogError(e?.message || '读取 RunningHub 视频模型目录失败'); });
     return () => { cancelled = true; };
   }, [hasRunningHubSelection]);
