@@ -23,6 +23,7 @@ const X_OFFICIAL_EXTEND = 'rhart-video-g-official/video-extend';
 const S_IMAGE = 'rhart-video-s/image-to-video';
 const S_TEXT = 'rhart-video-s/text-to-video';
 const V31_FAST = 'rhart-video-v3.1-fast/image-to-video';
+const V31_FAST_TEXT = 'rhart-video-v3.1-fast/text-to-video';
 const S_OFFICIAL_IMAGE = 'rhart-video-s-official/image-to-video';
 const S_OFFICIAL_TEXT = 'rhart-video-s-official/text-to-video';
 
@@ -235,6 +236,33 @@ test('RunningHub V3.1-fast enforces its model-specific request contract', () => 
   );
 });
 
+test('RunningHub V3.1-fast text-to-video uses the documented fixed endpoint without catalog scraping', () => {
+  const normalized = runninghubVideo.normalizeRunningHubVideoRequest({
+    model: V31_FAST_TEXT,
+    prompt: '春日午后少女骑车经过稻田',
+    aspectRatio: '9:16',
+    duration: 8,
+    resolution: '1080p',
+  });
+  assert.equal(normalized.path, '/openapi/v2/rhart-video-v3.1-fast/text-to-video');
+  assert.equal(normalized.imageField, null);
+  assert.deepEqual(normalized.imageUrls, []);
+  assert.deepEqual(normalized.body, {
+    prompt: '春日午后少女骑车经过稻田',
+    duration: '8',
+    aspectRatio: '9:16',
+    resolution: '1080p',
+  });
+  assert.throws(
+    () => runninghubVideo.normalizeRunningHubVideoRequest({ model: V31_FAST_TEXT, prompt: '1234' }),
+    /5-8000/,
+  );
+  assert.throws(
+    () => runninghubVideo.normalizeRunningHubVideoRequest({ model: V31_FAST_TEXT, prompt: '12345', duration: 10 }),
+    /仅支持 8 秒/,
+  );
+});
+
 test('RunningHub S official image-to-video omits ratio and resolution fields', () => {
   const normalized = runninghubVideo.normalizeRunningHubVideoRequest({
     model: S_OFFICIAL_IMAGE,
@@ -290,6 +318,7 @@ test('RunningHub video model path is allowlisted', () => {
     S_IMAGE,
     S_TEXT,
     V31_FAST,
+    V31_FAST_TEXT,
     S_OFFICIAL_IMAGE,
     S_OFFICIAL_TEXT,
   ].sort());
@@ -345,9 +374,12 @@ test('Running video node and API key management expose all standard models', () 
   assert.match(models, /rhart-video-s\/image-to-video/);
   assert.match(models, /rhart-video-s\/text-to-video/);
   assert.match(models, /rhart-video-v3\.1-fast\/image-to-video/);
+  assert.match(models, /rhart-video-v3\.1-fast\/text-to-video/);
   assert.match(models, /rhart-video-s-official\/image-to-video/);
   assert.match(models, /rhart-video-s-official\/text-to-video/);
   assert.match(models, /全能视频V3\.1-fast · 图生视频低价渠道版/);
+  assert.match(models, /全能视频V3\.1-fast · 文生视频低价渠道版/);
+  assert.match(node, /staticModelForCatalog/);
   assert.match(registry, /type: 'runninghub-video'[\s\S]*label: 'Running 视频'/);
   assert.match(ports, /'runninghub-video': \{ inputs: \['text', 'image', 'video', 'audio'\], outputs: \['video'\] \}/);
   assert.match(canvas, /'runninghub-video': VideoNode/);

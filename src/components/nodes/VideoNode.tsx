@@ -196,13 +196,18 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
     : d?.mainId || (isLegacySora2Model ? 'sora-2' : (d?.model && VIDEO_MODELS.find((m) => m.id === d.model || m.apiModelOptions.some((o) => o.value === d.model))?.id)) || VIDEO_MODELS[0].id;
   const modelDef = useMemo(() => VIDEO_MODELS.find((m) => m.id === mainId) || VIDEO_MODELS[0], [mainId]);
   // 子模型(上游真实 model 名)
-  const apiModel: string = d?.model && modelDef.apiModelOptions.some((o) => o.value === d.model) ? d.model : modelDef.apiModelOptions[0].value;
+  const selectedApiModel: string = d?.model && modelDef.apiModelOptions.some((o) => o.value === d.model) ? d.model : modelDef.apiModelOptions[0].value;
   const catalogModelId = typeof d?.runningHubCatalogModelId === 'string' ? d.runningHubCatalogModelId : '';
   const catalogModel = runningHubCatalog.find((item) => item.id === catalogModelId) || null;
-  const isCatalogRunningHubModel = modelDef.kind === 'runninghub' && !!catalogModel;
+  const staticModelForCatalog = catalogModel
+    ? Object.entries(RUNNINGHUB_CATALOG_NAME_BY_STATIC_MODEL).find(([, name]) => name === catalogModel.name)?.[0] || ''
+    : '';
+  const apiModel = staticModelForCatalog || selectedApiModel;
+  const isCatalogRunningHubModel = modelDef.kind === 'runninghub' && !!catalogModel && !staticModelForCatalog;
   useEffect(() => {
-    if (!catalogModelId) {
+    if (!catalogModelId || !isCatalogRunningHubModel) {
       setRunningHubCatalogFields([]);
+      if (staticModelForCatalog) setRunningHubCatalogError(null);
       return;
     }
     let cancelled = false;
@@ -210,7 +215,7 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
       .then((detail) => { if (!cancelled) setRunningHubCatalogFields(Array.isArray(detail.inputConfig) ? detail.inputConfig : []); })
       .catch((e) => { if (!cancelled) setRunningHubCatalogError(e?.message || '读取模型参数失败'); });
     return () => { cancelled = true; };
-  }, [catalogModelId]);
+  }, [catalogModelId, isCatalogRunningHubModel, staticModelForCatalog]);
   const catalogMode = catalogModel?.category === 'text-to-video' ? 'text'
     : ['video-edit', 'video-to-video', 'video-extend', 'motion-control', 'audio-to-video', 'video-tools'].includes(catalogModel?.category || '') ? 'video'
     : 'image';

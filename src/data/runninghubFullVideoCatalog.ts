@@ -12,6 +12,7 @@ export const RUNNINGHUB_CATALOG_NAME_BY_STATIC_MODEL: Record<string, string> = {
   'rhart-video-s/image-to-video': '全能视频S-图生视频-低价渠道版',
   'rhart-video-s/text-to-video': '全能视频S-文生视频-低价渠道版',
   'rhart-video-v3.1-fast/image-to-video': '全能视频V3.1-fast-图生视频-低价渠道版',
+  'rhart-video-v3.1-fast/text-to-video': '全能视频V3.1-fast-文生视频-低价渠道版',
   'rhart-video-s-official/image-to-video': '全能视频S-图生视频-官方稳定版',
   'rhart-video-s-official/text-to-video': '全能视频S-文生视频-官方稳定版',
 };
