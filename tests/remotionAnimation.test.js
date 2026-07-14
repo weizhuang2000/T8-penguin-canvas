@@ -153,6 +153,11 @@ test('Remotion node is registered across canvas, ports, permissions and Electron
   assert.match(read('src/config/nodeRegistry.ts'), /type:\s*'remotion-animation'/);
   assert.match(read('src/config/portTypes.ts'), /'remotion-animation':\s*\{\s*inputs:\s*\['text', 'image', 'video', 'audio'\],\s*outputs:\s*\['video'\]/);
   assert.match(read('src/components/Canvas.tsx'), /'remotion-animation':\s*RemotionAnimationNode/);
+  const nodeSource = read('src/components/nodes/RemotionAnimationNode.tsx');
+  assert.match(nodeSource, /settings\.llmConfigs \|\| state\.settings\.llmApiKeys/);
+  assert.match(nodeSource, /llmKeyId:\s*activeLlmConfig\?\.id/);
+  assert.doesNotMatch(nodeSource, /LLM_MODELS/);
+  assert.doesNotMatch(nodeSource, /generateExternalLlm/);
   assert.match(read('backend/src/auth/toolPermissions.js'), /'remotion-animation'/);
   assert.match(read('backend/src/server.js'), /app\.use\('\/api\/remotion', remotionRouter\)/);
   const pkg = JSON.parse(read('package.json'));

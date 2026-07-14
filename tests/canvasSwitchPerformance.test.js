@@ -42,3 +42,21 @@ test('canvas snapshot serialization happens after the autosave debounce', () => 
   assert.match(canvas, /lastSavedNodeCountByCanvasRef/);
   assert.doesNotMatch(canvas, /JSON\.parse\(previousSnapshot/);
 });
+
+test('ReactFlow runtime measurements do not count as canvas changes', () => {
+  const canvas = read('src/components/Canvas.tsx');
+
+  assert.match(canvas, /function canvasNodeForPersistence/);
+  assert.match(canvas, /delete persisted\.measured/);
+  assert.match(canvas, /delete persisted\.positionAbsolute/);
+  assert.match(canvas, /lastSavedByCanvasRef\.current\.set\(requestedCanvasId, normalizedSnapshot\)/);
+});
+
+test('canvas saves are serialized and retry a transient proxy failure once', () => {
+  const api = read('src/services/api.ts');
+
+  assert.match(api, /const canvasSaveQueues = new Map/);
+  assert.match(api, /for \(let attempt = 0; attempt < 2; attempt \+= 1\)/);
+  assert.match(api, /error\?\.name === 'ApiNetworkError'/);
+  assert.match(api, /服务器或反向代理暂时不可用/);
+});

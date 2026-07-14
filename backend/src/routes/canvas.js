@@ -17,6 +17,7 @@ const { findUnauthorizedNewNodes } = require('../auth/toolPermissions');
 const { patchCanvasNodeData } = require('../utils/canvasDataPatch');
 
 const router = express.Router();
+const jsonWriteQueues = new Map();
 
 function loadCanvasList() {
   if (!fs.existsSync(config.CANVAS_FILE)) return [];
@@ -60,12 +61,29 @@ function getCanvasAutoSaveDir() {
   return path.join(base, 'T8-penguin-canvas', 'canvases');
 }
 
-function atomicWriteJson(file, data) {
+async function atomicWriteJsonNow(file, data, options = {}) {
   const dir = path.dirname(file);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  const tmp = `${file}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf-8');
-  fs.renameSync(tmp, file);
+  await fs.promises.mkdir(dir, { recursive: true });
+  const tmp = `${file}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`;
+  const text = options.pretty === false ? JSON.stringify(data) : JSON.stringify(data, null, 2);
+  try {
+    await fs.promises.writeFile(tmp, text, 'utf-8');
+    await fs.promises.rename(tmp, file);
+  } catch (error) {
+    await fs.promises.unlink(tmp).catch(() => {});
+    throw error;
+  }
+}
+
+function atomicWriteJson(file, data, options = {}) {
+  const previous = jsonWriteQueues.get(file) || Promise.resolve();
+  const queued = previous.catch(() => undefined).then(() => atomicWriteJsonNow(file, data, options));
+  let tracked;
+  tracked = queued.finally(() => {
+    if (jsonWriteQueues.get(file) === tracked) jsonWriteQueues.delete(file);
+  });
+  jsonWriteQueues.set(file, tracked);
+  return tracked;
 }
 
 function normalizeCanvasMeta(item) {
@@ -192,9 +210,20 @@ function readCanvasDataFile(id) {
   }
 }
 
-function rejectUnauthorizedNewNodes(req, res, incomingNodes) {
-  const existing = readCanvasDataFile(req.params.id);
-  const blocked = findUnauthorizedNewNodes(req.user, incomingNodes, existing?.nodes || []);
+async function readCanvasDataFileAsync(id) {
+  try {
+    return JSON.parse(await fs.promises.readFile(getCanvasFile(id), 'utf-8'));
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+function rejectUnauthorizedNewNodes(req, res, incomingNodes, existingNodes) {
+  const knownNodes = Array.isArray(existingNodes)
+    ? existingNodes
+    : (readCanvasDataFile(req.params.id)?.nodes || []);
+  const blocked = findUnauthorizedNewNodes(req.user, incomingNodes, knownNodes);
   if (blocked.length === 0) return false;
   res.status(403).json({
     success: false,
@@ -325,7 +354,7 @@ router.put('/:id/shares', async (req, res) => {
   }
 });
 
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   const found = findCanvasForRequest(req, res);
   if (!found) return;
   const file = getCanvasFile(req.params.id);
@@ -333,7 +362,10 @@ router.get('/:id', (req, res) => {
     return res.status(404).json({ success: false, error: 'Canvas not found' });
   }
   try {
-    const data = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    const data = await readCanvasDataFileAsync(req.params.id);
+    if (!data) {
+      return res.status(404).json({ success: false, error: 'Canvas not found' });
+    }
     res.json({
       success: true,
       data: {
@@ -351,88 +383,96 @@ router.get('/:id', (req, res) => {
   }
 });
 
-router.put('/:id', (req, res) => {
-  const found = findCanvasForRequest(req, res);
-  if (!found) return;
-  if (!requireCanvasEdit(req, res, found)) return;
-  const file = getCanvasFile(req.params.id);
-  const incoming = req.body;
-  const allowEmptyOverwrite = req.query?.allowEmpty === '1' || incoming?.allowEmpty === true;
-  if (
-    !incoming ||
-    !Array.isArray(incoming.nodes) ||
-    (!allowEmptyOverwrite && incoming.nodes.length === 0 && fs.existsSync(file))
-  ) {
-    const existing = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf-8')) : null;
-    if (existing && Array.isArray(existing.nodes) && existing.nodes.length > 0) {
-      return res.status(400).json({ success: false, error: 'Refusing to overwrite non-empty canvas with empty data' });
+router.put('/:id', async (req, res) => {
+  try {
+    const found = findCanvasForRequest(req, res);
+    if (!found) return;
+    if (!requireCanvasEdit(req, res, found)) return;
+    const file = getCanvasFile(req.params.id);
+    const incoming = req.body;
+    const existing = await readCanvasDataFileAsync(req.params.id);
+    const allowEmptyOverwrite = req.query?.allowEmpty === '1' || incoming?.allowEmpty === true;
+    if (
+      !incoming ||
+      !Array.isArray(incoming.nodes) ||
+      (!allowEmptyOverwrite && incoming.nodes.length === 0 && existing)
+    ) {
+      if (existing && Array.isArray(existing.nodes) && existing.nodes.length > 0) {
+        return res.status(400).json({ success: false, error: 'Refusing to overwrite non-empty canvas with empty data' });
+      }
     }
-  }
 
-  const persisted = {
-    ...canvasExtensionFields(incoming),
-    ownerUserId: found.item.ownerUserId || null,
-    ownerName: found.item.ownerName || '',
-    ownerRole: found.item.ownerRole || '',
-    sharedWith: normalizeSharedWith(found.item.sharedWith),
-    allUsersShare: normalizeAllUsersShare(found.item.allUsersShare),
-    nodes: Array.isArray(incoming?.nodes) ? incoming.nodes : [],
-    edges: Array.isArray(incoming?.edges) ? incoming.edges : [],
-    viewport: incoming?.viewport || { x: 0, y: 0, zoom: 1 },
-    nextNodeSerialId: deriveNextNodeSerialId(incoming?.nodes, incoming?.nextNodeSerialId),
-  };
-  if (rejectUnauthorizedNewNodes(req, res, persisted.nodes)) return;
-  fs.writeFileSync(file, JSON.stringify(persisted, null, 2), 'utf-8');
-  found.item.nodeCount = persisted.nodes.length;
-  found.item.ownerUserId = found.item.ownerUserId || persisted.ownerUserId;
-  found.item.ownerName = found.item.ownerName || persisted.ownerName;
-  found.item.ownerRole = found.item.ownerRole || persisted.ownerRole;
-  found.item.sharedWith = normalizeSharedWith(found.item.sharedWith);
-  found.item.allUsersShare = normalizeAllUsersShare(found.item.allUsersShare);
-  found.item.updatedAt = Date.now();
-  saveCanvasList(found.list);
-  res.json({ success: true });
+    const persisted = {
+      ...canvasExtensionFields(incoming),
+      ownerUserId: found.item.ownerUserId || null,
+      ownerName: found.item.ownerName || '',
+      ownerRole: found.item.ownerRole || '',
+      sharedWith: normalizeSharedWith(found.item.sharedWith),
+      allUsersShare: normalizeAllUsersShare(found.item.allUsersShare),
+      nodes: Array.isArray(incoming?.nodes) ? incoming.nodes : [],
+      edges: Array.isArray(incoming?.edges) ? incoming.edges : [],
+      viewport: incoming?.viewport || { x: 0, y: 0, zoom: 1 },
+      nextNodeSerialId: deriveNextNodeSerialId(incoming?.nodes, incoming?.nextNodeSerialId),
+    };
+    if (rejectUnauthorizedNewNodes(req, res, persisted.nodes, existing?.nodes)) return;
+    await atomicWriteJson(file, persisted, { pretty: false });
+    found.item.nodeCount = persisted.nodes.length;
+    found.item.ownerUserId = found.item.ownerUserId || persisted.ownerUserId;
+    found.item.ownerName = found.item.ownerName || persisted.ownerName;
+    found.item.ownerRole = found.item.ownerRole || persisted.ownerRole;
+    found.item.sharedWith = normalizeSharedWith(found.item.sharedWith);
+    found.item.allUsersShare = normalizeAllUsersShare(found.item.allUsersShare);
+    found.item.updatedAt = Date.now();
+    saveCanvasList(found.list);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, error: `Save failed: ${e?.message || String(e)}` });
+  }
 });
 
-router.patch('/:id/nodes/:nodeId/patch-data', express.json({ limit: '50mb' }), (req, res) => {
-  const found = findCanvasForRequest(req, res);
-  if (!found) return;
-  if (!requireCanvasEdit(req, res, found)) return;
+router.patch('/:id/nodes/:nodeId/patch-data', express.json({ limit: '50mb' }), async (req, res) => {
+  try {
+    const found = findCanvasForRequest(req, res);
+    if (!found) return;
+    if (!requireCanvasEdit(req, res, found)) return;
 
-  const file = getCanvasFile(req.params.id);
-  const existing = readCanvasDataFile(req.params.id);
-  if (!existing || !Array.isArray(existing.nodes)) {
-    return res.status(404).json({ success: false, error: 'Canvas data not found' });
+    const file = getCanvasFile(req.params.id);
+    const existing = await readCanvasDataFileAsync(req.params.id);
+    if (!existing || !Array.isArray(existing.nodes)) {
+      return res.status(404).json({ success: false, error: 'Canvas data not found' });
+    }
+
+    const result = patchCanvasNodeData(existing, req.params.nodeId, req.body?.patch);
+    if (result.status !== 200) {
+      return res.status(result.status).json({ success: false, error: result.error });
+    }
+    const nodes = result.data.nodes;
+
+    const persisted = {
+      ...result.data,
+      ...canvasExtensionFields(existing),
+      ownerUserId: found.item.ownerUserId || existing.ownerUserId || null,
+      ownerName: found.item.ownerName || existing.ownerName || '',
+      ownerRole: found.item.ownerRole || existing.ownerRole || '',
+      sharedWith: normalizeSharedWith(found.item.sharedWith),
+      allUsersShare: normalizeAllUsersShare(found.item.allUsersShare),
+      nodes,
+      edges: Array.isArray(existing.edges) ? existing.edges : [],
+      viewport: existing.viewport || { x: 0, y: 0, zoom: 1 },
+      nextNodeSerialId: deriveNextNodeSerialId(nodes, existing.nextNodeSerialId),
+    };
+
+    await atomicWriteJson(file, persisted, { pretty: false });
+    found.item.nodeCount = nodes.length;
+    found.item.updatedAt = Date.now();
+    saveCanvasList(found.list);
+    res.json({ success: true, data: persisted });
+  } catch (e) {
+    res.status(500).json({ success: false, error: `Patch failed: ${e?.message || String(e)}` });
   }
-
-  const result = patchCanvasNodeData(existing, req.params.nodeId, req.body?.patch);
-  if (result.status !== 200) {
-    return res.status(result.status).json({ success: false, error: result.error });
-  }
-  const nodes = result.data.nodes;
-
-  const persisted = {
-    ...result.data,
-    ...canvasExtensionFields(existing),
-    ownerUserId: found.item.ownerUserId || existing.ownerUserId || null,
-    ownerName: found.item.ownerName || existing.ownerName || '',
-    ownerRole: found.item.ownerRole || existing.ownerRole || '',
-    sharedWith: normalizeSharedWith(found.item.sharedWith),
-    allUsersShare: normalizeAllUsersShare(found.item.allUsersShare),
-    nodes,
-    edges: Array.isArray(existing.edges) ? existing.edges : [],
-    viewport: existing.viewport || { x: 0, y: 0, zoom: 1 },
-    nextNodeSerialId: deriveNextNodeSerialId(nodes, existing.nextNodeSerialId),
-  };
-
-  fs.writeFileSync(file, JSON.stringify(persisted, null, 2), 'utf-8');
-  found.item.nodeCount = nodes.length;
-  found.item.updatedAt = Date.now();
-  saveCanvasList(found.list);
-  res.json({ success: true, data: persisted });
 });
 
-router.post('/:id/auto-save', (req, res) => {
+router.post('/:id/auto-save', async (req, res) => {
   try {
     const found = findCanvasForRequest(req, res);
     if (!found) return;
@@ -441,7 +481,8 @@ router.post('/:id/auto-save', (req, res) => {
     if (!incoming || !Array.isArray(incoming.nodes) || !Array.isArray(incoming.edges)) {
       return res.status(400).json({ success: false, error: 'Invalid canvas payload' });
     }
-    if (rejectUnauthorizedNewNodes(req, res, incoming.nodes)) return;
+    const existing = await readCanvasDataFileAsync(req.params.id);
+    if (rejectUnauthorizedNewNodes(req, res, incoming.nodes, existing?.nodes)) return;
     const saveDir = getCanvasAutoSaveDir();
     if (!saveDir) {
       return res.status(400).json({ success: false, error: 'canvasAutoSavePath is not configured' });
@@ -476,7 +517,7 @@ router.post('/:id/auto-save', (req, res) => {
       nextNodeSerialId: deriveNextNodeSerialId(incoming.nodes, incoming.nextNodeSerialId),
     };
 
-    atomicWriteJson(target, payload);
+    await atomicWriteJson(target, payload, { pretty: false });
     res.json({ success: true, data: { path: target, nodeCount: incoming.nodes.length, edgeCount: incoming.edges.length } });
   } catch (e) {
     res.status(500).json({ success: false, error: e?.message || String(e) });

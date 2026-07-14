@@ -294,19 +294,33 @@ function withNodeSerialBadge(Component: ComponentType<any>): ComponentType<any> 
   return WrappedNode;
 }
 
+function canvasNodeForPersistence(node: Node): Node {
+  const persisted = { ...node, selected: false, dragging: false } as Node & Record<string, unknown>;
+  delete persisted.measured;
+  delete persisted.resizing;
+  delete persisted.positionAbsolute;
+  return persisted as Node;
+}
+
+function canvasEdgeForPersistence(edge: Edge): Edge {
+  return { ...edge, selected: false };
+}
+
 function prepareCanvasSnapshot(data: { nodes?: any[]; edges?: any[]; nextNodeSerialId?: number }) {
   const rawNodes = Array.isArray(data.nodes) ? data.nodes : [];
   const rawEdges = Array.isArray(data.edges) ? data.edges : [];
-  const fixedNodesBeforeSerials = rawNodes.map((node: any) =>
-    node.type === 'groupBox' && node.connectable === false
-      ? { ...node, connectable: true }
-      : node,
-  );
+  const fixedNodesBeforeSerials = rawNodes.map((node: Node) => {
+    const persisted = canvasNodeForPersistence(node);
+    return persisted.type === 'groupBox' && persisted.connectable === false
+      ? { ...persisted, connectable: true }
+      : persisted;
+  });
+  const persistedEdges = rawEdges.map((edge: Edge) => canvasEdgeForPersistence(edge));
   const normalized = normalizeCanvasNodeSerials(fixedNodesBeforeSerials, data.nextNodeSerialId);
   return {
     nodesBeforeSerials: fixedNodesBeforeSerials,
     nodes: normalized.nodes,
-    edges: rawEdges,
+    edges: persistedEdges,
     nextNodeSerialId: normalized.nextNodeSerialId,
     serialsChanged: normalized.changed,
     savedNextNodeSerialId: data.nextNodeSerialId,
@@ -1468,11 +1482,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     history: [],
   },
   'remotion-animation': {
-    model: 'gemini-3.5-flash',
-    providerSource: 'zhenzhen',
-    providerId: '',
-    providerModel: '',
-    providerParams: {},
+    llmKeyId: '',
     remotionMode: 'json',
     remotionSubject: '',
     remotionSource: '',
@@ -2607,33 +2617,29 @@ function CanvasInner({
         const savedNextNodeSerialId = pendingSave?.nextNodeSerialId ?? data.nextNodeSerialId;
         // ⚡ 兑底补丁: 历史画布中可能存在 connectable=false 的旧 groupBox 节点
         // (5656721 事故期间创建的 group), 加载时强制打开可连接以恢复右侧聚合输出口
-        const fixedNsBeforeSerials = ns.map((n: any) =>
-          n.type === 'groupBox' && n.connectable === false
-            ? { ...n, connectable: true }
-            : n,
-        );
+        const fixedNsBeforeSerials = ns.map((node: Node) => {
+          const persisted = canvasNodeForPersistence(node);
+          return persisted.type === 'groupBox' && persisted.connectable === false
+            ? { ...persisted, connectable: true }
+            : persisted;
+        });
+        const persistedEdges = es.map((edge: Edge) => canvasEdgeForPersistence(edge));
         const normalized = normalizeCanvasNodeSerials(fixedNsBeforeSerials, savedNextNodeSerialId);
         nextNodeSerialIdRef.current = normalized.nextNodeSerialId;
         const fixedNs = normalized.nodes;
         setNodes(fixedNs);
-        setEdges(es);
-        const loadedSnapshot = JSON.stringify({
-          nodes: fixedNsBeforeSerials,
-          edges: es,
-          nextNodeSerialId: savedNextNodeSerialId || 1,
-        });
+        setEdges(persistedEdges);
         const normalizedSnapshot = JSON.stringify({
           nodes: fixedNs,
-          edges: es,
+          edges: persistedEdges,
           nextNodeSerialId: normalized.nextNodeSerialId,
         });
-        lastSavedByCanvasRef.current.set(
-          requestedCanvasId,
-          normalized.changed || normalizedSnapshot !== loadedSnapshot ? loadedSnapshot : normalizedSnapshot,
-        );
+        // 加载期的序号补齐、旧 group 修复和 ReactFlow 测量都属于内存归一化，
+        // 不应在纯切换画布时触发整画布 PUT；下一次真实业务修改会一并持久化。
+        lastSavedByCanvasRef.current.set(requestedCanvasId, normalizedSnapshot);
         lastSavedNodeCountByCanvasRef.current.set(requestedCanvasId, Array.isArray(data.nodes) ? data.nodes.length : 0);
         allowEmptySaveCanvasIdsRef.current.delete(requestedCanvasId);
-        histReset({ nodes: fixedNs, edges: es });
+        histReset({ nodes: fixedNs, edges: persistedEdges });
         const restoredViewport =
           pendingSendFocusRef.current?.canvasId === requestedCanvasId
             ? null
@@ -2718,23 +2724,23 @@ function CanvasInner({
     if (!activeId || !loaded || loadedCanvasId !== activeId) return;
     // 过滤 SHIFT 批量移线拖拽过程中的 phantom 节点与重定向边(不作为持久化快照)
     if (!canEditActiveCanvas) return;
-    const persistNodes = nodes.filter((n) => n.id !== BULK_PHANTOM_ID);
-    const persistEdges = edges.filter(
+    const runtimeNodes = nodes.filter((n) => n.id !== BULK_PHANTOM_ID);
+    const runtimeEdges = edges.filter(
       (ed) => ed.source !== BULK_PHANTOM_ID && ed.target !== BULK_PHANTOM_ID
     );
     const nextNodeSerialId = nextNodeSerialIdRef.current;
     const canvasIdForSave = activeId;
     const previousNodeCount = lastSavedNodeCountByCanvasRef.current.get(canvasIdForSave) || 0;
     const allowEmptySave = allowEmptySaveCanvasIdsRef.current.has(canvasIdForSave);
-    if (persistNodes.length === 0 && previousNodeCount > 0 && !allowEmptySave) {
+    if (runtimeNodes.length === 0 && previousNodeCount > 0 && !allowEmptySave) {
       // 防止空数据覆盖
       return;
     }
     const previousTimer = saveTimersByCanvasRef.current.get(canvasIdForSave);
     if (previousTimer) window.clearTimeout(previousTimer);
     const pendingSave: { nodes: Node[]; edges: Edge[]; snapshot?: string; nextNodeSerialId: number } = {
-      nodes: persistNodes,
-      edges: persistEdges,
+      nodes: runtimeNodes,
+      edges: runtimeEdges,
       nextNodeSerialId,
     };
     pendingSaveByCanvasRef.current.set(canvasIdForSave, pendingSave);
@@ -2743,6 +2749,8 @@ function CanvasInner({
       let snapshot = '';
       try {
         // 大画布序列化必须放在防抖之后；拖动期间这里只会不断替换定时器。
+        const persistNodes = runtimeNodes.map(canvasNodeForPersistence);
+        const persistEdges = runtimeEdges.map(canvasEdgeForPersistence);
         snapshot = JSON.stringify({ nodes: persistNodes, edges: persistEdges, nextNodeSerialId });
         if (snapshot === (lastSavedByCanvasRef.current.get(canvasIdForSave) || '')) {
           if (pendingSaveByCanvasRef.current.get(canvasIdForSave) === pendingSave) {

@@ -104,6 +104,7 @@ export interface ToolPermissionsConfig {
 
 const canvasDataCache = new Map<string, CanvasData>();
 const pendingCanvasDataRequests = new Map<string, Promise<CanvasData>>();
+const canvasSaveQueues = new Map<string, Promise<void>>();
 const CANVAS_DATA_CACHE_PREFIX = 't8pc:canvas-data:v1:';
 const MAX_PERSISTED_CANVAS_CACHE_CHARS = 2_000_000;
 const canvasPersistVersions = new Map<string, number>();
@@ -262,6 +263,10 @@ export function invalidateCanvasDataCache(id: string): void {
   }
 }
 
+function isLocalFrontendHost() {
+  return typeof window === 'undefined' || /^(127\.0\.0\.1|localhost)$/i.test(window.location.hostname);
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
@@ -271,7 +276,14 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     });
   } catch (error: any) {
     const message = error?.message || String(error || 'network error');
-    throw new Error(`本地后端服务不可用，请确认后端已启动：${message}`);
+    const wrapped = new Error(
+      isLocalFrontendHost()
+        ? `本地后端服务不可用，请确认后端已启动：${message}`
+        : `网络连接中断，服务器或反向代理暂时不可用：${message}`,
+    );
+    wrapped.name = 'ApiNetworkError';
+    (wrapped as Error & { cause?: unknown }).cause = error;
+    throw wrapped;
   }
   if (!res.ok) {
     let errMsg = `HTTP ${res.status}`;
@@ -290,9 +302,13 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
       }
     }
     if (res.status === 502 && errMsg === `HTTP ${res.status}` && url.startsWith(BASE)) {
-      errMsg = '本地后端服务不可用，请确认已启动 npm run dev:backend 或 npm run dev';
+      errMsg = isLocalFrontendHost()
+        ? '本地后端服务不可用，请确认已启动 npm run dev:backend 或 npm run dev'
+        : '服务器或反向代理暂时不可用（HTTP 502）';
     }
-    throw new Error(errMsg);
+    const wrapped = new Error(errMsg) as Error & { status?: number };
+    wrapped.status = res.status;
+    throw wrapped;
   }
   return res.json();
 }
@@ -450,13 +466,32 @@ export async function getCanvasData(id: string, options?: { force?: boolean }): 
   return pending.then(cloneCanvasData);
 }
 
-export async function saveCanvasData(id: string, data: CanvasData, options?: { allowEmpty?: boolean }): Promise<void> {
-  const query = options?.allowEmpty ? '?allowEmpty=1' : '';
-  await request(`${BASE}/canvas/${id}${query}`, {
-    method: 'PUT',
-    body: JSON.stringify(data),
+export function saveCanvasData(id: string, data: CanvasData, options?: { allowEmpty?: boolean }): Promise<void> {
+  const previous = canvasSaveQueues.get(id) || Promise.resolve();
+  const queued = previous.catch(() => undefined).then(async () => {
+    const query = options?.allowEmpty ? '?allowEmpty=1' : '';
+    const body = JSON.stringify(data);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        await request(`${BASE}/canvas/${encodeURIComponent(id)}${query}`, {
+          method: 'PUT',
+          body,
+        });
+        writeCanvasDataCache(id, data);
+        return;
+      } catch (error: any) {
+        const retryable = error?.name === 'ApiNetworkError' || [502, 503, 504].includes(Number(error?.status));
+        if (!retryable || attempt === 1) throw error;
+        await new Promise((resolve) => window.setTimeout(resolve, 650));
+      }
+    }
   });
-  writeCanvasDataCache(id, data);
+  let tracked: Promise<void>;
+  tracked = queued.finally(() => {
+    if (canvasSaveQueues.get(id) === tracked) canvasSaveQueues.delete(id);
+  });
+  canvasSaveQueues.set(id, tracked);
+  return tracked;
 }
 
 export async function patchCanvasNodeData(

@@ -1,8 +1,8 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { AlertTriangle, Brain, CheckCircle2, Clapperboard, Code2, FileJson, Loader2, Play, Sparkles, Square } from 'lucide-react';
-import { DEFAULT_LLM_MODEL, LLM_MODELS } from '../../providers/models';
-import { generateExternalLlm, generateLlm, type LlmContentPart, type LlmMessage } from '../../services/generation';
+import { DEFAULT_LLM_MODEL } from '../../providers/models';
+import { generateLlm, type LlmContentPart, type LlmMessage } from '../../services/generation';
 import {
   cancelRemotionJob,
   createRemotionJob,
@@ -21,11 +21,6 @@ import { useCanvasStore } from '../../stores/canvas';
 import { logBus } from '../../stores/logs';
 import { useThemeStore } from '../../stores/theme';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
-import {
-  advancedProviderModelOptions,
-  advancedProvidersForNode,
-  resolveAdvancedProviderSelection,
-} from '../../utils/advancedProviders';
 import {
   countExcludedMaterials,
   excludeMaterialId,
@@ -100,8 +95,8 @@ function RemotionAnimationNode({ id, data, selected }: NodeProps) {
   const d = data as any;
   const upstream = useUpstreamMaterials(id);
   const activeCanvasId = useCanvasStore((state) => state.activeId);
-  const advancedProviders = useApiKeysStore((state) => state.settings.advancedProviders);
-  const allowZhenzhenFallback = useApiKeysStore((state) => state.settings.enableZhenzhenFallback !== false);
+  const configuredLlmModel = useApiKeysStore((state) => state.settings.llmModel)?.trim() || DEFAULT_LLM_MODEL;
+  const llmConfigs = useApiKeysStore((state) => state.settings.llmConfigs || state.settings.llmApiKeys) || [];
   const { theme, style } = useThemeStore();
   const [localError, setLocalError] = useState('');
   const pollingRef = useRef(false);
@@ -127,25 +122,18 @@ function RemotionAnimationNode({ id, data, selected }: NodeProps) {
     label: item.label || `${item.kind} ${index + 1}`,
   })), [mediaMaterials]);
 
-  const llmProviders = useMemo(() => advancedProvidersForNode(advancedProviders, 'llm'), [advancedProviders]);
-  const selection = useMemo(() => resolveAdvancedProviderSelection(advancedProviders, 'llm', {
-    providerSource: d.providerSource,
-    providerId: d.providerId,
-    providerModel: d.providerModel,
-  }), [advancedProviders, d.providerId, d.providerModel, d.providerSource]);
-  const isExternal = selection.available && selection.providerSource !== 'zhenzhen';
-  const externalModels = selection.provider ? advancedProviderModelOptions(selection.provider, 'llm') : [];
-  const externalModel = selection.providerModel || externalModels[0] || '';
-  const model = String(d.model || DEFAULT_LLM_MODEL);
+  const llmConfigOptions = useMemo(() => {
+    const saved = llmConfigs.filter((item) => item && (item.hasApiKey || item.apiKey || item.baseUrl || item.model));
+    return saved.length > 0 ? saved : [{ id: 'default', label: '默认 LLM', model: configuredLlmModel, isDefault: true }];
+  }, [configuredLlmModel, llmConfigs]);
+  const selectedLlmKeyId = String(d.llmKeyId || '').trim();
+  const activeLlmConfig = llmConfigOptions.find((item) => item.id === selectedLlmKeyId)
+    || llmConfigOptions.find((item) => item.isDefault)
+    || llmConfigOptions[0];
+  const model = String(activeLlmConfig?.model || configuredLlmModel).trim() || configuredLlmModel;
   const busy = ['describing', 'validating', 'queued', 'preparing', 'bundling', 'runtime-check', 'runtime-download', 'rendering'].includes(String(d.remotionPhase || ''));
   const excludedCount = countExcludedMaterials(excludedIds, allMaterials);
   const jobId = String(d.remotionJobId || '');
-
-  useEffect(() => {
-    if (allowZhenzhenFallback || isExternal || !llmProviders[0]) return;
-    const provider = llmProviders[0];
-    update({ providerSource: provider.protocol, providerId: provider.id, providerModel: advancedProviderModelOptions(provider, 'llm')[0] || '' });
-  }, [allowZhenzhenFallback, isExternal, llmProviders, update]);
 
   const applyJob = useCallback((job: RemotionJob) => {
     const patch: Record<string, unknown> = {
@@ -189,22 +177,16 @@ function RemotionAnimationNode({ id, data, selected }: NodeProps) {
   }, [d.remotionPhase, jobId, pollJob]);
 
   const callLlm = useCallback(async (messages: LlmMessage[]) => {
-    if (isExternal && selection.provider) {
-      if (!externalModel) throw new Error('请选择外部 LLM 模型');
-      return generateExternalLlm({
-        providerId: selection.provider.id,
-        providerModel: externalModel,
-        model: externalModel,
-        messages,
-        temperature: 0.3,
-        max_tokens: mode === 'tsx' ? 32000 : 16000,
-        providerParams: d.providerParams || {},
-        llmVideoMode: 'frames',
-        videoFrameCount: 8,
-      });
-    }
-    return generateLlm({ model, messages, temperature: 0.3, max_tokens: mode === 'tsx' ? 32000 : 16000, llmVideoMode: 'frames', videoFrameCount: 8 });
-  }, [d.providerParams, externalModel, isExternal, mode, model, selection.provider]);
+    return generateLlm({
+      model,
+      llmKeyId: activeLlmConfig?.id,
+      messages,
+      temperature: 0.3,
+      max_tokens: mode === 'tsx' ? 32000 : 16000,
+      llmVideoMode: 'frames',
+      videoFrameCount: 8,
+    });
+  }, [activeLlmConfig?.id, mode, model]);
 
   const buildMessages = useCallback(async (): Promise<LlmMessage[]> => {
     const durations = await Promise.all(mediaMaterials.map((item) => probeDuration(item)));
@@ -321,19 +303,19 @@ function RemotionAnimationNode({ id, data, selected }: NodeProps) {
       </div>
 
       <div className="nodrag nowheel space-y-2 p-3" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="space-y-1 text-[10px]" style={{ color: 'var(--t8-text-muted)' }}><span>LLM 来源</span><select className="t8-select w-full px-2 py-1.5 text-xs" value={isExternal ? selection.providerId : 'zhenzhen'} disabled={busy} onChange={(event) => {
-            if (event.target.value === 'zhenzhen') update({ providerSource: 'zhenzhen', providerId: '', providerModel: '' });
-            else {
-              const provider = llmProviders.find((item) => item.id === event.target.value);
-              if (provider) update({ providerSource: provider.protocol, providerId: provider.id, providerModel: advancedProviderModelOptions(provider, 'llm')[0] || '' });
-            }
-          }}>
-            {allowZhenzhenFallback && <option value="zhenzhen">LLM 独立 Key</option>}
-            {llmProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label || provider.id}</option>)}
-          </select></label>
-          <label className="space-y-1 text-[10px]" style={{ color: 'var(--t8-text-muted)' }}><span>LLM 模型</span>{isExternal ? <select className="t8-select w-full px-2 py-1.5 text-xs" value={externalModel} disabled={busy} onChange={(event) => update({ providerModel: event.target.value })}>{externalModels.map((item) => <option key={item} value={item}>{item}</option>)}</select> : <select className="t8-select w-full px-2 py-1.5 text-xs" value={model} disabled={busy} onChange={(event) => update({ model: event.target.value })}>{LLM_MODELS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select>}</label>
-        </div>
+        <label className="block space-y-1 text-[10px]" style={{ color: 'var(--t8-text-muted)' }}>
+          <span>LLM 独立配置</span>
+          <select
+            className="t8-select w-full px-2 py-1.5 text-xs"
+            value={activeLlmConfig?.id || 'default'}
+            disabled={busy}
+            onChange={(event) => update({ llmKeyId: event.target.value })}
+          >
+            {llmConfigOptions.map((item) => (
+              <option key={item.id} value={item.id}>{item.label || item.id}{item.model ? ` · ${item.model}` : ''}</option>
+            ))}
+          </select>
+        </label>
 
         <label className="block space-y-1 text-[10px]" style={{ color: 'var(--t8-text-muted)' }}><span>主体或文本</span><textarea className="t8-input min-h-20 w-full resize-y px-2 py-1.5 text-xs" value={subject} disabled={busy} placeholder="例如：为新产品发布制作一段 8 秒科技感标题动画" onChange={(event) => update({ remotionSubject: event.target.value })} /></label>
 
