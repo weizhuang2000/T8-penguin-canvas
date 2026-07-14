@@ -397,3 +397,28 @@ test('Running video node and API key management expose all standard models', () 
   assert.match(node, /item\.name} · \{item\.priceLabel/);
   assert.match(node, /当前计费/);
 });
+
+test('all asynchronous video nodes attach canvas context when recording generation history', () => {
+  const videoNode = read('src/components/nodes/VideoNode.tsx');
+  const seedanceNode = read('src/components/nodes/SeedanceNode.tsx');
+  const directorNode = read('src/components/nodes/DirectorStoryboardNode.tsx');
+  const service = read('src/services/generation.ts');
+
+  assert.match(videoNode, /const \{ loadedCanvasId \} = useCanvasRuntime\(\)/);
+  assert.match(videoNode, /sourceNodeType: isRunningHubNodeType \? 'runninghub-video' : 'video'/);
+  assert.match(videoNode, /queryRunningHubVideo\([\s\S]*?historyContext\)/);
+  assert.match(videoNode, /queryVideo\(tid, apiModel, historyContext\)/);
+  assert.match(videoNode, /queryVideoFal\(\{ \.\.\.falPollRef\.current!, historyContext \}\)/);
+  assert.match(videoNode, /const falReq: VideoFalSubmitRequest = \{ apiModel, prompt: finalPrompt, providerParams, historyContext \}/);
+
+  assert.match(seedanceNode, /const \{ loadedCanvasId \} = useCanvasRuntime\(\)/);
+  assert.match(seedanceNode, /sourceNodeType: 'seedance'/);
+  assert.match(seedanceNode, /querySeedance\(tid, historyContext\)/);
+  assert.match(seedanceNode, /historyContext,\s*\n\s*\}\);/);
+
+  assert.match(directorNode, /sourceNodeType: 'director-storyboard'/);
+  assert.match(directorNode, /outputTitle: job\.title/);
+  assert.match(directorNode, /querySeedance\(submitted\.taskId, historyContext\)/);
+  assert.match(directorNode, /queryRunningHubVideo\(submitted\.taskId, runningHubQueryModel, historyContext\)/);
+  assert.match(service, /submitRunningHubCatalogVideo\(req: \{[\s\S]*?historyContext\?: GenerationHistoryContext/);
+});

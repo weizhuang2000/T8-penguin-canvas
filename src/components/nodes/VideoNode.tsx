@@ -34,10 +34,12 @@ import {
   queryVideoFal,
   type VideoSubmitRequest,
   type VideoFalSubmitRequest,
+  type GenerationHistoryContext,
   type RunningHubVideoCatalogModel,
   type RunningHubVideoCatalogField,
 } from '../../services/generation';
 import { useUpdateNodeData } from './useUpdateNodeData';
+import { useCanvasRuntime } from './canvasRuntimeContext';
 import { useHasAutoOutput } from './useHasAutoOutput';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { logBus } from '../../stores/logs';
@@ -109,6 +111,7 @@ const normalizeJimengSeedanceMode = (value: unknown): JimengSeedanceMode => {
 
 const VideoNode = ({ id, data, selected, type }: NodeProps) => {
   const update = useUpdateNodeData(id);
+  const { loadedCanvasId } = useCanvasRuntime();
   const hasAutoOutput = useHasAutoOutput(id);
   const { getEdges, getNodes } = useReactFlow();
   const [error, setError] = useState<string | null>(null);
@@ -505,7 +508,7 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
   //   useRunTrigger 认为 runFn 完成 markDone(true)。 但实际任务 videoUrl 还未赋值 → LoopNode awaitNode
   //   立即继续 → extractFromNode 读不到 videoUrl → result=null → failCount++。
   //   修复: 轮询完成才 resolve，handleGenerate await 它，markDone 时机=任务真正结束。
-  const startPolling = (tid: string): Promise<void> => {
+  const startPolling = (tid: string, historyContext: GenerationHistoryContext): Promise<void> => {
     stopPoll();
     return new Promise<void>((resolve, reject) => {
       let elapsed = 0;
@@ -524,8 +527,8 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
         }
         try {
           const r = isRunningHubVideo
-            ? await queryRunningHubVideo(tid, isCatalogRunningHubModel ? `catalog:${catalogModelId}` : apiModel)
-            : await queryVideo(tid, apiModel);
+            ? await queryRunningHubVideo(tid, isCatalogRunningHubModel ? `catalog:${catalogModelId}` : apiModel, historyContext)
+            : await queryVideo(tid, apiModel, historyContext);
           if (r.progress && r.progress !== lastProgress) {
             lastProgress = r.progress;
             logBus.debug(`[${elapsed}/${MAX}] status=${r.status} progress=${r.progress}`, src);
@@ -558,7 +561,7 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
   const falPollRef = useRef<{ responseUrl?: string; endpoint?: string; requestId?: string } | null>(null);
 
   // v1.2.9.11: 同样改造为 Promise（理由同 startPolling）
-  const startFalPolling = (): Promise<void> => {
+  const startFalPolling = (historyContext: GenerationHistoryContext): Promise<void> => {
     stopPoll();
     return new Promise<void>((resolve, reject) => {
       let elapsed = 0;
@@ -575,7 +578,7 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
           return;
         }
         try {
-          const r = await queryVideoFal(falPollRef.current!);
+          const r = await queryVideoFal({ ...falPollRef.current!, historyContext });
           if (elapsed % 10 === 0) logBus.debug(`[FAL ${elapsed}/${MAX}] status=${r.status}`, src);
           if (r.status === 'completed' && r.videoUrl) {
             stopPoll();
@@ -605,6 +608,14 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
     const { prompt: upstreamPrompt, imageUrls, videoUrls, audioUrls } = collectUpstream();
     const resolvedLocalPrompt = resolveMediaMentions(localPrompt, promptMentions, mentionMaterials);
     const finalPrompt = (upstreamPrompt || resolvedLocalPrompt || '').trim();
+    const historyContext: GenerationHistoryContext = {
+      canvasId: loadedCanvasId,
+      sourceNodeId: id,
+      sourceNodeType: isRunningHubNodeType ? 'runninghub-video' : 'video',
+      nodeTitle: isRunningHubNodeType ? 'Running 视频' : '视频生成',
+      prompt: finalPrompt,
+      seed: seed > 0 ? seed : undefined,
+    };
     if (!finalPrompt && !isCatalogRunningHubModel) {
       setError('未连接 text 节点也未填写 prompt');
       logBus.error('生成中止: 缺少 prompt', src);
@@ -650,6 +661,7 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
           providerParams: isJimengSeedanceSelected
             ? { ...providerParams, frameMode: jimengSeedanceMode }
             : providerParams,
+          historyContext,
         });
         const nextVideoUrl = r.videoUrls[0];
         if (!nextVideoUrl) throw new Error('扩展平台没有返回视频。');
@@ -696,9 +708,9 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
           }
           if (!Object.keys(params).length) throw new Error('请填写 Prompt、连接素材，或填写模型参数 JSON');
           logBus.info(`提交 RunningHub 目录视频模型: ${catalogModel.name} · ${runningHubPrice}`, src);
-          const r = await submitRunningHubCatalogVideo({ catalogModelId: catalogModel.id, params });
+          const r = await submitRunningHubCatalogVideo({ catalogModelId: catalogModel.id, params, historyContext });
           update({ status: 'polling', taskId: r.taskId, lastPrompt: finalPrompt, progress: '0%' });
-          await startPolling(r.taskId);
+          await startPolling(r.taskId, historyContext);
           return;
         }
         const promptTooLong = runningHubModel.promptMax !== undefined && finalPrompt.length > runningHubModel.promptMax;
@@ -731,10 +743,11 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
           resolution: resolution || runningHubModel.defaultResolution,
           duration: Number(duration) || runningHubModel.defaultDuration,
           storyboard: runningHubModel.supportsStoryboard ? runningHubStoryboard : undefined,
+          historyContext,
         });
         update({ status: 'polling', taskId: r.taskId, lastPrompt: finalPrompt, progress: '0%' });
         logBus.info(`RunningHub 视频任务已提交 taskId=${r.taskId}`, src);
-        await startPolling(r.taskId);
+        await startPolling(r.taskId, historyContext);
         return;
       }
 
@@ -750,7 +763,7 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
           images = refs;
         }
 
-        const falReq: VideoFalSubmitRequest = { apiModel, prompt: finalPrompt, providerParams };
+        const falReq: VideoFalSubmitRequest = { apiModel, prompt: finalPrompt, providerParams, historyContext };
         if (images && images.length) falReq.images = images;
 
         if (falReg.paramKind === 'veo-fal') {
@@ -815,7 +828,7 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
           update({ status: 'polling', lastPrompt: finalPrompt, progress: '15%' });
           logBus.info(`FAL 异步任务 requestId=${r.requestId} 进入轮询…`, src);
           // v1.2.9.11: await 让 useRunTrigger 等到任务真正完成才 markDone
-          await startFalPolling();
+          await startFalPolling(historyContext);
         }
         return;
       }
@@ -840,7 +853,7 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
       }
 
       // 按 kind 走不同字段(完全对齐 gpt-image-2-web payload)
-      const payload: VideoSubmitRequest = { model: apiModel, prompt: finalPrompt, providerParams };
+      const payload: VideoSubmitRequest = { model: apiModel, prompt: finalPrompt, providerParams, historyContext };
       if (isGrok15New) {
         payload.size = grok15NewSize;
       } else if (modelDef.kind === 'grok') {
@@ -885,7 +898,7 @@ const VideoNode = ({ id, data, selected, type }: NodeProps) => {
       update({ status: 'polling', taskId: r.taskId, lastPrompt: finalPrompt, progress: '0%' });
       logBus.info(`异步任务已提交 taskId=${r.taskId} 进入轮询…`, src);
       // v1.2.9.11: await 让 useRunTrigger 等到任务真正完成才 markDone
-      await startPolling(r.taskId);
+      await startPolling(r.taskId, historyContext);
     } catch (e: any) {
       const msg = e?.message || '提交失败';
       setError(msg);

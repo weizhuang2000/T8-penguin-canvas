@@ -179,7 +179,7 @@ test('director storyboard node submits and polls both RunningHub model kinds', (
   const proxy = read('../backend/src/routes/proxy.js');
   assert.match(node, /submitRunningHubVideo\(\{/);
   assert.match(node, /submitRunningHubCatalogVideo\(\{/);
-  assert.match(node, /queryRunningHubVideo\(submitted\.taskId, runningHubQueryModel\)/);
+  assert.match(node, /queryRunningHubVideo\(submitted\.taskId, runningHubQueryModel, historyContext\)/);
   assert.match(node, /当前模型计费/);
   assert.match(node, /modelOptions\.map/);
   assert.match(proxy, /runninghub\/video\/submit'[\s\S]*?requireNodePermission\(\['video', 'runninghub-video', 'director-storyboard'\]\)/);

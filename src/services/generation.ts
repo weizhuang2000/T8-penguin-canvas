@@ -43,6 +43,7 @@ export interface GenerationHistoryContext {
   sourceNodeType?: string;
   nodeTitle?: string;
   outputTitle?: string;
+  prompt?: string;
   seed?: number;
 }
 
@@ -826,6 +827,7 @@ export async function getRunningHubVideoCatalogDetail(modelId: string): Promise<
 export async function submitRunningHubCatalogVideo(req: {
   catalogModelId: string;
   params: Record<string, unknown>;
+  historyContext?: GenerationHistoryContext;
 }): Promise<{ taskId: string }> {
   const r = await fetch('/api/proxy/runninghub/video/catalog/submit', {
     method: 'POST',

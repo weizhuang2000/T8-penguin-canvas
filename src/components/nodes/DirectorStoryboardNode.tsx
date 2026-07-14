@@ -24,6 +24,7 @@ import {
   submitRunningHubVideo,
   submitSeedance,
   uploadFile,
+  type GenerationHistoryContext,
 } from '../../services/generation';
 import { runningHubVideoModelDef } from '../../providers/models';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
@@ -51,6 +52,7 @@ import {
   type DirectorStoryboardShot,
 } from '../../utils/directorStoryboard';
 import { materialMentionKey, type MediaMention } from './mediaMentions';
+import { useCanvasRuntime } from './canvasRuntimeContext';
 import {
   buildDirectorRunningHubCatalogParams,
   buildDirectorStoryboardModelOptions,
@@ -186,6 +188,7 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 
 const DirectorStoryboardNode = ({ id, data, selected }: NodeProps) => {
   const update = useUpdateNodeData(id);
+  const { loadedCanvasId } = useCanvasRuntime();
   const hasAutoOutput = useHasAutoOutput(id);
   const { theme, style: themeStyle } = useThemeStore();
   const isDark = theme === 'dark';
@@ -582,6 +585,15 @@ const DirectorStoryboardNode = ({ id, data, selected }: NodeProps) => {
     setJobPatch(job, { status: 'submitting', error: null, progress: '提交中' });
     const modelOption = resolveDirectorStoryboardModel(job.payload.model, modelOptions);
     const media = directorStoryboardPayloadMedia(job.payload);
+    const historyContext: GenerationHistoryContext = {
+      canvasId: loadedCanvasId,
+      sourceNodeId: id,
+      sourceNodeType: 'director-storyboard',
+      nodeTitle: '导演分镜台',
+      outputTitle: job.title,
+      prompt: job.payload.prompt,
+      seed: job.payload.seed,
+    };
     let submitted: { taskId: string };
     let runningHubQueryModel = '';
 
@@ -620,6 +632,7 @@ const DirectorStoryboardNode = ({ id, data, selected }: NodeProps) => {
         resolution: job.payload.resolution || definition.defaultResolution,
         duration,
         storyboard: definition.supportsStoryboard ? true : undefined,
+        historyContext,
       });
     } else if (modelOption.provider === 'runninghub-catalog' && modelOption.catalogModelId) {
       if ((modelOption.category === 'image-to-video' || modelOption.category === 'reference-to-video') && media.images.length === 0) {
@@ -632,9 +645,10 @@ const DirectorStoryboardNode = ({ id, data, selected }: NodeProps) => {
       submitted = await submitRunningHubCatalogVideo({
         catalogModelId: modelOption.catalogModelId,
         params: buildDirectorRunningHubCatalogParams(job.payload),
+        historyContext,
       });
     } else {
-      submitted = await submitSeedance(job.payload);
+      submitted = await submitSeedance({ ...job.payload, historyContext });
     }
     setJobPatch(job, { status: 'polling', taskId: submitted.taskId, progress: '15%' });
     logBus.info(`${job.title} · ${modelOption.label} taskId=${submitted.taskId} 已提交，进入轮询`, src);
@@ -642,8 +656,8 @@ const DirectorStoryboardNode = ({ id, data, selected }: NodeProps) => {
     for (let elapsed = 1; elapsed <= maxPoll; elapsed += 1) {
       await sleep(pollInt * 1000, signal);
       const result = modelOption.provider === 'seedance'
-        ? await querySeedance(submitted.taskId)
-        : await queryRunningHubVideo(submitted.taskId, runningHubQueryModel);
+        ? await querySeedance(submitted.taskId, historyContext)
+        : await queryRunningHubVideo(submitted.taskId, runningHubQueryModel, historyContext);
       const pct = Math.min(95, Math.round(15 + (elapsed * 80) / maxPoll));
       const normalizedStatus = String(result.status || '').toUpperCase();
       if ((normalizedStatus === 'SUCCEEDED' || normalizedStatus === 'SUCCESS') && result.videoUrl) {

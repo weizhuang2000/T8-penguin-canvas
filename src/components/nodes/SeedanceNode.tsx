@@ -5,9 +5,11 @@ import {
   generateExternalVideo,
   submitSeedance,
   querySeedance,
+  type GenerationHistoryContext,
   type SeedanceSubmitRequest,
 } from '../../services/generation';
 import { useUpdateNodeData } from './useUpdateNodeData';
+import { useCanvasRuntime } from './canvasRuntimeContext';
 import { useHasAutoOutput } from './useHasAutoOutput';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { logBus } from '../../stores/logs';
@@ -67,6 +69,7 @@ const seedanceMinPollCount = (intervalMs: number) =>
 
 const SeedanceNode = ({ id, data, selected }: NodeProps) => {
   const update = useUpdateNodeData(id);
+  const { loadedCanvasId } = useCanvasRuntime();
   const hasAutoOutput = useHasAutoOutput(id);
   const [error, setError] = useState<string | null>(null);
   const pollTimer = useRef<number | null>(null);
@@ -252,7 +255,7 @@ const SeedanceNode = ({ id, data, selected }: NodeProps) => {
 
   // v1.2.9.11: 返回 Promise，调用方 await 直到任务真正成功/失败/超时才 resolve/reject。
   //   在循环器中使用时，不 await 会导致 useRunTrigger 提前 markDone → LoopNode 读不到 videoUrl → result=null → failCount++。
-  const startPolling = (tid: string): Promise<void> => {
+  const startPolling = (tid: string, historyContext: GenerationHistoryContext): Promise<void> => {
     stopPoll();
     return new Promise<void>((resolve, reject) => {
       let elapsed = 0;
@@ -270,7 +273,7 @@ const SeedanceNode = ({ id, data, selected }: NodeProps) => {
           return;
         }
         try {
-          const r = await querySeedance(tid);
+          const r = await querySeedance(tid, historyContext);
           // 进度条估算 (对齐主项目: 30 + a*65/max)
           const pct = Math.min(95, Math.round(30 + (elapsed * 65) / MAX));
           if (r.progress && r.progress !== lastProgress) {
@@ -308,6 +311,14 @@ const SeedanceNode = ({ id, data, selected }: NodeProps) => {
     const { prompt: upstreamPrompt, imageUrls, videoUrls, audioUrls } = collectUpstream();
     const resolvedLocalPrompt = resolveMediaMentions(localPrompt, promptMentions, mentionMaterials);
     const finalPrompt = (upstreamPrompt || resolvedLocalPrompt || '').trim();
+    const historyContext: GenerationHistoryContext = {
+      canvasId: loadedCanvasId,
+      sourceNodeId: id,
+      sourceNodeType: 'seedance',
+      nodeTitle: 'Seedance 2.0',
+      prompt: finalPrompt,
+      seed: seed >= 0 ? seed : undefined,
+    };
     if (!finalPrompt) {
       setError('未连接 text 节点也未填写 prompt');
       logBus.error('生成中止: 缺少 prompt', src);
@@ -349,6 +360,7 @@ const SeedanceNode = ({ id, data, selected }: NodeProps) => {
                 web_search: webSearch,
                 frameMode: activeFrameMode,
               },
+          historyContext,
         });
         const nextVideoUrl = r.videoUrls[0];
         if (!nextVideoUrl) throw new Error('扩展平台没有返回视频。');
@@ -395,6 +407,7 @@ const SeedanceNode = ({ id, data, selected }: NodeProps) => {
         watermark,
         web_search: webSearch,
         providerParams,
+        historyContext,
       };
       if (seed !== -1) payload.seed = seed;
       if (firstFrame) payload.firstFrame = firstFrame;
@@ -419,7 +432,7 @@ const SeedanceNode = ({ id, data, selected }: NodeProps) => {
       update({ status: 'polling', taskId: r.taskId, lastPrompt: finalPrompt, progress: '15%' });
       logBus.info(`异步任务已提交 taskId=${r.taskId}, 进入轮询…`, src);
       // v1.2.9.11: await 让 useRunTrigger 等到任务真正完成才 markDone，循环器才能拿到 videoUrl
-      await startPolling(r.taskId);
+      await startPolling(r.taskId, historyContext);
     } catch (e: any) {
       const msg = e?.message || '提交失败';
       setError(msg);
