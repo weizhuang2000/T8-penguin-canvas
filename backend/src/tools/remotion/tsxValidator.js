@@ -14,6 +14,7 @@ const ALLOWED_IMPORTS = new Set([
   '@remotion/transitions/wipe',
   '@remotion/transitions/flip',
   '@remotion/transitions/clock-wipe',
+  '@t8/remotion-kit',
 ]);
 const BANNED_IDENTIFIERS = new Set([
   'fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'eval', 'Function',

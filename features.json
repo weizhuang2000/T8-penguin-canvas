@@ -4,7 +4,9 @@
     "nodeType": "remotion-animation",
     "label": "Remotion 动画",
     "capabilities": [
-      "选择内置或高级 LLM Provider 生成可编辑 JSON DSL / 受限专家 TSX",
+      "仅从 LLM 独立配置选择创作/审片模型，生成可编辑 JSON DSL / 受限专家 TSX",
+      "内置 t8-remotion-skill/v1 专业规则，支持创意方案、关键帧视觉审片和最多两轮修订",
+      "专业模式提供受控排版、运镜、遮罩、渐变、噪点和基础图表组件",
       "接收上游文本、图像、视频和音频并按素材 ID 编排",
       "本地异步队列渲染 H.264 MP4，支持首次下载浏览器运行时、进度和取消",
       "输出 videoUrl 并接入批量运行、循环器、输出节点和生成历史"
@@ -5911,6 +5913,7 @@
     "director-storyboard",
     "audio",
     "llm",
+    "remotion-animation",
     "runninghub",
     "runninghub-wallet",
     "rh-tools",

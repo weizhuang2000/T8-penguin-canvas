@@ -217,7 +217,7 @@ export interface AdvancedProviderSelection {
   available: boolean;
 }
 
-const IMAGE_PROTOCOLS = new Set(['openai-compatible', 'gemini-compatible', 'modelscope', 'volcengine', 'comfyui', 'jimeng-cli']);
+const IMAGE_PROTOCOLS = new Set(['openai-compatible', 'gemini-compatible', 'modelscope', 'volcengine', 'comfyui', 'jimeng-cli', 'gitee-flux']);
 const VIDEO_PROTOCOLS = new Set(['openai-compatible', 'gemini-compatible', 'volcengine', 'jimeng-cli']);
 const LLM_PROTOCOLS = new Set(['openai-compatible', 'gemini-compatible', 'modelscope', 'volcengine']);
 
@@ -240,6 +240,7 @@ const FALLBACK_MODELS: Record<AdvancedProviderNodeKind, Partial<Record<string, s
       'jimeng-image-2k',
       'jimeng-image-4k',
     ],
+    'gitee-flux': ['flux-1-schnell'],
   },
   video: {
     'openai-compatible': [],

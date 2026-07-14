@@ -414,6 +414,7 @@ function main() {
   checkFile(path.join(RES, 'backend-enc', 'routes', 'figma.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'routes', 'grokOAuth.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'routes', 'codexCli.t8c'));
+  checkFile(path.join(RES, 'backend-enc', 'routes', 'remotion.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'routes', 'aiWatermark.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'routes', 'cloudUploads.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'routes', 'parseHub.t8c'));
@@ -429,6 +430,7 @@ function main() {
   checkFile(path.join(RES, 'backend-enc', 'providers', 'adapters.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'providers', 'openaiCompatible.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'providers', 'llmMedia.t8c'));
+  checkFile(path.join(RES, 'backend-enc', 'providers', 'llmClient.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'providers', 'modelscope.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'providers', 'volcengine.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'providers', 'comfyui.t8c'));
@@ -436,6 +438,9 @@ function main() {
   checkFile(path.join(RES, 'backend-enc', 'tools', 'aiWatermark', 'runner.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'tools', 'aiWatermark', 'media.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'tools', 'topaz', 'runner.t8c'));
+  checkFile(path.join(RES, 'backend-enc', 'tools', 'remotion', 'generationManager.t8c'));
+  checkFile(path.join(RES, 'backend-enc', 'tools', 'remotion', 'renderCoordinator.t8c'));
+  checkFile(path.join(RES, 'backend-enc', 'tools', 'remotion', 'skillPack.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'utils', 'duckPayload.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'utils', 'codexCliRunner.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'utils', 'figmaBridge.t8c'));

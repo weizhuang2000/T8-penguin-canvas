@@ -14,6 +14,7 @@ const { tryDecodeDuckPayload } = require('../utils/duckPayload');
 const { normalizeImageOutputFormat, writeImageOutput } = require('../utils/imageOutput');
 const { addHistoryItems, kindFromUrl } = require('../utils/generationHistory');
 const { resolveLlmChatCompletionsUrl } = require('../utils/llmBaseUrl');
+const { resolveLlmConfig: resolveReusableLlmConfig } = require('../providers/llmClient');
 const { mimeFromPath, resolveMediaRef } = require('../providers/mediaResolver');
 const { requireNodePermission } = require('../auth/toolPermissions');
 const settingsRouter = require('./settings');
@@ -244,28 +245,7 @@ function zhenzhenBaseUrl(settings) {
 }
 
 function resolveLlmConfig(settings, keyId = '') {
-  if (!settings) return null;
-  const configs = settingsRouter.normalizeLlmConfigs(
-    settings.llmConfigs || settings.llmApiKeys,
-    settings.llmConfigs || settings.llmApiKeys,
-    { apiKey: settings.llmApiKey, baseUrl: settings.llmBaseUrl, model: settings.llmModel },
-  );
-  const requestedId = String(keyId || '').trim();
-  const selected = requestedId
-    ? configs.find((item) => item.id === requestedId)
-    : (configs.find((item) => item.isDefault) || configs[0]);
-  if (requestedId && !selected) {
-    return { error: '选择的 LLM 配置不存在或已被删除' };
-  }
-  const apiKey = selected?.apiKey || settings.llmApiKey || '';
-  if (!apiKey) return { error: '未配置 LLM 独立 API Key' };
-  return {
-    apiKey,
-    baseUrl: selected?.baseUrl || settings.llmBaseUrl,
-    model: selected?.model || settings.llmModel,
-    keyId: selected?.id || 'default',
-    label: selected?.label || '默认 LLM',
-  };
+  return resolveReusableLlmConfig(settings, keyId);
 }
 
 // ========== 工具: 按提示词（模型名 / endpoint / 路由名）选择分类 API Key ==========

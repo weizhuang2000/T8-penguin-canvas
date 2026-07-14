@@ -8,6 +8,7 @@ export type NodeType =
   // Core (8)
   | 'text'
   | 'image'
+  | 'flux-image'
   | 'video'
   | 'runninghub-video'
   | 'seedance'
@@ -138,7 +139,8 @@ export type AdvancedProviderProtocol =
   | 'modelscope'
   | 'volcengine'
   | 'comfyui'
-  | 'jimeng-cli';
+  | 'jimeng-cli'
+  | 'gitee-flux';
 
 export interface AdvancedProviderConfig {
   id: string;

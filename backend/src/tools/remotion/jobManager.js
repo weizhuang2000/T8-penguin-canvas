@@ -9,6 +9,7 @@ const { addHistoryItems } = require('../../utils/generationHistory');
 const { stageAssets } = require('./assets');
 const { normalizeProfile, parseJsonSource, validateDslSpec } = require('./schema');
 const { validateTsxSource } = require('./tsxValidator');
+const renderCoordinator = require('./renderCoordinator');
 
 const JOB_TTL_MS = 2 * 60 * 60 * 1000;
 const WORKSPACE_TTL_MS = 60 * 60 * 1000;
@@ -125,12 +126,14 @@ async function prepareJob(job) {
     profile: job.profile,
   };
   const request = {
+    operation: 'media',
     entryPoint,
     publicDir,
     outputLocation,
     inputProps,
     browserCacheDir: runtimeRoot(),
     nodeModulesDir: path.join(appRoot(), 'node_modules'),
+    proKitPath: path.join(appRoot(), 'remotion', 'ProKit.tsx'),
     concurrency: 2,
   };
   const requestFile = path.join(job.workDir, 'request.json');
@@ -186,6 +189,26 @@ async function runJob(job) {
     return drainQueue();
   }
 
+  let releaseRender;
+  try {
+    job.phase = 'waiting-renderer';
+    releaseRender = await renderCoordinator.acquire(`media:${job.id}`, job.abortController.signal);
+    if (job.status === 'cancelled') {
+      releaseRender();
+      activeJobId = '';
+      scheduleCleanup(job);
+      return drainQueue();
+    }
+  } catch (error) {
+    job.status = job.status === 'cancelled' || error?.name === 'AbortError' ? 'cancelled' : 'error';
+    job.phase = job.status;
+    job.error = job.status === 'error' ? (error.message || String(error)) : '';
+    job.updatedAt = Date.now();
+    activeJobId = '';
+    scheduleCleanup(job);
+    return drainQueue();
+  }
+
   const worker = path.join(appRoot(), 'electron', 'remotion-worker.cjs');
   const env = { ...process.env };
   if (process.versions.electron) env.ELECTRON_RUN_AS_NODE = '1';
@@ -218,6 +241,7 @@ async function runJob(job) {
   child.on('error', (error) => { job.workerError = error.message || String(error); });
   child.on('close', () => {
     clearTimeout(timeout);
+    releaseRender?.();
     job.child = null;
     job.updatedAt = Date.now();
     job.completedAt = Date.now();
@@ -296,6 +320,7 @@ function createJob(body, user) {
     createdAt: now,
     updatedAt: now,
     workDir: path.join(jobsRoot(), id),
+    abortController: new AbortController(),
   };
   jobs.set(id, job);
   queue.push(id);
@@ -319,6 +344,7 @@ function cancelJob(job) {
   job.updatedAt = Date.now();
   const index = queue.indexOf(job.id);
   if (index >= 0) queue.splice(index, 1);
+  job.abortController?.abort();
   if (job.child) terminateTree(job.child);
   if (activeJobId !== job.id) scheduleCleanup(job);
   return publicJob(job);

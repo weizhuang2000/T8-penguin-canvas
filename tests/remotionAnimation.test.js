@@ -156,10 +156,22 @@ test('Remotion node is registered across canvas, ports, permissions and Electron
   const nodeSource = read('src/components/nodes/RemotionAnimationNode.tsx');
   assert.match(nodeSource, /settings\.llmConfigs \|\| state\.settings\.llmApiKeys/);
   assert.match(nodeSource, /llmKeyId:\s*activeLlmConfig\?\.id/);
+  assert.match(nodeSource, /createRemotionGenerationJob/);
+  assert.match(nodeSource, /remotionReviewLlmKeyId/);
+  assert.match(nodeSource, /remotionQuality === 'professional'/);
   assert.doesNotMatch(nodeSource, /LLM_MODELS/);
   assert.doesNotMatch(nodeSource, /generateExternalLlm/);
+  assert.doesNotMatch(nodeSource, /generateLlm\(/);
+  const canvasSource = read('src/components/Canvas.tsx');
+  assert.match(canvasSource, /'remotion-animation':\s*\{[\s\S]*?remotionQuality:\s*'professional'[\s\S]*?remotionMode:\s*'tsx'/);
   assert.match(read('backend/src/auth/toolPermissions.js'), /'remotion-animation'/);
   assert.match(read('backend/src/server.js'), /app\.use\('\/api\/remotion', remotionRouter\)/);
+  assert.match(read('backend/src/routes/remotion.js'), /post\('\/generation-jobs'/);
+  const workerSource = read('electron/remotion-worker.cjs');
+  assert.match(workerSource, /renderStill/);
+  assert.match(workerSource, /contact-sheet\.jpg/);
+  assert.match(workerSource, /@t8\/remotion-kit/);
+  assert.match(read('features.json'), /LLM 独立配置/);
   const pkg = JSON.parse(read('package.json'));
   assert.equal(pkg.dependencies.remotion, '4.0.489');
   for (const name of ['@remotion/bundler', '@remotion/renderer', '@remotion/media', '@remotion/transitions']) {
@@ -180,7 +192,7 @@ test('optional real Remotion worker renders a tiny MP4', { skip: process.env.T8_
     publicDir,
     outputLocation,
     nodeModulesDir: path.join(ROOT, 'node_modules'),
-    browserCacheDir: path.join(dir, 'browser-cache'),
+    browserCacheDir: path.join(os.tmpdir(), 't8-remotion-smoke-browser-cache'),
     concurrency: 1,
     inputProps: {
       profile: { width: 320, height: 180, fps: 24, duration: 1, durationInFrames: 24 },

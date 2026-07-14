@@ -112,6 +112,7 @@ const ADVANCED_PROVIDER_LABELS: Record<AdvancedProviderProtocol, string> = {
   volcengine: '火山引擎',
   comfyui: 'ComfyUI',
   'jimeng-cli': '即梦 CLI',
+  'gitee-flux': 'Gitee Flux',
 };
 
 function displayAdvancedProviderLabel(provider: AdvancedProviderConfig): string {
@@ -181,6 +182,15 @@ const ADVANCED_PROVIDER_GUIDES: Record<AdvancedProviderProtocol, {
     connectionHint: '填写 dreamina 可执行文件路径；如果 CLI 装在 WSL 里，再打开 WSL 并填写发行版名称。',
     modelHint: '模型名按 CLI 支持的命令参数填写；图像可填 seedream-4.7，视频可填 seedance2.0fast_vip、seedance2.0_vip、seedance2.0fast、seedance2.0。每行一个。',
   },
+  'gitee-flux': {
+    subtitle: 'Gitee AI Serverless Flux 文生图',
+    description: '调用 Gitee AI Serverless API 的异步图像生成接口，支持 flux-1-schnell 等 Flux 模型。',
+    nodeScopes: ['Flux 生图节点', '图像节点'],
+    connectionHint: 'Base URL 默认 https://ai.gitee.com/v1；Token 请填写 Gitee AI 访问令牌。',
+    modelHint: '每行一个模型名，默认使用 flux-1-schnell。',
+    baseUrlPlaceholder: 'https://ai.gitee.com/v1',
+    keyLabel: 'Gitee AI Access Token',
+  },
 };
 
 const MODELSCOPE_TOKEN_URLS = {
@@ -195,6 +205,7 @@ const BUILT_IN_ADVANCED_PROVIDER_IDS = new Set([
   'volcengine',
   'comfyui',
   'jimeng-cli',
+  'gitee-flux',
 ]);
 
 const JIMENG_CLI_INSTALL_COMMAND = 'curl -s https://jimeng.jianying.com/cli | bash';

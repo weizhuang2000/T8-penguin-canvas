@@ -1,4 +1,6 @@
 export type RemotionMode = 'json' | 'tsx';
+export type RemotionQuality = 'standard' | 'professional';
+export type RemotionStylePreset = 'auto' | 'cinematic' | 'editorial' | 'tech' | 'minimal' | 'playful';
 export type RemotionRatio = '16:9' | '9:16' | '1:1';
 export type RemotionResolution = '720p' | '1080p';
 export type RemotionFps = 24 | 30 | 60;
@@ -33,6 +35,30 @@ export interface RemotionJob {
   size?: number;
 }
 
+export interface RemotionReview {
+  round: number;
+  score: number;
+  summary?: string;
+  criticalIssues?: string[];
+}
+
+export interface RemotionGenerationJob {
+  id: string;
+  status: 'queued' | 'running' | 'success' | 'error' | 'cancelled';
+  phase: string;
+  progress: number;
+  error?: string;
+  queuePosition?: number;
+  mode: RemotionMode;
+  quality: RemotionQuality;
+  source?: string;
+  plan?: string;
+  reviews: RemotionReview[];
+  warnings: string[];
+  skillVersion?: string;
+  skillRules?: string[];
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
   const payload = await response.json().catch(() => ({}));
@@ -55,6 +81,33 @@ export function validateRemotionSpec(payload: { mode: RemotionMode; source: stri
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
+}
+
+export function createRemotionGenerationJob(payload: {
+  mode: RemotionMode;
+  quality: RemotionQuality;
+  stylePreset: RemotionStylePreset;
+  llmKeyId: string;
+  reviewLlmKeyId?: string;
+  subject: string;
+  texts: Array<{ id: string; label?: string; text: string }>;
+  assets: RemotionAssetInput[];
+  profile: RemotionProfile;
+  historyContext?: Record<string, unknown>;
+}) {
+  return request<RemotionGenerationJob>('/api/remotion/generation-jobs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getRemotionGenerationJob(id: string) {
+  return request<RemotionGenerationJob>(`/api/remotion/generation-jobs/${encodeURIComponent(id)}`);
+}
+
+export function cancelRemotionGenerationJob(id: string) {
+  return request<RemotionGenerationJob>(`/api/remotion/generation-jobs/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
 }
 
 export function createRemotionJob(payload: {

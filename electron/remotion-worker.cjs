@@ -7,6 +7,11 @@ function emit(type, data = {}) {
   process.stdout.write(`${JSON.stringify({ type, ...data })}\n`);
 }
 
+function unitProgress(value) {
+  const number = Number(value) || 0;
+  return Math.max(0, Math.min(1, number > 1 ? number / 100 : number));
+}
+
 async function main() {
   const requestFile = process.argv[2];
   if (!requestFile) throw new Error('缺少 Remotion 作业请求文件');
@@ -17,7 +22,7 @@ async function main() {
   }
 
   const { bundle } = require('@remotion/bundler');
-  const { ensureBrowser, makeCancelSignal, renderMedia, selectComposition } = require('@remotion/renderer');
+  const { ensureBrowser, makeCancelSignal, renderMedia, renderStill, selectComposition } = require('@remotion/renderer');
   const cancellation = makeCancelSignal();
   let stopping = false;
   const stop = () => {
@@ -33,12 +38,16 @@ async function main() {
     entryPoint: request.entryPoint,
     publicDir: request.publicDir,
     enableCaching: true,
-    onProgress: (value) => emit('progress', { phase: 'bundling', progress: Math.round(2 + value * 18) }),
+    onProgress: (value) => emit('progress', { phase: 'bundling', progress: Math.round(2 + unitProgress(value) * 18) }),
     webpackOverride: (configuration) => ({
       ...configuration,
       resolve: {
         ...(configuration.resolve || {}),
         modules: [request.nodeModulesDir, ...((configuration.resolve && configuration.resolve.modules) || ['node_modules'])],
+        alias: {
+          ...((configuration.resolve && configuration.resolve.alias) || {}),
+          '@t8/remotion-kit': request.proKitPath || path.join(__dirname, '..', 'remotion', 'ProKit.tsx'),
+        },
       },
     }),
   });
@@ -48,7 +57,7 @@ async function main() {
     onProgress: (info) => emit('runtime-download', {
       phase: 'runtime-download',
       chromeMode,
-      progress: Math.round(20 + (Number(info.percent) || 0) * 20),
+      progress: Math.round(20 + unitProgress(info.percent) * 20),
       downloadedBytes: info.downloadedBytes,
       totalSizeInBytes: info.totalSizeInBytes,
       alreadyAvailable: info.alreadyAvailable,
@@ -67,6 +76,60 @@ async function main() {
     timeoutInMilliseconds: 120000,
     logLevel: 'warn',
   });
+
+  if (request.operation === 'stills') {
+    const outputDir = path.resolve(request.outputDir);
+    fs.mkdirSync(outputDir, {recursive: true});
+    const frames = [...new Set((request.frames || []).map((value) => Math.max(0, Math.min(composition.durationInFrames - 1, Math.round(Number(value) || 0)))))].slice(0, 6);
+    if (!frames.length) throw new Error('关键帧列表为空');
+    const scale = Math.max(0.1, Math.min(1, Number(request.scale) || 0.25));
+    const frameFiles = [];
+    emit('phase', {phase: 'rendering-stills', progress: 42});
+    for (let index = 0; index < frames.length; index += 1) {
+      const frame = frames[index];
+      const output = path.join(outputDir, `frame-${String(index + 1).padStart(2, '0')}-${frame}.png`);
+      await renderStill({
+        composition,
+        serveUrl,
+        inputProps: request.inputProps,
+        output,
+        frame,
+        scale,
+        imageFormat: 'png',
+        overwrite: true,
+        cancelSignal: cancellation.cancelSignal,
+        chromeMode: 'headless-shell',
+        onBrowserDownload,
+        timeoutInMilliseconds: 120000,
+        logLevel: 'warn',
+      });
+      frameFiles.push(output);
+      emit('progress', {phase: 'rendering-stills', progress: Math.round(42 + ((index + 1) / frames.length) * 42), renderedFrames: index + 1});
+    }
+
+    const sharp = require('sharp');
+    const frameWidth = Math.max(1, Math.round(composition.width * scale));
+    const frameHeight = Math.max(1, Math.round(composition.height * scale));
+    const labelHeight = 34;
+    const columns = 2;
+    const rows = Math.ceil(frameFiles.length / columns);
+    const composites = [];
+    for (let index = 0; index < frameFiles.length; index += 1) {
+      const left = (index % columns) * frameWidth;
+      const top = Math.floor(index / columns) * (frameHeight + labelHeight);
+      const seconds = frames[index] / composition.fps;
+      const label = Buffer.from(`<svg width="${frameWidth}" height="${labelHeight}"><rect width="100%" height="100%" fill="#09090b"/><text x="14" y="23" fill="#e5e7eb" font-family="Arial,sans-serif" font-size="15">${index + 1} · ${seconds.toFixed(2)}s · frame ${frames[index]}</text></svg>`);
+      composites.push({input: frameFiles[index], left, top});
+      composites.push({input: label, left, top: top + frameHeight});
+    }
+    const contactSheet = path.join(outputDir, 'contact-sheet.jpg');
+    await sharp({create: {width: frameWidth * columns, height: (frameHeight + labelHeight) * rows, channels: 3, background: '#09090b'}})
+      .composite(composites)
+      .jpeg({quality: 82, mozjpeg: true})
+      .toFile(contactSheet);
+    emit('complete', {progress: 100, operation: 'stills', contactSheet, frameFiles, frames, size: fs.statSync(contactSheet).size});
+    return;
+  }
 
   emit('phase', { phase: 'rendering', progress: 42 });
   await renderMedia({

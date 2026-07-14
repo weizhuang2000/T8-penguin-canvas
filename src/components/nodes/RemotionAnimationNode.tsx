@@ -2,19 +2,24 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { AlertTriangle, Brain, CheckCircle2, Clapperboard, Code2, FileJson, Loader2, Play, Sparkles, Square } from 'lucide-react';
 import { DEFAULT_LLM_MODEL } from '../../providers/models';
-import { generateLlm, type LlmContentPart, type LlmMessage } from '../../services/generation';
 import {
+  cancelRemotionGenerationJob,
   cancelRemotionJob,
+  createRemotionGenerationJob,
   createRemotionJob,
+  getRemotionGenerationJob,
   getRemotionJob,
   validateRemotionSpec,
   type RemotionAssetInput,
   type RemotionFps,
+  type RemotionGenerationJob,
   type RemotionJob,
   type RemotionMode,
   type RemotionProfile,
+  type RemotionQuality,
   type RemotionRatio,
   type RemotionResolution,
+  type RemotionStylePreset,
 } from '../../services/remotion';
 import { useApiKeysStore } from '../../stores/apiKeys';
 import { useCanvasStore } from '../../stores/canvas';
@@ -30,55 +35,46 @@ import {
 import LoopingVideo from '../LoopingVideo';
 import MaterialPreviewSection from './MaterialPreviewSection';
 import { useOrderedMaterials } from './useOrderedMaterials';
-import { useUpstreamMaterials, type Material } from './useUpstreamMaterials';
+import { useUpstreamMaterials } from './useUpstreamMaterials';
 import { useUpdateNodeData } from './useUpdateNodeData';
 
-const JSON_SCHEMA_GUIDE = `输出严格 JSON，不要 Markdown 代码块。结构：
-{
-  "version":"t8-remotion/v1",
-  "assets":[{"id":"asset-1","kind":"image|video|audio","label":"..."}],
-  "scenes":[{
-    "id":"scene-1","start":0,"duration":8,"background":"#09090b","transition":"none|fade|slide-left|slide-right|wipe",
-    "layers":[
-      {"id":"title","type":"text","start":0,"duration":4,"x":0,"y":0,"width":0.8,"height":0.3,"text":"标题","color":"#fff","fontSize":84,"fontWeight":700,"textAlign":"center","lineHeight":1.2,"enter":{"type":"fade|slide-up|scale|typewriter","duration":0.6,"delay":0}},
-      {"id":"visual","type":"image|video","assetId":"asset-1","start":0,"duration":8,"x":0,"y":0,"width":1,"height":1,"objectFit":"cover","opacity":1,"rotation":0,"scale":1},
-      {"id":"music","type":"audio","assetId":"asset-2","start":0,"duration":8,"volume":0.8,"loop":true,"trimStart":0},
-      {"id":"shape","type":"shape","start":0,"duration":8,"x":0,"y":0,"width":1,"height":1,"shape":"rect","fill":"#111827"}
-    ]
-  }]
-}
-坐标 x/y 范围 -1..1，width/height 是画面比例 0..2；场景不得超出总时长，图像/视频/音频只能引用给定素材 ID。`;
+const STYLE_OPTIONS: Array<{ value: RemotionStylePreset; label: string }> = [
+  { value: 'auto', label: '自动风格' },
+  { value: 'cinematic', label: '电影感' },
+  { value: 'editorial', label: '编辑设计' },
+  { value: 'tech', label: '科技感' },
+  { value: 'minimal', label: '极简' },
+  { value: 'playful', label: '活泼' },
+];
 
-const TSX_GUIDE = `输出单个 TSX 模块，不要 Markdown 代码块。必须命名导出：
-export const GeneratedComposition: React.FC<any> = ({assets, profile, subject}) => { ... };
-仅可导入 react、remotion、@remotion/media、@remotion/transitions 及其官方转场子路径。
-素材用 assets.find(a=>a.id==='asset-1') 获取，并用 staticFile('assets/'+asset.src) 转为地址；图片必须用 Remotion Img，视频/音频用 @remotion/media。
-所有动画必须通过 useCurrentFrame() 与 useVideoConfig() 按帧计算，Sequence 必须设置 premountFor={fps}。禁止 CSS animation/transition、网络请求、浏览器存储、动态 import、eval、进程或文件系统 API。`;
-
-function stripFence(value: string) {
-  return String(value || '').trim().replace(/^```(?:json|tsx|typescript|ts|jsx)?\s*/i, '').replace(/\s*```$/, '').trim();
-}
+const PHASE_LABELS: Record<string, string> = {
+  queued: '等待生成',
+  planning: '创意方案',
+  'generating-code': '生成 TSX',
+  'repairing-code': '修复源码',
+  compiling: '编译检查',
+  bundling: '编译 Remotion',
+  'runtime-check': '检查浏览器运行时',
+  'runtime-download': '下载浏览器运行时',
+  'rendering-stills': '渲染关键帧',
+  'rendering-review-1': '渲染第一轮关键帧',
+  'rendering-review-2': '渲染第二轮关键帧',
+  'reviewing-1': '第一轮视觉审片',
+  'reviewing-2': '第二轮视觉审片',
+  'reviewing-text-1': '第一轮文本审片',
+  'reviewing-text-2': '第二轮文本审片',
+  described: '描述已生成',
+  validating: '校验描述',
+  'waiting-renderer': '等待渲染器',
+  preparing: '准备素材',
+  rendering: '渲染 MP4',
+  success: '已完成',
+  cancelled: '已取消',
+  error: '失败',
+};
 
 function wait(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-function probeDuration(material: Material): Promise<number | null> {
-  if (material.kind !== 'video' && material.kind !== 'audio') return Promise.resolve(null);
-  return new Promise((resolve) => {
-    const media = document.createElement(material.kind) as HTMLMediaElement;
-    const timer = window.setTimeout(() => finish(null), 8000);
-    const finish = (value: number | null) => {
-      window.clearTimeout(timer);
-      media.removeAttribute('src');
-      media.load();
-      resolve(value);
-    };
-    media.preload = 'metadata';
-    media.onloadedmetadata = () => finish(Number.isFinite(media.duration) ? media.duration : null);
-    media.onerror = () => finish(null);
-    media.src = material.url;
-  });
 }
 
 function profileFromData(data: any): RemotionProfile {
@@ -99,9 +95,13 @@ function RemotionAnimationNode({ id, data, selected }: NodeProps) {
   const llmConfigs = useApiKeysStore((state) => state.settings.llmConfigs || state.settings.llmApiKeys) || [];
   const { theme, style } = useThemeStore();
   const [localError, setLocalError] = useState('');
-  const pollingRef = useRef(false);
+  const generationPollingRef = useRef(false);
+  const renderPollingRef = useRef(false);
 
-  const mode: RemotionMode = d.remotionMode === 'tsx' ? 'tsx' : 'json';
+  // 新节点会显式写入 professional；没有该字段的旧节点保持 standard。
+  const quality: RemotionQuality = d.remotionQuality === 'professional' ? 'professional' : 'standard';
+  const mode: RemotionMode = quality === 'professional' ? 'tsx' : (d.remotionMode === 'tsx' ? 'tsx' : 'json');
+  const stylePreset = (STYLE_OPTIONS.some((item) => item.value === d.remotionStylePreset) ? d.remotionStylePreset : 'auto') as RemotionStylePreset;
   const subject = String(d.remotionSubject || '');
   const source = String(d.remotionSource || '');
   const profile = profileFromData(d);
@@ -130,16 +130,35 @@ function RemotionAnimationNode({ id, data, selected }: NodeProps) {
   const activeLlmConfig = llmConfigOptions.find((item) => item.id === selectedLlmKeyId)
     || llmConfigOptions.find((item) => item.isDefault)
     || llmConfigOptions[0];
-  const model = String(activeLlmConfig?.model || configuredLlmModel).trim() || configuredLlmModel;
-  const busy = ['describing', 'validating', 'queued', 'preparing', 'bundling', 'runtime-check', 'runtime-download', 'rendering'].includes(String(d.remotionPhase || ''));
+  const reviewLlmKeyId = String(d.remotionReviewLlmKeyId || '');
+  const busy = String(d.status || '') === 'generating';
   const excludedCount = countExcludedMaterials(excludedIds, allMaterials);
-  const jobId = String(d.remotionJobId || '');
+  const generationJobId = String(d.remotionGenerationJobId || '');
+  const renderJobId = String(d.remotionJobId || '');
 
-  const applyJob = useCallback((job: RemotionJob) => {
+  const applyGenerationJob = useCallback((job: RemotionGenerationJob) => {
+    const patch: Record<string, unknown> = {
+      remotionGenerationJobId: job.id,
+      remotionPhase: job.phase,
+      remotionProgress: job.progress,
+      remotionActiveOperation: 'generation',
+      remotionPlan: job.plan || '',
+      remotionReviews: job.reviews || [],
+      remotionWarnings: job.warnings || [],
+      remotionSkillVersion: job.skillVersion || '',
+      status: job.status === 'error' ? 'error' : job.status === 'cancelled' ? 'idle' : job.status === 'success' ? 'idle' : 'generating',
+      error: job.error || '',
+    };
+    if (job.source) patch.remotionSource = job.source;
+    update(patch);
+  }, [update]);
+
+  const applyRenderJob = useCallback((job: RemotionJob) => {
     const patch: Record<string, unknown> = {
       remotionJobId: job.id,
       remotionPhase: job.phase,
       remotionProgress: job.progress,
+      remotionActiveOperation: 'render',
       status: job.status === 'success' ? 'success' : job.status === 'error' ? 'error' : job.status === 'cancelled' ? 'idle' : 'generating',
       error: job.error || '',
     };
@@ -152,13 +171,32 @@ function RemotionAnimationNode({ id, data, selected }: NodeProps) {
     update(patch);
   }, [update]);
 
-  const pollJob = useCallback(async (targetId: string) => {
-    if (!targetId || pollingRef.current) return;
-    pollingRef.current = true;
+  const pollGenerationJob = useCallback(async (targetId: string) => {
+    if (!targetId || generationPollingRef.current) return;
+    generationPollingRef.current = true;
+    try {
+      for (;;) {
+        const job = await getRemotionGenerationJob(targetId);
+        applyGenerationJob(job);
+        if (['success', 'error', 'cancelled'].includes(job.status)) {
+          if (job.status === 'error') throw new Error(job.error || 'Remotion 描述生成失败');
+          if (job.status === 'cancelled') throw Object.assign(new Error('Remotion 描述生成已取消'), { cancelled: true });
+          return job;
+        }
+        await wait(1000);
+      }
+    } finally {
+      generationPollingRef.current = false;
+    }
+  }, [applyGenerationJob]);
+
+  const pollRenderJob = useCallback(async (targetId: string) => {
+    if (!targetId || renderPollingRef.current) return;
+    renderPollingRef.current = true;
     try {
       for (;;) {
         const job = await getRemotionJob(targetId);
-        applyJob(job);
+        applyRenderJob(job);
         if (['success', 'error', 'cancelled'].includes(job.status)) {
           if (job.status === 'error') throw new Error(job.error || 'Remotion 渲染失败');
           return job;
@@ -166,77 +204,50 @@ function RemotionAnimationNode({ id, data, selected }: NodeProps) {
         await wait(1000);
       }
     } finally {
-      pollingRef.current = false;
+      renderPollingRef.current = false;
     }
-  }, [applyJob]);
+  }, [applyRenderJob]);
 
   useEffect(() => {
-    if (jobId && ['queued', 'preparing', 'bundling', 'runtime-check', 'runtime-download', 'rendering'].includes(String(d.remotionPhase || ''))) {
-      void pollJob(jobId).catch((error) => setLocalError(error.message || String(error)));
+    if (!busy) return;
+    if (d.remotionActiveOperation === 'generation' && generationJobId) {
+      void pollGenerationJob(generationJobId).catch((error) => {
+        if (!error?.cancelled) setLocalError(error.message || String(error));
+      });
+    } else if (d.remotionActiveOperation === 'render' && renderJobId) {
+      void pollRenderJob(renderJobId).catch((error) => setLocalError(error.message || String(error)));
     }
-  }, [d.remotionPhase, jobId, pollJob]);
-
-  const callLlm = useCallback(async (messages: LlmMessage[]) => {
-    return generateLlm({
-      model,
-      llmKeyId: activeLlmConfig?.id,
-      messages,
-      temperature: 0.3,
-      max_tokens: mode === 'tsx' ? 32000 : 16000,
-      llmVideoMode: 'frames',
-      videoFrameCount: 8,
-    });
-  }, [activeLlmConfig?.id, mode, model]);
-
-  const buildMessages = useCallback(async (): Promise<LlmMessage[]> => {
-    const durations = await Promise.all(mediaMaterials.map((item) => probeDuration(item)));
-    const manifest = assets.map((asset, index) => ({
-      id: asset.id,
-      kind: asset.kind,
-      label: asset.label,
-      durationSeconds: durations[index] == null ? undefined : Number(durations[index]!.toFixed(3)),
-      format: asset.url.split(/[?#]/)[0].split('.').pop()?.toLowerCase() || 'unknown',
-    }));
-    const textContext = orderedTexts.map((item) => item.url).join('\n\n');
-    const guide = mode === 'tsx' ? TSX_GUIDE : JSON_SCHEMA_GUIDE;
-    const prompt = `为 Remotion 生成一段可直接渲染的动画描述。\n\n主题/文案：\n${subject || '(未填写，依据上游素材创作)'}\n\n上游文本：\n${textContext || '(无)'}\n\n输出配置：${profile.ratio}，${profile.resolution}，${profile.fps}fps，总时长 ${profile.duration} 秒。\n\n素材清单：\n${JSON.stringify(manifest, null, 2)}\n\n${guide}`;
-    const content: LlmContentPart[] = [{ type: 'text', text: prompt }];
-    orderedImages.slice(0, 12).forEach((item) => content.push({ type: 'image_url', image_url: { url: item.url } }));
-    orderedVideos.slice(0, 4).forEach((item) => content.push({ type: 'video_url', video_url: { url: item.url } }));
-    return [
-      { role: 'system', content: '你是 Remotion 动画编排专家。严格遵守输出契约，只返回目标 JSON 或 TSX 源码。所有动画必须确定性地按帧渲染。' },
-      { role: 'user', content },
-    ];
-  }, [assets, mediaMaterials, mode, orderedImages, orderedTexts, orderedVideos, profile, subject]);
+  }, [busy, d.remotionActiveOperation, generationJobId, pollGenerationJob, pollRenderJob, renderJobId]);
 
   const generateDescription = useCallback(async () => {
     if (!subject.trim() && orderedMaterials.length === 0) throw new Error('请输入主题/文本或连接上游素材');
     setLocalError('');
-    update({ remotionPhase: 'describing', remotionProgress: 0, status: 'generating', error: '' });
-    const response = await callLlm(await buildMessages());
-    let next = stripFence(response.content);
-    update({ remotionSource: next, remotionPhase: 'validating', remotionProgress: 0 });
-    try {
-      await validateRemotionSpec({ mode, source: next, assets, profile });
-    } catch (firstError: any) {
-      const repair = await callLlm([
-        { role: 'system', content: '修复下面的 Remotion 描述。只返回修复后的完整 JSON 或 TSX，不要解释。' },
-        { role: 'user', content: `模式：${mode}\n校验错误：\n${firstError.message}\n\n待修复内容：\n${next}` },
-      ]);
-      next = stripFence(repair.content);
-      update({ remotionSource: next });
-      await validateRemotionSpec({ mode, source: next, assets, profile });
-    }
-    update({ remotionSource: next, remotionPhase: 'described', remotionProgress: 0, status: 'idle', error: '' });
-    logBus.success('Remotion 描述已生成并通过校验', `remotion:${id}`);
+    update({ remotionPhase: 'queued', remotionProgress: 0, remotionActiveOperation: 'generation', status: 'generating', error: '' });
+    const job = await createRemotionGenerationJob({
+      mode,
+      quality,
+      stylePreset,
+      llmKeyId: activeLlmConfig?.id || '',
+      reviewLlmKeyId: reviewLlmKeyId || undefined,
+      subject,
+      texts: orderedTexts.map((item) => ({ id: item.id, label: item.label, text: item.url })),
+      assets,
+      profile,
+      historyContext: { canvasId: activeCanvasId || '', sourceNodeId: id, sourceNodeType: 'remotion-animation' },
+    });
+    applyGenerationJob(job);
+    const completed = await pollGenerationJob(job.id);
+    const next = String(completed?.source || '').trim();
+    if (!next) throw new Error('Remotion 生成作业没有返回源码');
+    logBus.success(quality === 'professional' ? 'Remotion 专业描述已通过审片' : 'Remotion 描述已生成并通过校验', `remotion:${id}`);
     return next;
-  }, [assets, buildMessages, callLlm, id, mode, orderedMaterials.length, profile, subject, update]);
+  }, [activeCanvasId, activeLlmConfig?.id, applyGenerationJob, assets, id, mode, orderedMaterials.length, orderedTexts, pollGenerationJob, profile, quality, reviewLlmKeyId, stylePreset, subject, update]);
 
   const renderDescription = useCallback(async (value?: string) => {
     const renderSource = String(value ?? source).trim();
     if (!renderSource) throw new Error('请先生成或输入 Remotion 描述');
     setLocalError('');
-    update({ remotionPhase: 'validating', status: 'generating', error: '', videoUrl: '', videoUrls: [] });
+    update({ remotionPhase: 'validating', remotionActiveOperation: 'render', status: 'generating', error: '', videoUrl: '', videoUrls: [] });
     await validateRemotionSpec({ mode, source: renderSource, assets, profile });
     const job = await createRemotionJob({
       mode,
@@ -252,17 +263,18 @@ function RemotionAnimationNode({ id, data, selected }: NodeProps) {
         outputTitle: subject.trim().slice(0, 80) || 'Remotion 动画',
       },
     });
-    applyJob(job);
-    const completed = await pollJob(job.id);
+    applyRenderJob(job);
+    const completed = await pollRenderJob(job.id);
     if (completed?.status === 'success') logBus.success('Remotion 动画渲染完成', `remotion:${id}`);
     return completed;
-  }, [activeCanvasId, applyJob, assets, id, mode, pollJob, profile, source, subject, update]);
+  }, [activeCanvasId, applyRenderJob, assets, id, mode, pollRenderJob, profile, source, subject, update]);
 
   const generateAndRender = useCallback(async () => {
     try {
       const next = await generateDescription();
       await renderDescription(next);
     } catch (error: any) {
+      if (error?.cancelled) return;
       const message = error?.message || 'Remotion 生成失败';
       setLocalError(message);
       update({ remotionPhase: 'error', status: 'error', error: message });
@@ -273,14 +285,18 @@ function RemotionAnimationNode({ id, data, selected }: NodeProps) {
   useRunTrigger(id, generateAndRender, 'remotion-animation');
 
   const cancel = async () => {
-    if (!jobId) return;
-    try { applyJob(await cancelRemotionJob(jobId)); }
-    catch (error: any) { setLocalError(error?.message || '取消失败'); }
+    try {
+      if (d.remotionActiveOperation === 'generation' && generationJobId) applyGenerationJob(await cancelRemotionGenerationJob(generationJobId));
+      else if (renderJobId) applyRenderJob(await cancelRemotionJob(renderJobId));
+    } catch (error: any) {
+      setLocalError(error?.message || '取消失败');
+    }
   };
 
   const invoke = async (fn: () => Promise<unknown>) => {
     try { await fn(); }
     catch (error: any) {
+      if (error?.cancelled) return;
       const message = error?.message || '操作失败';
       setLocalError(message);
       update({ remotionPhase: 'error', status: 'error', error: message });
@@ -291,33 +307,38 @@ function RemotionAnimationNode({ id, data, selected }: NodeProps) {
   const phase = String(d.remotionPhase || 'idle');
   const progress = Math.max(0, Math.min(100, Number(d.remotionProgress) || 0));
   const videoUrl = String(d.videoUrl || '');
+  const plan = String(d.remotionPlan || '');
+  const reviews = Array.isArray(d.remotionReviews) ? d.remotionReviews : [];
+  const warnings = Array.isArray(d.remotionWarnings) ? d.remotionWarnings : [];
 
   return (
-    <div className={`t8-node overflow-hidden ${selected ? 'ring-2' : ''}`} style={{ width: 520, borderColor: selected ? 'var(--t8-accent)' : 'var(--t8-border-strong)' }}>
+    <div className={`t8-node overflow-hidden ${selected ? 'ring-2' : ''}`} style={{ width: 540, borderColor: selected ? 'var(--t8-accent)' : 'var(--t8-border-strong)' }}>
       <Handle type="target" position={Position.Left} style={{ background: '#fb7185', border: '1px solid var(--t8-bg-node)' }} />
       <Handle type="source" position={Position.Right} style={{ background: '#fb7185', border: '1px solid var(--t8-bg-node)' }} />
       <div className="t8-node-header flex items-center gap-2 px-3 py-2">
         <div className="flex h-8 w-8 items-center justify-center rounded-md bg-rose-400 text-rose-950"><Clapperboard size={17} /></div>
-        <div className="min-w-0 flex-1"><div className="text-sm font-bold">Remotion 动画</div><div className="truncate text-[10px]" style={{ color: 'var(--t8-text-muted)' }}>{mode === 'tsx' ? '专家 TSX' : 'JSON DSL'} · {profile.ratio} · {profile.resolution} · {profile.fps}fps</div></div>
+        <div className="min-w-0 flex-1"><div className="text-sm font-bold">Remotion 动画</div><div className="truncate text-[10px]" style={{ color: 'var(--t8-text-muted)' }}>{quality === 'professional' ? '专业 Skill' : '标准'} · {mode === 'tsx' ? '专家 TSX' : 'JSON DSL'} · {profile.ratio} · {profile.resolution}</div></div>
         {phase === 'success' ? <CheckCircle2 size={15} className="text-emerald-400" /> : busy ? <Loader2 size={15} className="animate-spin text-rose-300" /> : <Brain size={15} className="text-rose-300" />}
       </div>
 
       <div className="nodrag nowheel space-y-2 p-3" onMouseDown={(event) => event.stopPropagation()}>
-        <label className="block space-y-1 text-[10px]" style={{ color: 'var(--t8-text-muted)' }}>
-          <span>LLM 独立配置</span>
-          <select
-            className="t8-select w-full px-2 py-1.5 text-xs"
-            value={activeLlmConfig?.id || 'default'}
-            disabled={busy}
-            onChange={(event) => update({ llmKeyId: event.target.value })}
-          >
-            {llmConfigOptions.map((item) => (
-              <option key={item.id} value={item.id}>{item.label || item.id}{item.model ? ` · ${item.model}` : ''}</option>
-            ))}
-          </select>
-        </label>
+        <div className="grid grid-cols-2 gap-1.5">
+          <label className="block space-y-1 text-[10px]" style={{ color: 'var(--t8-text-muted)' }}>
+            <span>创作模型（LLM 独立配置）</span>
+            <select className="t8-select w-full px-2 py-1.5 text-xs" value={activeLlmConfig?.id || 'default'} disabled={busy} onChange={(event) => update({ llmKeyId: event.target.value })}>
+              {llmConfigOptions.map((item) => <option key={item.id} value={item.id}>{item.label || item.id}{item.model ? ` · ${item.model}` : ''}</option>)}
+            </select>
+          </label>
+          <label className="block space-y-1 text-[10px]" style={{ color: 'var(--t8-text-muted)' }}>
+            <span>视觉审片模型</span>
+            <select className="t8-select w-full px-2 py-1.5 text-xs" value={reviewLlmKeyId} disabled={busy || quality !== 'professional'} onChange={(event) => update({ remotionReviewLlmKeyId: event.target.value })}>
+              <option value="">同创作模型</option>
+              {llmConfigOptions.map((item) => <option key={item.id} value={item.id}>{item.label || item.id}{item.model ? ` · ${item.model}` : ''}</option>)}
+            </select>
+          </label>
+        </div>
 
-        <label className="block space-y-1 text-[10px]" style={{ color: 'var(--t8-text-muted)' }}><span>主体或文本</span><textarea className="t8-input min-h-20 w-full resize-y px-2 py-1.5 text-xs" value={subject} disabled={busy} placeholder="例如：为新产品发布制作一段 8 秒科技感标题动画" onChange={(event) => update({ remotionSubject: event.target.value })} /></label>
+        <label className="block space-y-1 text-[10px]" style={{ color: 'var(--t8-text-muted)' }}><span>主体或文本</span><textarea className="t8-input min-h-20 w-full resize-y px-2 py-1.5 text-xs" value={subject} disabled={busy} placeholder="例如：为新产品发布制作一段 8 秒高级科技感标题动画" onChange={(event) => update({ remotionSubject: event.target.value })} /></label>
 
         <MaterialPreviewSection
           texts={orderedTexts}
@@ -335,15 +356,26 @@ function RemotionAnimationNode({ id, data, selected }: NodeProps) {
           title="Remotion 上游素材"
         />
 
-        <div className="grid grid-cols-5 gap-1.5">
-          <select className="t8-select col-span-1 px-1 py-1.5 text-[10px]" value={mode} disabled={busy} onChange={(event) => update({ remotionMode: event.target.value, remotionSource: '' })}><option value="json">JSON DSL</option><option value="tsx">专家 TSX</option></select>
+        <div className="grid grid-cols-4 gap-1.5">
+          <select className="t8-select px-1 py-1.5 text-[10px]" value={quality} disabled={busy} onChange={(event) => {
+            const next = event.target.value as RemotionQuality;
+            update({ remotionQuality: next, ...(next === 'professional' ? { remotionMode: 'tsx', remotionSource: '' } : {}) });
+          }}><option value="professional">专业 Skill</option><option value="standard">标准</option></select>
+          <select className="t8-select px-1 py-1.5 text-[10px]" value={stylePreset} disabled={busy} onChange={(event) => update({ remotionStylePreset: event.target.value })}>{STYLE_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+          <select className="t8-select px-1 py-1.5 text-[10px]" value={mode} disabled={busy || quality === 'professional'} onChange={(event) => update({ remotionMode: event.target.value, remotionSource: '' })}><option value="json">JSON DSL</option><option value="tsx">专家 TSX</option></select>
           <select className="t8-select px-1 py-1.5 text-[10px]" value={profile.ratio} disabled={busy} onChange={(event) => update({ remotionRatio: event.target.value })}>{['16:9', '9:16', '1:1'].map((item) => <option key={item}>{item}</option>)}</select>
+        </div>
+        <div className="grid grid-cols-3 gap-1.5">
           <select className="t8-select px-1 py-1.5 text-[10px]" value={profile.resolution} disabled={busy} onChange={(event) => update({ remotionResolution: event.target.value })}>{['720p', '1080p'].map((item) => <option key={item}>{item}</option>)}</select>
           <select className="t8-select px-1 py-1.5 text-[10px]" value={profile.fps} disabled={busy} onChange={(event) => update({ remotionFps: Number(event.target.value) })}>{[24, 30, 60].map((item) => <option key={item} value={item}>{item}fps</option>)}</select>
           <input className="t8-input px-1 py-1.5 text-[10px]" type="number" min={1} max={60} value={profile.duration} disabled={busy} title="时长（秒）" onChange={(event) => update({ remotionDuration: Math.max(1, Math.min(60, Number(event.target.value) || 8)) })} />
         </div>
 
-        {mode === 'tsx' && <div className="flex items-start gap-1.5 rounded border border-amber-400/30 bg-amber-400/10 px-2 py-1.5 text-[10px] text-amber-200"><AlertTriangle size={13} className="mt-0.5 shrink-0" /><span>专家模式会编译受限 TSX。仅允许白名单 Remotion API，并在独立子进程中限时渲染。</span></div>}
+        {quality === 'professional' && <div className="flex items-start gap-1.5 rounded border border-amber-400/30 bg-amber-400/10 px-2 py-1.5 text-[10px] text-amber-200"><AlertTriangle size={13} className="mt-0.5 shrink-0" /><span>专业模式会生成创意方案、编译受限 TSX，并渲染关键帧进行最多两轮视觉审片。若模型不支持图片会自动降级为文本审查。</span></div>}
+
+        {plan && <details className="rounded border px-2 py-1.5 text-[10px]" style={{ borderColor: 'var(--t8-border)', color: 'var(--t8-text-muted)' }}><summary className="cursor-pointer">创意方案摘要</summary><div className="mt-1 whitespace-pre-wrap">{plan}</div></details>}
+        {reviews.length > 0 && <div className="flex flex-wrap gap-1">{reviews.map((review: any) => <span key={review.round} className={`rounded px-1.5 py-0.5 text-[10px] ${Number(review.score) >= 88 ? 'bg-emerald-400/15 text-emerald-300' : 'bg-amber-400/15 text-amber-200'}`}>第 {review.round} 轮 · {review.score} 分</span>)}</div>}
+        {warnings.length > 0 && <div className="whitespace-pre-wrap rounded border border-amber-400/25 bg-amber-400/10 px-2 py-1.5 text-[10px] text-amber-200">{warnings.join('\n')}</div>}
 
         <label className="block space-y-1 text-[10px]" style={{ color: 'var(--t8-text-muted)' }}><span className="flex items-center gap-1">{mode === 'tsx' ? <Code2 size={12} /> : <FileJson size={12} />} Remotion 描述</span><textarea className="t8-input min-h-48 w-full resize-y px-2 py-1.5 font-mono text-[10px] leading-relaxed" value={source} disabled={busy} placeholder={mode === 'tsx' ? '生成或粘贴受限 Remotion TSX...' : '生成或粘贴 t8-remotion/v1 JSON...'} onChange={(event) => update({ remotionSource: event.target.value, remotionPhase: 'edited' })} /></label>
 
@@ -353,7 +385,7 @@ function RemotionAnimationNode({ id, data, selected }: NodeProps) {
           {busy ? <button className="t8-btn px-2 py-1.5 text-[11px]" onClick={() => void cancel()}><Square size={13} />取消</button> : <button className="t8-btn t8-btn-primary px-2 py-1.5 text-[11px]" onClick={() => void invoke(generateAndRender)}><Sparkles size={13} />生成并渲染</button>}
         </div>
 
-        {busy && <div className="space-y-1"><div className="flex justify-between text-[10px]" style={{ color: 'var(--t8-text-muted)' }}><span>{phase === 'runtime-download' ? '首次下载 Remotion 浏览器运行时' : phase}</span><span>{progress}%</span></div><div className="h-1.5 overflow-hidden rounded bg-black/25"><div className="h-full bg-rose-400" style={{ width: `${progress}%` }} /></div></div>}
+        {busy && <div className="space-y-1"><div className="flex justify-between text-[10px]" style={{ color: 'var(--t8-text-muted)' }}><span>{PHASE_LABELS[phase] || phase}</span><span>{progress}%</span></div><div className="h-1.5 overflow-hidden rounded bg-black/25"><div className="h-full bg-rose-400" style={{ width: `${progress}%` }} /></div></div>}
         {error && <div className="whitespace-pre-wrap rounded border border-red-400/30 bg-red-400/10 px-2 py-1.5 text-[10px] text-red-300">{error}</div>}
         {videoUrl && <div className="space-y-1"><LoopingVideo src={videoUrl} controls className="max-h-64 w-full rounded bg-black object-contain" /><div className="truncate text-[10px]" style={{ color: 'var(--t8-text-muted)' }}>{String(d.fileName || videoUrl)}</div></div>}
       </div>

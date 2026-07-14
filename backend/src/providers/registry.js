@@ -1,6 +1,7 @@
 const DEFAULT_MODELSCOPE_BASE_URL = 'https://api-inference.modelscope.cn/v1';
 const DEFAULT_VOLCENGINE_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3';
 const DEFAULT_GEMINI_COMPATIBLE_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
+const DEFAULT_GITEE_FLUX_BASE_URL = 'https://ai.gitee.com/v1';
 const { isAllowedComfyuiUrl } = require('./comfyuiAccess');
 
 const DEFAULT_MODELSCOPE_IMAGE_MODELS = [
@@ -94,6 +95,10 @@ const DEFAULT_JIMENG_VIDEO_MODELS = [
   'jimeng-video-1080p',
 ];
 
+const DEFAULT_GITEE_FLUX_IMAGE_MODELS = [
+  'flux-1-schnell',
+];
+
 const SUPPORTED_PROTOCOLS = new Set([
   'openai-compatible',
   'gemini-compatible',
@@ -101,12 +106,24 @@ const SUPPORTED_PROTOCOLS = new Set([
   'volcengine',
   'comfyui',
   'jimeng-cli',
+  'gitee-flux',
 ]);
 
 const PROVIDER_ID_RE = /^[a-z0-9][a-z0-9_-]{1,47}$/;
 const CONTROL_CHAR_RE = /[\x00-\x1f\x7f]/;
 
 const DEFAULT_ADVANCED_PROVIDERS = [
+  {
+    id: 'gitee-flux',
+    label: 'Gitee Flux',
+    protocol: 'gitee-flux',
+    baseUrl: DEFAULT_GITEE_FLUX_BASE_URL,
+    enabled: false,
+    imageModels: DEFAULT_GITEE_FLUX_IMAGE_MODELS,
+    videoModels: [],
+    chatModels: [],
+    defaults: { imageModel: DEFAULT_GITEE_FLUX_IMAGE_MODELS[0], responseFormat: 'url' },
+  },
   {
     id: 'openai-compatible',
     label: 'OpenAI',
@@ -613,6 +630,8 @@ module.exports = {
   DEFAULT_GEMINI_IMAGE_MODELS,
   DEFAULT_GEMINI_VIDEO_MODELS,
   DEFAULT_GEMINI_COMPATIBLE_BASE_URL,
+  DEFAULT_GITEE_FLUX_BASE_URL,
+  DEFAULT_GITEE_FLUX_IMAGE_MODELS,
   DEFAULT_VOLCENGINE_CHAT_MODELS,
   DEFAULT_VOLCENGINE_IMAGE_MODELS,
   DEFAULT_VOLCENGINE_VIDEO_MODELS,

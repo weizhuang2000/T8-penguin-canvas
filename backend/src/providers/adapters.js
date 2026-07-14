@@ -4,6 +4,7 @@ const modelscope = require('./modelscope');
 const volcengine = require('./volcengine');
 const comfyui = require('./comfyui');
 const jimengCli = require('./jimengCli');
+const giteeFlux = require('./giteeFlux');
 
 const ADAPTERS = {
   'openai-compatible': openaiCompatible,
@@ -12,6 +13,7 @@ const ADAPTERS = {
   volcengine,
   comfyui,
   'jimeng-cli': jimengCli,
+  'gitee-flux': giteeFlux,
 };
 
 function getAdapterForProtocol(protocol) {

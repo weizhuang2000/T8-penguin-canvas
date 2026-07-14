@@ -188,6 +188,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   // Core (8)
   text: TextNode,
   image: ImageNode,
+  'flux-image': ImageNode,
   video: VideoNode,
   'runninghub-video': VideoNode,
   seedance: SeedanceNode, // 完全对齐 gpt-image-2-web Seedance2.0(独立 /seedance/v3 路径)
@@ -1483,7 +1484,10 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
   },
   'remotion-animation': {
     llmKeyId: '',
-    remotionMode: 'json',
+    remotionReviewLlmKeyId: '',
+    remotionQuality: 'professional',
+    remotionStylePreset: 'auto',
+    remotionMode: 'tsx',
     remotionSubject: '',
     remotionSource: '',
     remotionRatio: '16:9',
@@ -1623,6 +1627,16 @@ function initialDataForNodeType(
   advancedProviders: AdvancedProviderConfig[] | undefined,
 ): Record<string, any> {
   const base = { ...(INITIAL_DATA[type] || {}) };
+  if (type === 'flux-image') {
+    return {
+      ...base,
+      model: 'flux-1-schnell',
+      providerSource: 'gitee-flux',
+      providerId: 'gitee-flux',
+      providerModel: 'flux-1-schnell',
+      providerParams: { n: 1 },
+    };
+  }
   if (!EXHIBITION_IMAGE_PROVIDER_NODE_TYPES.has(type)) return base;
   return {
     ...base,
