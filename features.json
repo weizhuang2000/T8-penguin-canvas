@@ -6,6 +6,7 @@
     "capabilities": [
       "通过 Gitee AI Serverless API 的 /v1/async/music/generations 调用 ACE-Step-v1-3.5B",
       "支持英文音乐风格提示词、结构化歌词、30-240 秒时长、中文说唱 LoRA、随机种子和高级推理参数",
+      "节点内可选择已配置的 LLM，按音乐主题一键生成英文风格提示词和保持原语言的结构化歌词",
       "异步轮询 /v1/task/{task_id}，完成后把远程音频保存到本地 output 目录",
       "接收上游文本并输出 audioUrl/audioUrls，接入批量运行、自动输出素材和生成历史"
     ],

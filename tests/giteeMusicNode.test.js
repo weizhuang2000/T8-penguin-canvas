@@ -33,3 +33,17 @@ test('ACE-Step node calls backend proxy with official async music parameters', (
   assert.match(provider, /task:\s*'text2music'/);
   assert.match(provider, /\/task\/\$\{encodeURIComponent\(id\)\}/);
 });
+
+test('ACE-Step node uses configured LLM to create English style prompt and untranslated structured lyrics', () => {
+  const node = read('src/components/nodes/GiteeMusicNode.tsx');
+
+  assert.match(node, /generateLlm\(\{/);
+  assert.match(node, /创意 LLM 模型/);
+  assert.match(node, /音乐主题与风格要求/);
+  assert.match(node, /stylePrompt 必须只使用英文/);
+  assert.match(node, /绝对不要为了 stylePrompt 而把歌词翻译成英文/);
+  assert.match(node, /prompt:\s*creative\.stylePrompt/);
+  assert.match(node, /lyrics:\s*creative\.lyrics/);
+  assert.match(node, /promptTemplateKind=\{false\}/);
+  assert.doesNotMatch(node, /promptTemplateKind="video"/);
+});

@@ -1,12 +1,14 @@
 import { memo, useMemo, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { AlertCircle, ChevronDown, ChevronUp, Loader2, Music2, Sparkles } from 'lucide-react';
-import { generateExternalMusic } from '../../services/generation';
+import { generateExternalMusic, generateLlm } from '../../services/generation';
+import { DEFAULT_LLM_MODEL } from '../../providers/models';
 import { PORT_COLOR } from '../../config/portTypes';
 import { useThemeStore } from '../../stores/theme';
 import { useCanvasStore } from '../../stores/canvas';
 import { logBus } from '../../stores/logs';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
+import { useApiKeysStore } from '../../stores/apiKeys';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useUpstreamMaterials } from './useUpstreamMaterials';
@@ -25,9 +27,33 @@ function clamp(value: unknown, fallback: number, min: number, max: number): numb
 
 const inputClass = 'w-full rounded bg-white/5 border border-white/10 px-2 py-1 text-xs text-white outline-none focus:border-violet-300/60 placeholder:text-white/30';
 
+function parseCreativeResponse(content: string): { stylePrompt: string; lyrics: string } {
+  const clean = String(content || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  const start = clean.indexOf('{');
+  const end = clean.lastIndexOf('}');
+  if (start >= 0 && end > start) {
+    try {
+      const parsed = JSON.parse(clean.slice(start, end + 1));
+      const stylePrompt = String(parsed?.stylePrompt || parsed?.style_prompt || '').trim();
+      const lyrics = String(parsed?.lyrics || '').trim();
+      if (stylePrompt && lyrics) return { stylePrompt, lyrics };
+    } catch {
+      // 继续尝试纯文本兜底格式。
+    }
+  }
+  const styleMatch = clean.match(/(?:STYLE_PROMPT|STYLE PROMPT|英文风格提示词)\s*[:：]\s*([\s\S]*?)(?=\n\s*(?:LYRICS|歌词)\s*[:：]|$)/i);
+  const lyricsMatch = clean.match(/(?:LYRICS|歌词)\s*[:：]\s*([\s\S]*)$/i);
+  const stylePrompt = String(styleMatch?.[1] || '').trim();
+  const lyrics = String(lyricsMatch?.[1] || '').trim();
+  if (!stylePrompt || !lyrics) throw new Error('LLM 未返回有效的英文风格提示词和结构化歌词。');
+  return { stylePrompt, lyrics };
+}
+
 const GiteeMusicNode = ({ id, data, selected }: NodeProps) => {
   const update = useUpdateNodeData(id);
   const activeCanvasId = useCanvasStore((state) => state.activeId);
+  const configuredLlmModel = useApiKeysStore((state) => state.settings.llmModel)?.trim() || DEFAULT_LLM_MODEL;
+  const llmConfigs = useApiKeysStore((state) => state.settings.llmConfigs || state.settings.llmApiKeys) || [];
   const { theme, style: themeStyle } = useThemeStore();
   const isDark = theme === 'dark';
   const isPixel = themeStyle === 'pixel';
@@ -37,10 +63,12 @@ const GiteeMusicNode = ({ id, data, selected }: NodeProps) => {
   const orderedTexts = useOrderedMaterials(upstream.texts, materialOrder);
   const [error, setError] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [creativeBusy, setCreativeBusy] = useState(false);
   const src = `gitee-music:${id.slice(0, 6)}`;
 
   const prompt = typeof d.prompt === 'string' ? d.prompt : '';
   const lyrics = typeof d.lyrics === 'string' ? d.lyrics : '';
+  const musicTheme = typeof d.musicTheme === 'string' ? d.musicTheme : '';
   const promptMentions: MediaMention[] = Array.isArray(d.promptMentions) ? d.promptMentions : [];
   const status: 'idle' | 'generating' | 'success' | 'error' = d.status || 'idle';
   const busy = status === 'generating';
@@ -52,8 +80,69 @@ const GiteeMusicNode = ({ id, data, selected }: NodeProps) => {
   const schedulerType = d.schedulerType === 'heun' ? 'heun' : 'euler';
   const cfgType = ['cfg', 'apg', 'cfg_star'].includes(d.cfgType) ? d.cfgType : 'apg';
 
+  const llmConfigOptions = useMemo(() => {
+    const saved = llmConfigs.filter((item) => item && (item.hasApiKey || item.apiKey || item.baseUrl || item.model));
+    return saved.length > 0 ? saved : [{ id: 'default', label: '默认 LLM', model: configuredLlmModel, isDefault: true }];
+  }, [configuredLlmModel, llmConfigs]);
+  const selectedLlmKeyId = String(d.llmKeyId || '').trim();
+  const activeLlmConfig = llmConfigOptions.find((item) => item.id === selectedLlmKeyId)
+    || llmConfigOptions.find((item) => item.isDefault)
+    || llmConfigOptions[0];
+  const activeLlmModel = String(activeLlmConfig?.model || configuredLlmModel).trim() || DEFAULT_LLM_MODEL;
+
   const mentionMaterials = useMemo(() => [], []);
   const finalPrompt = orderedTexts.map((item) => item.url).filter(Boolean).join('\n').trim() || prompt.trim();
+
+  const handleCreative = async () => {
+    const themeRequirement = musicTheme.trim();
+    if (!themeRequirement) {
+      setError('请先填写音乐主题与风格要求。');
+      return;
+    }
+    setError(null);
+    setCreativeBusy(true);
+    try {
+      logBus.info(`调用 ${activeLlmModel} 生成音乐创意`, src);
+      const response = await generateLlm({
+        model: activeLlmModel,
+        llmKeyId: activeLlmConfig?.id && activeLlmConfig.id !== 'default' ? activeLlmConfig.id : undefined,
+        temperature: 0.8,
+        max_tokens: 4096,
+        messages: [
+          {
+            role: 'system',
+            content: [
+              '你是专业音乐制作人、编曲师和歌词作者，负责为 ACE-Step 音乐生成模型准备输入。',
+              '只输出一个合法 JSON 对象，不要 Markdown、解释或代码块。JSON 必须是：{"stylePrompt":"...","lyrics":"..."}。',
+              'stylePrompt 必须只使用英文，写成逗号分隔的音乐标签与简短描述，涵盖流派、乐器、BPM、情绪、人声类型和制作质感；不要包含歌词。',
+              'lyrics 必须使用 [Verse]、[Chorus]、[Bridge]、[Outro] 等结构标签。歌词保持用户要求的语言；用户未指定语言时，跟随主题文本的主要语言，绝对不要为了 stylePrompt 而把歌词翻译成英文。',
+              '若用户要求纯音乐，lyrics 只返回 [Instrumental]。',
+            ].join('\n'),
+          },
+          {
+            role: 'user',
+            content: `请根据以下音乐主题与风格要求生成英文风格提示词和结构化歌词：\n\n${themeRequirement}`,
+          },
+        ],
+      });
+      const creative = parseCreativeResponse(response.content);
+      update({
+        prompt: creative.stylePrompt,
+        promptMentions: [],
+        lyrics: creative.lyrics,
+        llmKeyId: activeLlmConfig?.id || '',
+        llmModel: activeLlmModel,
+        lastCreativeTheme: themeRequirement,
+      });
+      logBus.success('音乐创意已写入英文风格提示词与歌词', src);
+    } catch (caught: any) {
+      const message = caught?.message || 'LLM 音乐创意生成失败';
+      setError(message);
+      logBus.error(message, src);
+    } finally {
+      setCreativeBusy(false);
+    }
+  };
 
   const handleGenerate = async () => {
     setError(null);
@@ -158,6 +247,48 @@ const GiteeMusicNode = ({ id, data, selected }: NodeProps) => {
           />
         )}
 
+        <div className="space-y-2 rounded border border-violet-300/20 bg-violet-400/[0.06] p-2">
+          <label className="block space-y-1">
+            <span className="text-[10px] text-white/55">创意 LLM 模型</span>
+            <select
+              value={activeLlmConfig?.id || 'default'}
+              disabled={busy || creativeBusy}
+              onChange={(event) => {
+                const next = llmConfigOptions.find((item) => item.id === event.target.value);
+                update({ llmKeyId: event.target.value, llmModel: next?.model || configuredLlmModel });
+              }}
+              className={inputClass}
+            >
+              {llmConfigOptions.map((item) => (
+                <option key={item.id} value={item.id} className="bg-zinc-900">
+                  {item.label || item.id}{item.model ? ` · ${item.model}` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block space-y-1">
+            <span className="text-[10px] text-white/55">音乐主题与风格要求</span>
+            <textarea
+              value={musicTheme}
+              disabled={busy || creativeBusy}
+              onChange={(event) => update({ musicTheme: event.target.value })}
+              placeholder="例如：一首关于夏夜海边重逢的中文流行歌，女声，温暖但略带遗憾，副歌要有记忆点"
+              rows={4}
+              className={`${inputClass} nodrag resize-y leading-relaxed`}
+            />
+          </label>
+          <button
+            type="button"
+            disabled={busy || creativeBusy || !musicTheme.trim()}
+            onClick={() => void handleCreative()}
+            className="flex w-full items-center justify-center gap-2 rounded bg-fuchsia-500/90 px-3 py-1.5 text-xs font-semibold text-white hover:bg-fuchsia-400 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {creativeBusy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+            {creativeBusy ? '创意生成中' : '创意'}
+          </button>
+          <div className="text-[10px] leading-relaxed text-white/40">风格要求会整理为英文；歌词保持主题所要求的语言，并写成结构化歌词。</div>
+        </div>
+
         <label className="block space-y-1">
           <span className="text-[10px] text-white/55">音乐风格提示词（仅英文）</span>
           <MentionPromptInput
@@ -169,7 +300,7 @@ const GiteeMusicNode = ({ id, data, selected }: NodeProps) => {
             placeholder="pop, synth, drums, 120 bpm, upbeat, female vocals"
             isDark={isDark}
             isPixel={isPixel}
-            promptTemplateKind="video"
+            promptTemplateKind={false}
             className={`${inputClass} min-h-[72px]`}
           />
           {orderedTexts.length > 0 && <span className="block text-[10px] text-amber-200/80">运行时优先使用上游文本。</span>}
@@ -233,7 +364,7 @@ const GiteeMusicNode = ({ id, data, selected }: NodeProps) => {
 
         <button
           type="button"
-          disabled={busy}
+          disabled={busy || creativeBusy}
           onClick={() => void handleGenerate().catch(() => undefined)}
           className="flex w-full items-center justify-center gap-2 rounded-lg bg-violet-500 px-3 py-2 text-xs font-semibold text-white shadow-lg shadow-violet-500/20 hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-55"
         >
