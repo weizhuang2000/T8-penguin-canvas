@@ -98,6 +98,17 @@ test('tool permissions expose Flux image node and migrate it into saved defaults
   assert.equal(permissions.canUseNode({ id: 'u2', role: 'designer' }, 'flux-image'), true);
 }));
 
+test('tool permissions expose ACE-Step music node and migrate it into saved defaults', () => withTempData(() => {
+  const oldDefaults = permissions.DEFAULT_VISIBLE_NODE_TYPES.filter((type) => type !== 'gitee-music');
+  permissions.writeDb({ defaultVisibleNodeTypes: oldDefaults, roleRules: {}, userRules: {} });
+
+  const resolved = permissions.resolveToolPermissions({ id: 'u2', role: 'designer' });
+  assert.equal(permissions.ALL_NODE_TYPES.includes('gitee-music'), true);
+  assert.equal(permissions.DEFAULT_VISIBLE_NODE_TYPES.includes('gitee-music'), true);
+  assert.equal(resolved.visibleNodeTypes.includes('gitee-music'), true);
+  assert.equal(permissions.canUseNode({ id: 'u2', role: 'designer' }, 'gitee-music'), true);
+}));
+
 test('tool permissions keep exhibition text-image loop grants when saved from user management', () => withTempData(() => {
   permissions.writeDb({
     defaultVisibleNodeTypes: ['text'],

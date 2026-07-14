@@ -1,4 +1,19 @@
 {
+  "giteeAceStepMusic": {
+    "status": "implemented",
+    "nodeType": "gitee-music",
+    "label": "ACE-Step 音乐",
+    "capabilities": [
+      "通过 Gitee AI Serverless API 的 /v1/async/music/generations 调用 ACE-Step-v1-3.5B",
+      "支持英文音乐风格提示词、结构化歌词、30-240 秒时长、中文说唱 LoRA、随机种子和高级推理参数",
+      "异步轮询 /v1/task/{task_id}，完成后把远程音频保存到本地 output 目录",
+      "接收上游文本并输出 audioUrl/audioUrls，接入批量运行、自动输出素材和生成历史"
+    ],
+    "verification": [
+      "node --test tests/giteeFluxProvider.test.cjs tests/giteeMusicNode.test.js tests/toolPermissions.test.js",
+      "npm run type-check"
+    ]
+  },
   "remotionAnimation": {
     "status": "implemented",
     "nodeType": "remotion-animation",

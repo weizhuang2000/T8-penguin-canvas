@@ -108,6 +108,7 @@ import VideoNode from './nodes/VideoNode';
 import SeedanceNode from './nodes/SeedanceNode';
 import DirectorStoryboardNode from './nodes/DirectorStoryboardNode';
 import AudioNode from './nodes/AudioNode';
+import GiteeMusicNode from './nodes/GiteeMusicNode';
 import RunningHubNode from './nodes/RunningHubNode';
 import RhConfigNode from './nodes/RhConfigNode';
 import RHToolsNode from './nodes/RHToolsNode';
@@ -194,6 +195,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   seedance: SeedanceNode, // 完全对齐 gpt-image-2-web Seedance2.0(独立 /seedance/v3 路径)
   'director-storyboard': DirectorStoryboardNode,
   audio: AudioNode,
+  'gitee-music': GiteeMusicNode,
   llm: LLMNode,
   'remotion-animation': RemotionAnimationNode,
   runninghub: RunningHubNode,
@@ -1474,6 +1476,26 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
   },
   'penguin-portrait': { preset: 'penguin-portrait' },
   audio: { mode: 'generate', version: 'v5.5', title: '', tags: '', seed: 0, continueAt: 28 },
+  'gitee-music': {
+    providerSource: 'gitee-flux',
+    providerId: 'gitee-flux',
+    providerModel: 'ACE-Step-v1-3.5B',
+    prompt: '',
+    lyrics: '',
+    duration: 60,
+    seed: 0,
+    loraName: 'None',
+    inferSteps: 60,
+    guidanceScale: 15,
+    minGuidanceScale: 3,
+    schedulerType: 'euler',
+    cfgType: 'apg',
+    omegaScale: 10,
+    guidanceInterval: 0.5,
+    useErgTag: true,
+    useErgLyric: true,
+    useErgDiffusion: true,
+  },
   llm: {
     system: '',
     prompt: '',
@@ -1635,6 +1657,8 @@ function initialDataForNodeType(
       providerId: 'gitee-flux',
       providerModel: 'flux-1-schnell',
       providerParams: { n: 1 },
+      aspectRatio: '1:1',
+      sizeLevel: '1K',
     };
   }
   if (!EXHIBITION_IMAGE_PROVIDER_NODE_TYPES.has(type)) return base;

@@ -83,6 +83,11 @@ const IMAGE_POLL_TIMEOUT_SECONDS = 3600;
 const minPollCountForTimeout = (intervalMs: number) =>
   Math.ceil((IMAGE_POLL_TIMEOUT_SECONDS * 1000) / Math.max(1, intervalMs));
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
+const GITEE_FLUX_SIZE_BY_LEVEL: Record<string, string> = {
+  '1K': '1024x1024',
+  '1.5K': '1536x1536',
+  '2K': '2048x2048',
+};
 const COMFY_NUMERIC_FIELD_SOURCES = new Set([
   'width',
   'height',
@@ -183,6 +188,10 @@ const ImageNode = ({ id, data, selected, type }: NodeProps) => {
         id: 'flux-1-schnell',
         label: 'Flux 1 Schnell',
         description: 'Gitee AI Serverless Flux 文生图',
+        aspectRatios: ['1:1'],
+        defaultAspectRatio: '1:1',
+        sizes: Object.keys(GITEE_FLUX_SIZE_BY_LEVEL),
+        defaultSize: '1K',
       };
     }
     return IMAGE_MODELS[0];
@@ -382,8 +391,16 @@ const ImageNode = ({ id, data, selected, type }: NodeProps) => {
     },
   });
 
-  const aspectRatio = d?.aspectRatio || modelDef.defaultAspectRatio;
-  const sizeLevel = d?.sizeLevel || modelDef.defaultSize;
+  const aspectRatio = isFluxNode ? '1:1' : (d?.aspectRatio || modelDef.defaultAspectRatio);
+  const savedSizeLevel = String(d?.sizeLevel || modelDef.defaultSize);
+  const sizeLevel = isFluxNode && !GITEE_FLUX_SIZE_BY_LEVEL[savedSizeLevel] ? '1K' : savedSizeLevel;
+  useEffect(() => {
+    if (!isFluxNode) return;
+    const patch: Record<string, string> = {};
+    if (d?.aspectRatio !== '1:1') patch.aspectRatio = '1:1';
+    if (!GITEE_FLUX_SIZE_BY_LEVEL[String(d?.sizeLevel || '')]) patch.sizeLevel = '1K';
+    if (Object.keys(patch).length) update(patch);
+  }, [d?.aspectRatio, d?.sizeLevel, isFluxNode, update]);
   // 子模型变体(对齐 gpt-image-2-web 的 g_model/n_model)
   const savedApiModel = typeof d?.apiModel === 'string' ? d.apiModel : '';
   const apiModel = modelDef.apiModelOptions.some((opt) => opt.value === savedApiModel)
@@ -626,7 +643,9 @@ const ImageNode = ({ id, data, selected, type }: NodeProps) => {
       if (isExternalSelected && providerSelection.provider) {
         const providerModel = externalProviderModel;
         if (!providerModel) throw new Error('扩展平台未配置可用图像模型');
-        let size = externalImageSizeFor(aspectRatio, sizeLevel);
+        let size = isFluxNode
+          ? (GITEE_FLUX_SIZE_BY_LEVEL[sizeLevel] || GITEE_FLUX_SIZE_BY_LEVEL['1K'])
+          : externalImageSizeFor(aspectRatio, sizeLevel);
         if (isComfyExternal && comfyWorkflow) {
           const width = comfyNumberForSource('width', 1024);
           const height = comfyNumberForSource('height', 1024);

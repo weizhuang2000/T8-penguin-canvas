@@ -48,6 +48,7 @@ export const NODE_DEFAULT_SIZE: Record<string, { w: number; h: number }> = {
   seedance: { w: 320, h: 380 },
   'director-storyboard': { w: 460, h: 760 },
   audio: { w: 320, h: 380 },
+  'gitee-music': { w: 360, h: 660 },
   llm: { w: 320, h: 360 },
   'remotion-animation': { w: 520, h: 820 },
   runninghub: { w: 360, h: 460 },

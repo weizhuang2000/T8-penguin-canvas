@@ -90,9 +90,24 @@ async function generateVideoWithProvider(provider, input = {}, options = {}) {
   return adapter.generateVideo(provider, input, options);
 }
 
+async function generateMusicWithProvider(provider, input = {}, options = {}) {
+  const adapter = getAdapterForProtocol(provider?.protocol);
+  if (!adapter?.generateMusic) {
+    return {
+      ok: false,
+      code: 'unsupported_music_generation',
+      providerId: provider?.id || '',
+      protocol: provider?.protocol || '',
+      error: '该扩展平台暂不支持音乐生成。',
+    };
+  }
+  return adapter.generateMusic(provider, input, options);
+}
+
 module.exports = {
   generateChatWithProvider,
   generateImageWithProvider,
+  generateMusicWithProvider,
   generateVideoWithProvider,
   getAdapterForProtocol,
   queryImageTaskWithProvider,

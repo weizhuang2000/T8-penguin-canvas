@@ -9,6 +9,7 @@ export type NodeType =
   | 'text'
   | 'image'
   | 'flux-image'
+  | 'gitee-music'
   | 'video'
   | 'runninghub-video'
   | 'seedance'

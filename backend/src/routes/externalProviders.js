@@ -9,6 +9,7 @@ const { writeImageOutput } = require('../utils/imageOutput');
 const {
   generateChatWithProvider,
   generateImageWithProvider,
+  generateMusicWithProvider,
   generateVideoWithProvider,
   queryImageTaskWithProvider,
   testProviderConnection,
@@ -146,6 +147,15 @@ async function saveVideoOutputs(urls, options = {}) {
   const out = [];
   for (const url of Array.isArray(urls) ? urls : []) {
     const saved = await saveOneMediaOutput(url, 'video', options);
+    if (saved) out.push(saved);
+  }
+  return out;
+}
+
+async function saveAudioOutputs(urls, options = {}) {
+  const out = [];
+  for (const url of Array.isArray(urls) ? urls : []) {
+    const saved = await saveOneMediaOutput(url, 'audio', options);
     if (saved) out.push(saved);
   }
   return out;
@@ -565,6 +575,41 @@ router.post('/video', async (req, res) => {
     return res.status(500).json({
       success: false,
       code: 'external_video_failed',
+      error: e?.message || String(e),
+    });
+  }
+});
+
+router.post('/music', async (req, res) => {
+  try {
+    const settings = settingsRouter.loadSettings({ persistMigrations: false });
+    const currentProviders = normalizeAdvancedProviders(settings.advancedProviders);
+    const resolved = resolveRunnableProvider(req.body || {}, currentProviders);
+    if (!resolved.ok) {
+      return res.json({
+        success: false,
+        code: resolved.code,
+        error: resolved.error,
+        data: resolved.provider ? { provider: safeProviderForResponse(resolved.provider) } : undefined,
+      });
+    }
+    const result = await generateMusicWithProvider(resolved.provider, req.body || {}, {
+      timeoutMs: generationTimeoutMs(req.body?.timeoutMs),
+      baseUrl: `http://127.0.0.1:${config.PORT}`,
+    });
+    if (!result.ok) return resultResponse(res, result, resolved.provider);
+    const remoteAudioUrls = Array.isArray(result.audioUrls) ? result.audioUrls : [];
+    const audioUrls = await saveAudioOutputs(remoteAudioUrls);
+    rememberExternalOutputs(req, audioUrls, 'audio', resolved.provider, { taskId: result.taskId });
+    return resultResponse(res, result, resolved.provider, {
+      remoteAudioUrls,
+      audioUrls,
+      audioUrl: audioUrls[0] || '',
+    });
+  } catch (e) {
+    return res.status(500).json({
+      success: false,
+      code: 'external_music_failed',
       error: e?.message || String(e),
     });
   }

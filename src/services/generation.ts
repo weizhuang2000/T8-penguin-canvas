@@ -165,6 +165,66 @@ export async function queryExternalImageStatus(req: QueryExternalImageStatusRequ
   };
 }
 
+export interface GenerateExternalMusicRequest {
+  providerId: string;
+  providerModel?: string;
+  model?: string;
+  prompt?: string;
+  lyrics?: string;
+  duration?: number;
+  reference_audio_strength?: number;
+  lora_name?: 'None' | 'ACE-Step-v1-chinese-rap-LoRA';
+  infer_steps?: number;
+  guidance_scale?: number;
+  guidance_scale_text?: number;
+  guidance_scale_lyric?: number;
+  scheduler_type?: 'euler' | 'heun';
+  cfg_type?: 'cfg' | 'apg' | 'cfg_star';
+  seeds?: number[];
+  omega_scale?: number;
+  guidance_interval?: number;
+  guidance_interval_decay?: number;
+  min_guidance_scale?: number;
+  use_erg_tag?: boolean;
+  use_erg_lyric?: boolean;
+  use_erg_diffusion?: boolean;
+  timeoutMs?: number;
+  historyContext?: GenerationHistoryContext;
+}
+
+export interface GenerateExternalMusicResult {
+  audioUrl: string;
+  audioUrls: string[];
+  remoteAudioUrls?: string[];
+  taskId?: string;
+  status?: string;
+  code?: string;
+  raw?: any;
+  provider?: any;
+}
+
+export async function generateExternalMusic(req: GenerateExternalMusicRequest): Promise<GenerateExternalMusicResult> {
+  const r = await fetch('/api/proxy/external/music', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  const data = await parseJsonResponse(r);
+  if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
+  const payload = data.data || {};
+  const audioUrls = Array.isArray(payload.audioUrls) ? payload.audioUrls : [];
+  return {
+    audioUrl: typeof payload.audioUrl === 'string' ? payload.audioUrl : (audioUrls[0] || ''),
+    audioUrls,
+    remoteAudioUrls: Array.isArray(payload.remoteAudioUrls) ? payload.remoteAudioUrls : undefined,
+    taskId: payload.taskId,
+    status: payload.status || data.code,
+    code: data.code || payload.code,
+    raw: payload.raw,
+    provider: payload.provider,
+  };
+}
+
 export interface GenerateExternalVideoRequest {
   providerId: string;
   providerModel?: string;

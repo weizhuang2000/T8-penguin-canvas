@@ -23,6 +23,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: 'text', label: '文本', category: 'core', description: '提示词文本节点', icon: 'Type', color: 'sky' },
   { type: 'image', label: '图像', category: 'core', description: 'GPT Image 2 / Nano Banana Pro / Nano Banana 2 (多 TAB 模型切换)', icon: 'Image', color: 'amber' },
   { type: 'flux-image', label: 'Flux 生图', category: 'core', description: '通过 Gitee AI Serverless API 调用 flux-1-schnell 异步文生图', icon: 'Sparkles', color: 'violet' },
+  { type: 'gitee-music', label: 'ACE-Step 音乐', category: 'core', description: '通过 Gitee AI Serverless API 调用 ACE-Step-v1-3.5B 生成 30–240 秒音乐', icon: 'Music2', color: 'violet' },
   { type: 'video', label: '视频', category: 'core', description: 'Veo / Grok Video', icon: 'Video', color: 'rose' },
   { type: 'seedance', label: 'SD2.0', category: 'core', description: 'Seedance 2.0 视频分镜', icon: 'Film', color: 'fuchsia' },
   { type: 'director-storyboard', label: '导演分镜台', category: 'core', description: '秒级长片分镜台：多镜头提示词、参考素材和 Seedance2.0 无限并发生成', icon: 'Clapperboard', color: 'fuchsia' },
