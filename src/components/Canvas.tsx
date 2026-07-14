@@ -103,6 +103,7 @@ import PlaceholderNode from './nodes/PlaceholderNode';
 import TextNode from './nodes/TextNode';
 import ImageNode from './nodes/ImageNode';
 import LLMNode from './nodes/LLMNode';
+import RemotionAnimationNode from './nodes/RemotionAnimationNode';
 import VideoNode from './nodes/VideoNode';
 import SeedanceNode from './nodes/SeedanceNode';
 import DirectorStoryboardNode from './nodes/DirectorStoryboardNode';
@@ -193,6 +194,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'director-storyboard': DirectorStoryboardNode,
   audio: AudioNode,
   llm: LLMNode,
+  'remotion-animation': RemotionAnimationNode,
   runninghub: RunningHubNode,
   // RH 钱包应用：复用 RunningHubNode。v1.2.9.16 起与普通 RunningHub 节点统一使用 settings.rhApiKey
   'runninghub-wallet': RunningHubNode,
@@ -1465,6 +1467,24 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     stream: true,
     history: [],
   },
+  'remotion-animation': {
+    model: 'gemini-3.5-flash',
+    providerSource: 'zhenzhen',
+    providerId: '',
+    providerModel: '',
+    providerParams: {},
+    remotionMode: 'json',
+    remotionSubject: '',
+    remotionSource: '',
+    remotionRatio: '16:9',
+    remotionResolution: '1080p',
+    remotionFps: 30,
+    remotionDuration: 8,
+    remotionMaterialOrder: [],
+    remotionExcludedMaterialIds: [],
+    remotionPhase: 'idle',
+    remotionProgress: 0,
+  },
   upload: { uploadType: null },
   'model-3d-upload': { uploadType: 'model3d', lockedUploadType: 'model3d' },
   'model-3d-preview': { modelPreviewAutoRotate: true },
@@ -1675,7 +1695,7 @@ function filterExclusiveTargetEdges(
 const EXECUTABLE_NODE_TYPES = new Set<string>([
   'image', 'edit',
   'multi-angle-3d', 'panorama-720', 'penguin-portrait',
-  'video', 'runninghub-video', 'seedance', 'audio', 'llm', 'runninghub', 'runninghub-wallet',
+  'video', 'runninghub-video', 'seedance', 'audio', 'llm', 'remotion-animation', 'runninghub', 'runninghub-wallet',
   // v1.2.10.1: rh-tools 与 RunningHub 同质，同样可被批量运行调起
   'rh-tools', 'rh-toolbox',
   'resize', 'upscale', 'grid-crop', 'mark', 'remove-bg', 'combine', 'image-compare', 'drawing-board',

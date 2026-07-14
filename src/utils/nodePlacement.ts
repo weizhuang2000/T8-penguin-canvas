@@ -49,6 +49,7 @@ export const NODE_DEFAULT_SIZE: Record<string, { w: number; h: number }> = {
   'director-storyboard': { w: 460, h: 760 },
   audio: { w: 320, h: 380 },
   llm: { w: 320, h: 360 },
+  'remotion-animation': { w: 520, h: 820 },
   runninghub: { w: 360, h: 460 },
   'runninghub-wallet': { w: 360, h: 460 },
   'rh-tools': { w: 360, h: 460 },

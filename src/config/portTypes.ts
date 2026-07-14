@@ -64,6 +64,7 @@ export const NODE_PORTS: Record<string, NodePorts> = {
   'director-storyboard': { inputs: ['text', 'image', 'video', 'audio'], outputs: ['video', 'text'] },
   audio: { inputs: ['text', 'audio'], outputs: ['audio'] },
   llm: { inputs: ['text', 'image', 'video'], outputs: ['text'] },
+  'remotion-animation': { inputs: ['text', 'image', 'video', 'audio'], outputs: ['video'] },
 
   // ========== RH ==========
   runninghub: { inputs: ['text', 'image', 'video', 'audio', 'config'], outputs: ['image', 'video'] },

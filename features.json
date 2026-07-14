@@ -1,4 +1,20 @@
 {
+  "remotionAnimation": {
+    "status": "implemented",
+    "nodeType": "remotion-animation",
+    "label": "Remotion 动画",
+    "capabilities": [
+      "选择内置或高级 LLM Provider 生成可编辑 JSON DSL / 受限专家 TSX",
+      "接收上游文本、图像、视频和音频并按素材 ID 编排",
+      "本地异步队列渲染 H.264 MP4，支持首次下载浏览器运行时、进度和取消",
+      "输出 videoUrl 并接入批量运行、循环器、输出节点和生成历史"
+    ],
+    "verification": [
+      "node --test tests/remotionAnimation.test.js",
+      "npm run type-check",
+      "npm run build"
+    ]
+  },
   "$schema": "本文件为 T8-penguin-canvas 节点清单防丢失锁,任何节点删减都需要在 roadmap.md 中说明并更新本文件。",
   "version": "2.2.7",
   "reverseIsometricDesign": {
