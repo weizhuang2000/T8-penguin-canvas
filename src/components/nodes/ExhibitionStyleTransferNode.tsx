@@ -182,7 +182,7 @@ function buildMentionMaterials(originalImage: string, styleReferenceImage: strin
       origin: 'upstream',
       label: '原始图像',
       mentionKey: 'exhibition-style-transfer:original-image',
-      mentionToken: '@图片1',
+      mentionToken: '@img1',
     } as Material & { mentionKey: string; mentionToken: string });
   }
   if (mode === 'style-reference' && styleReferenceImage) {
@@ -194,7 +194,7 @@ function buildMentionMaterials(originalImage: string, styleReferenceImage: strin
       origin: 'upstream',
       label: '设计风格参考图',
       mentionKey: 'exhibition-style-transfer:style-reference',
-      mentionToken: '@图片2',
+      mentionToken: '@img2',
     } as Material & { mentionKey: string; mentionToken: string });
   }
   return items;
