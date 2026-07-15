@@ -20,6 +20,26 @@ const router = express.Router();
 const EXTERNAL_GENERATION_TIMEOUT_MS = 60 * 60 * 1000;
 const EXTERNAL_IMAGE_JOB_TTL_MS = 2 * 60 * 60 * 1000;
 const externalImageJobs = new Map();
+const GITEE_MUSIC_PROVIDER_ID = 'gitee-music';
+
+function resolveMusicProvider(body, settings) {
+  const providerId = String(body?.providerId || '').trim();
+  if (providerId === GITEE_MUSIC_PROVIDER_ID || providerId === 'gitee-flux') {
+    return {
+      ok: true,
+      provider: {
+        id: GITEE_MUSIC_PROVIDER_ID,
+        label: 'Gitee ACE-Step',
+        protocol: 'gitee-flux',
+        baseUrl: 'https://ai.gitee.com/v1',
+        apiKey: String(settings?.giteeMusicApiKey || '').trim(),
+        enabled: true,
+      },
+    };
+  }
+  const currentProviders = normalizeAdvancedProviders(settings?.advancedProviders);
+  return resolveRunnableProvider(body || {}, currentProviders);
+}
 
 function generationTimeoutMs(value) {
   const n = Number(value);
@@ -583,8 +603,7 @@ router.post('/video', async (req, res) => {
 router.post('/music', async (req, res) => {
   try {
     const settings = settingsRouter.loadSettings({ persistMigrations: false });
-    const currentProviders = normalizeAdvancedProviders(settings.advancedProviders);
-    const resolved = resolveRunnableProvider(req.body || {}, currentProviders);
+    const resolved = resolveMusicProvider(req.body || {}, settings);
     if (!resolved.ok) {
       return res.json({
         success: false,

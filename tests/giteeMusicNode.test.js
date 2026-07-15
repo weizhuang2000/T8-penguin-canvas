@@ -25,6 +25,7 @@ test('ACE-Step node calls backend proxy with official async music parameters', (
   const provider = read('backend/src/providers/giteeFlux.js');
 
   assert.match(node, /generateExternalMusic\(\{/);
+  assert.match(node, /const PROVIDER_ID = 'gitee-music'/);
   assert.match(node, /providerModel: MODEL/);
   assert.match(node, /lyrics: lyrics\.trim\(\)/);
   assert.match(service, /fetch\('\/api\/proxy\/external\/music'/);
@@ -32,6 +33,8 @@ test('ACE-Step node calls backend proxy with official async music parameters', (
   assert.match(provider, /\/async\/music\/generations/);
   assert.match(provider, /task:\s*'text2music'/);
   assert.match(provider, /\/task\/\$\{encodeURIComponent\(id\)\}/);
+  assert.match(route, /giteeMusicApiKey/);
+  assert.match(node, /分类独立 Key → Gitee ACE-Step 音乐 Token/);
 });
 
 test('ACE-Step node uses configured LLM to create English style prompt and untranslated structured lyrics', () => {

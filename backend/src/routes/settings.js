@@ -39,6 +39,7 @@ const DEFAULT_SETTINGS = {
   grokApiKey: '',
   seedanceApiKey: '',
   sunoApiKey: '',
+  giteeMusicApiKey: '',
   // v1.2.10.2: 全局生成素材自动保存到本地的路径(可用户自定义)
   fileSavePath: config.DEFAULT_LOCAL_SAVE_DIR,
   // v1.3.1: 画布自动保存导出路径(实际写入 <path>/T8-penguin-canvas/canvases)
@@ -91,6 +92,7 @@ const LEGACY_DEFAULT_PATHS = {
 const CLASSIFIED_KEY_FIELDS = [
   'gptImageApiKey', 'nanoBananaApiKey', 'mjApiKey', 'veoApiKey',
   'grokApiKey', 'seedanceApiKey', 'sunoApiKey',
+  'giteeMusicApiKey',
 ];
 
 const DEFAULT_TASK_COMPLETION_SOUND = { mode: 'default', url: '' };
@@ -348,10 +350,16 @@ function loadSettings({ persistMigrations = true } = {}) {
   if (!fs.existsSync(config.SETTINGS_FILE)) return { ...DEFAULT_SETTINGS };
   try {
     const data = JSON.parse(fs.readFileSync(config.SETTINGS_FILE, 'utf-8'));
+    const legacyGiteeFluxProvider = (Array.isArray(data.advancedProviders) ? data.advancedProviders : [])
+      .find((provider) => provider?.id === 'gitee-flux' || provider?.protocol === 'gitee-flux');
+    const migratedGiteeMusicApiKey = !String(data.giteeMusicApiKey || '').trim()
+      ? String(legacyGiteeFluxProvider?.apiKey || '').trim()
+      : '';
     // 强制 base URL 与配置一致(防篡改)
     const merged = {
       ...DEFAULT_SETTINGS,
       ...data,
+      giteeMusicApiKey: String(data.giteeMusicApiKey || migratedGiteeMusicApiKey || '').trim(),
       zhenzhenBaseUrl: normalizeZhenzhenBaseUrl(data.zhenzhenBaseUrl) || config.ZHENZHEN_BASE_URL,
       llmBaseUrl: normalizeLlmBaseUrl(data.llmBaseUrl, config.ZHENZHEN_BASE_URL) || config.ZHENZHEN_BASE_URL,
       llmModel: normalizeLlmModelName(data.llmModel, config.LLM_DEFAULT_MODEL) || config.LLM_DEFAULT_MODEL,
@@ -363,7 +371,8 @@ function loadSettings({ persistMigrations = true } = {}) {
     merged.taskCompletionSound = normalizeTaskCompletionSound(data.taskCompletionSound);
     merged.taskFailureSound = normalizeTaskFailureSound(data.taskFailureSound);
     const migrated = migrateLegacyDefaultPaths(merged);
-    if (persistMigrations && migrated.changed) {
+    const removedLegacyGiteeFlux = !!legacyGiteeFluxProvider;
+    if (persistMigrations && (migrated.changed || removedLegacyGiteeFlux || !!migratedGiteeMusicApiKey)) {
       saveSettings(migrated.settings);
     }
     return migrated.settings;

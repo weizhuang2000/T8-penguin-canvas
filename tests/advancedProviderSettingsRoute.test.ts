@@ -54,6 +54,7 @@ test('settings route persists advancedProviders with masking and secret preserva
   assert.equal(initial.data.llmBaseUrl, 'https://ai.t8star.org');
   assert.equal(initial.data.llmModel, 'gemini-3.1-flash-lite-preview');
   assert.ok(Array.isArray(initial.data.advancedProviders));
+  assert.equal(initial.data.advancedProviders.some((p: any) => p.id === 'gitee-flux'), false);
   assert.equal(initial.data.advancedProviderSummary.enabledCount, 0);
   assert.equal(initial.data.advancedProviders.find((p: any) => p.id === 'modelscope')?.apiKey, '');
 
@@ -61,6 +62,7 @@ test('settings route persists advancedProviders with masking and secret preserva
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      giteeMusicApiKey: 'gitee-music-secret-1234',
       advancedProviders: [
         {
           id: 'modelscope',
@@ -127,6 +129,7 @@ test('settings route persists advancedProviders with masking and secret preserva
   assert.equal(modelscope.hasApiKey, true);
   assert.equal(masked.data.advancedProviderSummary.enabledCount, 1);
   assert.equal(masked.data.advancedProviderSummary.configuredKeyCount, 1);
+  assert.equal(masked.data.giteeMusicApiKey, '****1234');
   assert.equal(masked.data.advancedProviders.some((p: any) => p.id === 'bad url'), false);
   assert.equal(JSON.stringify(masked.data).includes('ms-secret-123456'), false);
 
@@ -139,6 +142,7 @@ test('settings route persists advancedProviders with masking and secret preserva
   assert.equal(raw.data.llmConfigs.find((item: any) => item.id === 'backup').baseUrl, 'https://backup.example.com/v1');
   assert.equal(raw.data.llmConfigs.find((item: any) => item.id === 'backup').model, 'backup-chat-model');
   assert.equal(raw.data.advancedProviders.find((p: any) => p.id === 'modelscope').apiKey, 'ms-secret-123456');
+  assert.equal(raw.data.giteeMusicApiKey, 'gitee-music-secret-1234');
 
   const preserveLlmKeys = await fetch(base, {
     method: 'POST',
@@ -203,4 +207,23 @@ test('settings route persists advancedProviders with masking and secret preserva
   assert.equal(invalidModelResponse.status, 400);
   const afterInvalidModel = await fetch(`${base}/raw`).then((res) => res.json());
   assert.equal(afterInvalidModel.data.llmModel, 'backup-chat-model');
+
+  fs.writeFileSync(config.SETTINGS_FILE, JSON.stringify({
+    advancedProviders: [
+      {
+        id: 'gitee-flux',
+        label: 'Gitee Flux',
+        protocol: 'gitee-flux',
+        enabled: true,
+        apiKey: 'legacy-gitee-token',
+        imageModels: ['flux-1-schnell'],
+      },
+    ],
+  }), 'utf8');
+  const migratedLegacy = await fetch(`${base}/raw`).then((res) => res.json());
+  assert.equal(migratedLegacy.data.giteeMusicApiKey, 'legacy-gitee-token');
+  assert.equal(migratedLegacy.data.advancedProviders.some((p: any) => p.id === 'gitee-flux'), false);
+  const persistedMigration = JSON.parse(fs.readFileSync(config.SETTINGS_FILE, 'utf8'));
+  assert.equal(persistedMigration.giteeMusicApiKey, 'legacy-gitee-token');
+  assert.equal(persistedMigration.advancedProviders.some((p: any) => p.id === 'gitee-flux'), false);
 });

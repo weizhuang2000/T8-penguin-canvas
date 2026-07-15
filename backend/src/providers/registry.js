@@ -95,10 +95,6 @@ const DEFAULT_JIMENG_VIDEO_MODELS = [
   'jimeng-video-1080p',
 ];
 
-const DEFAULT_GITEE_FLUX_IMAGE_MODELS = [
-  'flux-1-schnell',
-];
-
 const SUPPORTED_PROTOCOLS = new Set([
   'openai-compatible',
   'gemini-compatible',
@@ -106,24 +102,12 @@ const SUPPORTED_PROTOCOLS = new Set([
   'volcengine',
   'comfyui',
   'jimeng-cli',
-  'gitee-flux',
 ]);
 
 const PROVIDER_ID_RE = /^[a-z0-9][a-z0-9_-]{1,47}$/;
 const CONTROL_CHAR_RE = /[\x00-\x1f\x7f]/;
 
 const DEFAULT_ADVANCED_PROVIDERS = [
-  {
-    id: 'gitee-flux',
-    label: 'Gitee Flux',
-    protocol: 'gitee-flux',
-    baseUrl: DEFAULT_GITEE_FLUX_BASE_URL,
-    enabled: false,
-    imageModels: DEFAULT_GITEE_FLUX_IMAGE_MODELS,
-    videoModels: [],
-    chatModels: [],
-    defaults: { imageModel: DEFAULT_GITEE_FLUX_IMAGE_MODELS[0], responseFormat: 'url' },
-  },
   {
     id: 'openai-compatible',
     label: 'OpenAI',
@@ -564,6 +548,8 @@ function normalizeAdvancedProviders(rawProviders, currentProviders = []) {
   }
 
   for (const raw of Array.isArray(rawProviders) ? rawProviders : []) {
+    // Gitee Flux 生图平台已下线；旧设置只用于迁移 ACE-Step Token，不再作为扩展平台返回。
+    if (cleanId(raw?.id) === 'gitee-flux' || String(raw?.protocol || '').trim() === 'gitee-flux') continue;
     const id = cleanId(raw?.id);
     const previous = previousById.get(id) || byId.get(id) || null;
     const provider = normalizeProvider(raw, previous);
@@ -631,7 +617,6 @@ module.exports = {
   DEFAULT_GEMINI_VIDEO_MODELS,
   DEFAULT_GEMINI_COMPATIBLE_BASE_URL,
   DEFAULT_GITEE_FLUX_BASE_URL,
-  DEFAULT_GITEE_FLUX_IMAGE_MODELS,
   DEFAULT_VOLCENGINE_CHAT_MODELS,
   DEFAULT_VOLCENGINE_IMAGE_MODELS,
   DEFAULT_VOLCENGINE_VIDEO_MODELS,

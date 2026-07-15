@@ -42,6 +42,22 @@ test('normalizeAdvancedProviders migrates missing settings to disabled default p
   ]);
 });
 
+test('normalizeAdvancedProviders removes the retired Gitee Flux card from legacy settings', () => {
+  const providers = normalizeAdvancedProviders([
+    {
+      id: 'gitee-flux',
+      label: 'Gitee Flux',
+      protocol: 'gitee-flux',
+      enabled: true,
+      apiKey: 'legacy-token',
+      imageModels: ['flux-1-schnell'],
+    },
+  ]);
+
+  assert.equal(providers.some((provider: any) => provider.id === 'gitee-flux'), false);
+  assert.equal(providers.some((provider: any) => provider.protocol === 'gitee-flux'), false);
+});
+
 test('normalizeAdvancedProviders migrates ModelScope LoRA defaults and legacy ms_loras', () => {
   const providers = normalizeAdvancedProviders([
     {

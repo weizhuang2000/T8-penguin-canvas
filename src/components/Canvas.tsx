@@ -1477,8 +1477,8 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
   'penguin-portrait': { preset: 'penguin-portrait' },
   audio: { mode: 'generate', version: 'v5.5', title: '', tags: '', seed: 0, continueAt: 28 },
   'gitee-music': {
-    providerSource: 'gitee-flux',
-    providerId: 'gitee-flux',
+    providerSource: 'gitee-music',
+    providerId: 'gitee-music',
     providerModel: 'ACE-Step-v1-3.5B',
     musicTheme: '',
     llmKeyId: '',

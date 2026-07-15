@@ -19,7 +19,7 @@ import type { MediaMention } from './mediaMentions';
 import PromptTextarea from '../PromptTextarea';
 
 const MODEL = 'ACE-Step-v1-3.5B';
-const PROVIDER_ID = 'gitee-flux';
+const PROVIDER_ID = 'gitee-music';
 
 function clamp(value: unknown, fallback: number, min: number, max: number): number {
   const number = Number(value);
@@ -376,7 +376,7 @@ const GiteeMusicNode = ({ id, data, selected }: NodeProps) => {
           {busy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
           {busy ? '生成中（异步任务轮询）' : '生成音乐'}
         </button>
-        <div className="text-center text-[10px] leading-relaxed text-white/35">使用 API 设置 → 扩展平台 → Gitee Flux 中的 Token</div>
+        <div className="text-center text-[10px] leading-relaxed text-white/35">使用 API 设置 → 分类独立 Key → Gitee ACE-Step 音乐 Token</div>
       </div>
     </div>
   );

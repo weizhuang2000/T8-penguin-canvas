@@ -59,7 +59,8 @@ type KeyField =
   | 'soraApiKey'
   | 'grokApiKey'
   | 'seedanceApiKey'
-  | 'sunoApiKey';
+  | 'sunoApiKey'
+  | 'giteeMusicApiKey';
 
 interface KeySpec {
   field: KeyField;
@@ -83,6 +84,7 @@ const CLASSIFIED_KEYS: KeySpec[] = [
   { field: 'grokApiKey', label: 'grok 系列', desc: 'Grok Image / Grok Imagine Video 专用', bullet: 'bg-orange-400' },
   { field: 'seedanceApiKey', label: 'seedance 系列', desc: 'Seedance 视频专用', bullet: 'bg-teal-400' },
   { field: 'sunoApiKey', label: 'suno 系列', desc: 'Suno 音乐专用', bullet: 'bg-rose-400' },
+  { field: 'giteeMusicApiKey', label: 'Gitee ACE-Step 音乐', desc: 'Gitee AI ACE-Step 音乐生成专用 Token', bullet: 'bg-violet-400' },
 ];
 
 const ALL_FIELDS: KeyField[] = [
@@ -112,7 +114,6 @@ const ADVANCED_PROVIDER_LABELS: Record<AdvancedProviderProtocol, string> = {
   volcengine: '火山引擎',
   comfyui: 'ComfyUI',
   'jimeng-cli': '即梦 CLI',
-  'gitee-flux': 'Gitee Flux',
 };
 
 function displayAdvancedProviderLabel(provider: AdvancedProviderConfig): string {
@@ -182,15 +183,6 @@ const ADVANCED_PROVIDER_GUIDES: Record<AdvancedProviderProtocol, {
     connectionHint: '填写 dreamina 可执行文件路径；如果 CLI 装在 WSL 里，再打开 WSL 并填写发行版名称。',
     modelHint: '模型名按 CLI 支持的命令参数填写；图像可填 seedream-4.7，视频可填 seedance2.0fast_vip、seedance2.0_vip、seedance2.0fast、seedance2.0。每行一个。',
   },
-  'gitee-flux': {
-    subtitle: 'Gitee AI Serverless Flux 文生图',
-    description: '调用 Gitee AI Serverless API 的异步图像生成接口，支持 flux-1-schnell 等 Flux 模型。',
-    nodeScopes: ['图像节点'],
-    connectionHint: 'Base URL 默认 https://ai.gitee.com/v1；Token 请填写 Gitee AI 访问令牌。',
-    modelHint: '每行一个模型名，默认使用 flux-1-schnell。',
-    baseUrlPlaceholder: 'https://ai.gitee.com/v1',
-    keyLabel: 'Gitee AI Access Token',
-  },
 };
 
 const MODELSCOPE_TOKEN_URLS = {
@@ -205,7 +197,6 @@ const BUILT_IN_ADVANCED_PROVIDER_IDS = new Set([
   'volcengine',
   'comfyui',
   'jimeng-cli',
-  'gitee-flux',
 ]);
 
 const JIMENG_CLI_INSTALL_COMMAND = 'curl -s https://jimeng.jianying.com/cli | bash';
@@ -310,12 +301,12 @@ function AdvancedProviderFormBlock({
 const emptyMap = (): Record<KeyField, string> => ({
   zhenzhenApiKey: '', rhApiKey: '', llmApiKey: '',
   gptImageApiKey: '', nanoBananaApiKey: '', mjApiKey: '', veoApiKey: '',
-  soraApiKey: '', grokApiKey: '', seedanceApiKey: '', sunoApiKey: '',
+  soraApiKey: '', grokApiKey: '', seedanceApiKey: '', sunoApiKey: '', giteeMusicApiKey: '',
 });
 const emptyShow = (): Record<KeyField, boolean> => ({
   zhenzhenApiKey: false, rhApiKey: false, llmApiKey: false,
   gptImageApiKey: false, nanoBananaApiKey: false, mjApiKey: false, veoApiKey: false,
-  soraApiKey: false, grokApiKey: false, seedanceApiKey: false, sunoApiKey: false,
+  soraApiKey: false, grokApiKey: false, seedanceApiKey: false, sunoApiKey: false, giteeMusicApiKey: false,
 });
 
 function formatCloudError(error: string, data?: any) {
@@ -566,6 +557,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     grokApiKey: inputs.grokApiKey.trim(),
     seedanceApiKey: inputs.seedanceApiKey.trim(),
     sunoApiKey: inputs.sunoApiKey.trim(),
+    giteeMusicApiKey: inputs.giteeMusicApiKey.trim(),
     fileSavePath: fileSavePathInput.trim(),
     canvasAutoSavePath: canvasAutoSavePathInput.trim(),
     resourceLibraryPath: resourceLibraryPathInput.trim(),
@@ -3224,10 +3216,10 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
             {classifiedOpen && (
               <div className="mt-3">
                 <div className={`text-[11px] ${hintCls} mb-3`}>
-                  为不同模型系列单独配置 Key；<b>未填则自动 fallback 到贞贞工坊通用 Key</b>。后端会根据调用的模型名/路由自动选择。
+                  为不同模型系列单独配置 Key；多数模型未填时会 fallback 到贞贞工坊通用 Key，Gitee ACE-Step Token 除外。后端会根据调用的模型名/路由自动选择。
                 </div>
                 <div className="space-y-4">
-                  {CLASSIFIED_KEYS.map((spec) => renderKey(spec, { fallbackHint: true }))}
+                  {CLASSIFIED_KEYS.map((spec) => renderKey(spec, { fallbackHint: spec.field !== 'giteeMusicApiKey' }))}
                 </div>
               </div>
             )}
