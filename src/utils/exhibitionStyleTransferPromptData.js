@@ -75,6 +75,13 @@ function styleSourceText(mode, values) {
   ].filter(Boolean).join('\n');
 }
 
+function executionText(mode) {
+  if (mode === 'style-reference') {
+    return '执行方式：把@图片2 提取展陈设计风格、色彩体系、材质语言、表面肌理、光泽关系、灯光氛围和细部质感迁移到@图片1已有的墙面、地面、展台、展柜、装置、导视、标题字、灯带和装饰表面上；只做材质与风格层面的替换，不移动、不增删、不重构任何核心元素。';
+  }
+  return '执行方式：把上述风格语言真实地迁移到原始图像已有的墙面、地面、展台、展柜、装置、导视、标题字、灯带和装饰表面上；只做材质与风格层面的替换，不移动、不增删、不重构任何核心元素。';
+}
+
 export function buildExhibitionStyleTransferPrompt(values = {}) {
   const mode = normalizeExhibitionStyleTransferMode(values.mode);
   const supplement = cleanText(values.supplement);
@@ -92,7 +99,7 @@ export function buildExhibitionStyleTransferPrompt(values = {}) {
     '风格控制：',
     styleSourceText(mode, values),
     '',
-    '执行方式：把上述风格语言真实地迁移到原始图像已有的墙面、地面、展台、展柜、装置、导视、标题字、灯带和装饰表面上；只做材质与风格层面的替换，不移动、不增删、不重构任何核心元素。',
+    executionText(mode),
     '',
     '文字约束：保留原图文字所在区域、层级和排版关系；不要生成新的可读文字，不要把提示词字段名渲染到画面里。',
     '',

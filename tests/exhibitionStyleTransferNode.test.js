@@ -28,6 +28,12 @@ test('exhibition style transfer node exposes image ports and shared controls', (
   assert.match(source, /UnitPanelMaterialEditorModal/);
   assert.match(source, /outputFormat/);
   assert.match(source, /\['jpg', 'png'\]/);
+  assert.match(source, /MentionPromptInput/);
+  assert.match(source, /resolveMediaMentions/);
+  assert.match(source, /mentionToken: '@图片1'/);
+  assert.match(source, /mentionToken: '@图片2'/);
+  assert.match(source, /promptMentions/);
+  assert.match(source, /supplementMentions/);
   assert.match(source, /useRunTrigger\(id, runGenerate, 'image'\)/);
   assert.match(source, /生成风格迁移/);
   assert.match(source, /closestAspectRatio/);
@@ -35,4 +41,5 @@ test('exhibition style transfer node exposes image ports and shared controls', (
   assert.doesNotMatch(source, /analyzeDominantTone/);
   assert.doesNotMatch(source, /styleReferenceTone/);
   assert.doesNotMatch(source, /参考图主色调识别/);
+  assert.match(read('src/components/nodes/mediaMentions.ts'), /@\u56fe\u7247\\d\+/);
 });

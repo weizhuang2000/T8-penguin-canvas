@@ -41,6 +41,9 @@ import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
 import UnitPanelMaterialEditorModal from './UnitPanelMaterialEditorModal';
 import UnitPanelMaterialSelect from './UnitPanelMaterialSelect';
 import NodeHelpButton from './NodeHelpButton';
+import MentionPromptInput from './MentionPromptInput';
+import { materialMentionKey, resolveMediaMentions, tokenForMaterial, type MediaMention } from './mediaMentions';
+import type { Material } from './useUpstreamMaterials';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
 const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-40';
@@ -164,6 +167,62 @@ function buildColorMaterialPresetPayload(presets: ElevationColorMaterialPresetIt
   }));
 }
 
+function mediaMentions(value: unknown): MediaMention[] {
+  return Array.isArray(value) ? (value as MediaMention[]) : [];
+}
+
+function buildMentionMaterials(originalImage: string, styleReferenceImage: string, mode: ExhibitionStyleTransferMode): Material[] {
+  const items: Material[] = [];
+  if (originalImage) {
+    items.push({
+      id: 'style-transfer-original-image',
+      kind: 'image',
+      url: originalImage,
+      sourceNodeId: 'style-transfer-original-image',
+      origin: 'upstream',
+      label: '原始图像',
+      mentionKey: 'exhibition-style-transfer:original-image',
+      mentionToken: '@图片1',
+    } as Material & { mentionKey: string; mentionToken: string });
+  }
+  if (mode === 'style-reference' && styleReferenceImage) {
+    items.push({
+      id: 'style-transfer-style-reference',
+      kind: 'image',
+      url: styleReferenceImage,
+      sourceNodeId: 'style-transfer-style-reference',
+      origin: 'upstream',
+      label: '设计风格参考图',
+      mentionKey: 'exhibition-style-transfer:style-reference',
+      mentionToken: '@图片2',
+    } as Material & { mentionKey: string; mentionToken: string });
+  }
+  return items;
+}
+
+function buildPromptMentions(text: string, materials: Material[]): MediaMention[] {
+  const mentions: MediaMention[] = [];
+  for (const material of materials) {
+    const token = tokenForMaterial(material, materials);
+    if (!token || token === '@material') continue;
+    let start = text.indexOf(token);
+    while (start >= 0) {
+      mentions.push({
+        id: `${materialMentionKey(material)}:${start}`,
+        kind: material.kind as MediaMention['kind'],
+        materialKey: materialMentionKey(material),
+        url: material.url,
+        label: material.label,
+        token,
+        start,
+        end: start + token.length,
+      });
+      start = text.indexOf(token, start + token.length);
+    }
+  }
+  return mentions.sort((a, b) => a.start - b.start);
+}
+
 function ImageSlot({ title, subtitle, url }: { title: string; subtitle: string; url: string }) {
   return (
     <div className="relative rounded border border-white/10 bg-black/15 p-2">
@@ -241,16 +300,30 @@ const ExhibitionStyleTransferNode = ({ id, data, selected }: NodeProps) => {
     const ids = Array.isArray(d.secondaryMaterialIds) ? d.secondaryMaterialIds.map(String) : [];
     return materials.filter((item) => ids.includes(item.id));
   }, [d.secondaryMaterialIds, materials]);
+  const supplementMentions = mediaMentions(d.supplementMentions);
+  const mentionMaterials = useMemo(
+    () => buildMentionMaterials(originalImage, styleReferenceImage, mode),
+    [mode, originalImage, styleReferenceImage],
+  );
+  const resolvedSupplement = useMemo(
+    () => resolveMediaMentions(String(d.supplement || ''), supplementMentions, mentionMaterials),
+    [d.supplement, mentionMaterials, supplementMentions],
+  );
 
-  const prompt = useMemo(() => buildExhibitionStyleTransferPrompt({
+  const rawPrompt = useMemo(() => buildExhibitionStyleTransferPrompt({
     mode,
     colorMaterial: colorMaterialTextFromPreset(selectedColorMaterialPreset),
     colorMaterialPalette: colorPaletteTextFromPreset(selectedColorMaterialPreset),
     colorMaterialTextures: materialTexturesTextFromPreset(selectedColorMaterialPreset),
     primaryMaterial: selectedPrimaryMaterial,
     secondaryMaterials: selectedSecondaryMaterials,
-    supplement: d.supplement,
-  }), [d.supplement, mode, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials]);
+    supplement: resolvedSupplement,
+  }), [mode, resolvedSupplement, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials]);
+  const promptMentions = useMemo(() => buildPromptMentions(rawPrompt, mentionMaterials), [mentionMaterials, rawPrompt]);
+  const prompt = useMemo(
+    () => resolveMediaMentions(rawPrompt, promptMentions, mentionMaterials),
+    [mentionMaterials, promptMentions, rawPrompt],
+  );
 
   useEffect(() => {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
@@ -284,10 +357,16 @@ const ExhibitionStyleTransferNode = ({ id, data, selected }: NodeProps) => {
 
   useEffect(() => {
     const refs = [originalImage, mode === 'style-reference' ? styleReferenceImage : ''].filter(Boolean);
-    if (d.prompt !== prompt || d.outputText !== prompt || d.text !== prompt || JSON.stringify(d.referenceImages || []) !== JSON.stringify(refs)) {
-      update({ prompt, outputText: prompt, text: prompt, referenceImages: refs });
+    if (
+      d.prompt !== prompt
+      || d.outputText !== prompt
+      || d.text !== prompt
+      || JSON.stringify(d.referenceImages || []) !== JSON.stringify(refs)
+      || JSON.stringify(mediaMentions(d.promptMentions)) !== JSON.stringify(promptMentions)
+    ) {
+      update({ prompt, outputText: prompt, text: prompt, referenceImages: refs, promptMentions });
     }
-  }, [d.outputText, d.prompt, d.referenceImages, d.text, mode, originalImage, prompt, styleReferenceImage, update]);
+  }, [d.outputText, d.prompt, d.promptMentions, d.referenceImages, d.text, mode, originalImage, prompt, promptMentions, styleReferenceImage, update]);
 
   const saveColorMaterialPresetItems = async (presets: ElevationColorMaterialPresetItem[]) => {
     if (!canManageTeam) return;
@@ -717,7 +796,18 @@ const ExhibitionStyleTransferNode = ({ id, data, selected }: NodeProps) => {
             </label>
             <label className="space-y-1">
               <span className="text-[10px] text-white/55">补充要求</span>
-              <input className={FIELD} value={d.supplement || ''} disabled={isReadonly || busy} placeholder="仅补充风格/材质要求" onChange={(event) => update({ supplement: event.target.value })} />
+              <MentionPromptInput
+                value={d.supplement || ''}
+                mentions={supplementMentions}
+                materials={mentionMaterials}
+                onChange={(value, mentions) => update({ supplement: value, supplementMentions: mentions })}
+                placeholder="仅补充风格/材质要求，可用 @ 引用原始图像或风格参考图"
+                className={`${FIELD} min-h-[36px]`}
+                isDark
+                isPixel={false}
+                disabled={isReadonly || busy}
+                expandable={false}
+              />
             </label>
           </div>
           {d.progress && <div className="text-[10px] text-cyan-100">{d.progress}</div>}

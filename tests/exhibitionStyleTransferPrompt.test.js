@@ -15,6 +15,7 @@ test('style transfer prompt uses original image as the only structure source', (
   assert.match(prompt, /仅从 @图片2 提取展陈设计风格、色彩体系、材质语言/);
   assert.match(prompt, /原始图像是空间结构、展品、文字、展示手段、构图、视角、比例和动线/);
   assert.match(prompt, /不得从 @图片2 复制空间架构、展品、文字、展示手段/);
+  assert.match(prompt, /执行方式：把@图片2 提取展陈设计风格、色彩体系、材质语言、表面肌理、光泽关系、灯光氛围和细部质感迁移到@图片1已有的墙面、地面、展台、展柜、装置、导视、标题字、灯带和装饰表面上/);
   assert.match(prompt, /禁止：改造空间、替换展品、改写文字、增加新展示方式/);
   assert.doesNotMatch(prompt, /参考图主色调识别/);
 });
@@ -31,6 +32,7 @@ test('style transfer prompt uses shared color material preset without reference 
   assert.match(prompt, /Color palette：白色、银灰、冷蓝/);
   assert.match(prompt, /Materials\/textures：低反射金属、半透明亚克力/);
   assert.doesNotMatch(prompt, /@图片2/);
+  assert.match(prompt, /执行方式：把上述风格语言真实地迁移到原始图像已有的墙面/);
 });
 
 test('style transfer prompt uses unit panel materials as replacement source', () => {

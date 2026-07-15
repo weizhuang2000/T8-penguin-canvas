@@ -22,6 +22,7 @@ const TOKEN_PREFIX: Record<MediaMentionKind, string> = {
 
 function tokenMatchesMentionKind(mention: Pick<MediaMention, 'kind' | 'token'>): boolean {
   if (mention.kind === 'image' && /^@img\d+\b/.test(mention.token)) return true;
+  if (mention.kind === 'image' && /^@图片\d+\b/.test(mention.token)) return true;
   if (mention.kind === 'video' && /^@vid\d+\b/.test(mention.token)) return true;
   if (mention.kind === 'audio' && /^@aud\d+\b/.test(mention.token)) return true;
   if (mention.kind === 'text' && /^@txt\d+\b/.test(mention.token)) return true;
