@@ -189,7 +189,6 @@ const SPECIFIC_NODES: Record<string, any> = {
   // Core (8)
   text: TextNode,
   image: ImageNode,
-  'flux-image': ImageNode,
   video: VideoNode,
   'runninghub-video': VideoNode,
   seedance: SeedanceNode, // 完全对齐 gpt-image-2-web Seedance2.0(独立 /seedance/v3 路径)
@@ -299,6 +298,7 @@ function withNodeSerialBadge(Component: ComponentType<any>): ComponentType<any> 
 
 function canvasNodeForPersistence(node: Node): Node {
   const persisted = { ...node, selected: false, dragging: false } as Node & Record<string, unknown>;
+  if (persisted.type === 'flux-image') persisted.type = 'image';
   delete persisted.measured;
   delete persisted.resizing;
   delete persisted.positionAbsolute;
@@ -1652,18 +1652,6 @@ function initialDataForNodeType(
   advancedProviders: AdvancedProviderConfig[] | undefined,
 ): Record<string, any> {
   const base = { ...(INITIAL_DATA[type] || {}) };
-  if (type === 'flux-image') {
-    return {
-      ...base,
-      model: 'flux-1-schnell',
-      providerSource: 'gitee-flux',
-      providerId: 'gitee-flux',
-      providerModel: 'flux-1-schnell',
-      providerParams: { n: 1 },
-      aspectRatio: '1:1',
-      sizeLevel: '1K',
-    };
-  }
   if (!EXHIBITION_IMAGE_PROVIDER_NODE_TYPES.has(type)) return base;
   return {
     ...base,

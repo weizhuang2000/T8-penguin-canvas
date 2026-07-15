@@ -85,6 +85,39 @@ export const GeneratedComposition: React.FC<any> = () => {
   assert.equal(result.ok, true, result.errors.join('\n'));
 });
 
+test('expert TSX automatically converts color interpolate calls to interpolateColors', () => {
+  const source = `
+import React from 'react';
+import {AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
+export const GeneratedComposition: React.FC<any> = () => {
+  const frame = useCurrentFrame();
+  const {fps} = useVideoConfig();
+  const palette = ['#0D0C0A', '#F4EBDD'];
+  const background = interpolate(frame, [0, fps], palette);
+  return <AbsoluteFill style={{background}} />;
+};`;
+  const result = validateTsxSource(source);
+  assert.equal(result.ok, true, result.errors.join('\n'));
+  assert.match(result.source, /interpolateColors as __t8InterpolateColors/);
+  assert.match(result.source, /__t8InterpolateColors\(frame, \[0, fps\], palette\)/);
+  assert.match(result.normalizations.join('\n'), /颜色 interpolate/);
+});
+
+test('expert TSX rejects mixed color and transform interpolate output', () => {
+  const source = `
+import React from 'react';
+import {AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
+export const GeneratedComposition = () => {
+  const frame = useCurrentFrame();
+  useVideoConfig();
+  const value = interpolate(frame, [0, 1], ['#0D0C0A', 'translateX(10px)']);
+  return <AbsoluteFill style={{color: value}} />;
+};`;
+  const result = validateTsxSource(source);
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join('\n'), /混用了颜色和非颜色值/);
+});
+
 test('expert TSX blocks network, arbitrary imports, URL literals and CSS animations', () => {
   const source = `
 import React from 'react';
@@ -142,6 +175,11 @@ test('Remotion validation route uses standard response envelope', async () => {
     assert.equal(response.status, 200);
     assert.equal(payload.success, true);
     assert.equal(payload.data.valid, true);
+    const runtimeResponse = await fetch(`http://127.0.0.1:${address.port}/api/remotion/runtime/status`);
+    const runtimePayload = await runtimeResponse.json();
+    assert.equal(runtimePayload.success, true);
+    assert.equal(runtimePayload.data.skill.version, 't8-remotion-skill/v2');
+    assert.equal(runtimePayload.data.skill.ruleCount, 38);
   } finally {
     await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }
@@ -154,10 +192,17 @@ test('Remotion node is registered across canvas, ports, permissions and Electron
   assert.match(read('src/config/portTypes.ts'), /'remotion-animation':\s*\{\s*inputs:\s*\['text', 'image', 'video', 'audio'\],\s*outputs:\s*\['video'\]/);
   assert.match(read('src/components/Canvas.tsx'), /'remotion-animation':\s*RemotionAnimationNode/);
   const nodeSource = read('src/components/nodes/RemotionAnimationNode.tsx');
+  assert.match(nodeSource, /import PromptTextarea from '\.\.\/PromptTextarea'/);
+  assert.match(nodeSource, /title="Remotion 主体或文本"[\s\S]*value=\{subject\}[\s\S]*onValueChange=\{\(value\) => update\(\{ remotionSubject: value \}\)\}/);
+  assert.match(nodeSource, /title="Remotion 描述"[\s\S]*value=\{source\}[\s\S]*onValueChange=\{\(value\) => update\(\{ remotionSource: value, remotionPhase: 'edited' \}\)\}/);
   assert.match(nodeSource, /settings\.llmConfigs \|\| state\.settings\.llmApiKeys/);
   assert.match(nodeSource, /llmKeyId:\s*activeLlmConfig\?\.id/);
   assert.match(nodeSource, /createRemotionGenerationJob/);
+  assert.match(nodeSource, /validation\.source/);
+  assert.match(nodeSource, /validation\.normalizations/);
   assert.match(nodeSource, /remotionReviewLlmKeyId/);
+  assert.match(nodeSource, /remotionSkillRuleDetails/);
+  assert.match(nodeSource, /本次 Skill/);
   assert.match(nodeSource, /remotionQuality === 'professional'/);
   assert.doesNotMatch(nodeSource, /LLM_MODELS/);
   assert.doesNotMatch(nodeSource, /generateExternalLlm/);
@@ -179,6 +224,7 @@ test('Remotion node is registered across canvas, ports, permissions and Electron
   }
   assert.equal(pkg.build.files.includes('electron/remotion-worker.cjs'), true);
   assert.equal(pkg.build.files.includes('remotion/**/*'), true);
+  assert.equal(pkg.build.files.includes('THIRD_PARTY_NOTICES.md'), true);
 });
 
 test('optional real Remotion worker renders a tiny MP4', { skip: process.env.T8_RUN_REMOTION_SMOKE !== '1', timeout: 10 * 60 * 1000 }, async () => {

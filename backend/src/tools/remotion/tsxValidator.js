@@ -22,12 +22,104 @@ const BANNED_IDENTIFIERS = new Set([
   'localStorage', 'sessionStorage', 'indexedDB', 'document', 'window', 'navigator',
 ]);
 const BANNED_STYLE_KEYS = new Set(['animation', 'animationName', 'transition', 'transitionProperty', 'backgroundImage']);
+const COLOR_LITERAL_RE = /^(?:#[0-9a-f]{3,8}|rgba?\s*\(|hsla?\s*\(|hwb\s*\(|lab\s*\(|lch\s*\(|oklab\s*\(|oklch\s*\(|color\s*\()/i;
+
+function staticString(node) {
+  if (node?.type === 'StringLiteral') return node.value;
+  if (node?.type === 'TemplateLiteral' && node.expressions.length === 0) return node.quasis[0]?.value?.cooked || '';
+  return null;
+}
+
+function resolveArrayExpression(node, callPath) {
+  if (node?.type === 'ArrayExpression') return node;
+  if (node?.type !== 'Identifier') return null;
+  const binding = callPath.scope.getBinding(node.name);
+  const declarator = binding?.path?.isVariableDeclarator?.() ? binding.path : binding?.path?.parentPath;
+  if (declarator?.isVariableDeclarator?.() && declarator.node.init?.type === 'ArrayExpression') return declarator.node.init;
+  return null;
+}
+
+function uniqueAlias(source) {
+  let suffix = 0;
+  let alias = '__t8InterpolateColors';
+  while (new RegExp(`\\b${alias}\\b`).test(source)) {
+    suffix += 1;
+    alias = `__t8InterpolateColors${suffix}`;
+  }
+  return alias;
+}
+
+function applyTextEdits(source, edits) {
+  let next = source;
+  for (const edit of [...edits].sort((a, b) => b.start - a.start)) {
+    next = `${next.slice(0, edit.start)}${edit.text}${next.slice(edit.end)}`;
+  }
+  return next;
+}
+
+function normalizeColorInterpolations(source, ast) {
+  const directNames = new Set();
+  const namespaceNames = new Set();
+  let lastImportEnd = 0;
+  for (const node of ast.program.body) {
+    if (node.type !== 'ImportDeclaration') continue;
+    lastImportEnd = Math.max(lastImportEnd, Number(node.end) || 0);
+    if (node.source.value !== 'remotion') continue;
+    for (const specifier of node.specifiers || []) {
+      if (specifier.type === 'ImportSpecifier' && specifier.imported?.name === 'interpolate') directNames.add(specifier.local.name);
+      if (specifier.type === 'ImportNamespaceSpecifier') namespaceNames.add(specifier.local.name);
+    }
+  }
+
+  const alias = uniqueAlias(source);
+  const edits = [];
+  const errors = [];
+  const normalizations = [];
+  let needsAliasImport = false;
+  traverse(ast, {
+    CallExpression(callPath) {
+      const callee = callPath.node.callee;
+      let editRange = null;
+      let replacement = '';
+      if (callee?.type === 'Identifier' && directNames.has(callee.name)) {
+        editRange = {start: callee.start, end: callee.end};
+        replacement = alias;
+        needsAliasImport = true;
+      } else if (callee?.type === 'MemberExpression' && !callee.computed && callee.object?.type === 'Identifier'
+        && namespaceNames.has(callee.object.name) && callee.property?.type === 'Identifier' && callee.property.name === 'interpolate') {
+        editRange = {start: callee.property.start, end: callee.property.end};
+        replacement = 'interpolateColors';
+      }
+      if (!editRange || editRange.start == null || editRange.end == null) return;
+      const outputRange = resolveArrayExpression(callPath.node.arguments?.[2], callPath);
+      if (!outputRange) return;
+      const values = outputRange.elements.map(staticString);
+      const colorValues = values.filter((value) => typeof value === 'string' && COLOR_LITERAL_RE.test(value));
+      if (colorValues.length === 0) return;
+      if (values.every((value) => typeof value === 'string' && COLOR_LITERAL_RE.test(value))) {
+        edits.push({...editRange, text: replacement});
+        normalizations.push(`已将颜色 interpolate() 自动改为 interpolateColors()：${colorValues[0]}`);
+      } else {
+        errors.push(`interpolate() 的输出范围混用了颜色和非颜色值（${colorValues[0]}）；请拆分动画并对颜色单独使用 interpolateColors()`);
+      }
+    },
+  });
+  if (needsAliasImport && edits.some((edit) => edit.text === alias)) {
+    edits.push({start: lastImportEnd, end: lastImportEnd, text: `\nimport {interpolateColors as ${alias}} from 'remotion';`});
+  }
+  return {
+    source: edits.length ? applyTextEdits(source, edits) : source,
+    errors,
+    normalizations: [...new Set(normalizations)],
+  };
+}
 
 function validateTsxSource(source) {
-  const text = String(source || '').trim().replace(/^```(?:tsx|typescript|ts|jsx)?\s*/i, '').replace(/\s*```$/, '');
-  const errors = [];
-  if (!text) return { ok: false, source: text, errors: ['TSX 内容为空'] };
-  if (text.length > MAX_SOURCE_LENGTH) return { ok: false, source: text, errors: [`TSX 超过 ${MAX_SOURCE_LENGTH} 字符限制`] };
+  let text = String(source || '').trim().replace(/^```(?:tsx|typescript|ts|jsx)?\s*/i, '').replace(/\s*```$/, '');
+  let errors = [];
+  let normalizations = [];
+  if (!text) return { ok: false, source: text, errors: ['TSX 内容为空'], normalizations };
+  if (text.length > MAX_SOURCE_LENGTH) return { ok: false, source: text, errors: [`TSX 超过 ${MAX_SOURCE_LENGTH} 字符限制`], normalizations };
 
   let ast;
   try {
@@ -37,7 +129,19 @@ function validateTsxSource(source) {
       errorRecovery: false,
     });
   } catch (error) {
-    return { ok: false, source: text, errors: [`TSX 解析失败: ${error.message}`] };
+    return { ok: false, source: text, errors: [`TSX 解析失败: ${error.message}`], normalizations };
+  }
+
+  const colorNormalization = normalizeColorInterpolations(text, ast);
+  text = colorNormalization.source;
+  errors = colorNormalization.errors;
+  normalizations = colorNormalization.normalizations;
+  if (normalizations.length > 0) {
+    try {
+      ast = parser.parse(text, {sourceType: 'module', plugins: ['typescript', 'jsx'], errorRecovery: false});
+    } catch (error) {
+      return {ok: false, source: text, errors: [`颜色插值自动修复后 TSX 解析失败: ${error.message}`], normalizations};
+    }
   }
 
   let hasExport = false;
@@ -99,7 +203,7 @@ function validateTsxSource(source) {
   if (!hasExport) errors.push('必须命名导出 GeneratedComposition');
   if (!hasFrameHook) errors.push('动画必须使用 useCurrentFrame()');
   if (!hasVideoConfig) errors.push('动画必须使用 useVideoConfig()');
-  return { ok: errors.length === 0, source: text, errors };
+  return { ok: errors.length === 0, source: text, errors, normalizations };
 }
 
-module.exports = { ALLOWED_IMPORTS, MAX_SOURCE_LENGTH, validateTsxSource };
+module.exports = { ALLOWED_IMPORTS, COLOR_LITERAL_RE, MAX_SOURCE_LENGTH, normalizeColorInterpolations, validateTsxSource };

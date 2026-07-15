@@ -185,7 +185,7 @@ const ADVANCED_PROVIDER_GUIDES: Record<AdvancedProviderProtocol, {
   'gitee-flux': {
     subtitle: 'Gitee AI Serverless Flux 文生图',
     description: '调用 Gitee AI Serverless API 的异步图像生成接口，支持 flux-1-schnell 等 Flux 模型。',
-    nodeScopes: ['Flux 生图节点', '图像节点'],
+    nodeScopes: ['图像节点'],
     connectionHint: 'Base URL 默认 https://ai.gitee.com/v1；Token 请填写 Gitee AI 访问令牌。',
     modelHint: '每行一个模型名，默认使用 flux-1-schnell。',
     baseUrlPlaceholder: 'https://ai.gitee.com/v1',

@@ -26,6 +26,7 @@ import { useCanvasStore } from '../../stores/canvas';
 import { logBus } from '../../stores/logs';
 import { useThemeStore } from '../../stores/theme';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
+import PromptTextarea from '../PromptTextarea';
 import {
   countExcludedMaterials,
   excludeMaterialId,
@@ -49,6 +50,7 @@ const STYLE_OPTIONS: Array<{ value: RemotionStylePreset; label: string }> = [
 
 const PHASE_LABELS: Record<string, string> = {
   queued: '等待生成',
+  'preparing-assets': '暂存并分析素材',
   planning: '创意方案',
   'generating-code': '生成 TSX',
   'repairing-code': '修复源码',
@@ -146,6 +148,9 @@ function RemotionAnimationNode({ id, data, selected }: NodeProps) {
       remotionReviews: job.reviews || [],
       remotionWarnings: job.warnings || [],
       remotionSkillVersion: job.skillVersion || '',
+      remotionSkillSource: job.skillSource || null,
+      remotionSkillRules: job.skillRules || [],
+      remotionSkillRuleDetails: job.skillRuleDetails || [],
       status: job.status === 'error' ? 'error' : job.status === 'cancelled' ? 'idle' : job.status === 'success' ? 'idle' : 'generating',
       error: job.error || '',
     };
@@ -244,11 +249,19 @@ function RemotionAnimationNode({ id, data, selected }: NodeProps) {
   }, [activeCanvasId, activeLlmConfig?.id, applyGenerationJob, assets, id, mode, orderedMaterials.length, orderedTexts, pollGenerationJob, profile, quality, reviewLlmKeyId, stylePreset, subject, update]);
 
   const renderDescription = useCallback(async (value?: string) => {
-    const renderSource = String(value ?? source).trim();
+    let renderSource = String(value ?? source).trim();
     if (!renderSource) throw new Error('请先生成或输入 Remotion 描述');
     setLocalError('');
     update({ remotionPhase: 'validating', remotionActiveOperation: 'render', status: 'generating', error: '', videoUrl: '', videoUrls: [] });
-    await validateRemotionSpec({ mode, source: renderSource, assets, profile });
+    const validation = await validateRemotionSpec({ mode, source: renderSource, assets, profile });
+    if (mode === 'tsx' && validation.source && validation.source !== renderSource) {
+      renderSource = validation.source;
+      const existingWarnings = Array.isArray(d.remotionWarnings) ? d.remotionWarnings : [];
+      update({
+        remotionSource: renderSource,
+        remotionWarnings: [...new Set([...existingWarnings, ...(validation.normalizations || [])])],
+      });
+    }
     const job = await createRemotionJob({
       mode,
       source: renderSource,
@@ -267,7 +280,7 @@ function RemotionAnimationNode({ id, data, selected }: NodeProps) {
     const completed = await pollRenderJob(job.id);
     if (completed?.status === 'success') logBus.success('Remotion 动画渲染完成', `remotion:${id}`);
     return completed;
-  }, [activeCanvasId, applyRenderJob, assets, id, mode, pollRenderJob, profile, source, subject, update]);
+  }, [activeCanvasId, applyRenderJob, assets, d.remotionWarnings, id, mode, pollRenderJob, profile, source, subject, update]);
 
   const generateAndRender = useCallback(async () => {
     try {
@@ -310,6 +323,9 @@ function RemotionAnimationNode({ id, data, selected }: NodeProps) {
   const plan = String(d.remotionPlan || '');
   const reviews = Array.isArray(d.remotionReviews) ? d.remotionReviews : [];
   const warnings = Array.isArray(d.remotionWarnings) ? d.remotionWarnings : [];
+  const skillVersion = String(d.remotionSkillVersion || 't8-remotion-skill/v2');
+  const skillSource = d.remotionSkillSource && typeof d.remotionSkillSource === 'object' ? d.remotionSkillSource : null;
+  const skillRuleDetails = Array.isArray(d.remotionSkillRuleDetails) ? d.remotionSkillRuleDetails : [];
 
   return (
     <div className={`t8-node overflow-hidden ${selected ? 'ring-2' : ''}`} style={{ width: 540, borderColor: selected ? 'var(--t8-accent)' : 'var(--t8-border-strong)' }}>
@@ -338,7 +354,19 @@ function RemotionAnimationNode({ id, data, selected }: NodeProps) {
           </label>
         </div>
 
-        <label className="block space-y-1 text-[10px]" style={{ color: 'var(--t8-text-muted)' }}><span>主体或文本</span><textarea className="t8-input min-h-20 w-full resize-y px-2 py-1.5 text-xs" value={subject} disabled={busy} placeholder="例如：为新产品发布制作一段 8 秒高级科技感标题动画" onChange={(event) => update({ remotionSubject: event.target.value })} /></label>
+        <label className="block space-y-1 text-[10px]" style={{ color: 'var(--t8-text-muted)' }}>
+          <span>主体或文本</span>
+          <PromptTextarea
+            title="Remotion 主体或文本"
+            value={subject}
+            disabled={busy}
+            readOnly={busy}
+            placeholder="例如：为新产品发布制作一段 8 秒高级科技感标题动画"
+            onValueChange={(value) => update({ remotionSubject: value })}
+            rows={3}
+            className="t8-input min-h-20 w-full resize-y px-2 py-1.5 text-xs"
+          />
+        </label>
 
         <MaterialPreviewSection
           texts={orderedTexts}
@@ -375,9 +403,29 @@ function RemotionAnimationNode({ id, data, selected }: NodeProps) {
 
         {plan && <details className="rounded border px-2 py-1.5 text-[10px]" style={{ borderColor: 'var(--t8-border)', color: 'var(--t8-text-muted)' }}><summary className="cursor-pointer">创意方案摘要</summary><div className="mt-1 whitespace-pre-wrap">{plan}</div></details>}
         {reviews.length > 0 && <div className="flex flex-wrap gap-1">{reviews.map((review: any) => <span key={review.round} className={`rounded px-1.5 py-0.5 text-[10px] ${Number(review.score) >= 88 ? 'bg-emerald-400/15 text-emerald-300' : 'bg-amber-400/15 text-amber-200'}`}>第 {review.round} 轮 · {review.score} 分</span>)}</div>}
+        <details className="rounded border px-2 py-1.5 text-[10px]" style={{ borderColor: 'var(--t8-border)', color: 'var(--t8-text-muted)' }}>
+          <summary className="cursor-pointer">本次 Skill · {skillVersion}{skillSource?.pluginVersion ? ` · 上游 ${skillSource.pluginVersion}` : ''}</summary>
+          {skillRuleDetails.length > 0 ? <div className="mt-1.5 flex flex-wrap gap-1">
+            {skillRuleDetails.map((rule: any) => <span key={rule.id} title={rule.reason || rule.phases?.join(', ')} className={`rounded px-1.5 py-0.5 ${rule.support === 'disabled' ? 'bg-amber-400/15 text-amber-200' : rule.support === 'adapted' ? 'bg-sky-400/15 text-sky-200' : 'bg-emerald-400/15 text-emerald-200'}`}>{rule.id}{rule.support === 'adapted' ? ' · 适配' : rule.support === 'disabled' ? ' · 未启用' : ''}</span>)}
+          </div> : <div className="mt-1">生成后显示本次命中的内置规则和能力门控结果。</div>}
+        </details>
         {warnings.length > 0 && <div className="whitespace-pre-wrap rounded border border-amber-400/25 bg-amber-400/10 px-2 py-1.5 text-[10px] text-amber-200">{warnings.join('\n')}</div>}
 
-        <label className="block space-y-1 text-[10px]" style={{ color: 'var(--t8-text-muted)' }}><span className="flex items-center gap-1">{mode === 'tsx' ? <Code2 size={12} /> : <FileJson size={12} />} Remotion 描述</span><textarea className="t8-input min-h-48 w-full resize-y px-2 py-1.5 font-mono text-[10px] leading-relaxed" value={source} disabled={busy} placeholder={mode === 'tsx' ? '生成或粘贴受限 Remotion TSX...' : '生成或粘贴 t8-remotion/v1 JSON...'} onChange={(event) => update({ remotionSource: event.target.value, remotionPhase: 'edited' })} /></label>
+        <label className="block space-y-1 text-[10px]" style={{ color: 'var(--t8-text-muted)' }}>
+          <span className="flex items-center gap-1">{mode === 'tsx' ? <Code2 size={12} /> : <FileJson size={12} />} Remotion 描述</span>
+          <PromptTextarea
+            title="Remotion 描述"
+            value={source}
+            disabled={busy}
+            readOnly={busy}
+            placeholder={mode === 'tsx' ? '生成或粘贴受限 Remotion TSX...' : '生成或粘贴 t8-remotion/v1 JSON...'}
+            onValueChange={(value) => update({ remotionSource: value, remotionPhase: 'edited' })}
+            rows={8}
+            mono
+            editorKind={mode === 'json' ? 'json' : 'text'}
+            className="t8-input min-h-48 w-full resize-y px-2 py-1.5 font-mono text-[10px] leading-relaxed"
+          />
+        </label>
 
         <div className="grid grid-cols-3 gap-1.5">
           <button className="t8-btn px-2 py-1.5 text-[11px]" disabled={busy} onClick={() => void invoke(generateDescription)}><Brain size={13} />生成描述</button>

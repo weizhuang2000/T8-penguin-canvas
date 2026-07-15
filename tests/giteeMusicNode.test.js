@@ -47,3 +47,11 @@ test('ACE-Step node uses configured LLM to create English style prompt and untra
   assert.match(node, /promptTemplateKind=\{false\}/);
   assert.doesNotMatch(node, /promptTemplateKind="video"/);
 });
+
+test('ACE-Step node uses IME-safe textarea wrapper for theme and lyrics', () => {
+  const node = read('src/components/nodes/GiteeMusicNode.tsx');
+
+  assert.match(node, /import PromptTextarea from '\.\.\/PromptTextarea'/);
+  assert.match(node, /title="ACE-Step 音乐主题与风格要求"[\s\S]*value=\{musicTheme\}[\s\S]*onValueChange=\{\(value\) => update\(\{ musicTheme: value \}\)\}/);
+  assert.match(node, /title="ACE-Step 歌词"[\s\S]*value=\{lyrics\}[\s\S]*onValueChange=\{\(value\) => update\(\{ lyrics: value \}\)\}/);
+});

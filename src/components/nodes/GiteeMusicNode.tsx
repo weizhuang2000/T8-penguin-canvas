@@ -16,6 +16,7 @@ import { useOrderedMaterials } from './useOrderedMaterials';
 import MentionPromptInput from './MentionPromptInput';
 import MaterialPreviewSection from './MaterialPreviewSection';
 import type { MediaMention } from './mediaMentions';
+import PromptTextarea from '../PromptTextarea';
 
 const MODEL = 'ACE-Step-v1-3.5B';
 const PROVIDER_ID = 'gitee-flux';
@@ -268,10 +269,12 @@ const GiteeMusicNode = ({ id, data, selected }: NodeProps) => {
           </label>
           <label className="block space-y-1">
             <span className="text-[10px] text-white/55">音乐主题与风格要求</span>
-            <textarea
+            <PromptTextarea
+              title="ACE-Step 音乐主题与风格要求"
               value={musicTheme}
               disabled={busy || creativeBusy}
-              onChange={(event) => update({ musicTheme: event.target.value })}
+              readOnly={busy || creativeBusy}
+              onValueChange={(value) => update({ musicTheme: value })}
               placeholder="例如：一首关于夏夜海边重逢的中文流行歌，女声，温暖但略带遗憾，副歌要有记忆点"
               rows={4}
               className={`${inputClass} nodrag resize-y leading-relaxed`}
@@ -308,11 +311,13 @@ const GiteeMusicNode = ({ id, data, selected }: NodeProps) => {
 
         <label className="block space-y-1">
           <span className="text-[10px] text-white/55">歌词</span>
-          <textarea
+          <PromptTextarea
+            title="ACE-Step 歌词"
             value={lyrics}
-            onChange={(event) => update({ lyrics: event.target.value })}
+            onValueChange={(value) => update({ lyrics: value })}
             placeholder={'[Verse]\n...\n[Chorus]\n...\n\n纯音乐请填写 [instrumental]'}
             rows={7}
+            editorKind="text"
             className={`${inputClass} nodrag resize-y leading-relaxed`}
           />
         </label>

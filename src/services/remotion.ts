@@ -42,6 +42,23 @@ export interface RemotionReview {
   criticalIssues?: string[];
 }
 
+export type RemotionSkillSupport = 'enabled' | 'adapted' | 'disabled';
+
+export interface RemotionSkillSource {
+  name: 'remotion-best-practices';
+  pluginVersion: string;
+  snapshot: string;
+  repository?: string;
+  license?: string;
+}
+
+export interface RemotionSkillRuleDetail {
+  id: string;
+  support: RemotionSkillSupport;
+  phases: Array<'plan' | 'code' | 'repair' | 'review'>;
+  reason?: string;
+}
+
 export interface RemotionGenerationJob {
   id: string;
   status: 'queued' | 'running' | 'success' | 'error' | 'cancelled';
@@ -57,6 +74,8 @@ export interface RemotionGenerationJob {
   warnings: string[];
   skillVersion?: string;
   skillRules?: string[];
+  skillSource?: RemotionSkillSource;
+  skillRuleDetails?: RemotionSkillRuleDetail[];
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -72,11 +91,23 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export function getRemotionRuntimeStatus() {
-  return request<{ installed: boolean; executable?: string; phase: string; progress?: number; queuedJobs: number }>('/api/remotion/runtime/status');
+  return request<{
+    installed: boolean;
+    executable?: string;
+    phase: string;
+    progress?: number;
+    queuedJobs: number;
+    skill: {
+      version: string;
+      source: RemotionSkillSource;
+      ruleCount: number;
+      capabilities: Record<RemotionSkillSupport, string[]>;
+    };
+  }>('/api/remotion/runtime/status');
 }
 
 export function validateRemotionSpec(payload: { mode: RemotionMode; source: string; assets: RemotionAssetInput[]; profile: RemotionProfile }) {
-  return request<{ valid: true; spec?: unknown }>('/api/remotion/spec/validate', {
+  return request<{ valid: true; spec?: unknown; source?: string; normalizations?: string[] }>('/api/remotion/spec/validate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

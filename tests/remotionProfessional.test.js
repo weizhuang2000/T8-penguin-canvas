@@ -7,7 +7,10 @@ import {spawn} from 'node:child_process';
 import {createRequire} from 'node:module';
 
 const require = createRequire(import.meta.url);
-const {buildSkillContext, normalizeGenerationInput, selectSkillRules} = require('../backend/src/tools/remotion/skillPack');
+const {buildSkillContext, normalizeGenerationInput, selectSkillRules, skillStatus, RULE_CATALOG} = require('../backend/src/tools/remotion/skillPack');
+const {parseSrt} = require('../backend/src/tools/remotion/captions');
+const {detectSilence, parseDuration, parseVideo} = require('../backend/src/tools/remotion/mediaProbe');
+const {auditSkill} = require('../scripts/audit-remotion-skill.cjs');
 const {generateConfiguredLlm, resolveLlmConfig} = require('../backend/src/providers/llmClient');
 const manager = require('../backend/src/tools/remotion/generationManager');
 const {validateTsxSource} = require('../backend/src/tools/remotion/tsxValidator');
@@ -23,12 +26,13 @@ const fakeSettings = {
 
 const validTsx = `
 import React from 'react';
-import {AbsoluteFill, useCurrentFrame, useVideoConfig} from 'remotion';
+import {AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
 import {GradientBackdrop, KineticText} from '@t8/remotion-kit';
 export const GeneratedComposition: React.FC<any> = () => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
-  return <AbsoluteFill><GradientBackdrop/><KineticText text={String(frame + fps)} /></AbsoluteFill>;
+  const background = interpolate(frame, [0, fps], ['#0D0C0A', '#312E81']);
+  return <AbsoluteFill style={{background}}><GradientBackdrop/><KineticText text={String(frame + fps)} /></AbsoluteFill>;
 };`;
 
 function waitForJob(id, timeout = 3000) {
@@ -52,15 +56,66 @@ test('Remotion skill router selects supported conditional rules and clips text c
     assets: [{kind: 'image'}, {kind: 'video'}, {kind: 'audio'}],
     profile: {duration: 8},
   });
-  for (const id of ['animations', 'timing', 'sequencing', 'assets', 'security', 'text', 'images', 'videos', 'audio', 'transitions', 'charts']) {
+  for (const id of ['animations', 'timing', 'sequencing', 'assets', 'compositions', 'parameters', 'text-animations', 'images', 'videos', 'audio', 'transitions', 'charts']) {
     assert.equal(ids.includes(id), true, id);
   }
   const normalized = normalizeGenerationInput({texts: [{id: 'long', text: 'a'.repeat(100_000)}]});
   assert.equal(normalized.texts[0].text.length, 80_000);
   const skill = buildSkillContext({subject: '标题', assets: [], profile: {duration: 8}, stylePreset: 'tech'});
-  assert.equal(skill.version, 't8-remotion-skill/v1');
+  assert.equal(skill.version, 't8-remotion-skill/v2');
   assert.match(skill.text, /useCurrentFrame/);
+  assert.match(skill.text, /颜色.*interpolateColors/);
   assert.doesNotMatch(skill.text, /Lottie|React Three Fiber/);
+});
+
+test('Skill v2 catalogs all 38 upstream rules and gates unsupported capabilities', () => {
+  const status = skillStatus();
+  assert.equal(status.ruleCount, 38);
+  assert.equal(Object.keys(RULE_CATALOG).length, 38);
+  assert.deepEqual(status.capabilities.disabled.sort(), ['3d', 'audio-visualization', 'gifs', 'light-leaks', 'lottie', 'maps', 'tailwind', 'transcribe-captions', 'transparent-videos', 'voiceover'].sort());
+  for (const rule of Object.values(RULE_CATALOG)) assert.match(rule.sha256, /^[a-f0-9]{64}$/);
+  const skill = buildSkillContext({mode: 'tsx', subject: '使用 Mapbox 地图并用 ElevenLabs 配音', texts: [], assets: [], profile: {duration: 8}}, 'code');
+  assert.equal(skill.details.some((rule) => rule.id === 'maps' && rule.support === 'disabled'), true);
+  assert.equal(skill.details.some((rule) => rule.id === 'voiceover' && rule.support === 'disabled'), true);
+  assert.doesNotMatch(skill.text, /Mapbox token|ElevenLabs API|fetch\(/);
+  assert.match(skill.warnings.join('\n'), /maps/);
+  assert.ok(skill.text.length <= 24_000);
+});
+
+test('Skill phases and JSON mode receive only applicable context', () => {
+  const input = {mode: 'tsx', subject: '字幕图表动画', texts: [], assets: [{kind: 'video'}], profile: {duration: 8}};
+  const plan = buildSkillContext(input, 'plan');
+  const repair = buildSkillContext(input, 'repair');
+  assert.match(plan.text, /get-video-duration/);
+  assert.doesNotMatch(repair.text, /extract-frames/);
+  const json = buildSkillContext({...input, mode: 'json'}, 'code');
+  assert.match(json.text, /当前为 JSON DSL/);
+  assert.doesNotMatch(json.text, /可优先复用 @t8\/remotion-kit/);
+});
+
+test('SRT parser returns controlled Caption JSON and media probe parsers extract metadata', () => {
+  const captions = parseSrt('1\n00:00:00,500 --> 00:00:02,000\n你好，世界\n\n2\n00:00:02.100 --> 00:00:03.000\n第二句');
+  assert.deepEqual(captions[0], {text: '你好，世界', startMs: 500, endMs: 2000, timestampMs: null, confidence: null});
+  assert.equal(captions.length, 2);
+  assert.equal(parseDuration('Duration: 00:01:02.50, start: 0.0'), 62.5);
+  assert.deepEqual(parseVideo('Stream #0:0: Video: h264, yuv420p, 1920x1080, 30 fps'), {width: 1920, height: 1080, codec: 'h264'});
+});
+
+test('media probing honors an already cancelled AbortSignal', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(() => detectSilence('missing.mp4', {signal: controller.signal}), (error) => error?.name === 'AbortError');
+});
+
+test('Skill audit reports changed and missing upstream rules', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't8-remotion-skill-audit-'));
+  const rules = path.join(dir, 'rules');
+  fs.mkdirSync(rules);
+  fs.writeFileSync(path.join(rules, 'animations.md'), 'changed', 'utf8');
+  const result = auditSkill(dir);
+  assert.equal(result.ok, false);
+  assert.equal(result.changed.includes('animations'), true);
+  assert.equal(result.missing.includes('assets'), true);
 });
 
 test('reusable LLM client resolves only independent config and reports HTML upstream safely', async () => {
@@ -98,14 +153,21 @@ test('standard generation job runs asynchronously with mocked independent LLM', 
     assets: [],
     scenes: [{id: 's1', start: 0, duration: 2, background: '#111827', transition: 'fade', layers: [{id: 't1', type: 'text', start: 0, duration: 2, x: 0, y: 0, width: 0.8, height: 0.3, text: 'Hello'}]}],
   });
+  let submittedPrompt = '';
   manager.setTestHooks({
     loadSettings: () => fakeSettings,
-    generateLlm: async () => ({content: spec, model: 'code-model'}),
+    generateLlm: async (options) => {
+      submittedPrompt = String(options.messages?.[1]?.content?.[0]?.text || options.messages?.[1]?.content || '');
+      return {content: spec, model: 'code-model'};
+    },
   });
   const created = manager.createGenerationJob({mode: 'json', quality: 'standard', llmKeyId: 'writer', subject: 'Hello', profile: {duration: 2}}, {id: 'u1', role: 'member'});
   const completed = await waitForJob(created.id);
   assert.equal(completed.status, 'success', completed.error);
   assert.match(completed.source, /t8-remotion\/v1/);
+  assert.equal(completed.skillVersion, 't8-remotion-skill/v2');
+  assert.equal(completed.skillSource.pluginVersion, '1.0.3');
+  assert.doesNotMatch(submittedPrompt, /可优先复用 @t8\/remotion-kit/);
   assert.equal(manager.canAccess(manager.getGenerationJob(created.id), {id: 'u2', role: 'member'}), false);
   assert.equal(manager.canAccess(manager.getGenerationJob(created.id), {id: 'admin', role: 'admin'}), true);
 });
@@ -136,6 +198,9 @@ test('professional generation performs visual review and falls back to text revi
     const completed = await waitForJob(created.id);
     assert.equal(completed.status, 'success', completed.error);
     assert.equal(completed.reviews[0].score, 92);
+    assert.equal(completed.skillRuleDetails.some((rule) => rule.id === 'animations'), true);
+    assert.match(completed.source, /__t8InterpolateColors/);
+    assert.match(completed.warnings.join('\n'), /已将颜色 interpolate/);
     assert.match(completed.warnings.join('\n'), /降级为文本审查/);
     assert.ok(calls >= 4);
   } finally {
@@ -193,8 +258,8 @@ test('professional kit resolves through the Remotion bundler alias', {timeout: 6
   fs.writeFileSync(entryPoint, `
 import React from 'react';
 import {Composition, registerRoot, AbsoluteFill, useCurrentFrame, useVideoConfig} from 'remotion';
-import {GradientBackdrop, KineticText, BarChart} from '@t8/remotion-kit';
-const Demo: React.FC = () => { const frame=useCurrentFrame(); const {fps}=useVideoConfig(); return <AbsoluteFill><GradientBackdrop/><KineticText text={String(frame+fps)}/><BarChart data={[{label:'A',value:10}]}/></AbsoluteFill>; };
+import {GradientBackdrop, KineticText, TypewriterText, WordHighlight, FitText, CaptionTrack, BarChart, AnimatedPieChart, AnimatedPath} from '@t8/remotion-kit';
+const Demo: React.FC = () => { const frame=useCurrentFrame(); const {fps}=useVideoConfig(); return <AbsoluteFill><GradientBackdrop/><KineticText text={String(frame+fps)}/><TypewriterText text="Hello"/><WordHighlight text="one two"/><FitText text="fit"/><CaptionTrack captions={[{text:'caption',startMs:0,endMs:1000,timestampMs:null,confidence:null}]}/><BarChart data={[{label:'A',value:10}]}/><AnimatedPieChart data={[{label:'A',value:10}]}/><AnimatedPath d="M 0 0 L 100 100"/></AbsoluteFill>; };
 const Root=()=> <Composition id="T8Remotion" component={Demo} width={320} height={180} fps={24} durationInFrames={24}/>;
 registerRoot(Root);`, 'utf8');
   try {
@@ -225,7 +290,9 @@ test('optional real worker renders six professional stills and a contact sheet',
   const publicDir = path.join(dir, 'public');
   const outputDir = path.join(dir, 'stills');
   fs.mkdirSync(publicDir, {recursive: true});
-  fs.writeFileSync(path.join(dir, 'GeneratedComposition.tsx'), validTsx, 'utf8');
+  const normalizedSmokeSource = validateTsxSource(validTsx);
+  assert.equal(normalizedSmokeSource.ok, true, normalizedSmokeSource.errors.join('\n'));
+  fs.writeFileSync(path.join(dir, 'GeneratedComposition.tsx'), normalizedSmokeSource.source, 'utf8');
   fs.writeFileSync(path.join(dir, 'index.tsx'), `
 import React from 'react';
 import {Composition, registerRoot} from 'remotion';

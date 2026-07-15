@@ -109,6 +109,7 @@
       "electron/loader.cjs",
       "electron/remotion-worker.cjs",
       "remotion/**/*",
+      "THIRD_PARTY_NOTICES.md",
       "package.json",
       "node_modules/**/*",
       "!node_modules/electron/**/*",

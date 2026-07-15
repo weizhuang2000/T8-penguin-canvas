@@ -56,6 +56,71 @@ export const WordReveal: React.FC<{
   );
 };
 
+export const TypewriterText: React.FC<{
+  text: string;
+  delay?: number;
+  charsPerSecond?: number;
+  cursor?: boolean;
+  style?: React.CSSProperties;
+}> = ({text, delay = 0, charsPerSecond = 18, cursor = true, style}) => {
+  const frame = useCurrentFrame();
+  const {fps} = useVideoConfig();
+  const count = Math.max(0, Math.min(text.length, Math.floor(((frame / fps) - delay) * charsPerSecond)));
+  const showCursor = cursor && count < text.length && Math.floor(frame / Math.max(1, fps / 2)) % 2 === 0;
+  return <span style={style}>{text.slice(0, count)}{showCursor ? '▍' : ''}</span>;
+};
+
+export const WordHighlight: React.FC<{
+  text: string;
+  delay?: number;
+  secondsPerWord?: number;
+  color?: string;
+  style?: React.CSSProperties;
+}> = ({text, delay = 0, secondsPerWord = 0.35, color = '#fbbf24', style}) => {
+  const frame = useCurrentFrame();
+  const {fps} = useVideoConfig();
+  const words = text.split(/(\s+)/);
+  const spoken = words.filter((word) => word.trim());
+  const active = Math.max(-1, Math.floor(((frame / fps) - delay) / Math.max(0.05, secondsPerWord)));
+  let wordIndex = -1;
+  return <span style={style}>{words.map((word, index) => {
+    if (word.trim()) wordIndex += 1;
+    const highlighted = word.trim() && wordIndex === Math.min(active, spoken.length - 1);
+    return <span key={`${word}-${index}`} style={highlighted ? {color, textDecoration: 'underline', textDecorationThickness: '0.16em', textUnderlineOffset: '0.12em'} : undefined}>{word}</span>;
+  })}</span>;
+};
+
+export const FitText: React.FC<React.PropsWithChildren<{
+  text?: string;
+  containerWidth?: number;
+  maxFontSize?: number;
+  minFontSize?: number;
+  maxLines?: number;
+  style?: React.CSSProperties;
+}>> = ({text, containerWidth = 1200, maxFontSize = 96, minFontSize = 24, maxLines = 2, style, children}) => {
+  const content = String(text ?? children ?? '');
+  const estimatedUnits = [...content].reduce((sum, char) => sum + (/\s/.test(char) ? 0.35 : /[\x00-\xff]/.test(char) ? 0.58 : 1), 0);
+  const fitted = Math.max(minFontSize, Math.min(maxFontSize, containerWidth * maxLines / Math.max(1, estimatedUnits)));
+  return <div style={{fontSize: fitted, lineHeight: 1.12, maxWidth: containerWidth, overflow: 'hidden', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: maxLines, ...style}}>{text ?? children}</div>;
+};
+
+export type Caption = {text: string; startMs: number; endMs: number; timestampMs: number | null; confidence: number | null};
+
+export const CaptionTrack: React.FC<{
+  captions: Caption[];
+  color?: string;
+  activeColor?: string;
+  style?: React.CSSProperties;
+}> = ({captions, color = '#ffffff', activeColor = '#fde047', style}) => {
+  const frame = useCurrentFrame();
+  const {fps} = useVideoConfig();
+  const now = frame / fps * 1000;
+  const caption = captions.find((item) => now >= item.startMs && now < item.endMs);
+  if (!caption) return null;
+  const progress = interpolate(now, [caption.startMs, Math.min(caption.endMs, caption.startMs + 180)], [0, 1], clamp);
+  return <div style={{position: 'absolute', left: '8%', right: '8%', bottom: '8%', display: 'flex', justifyContent: 'center', textAlign: 'center', color, opacity: progress, transform: `translateY(${(1 - progress) * 18}px)`, ...style}}><span style={{background: 'rgba(0,0,0,0.62)', borderRadius: 14, padding: '0.22em 0.5em', boxDecorationBreak: 'clone', WebkitBoxDecorationBreak: 'clone', textShadow: `0 0 18px ${activeColor}55`}}>{caption.text}</span></div>;
+};
+
 export const NumberCounter: React.FC<{
   from?: number;
   to: number;
@@ -188,4 +253,35 @@ export const LineChart: React.FC<{data: ChartDatum[]; color?: string; style?: Re
       </g>)}
     </svg>
   );
+};
+
+export const AnimatedPieChart: React.FC<{data: ChartDatum[]; size?: number; strokeWidth?: number; style?: React.CSSProperties}> = ({data, size = 420, strokeWidth = 72, style}) => {
+  const frame = useCurrentFrame();
+  const {fps} = useVideoConfig();
+  const progress = interpolate(frame, [0, 1.4 * fps], [0, 1], {...clamp, easing: Easing.out(Easing.cubic)});
+  const total = Math.max(1, data.reduce((sum, item) => sum + Math.max(0, Number(item.value) || 0), 0));
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
+  return <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size} style={{transform: 'rotate(-90deg)', ...style}}>{data.map((item, index) => {
+    const ratio = Math.max(0, Number(item.value) || 0) / total;
+    const length = circumference * ratio * progress;
+    const currentOffset = circumference * offset;
+    offset += ratio;
+    return <circle key={`${item.label}-${index}`} cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={item.color || ['#67e8f9', '#a78bfa', '#fbbf24', '#fb7185'][index % 4]} strokeWidth={strokeWidth} strokeDasharray={`${length} ${circumference - length}`} strokeDashoffset={-currentOffset} strokeLinecap="butt" />;
+  })}</svg>;
+};
+
+export const AnimatedPath: React.FC<{
+  d: string;
+  viewBox?: string;
+  color?: string;
+  strokeWidth?: number;
+  duration?: number;
+  style?: React.CSSProperties;
+}> = ({d, viewBox = '0 0 1000 500', color = '#67e8f9', strokeWidth = 8, duration = 1.5, style}) => {
+  const frame = useCurrentFrame();
+  const {fps} = useVideoConfig();
+  const progress = interpolate(frame, [0, duration * fps], [0, 1], {...clamp, easing: Easing.out(Easing.cubic)});
+  return <svg viewBox={viewBox} style={{overflow: 'visible', ...style}}><path d={d} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" pathLength={1} strokeDasharray={1} strokeDashoffset={1 - progress} /></svg>;
 };

@@ -7,6 +7,8 @@ const {spawn} = require('child_process');
 const config = require('../../config');
 const {generateConfiguredLlm, loadRawSettings} = require('../../providers/llmClient');
 const {stageAssets} = require('./assets');
+const {extractCaptionTracks} = require('./captions');
+const {probeStagedAssets} = require('./mediaProbe');
 const renderCoordinator = require('./renderCoordinator');
 const {normalizeProfile} = require('./schema');
 const {validateSource} = require('./jobManager');
@@ -24,7 +26,7 @@ let loadSettingsImpl = loadRawSettings;
 let renderStillsImpl;
 
 const JSON_GUIDE = `只返回严格 JSON，不要 Markdown 代码块。版本必须是 t8-remotion/v1。assets 只能声明给定素材 ID；scenes 包含 id/start/duration/background/transition/layers；图层仅限 text/image/video/audio/shape。所有场景和图层不能超过总时长。动画仅限 none/fade/slide-left/slide-right/slide-up/slide-down/scale/typewriter。`;
-const TSX_GUIDE = `只返回单个 TSX 模块，不要 Markdown 代码块或解释。必须命名导出 export const GeneratedComposition: React.FC<any> = ({assets, profile, subject}) => {...}。可导入 react、remotion、@remotion/media、@remotion/transitions 白名单子路径和 @t8/remotion-kit。素材必须通过 assets.find(a=>a.id==='asset-1') 获取，并用 staticFile('assets/'+asset.src) 转为地址。`;
+const TSX_GUIDE = `只返回单个 TSX 模块，不要 Markdown 代码块或解释。必须命名导出 export const GeneratedComposition: React.FC<any> = ({assets, profile, subject}) => {...}。可导入 react、remotion、@remotion/media、@remotion/transitions 白名单子路径和 @t8/remotion-kit。素材必须通过 assets.find(a=>a.id==='asset-1') 获取，并用 staticFile('assets/'+asset.src) 转为地址。数值动画使用 interpolate()；任何 #hex/rgb/hsl/oklch 颜色动画必须从 remotion 导入并使用 interpolateColors()，禁止把颜色传给 interpolate()。`;
 
 function appRoot() {
   if (process.env.T8PC_APP_PATH) return path.resolve(process.env.T8PC_APP_PATH);
@@ -100,6 +102,8 @@ function publicJob(job) {
     warnings: job.warnings,
     skillVersion: job.skill?.version,
     skillRules: job.skill?.ruleIds || [],
+    skillSource: job.skill?.source,
+    skillRuleDetails: job.skill?.details || [],
   };
 }
 
@@ -117,23 +121,35 @@ function scheduleCleanup(job) {
 }
 
 function materialManifest(job) {
-  return job.input.assets.map((asset) => ({id: asset.id, kind: asset.kind, label: asset.label || asset.id}));
+  const prepared = new Map((job.prepared?.stagedAssets || []).map((asset) => [asset.id, asset]));
+  return job.input.assets.map((asset) => {
+    const staged = prepared.get(asset.id);
+    return {id: asset.id, kind: asset.kind, label: asset.label || asset.id, ...(staged?.metadata ? {metadata: staged.metadata} : {})};
+  });
 }
 
 function userContent(job, prompt) {
   const content = [{type: 'text', text: prompt}];
+  const prepared = new Map((job.prepared?.llmAssets || []).map((asset) => [asset.id, asset]));
   for (const asset of job.input.assets.filter((item) => item.kind === 'image').slice(0, 12)) {
-    content.push({type: 'image_url', image_url: {url: asset.url}});
+    content.push({type: 'image_url', image_url: {url: prepared.get(asset.id)?.url || asset.url}});
   }
   for (const asset of job.input.assets.filter((item) => item.kind === 'video').slice(0, 4)) {
-    content.push({type: 'video_url', video_url: {url: asset.url}});
+    content.push({type: 'video_url', video_url: {url: prepared.get(asset.id)?.url || asset.url}});
   }
   return content;
 }
 
-function commonContext(job) {
+function skillFor(job, phase) {
+  if (!job.skillContexts[phase]) job.skillContexts[phase] = buildSkillContext({...job.input, profile: job.profile}, phase);
+  return job.skillContexts[phase];
+}
+
+function commonContext(job, phase) {
   const textContext = job.input.texts.map((item) => `${item.label || item.id || '上游文本'}：\n${item.text}`).join('\n\n');
-  return `主题/文案：\n${job.input.subject || '(依据上游素材创作)'}\n\n上游文本：\n${textContext || '(无)'}\n\n输出配置：${job.profile.ratio}，${job.profile.width}x${job.profile.height}，${job.profile.fps}fps，总时长 ${job.profile.duration} 秒。\n\n素材清单：\n${JSON.stringify(materialManifest(job), null, 2)}\n\n${job.skill.text}`;
+  const captions = job.prepared?.captionTracks || [];
+  const captionContext = captions.length ? `\n\n已解析字幕轨：\n${JSON.stringify(captions, null, 2)}` : '';
+  return `主题/文案：\n${job.input.subject || '(依据上游素材创作)'}\n\n上游文本：\n${textContext || '(无)'}\n\n输出配置：${job.profile.ratio}，${job.profile.width}x${job.profile.height}，${job.profile.fps}fps，总时长 ${job.profile.duration} 秒。\n\n素材清单：\n${JSON.stringify(materialManifest(job), null, 2)}${captionContext}\n\n${skillFor(job, phase).text}`;
 }
 
 async function callLlm(job, phase, options) {
@@ -151,7 +167,7 @@ async function callLlm(job, phase, options) {
 }
 
 async function generatePlan(job) {
-  const prompt = `${commonContext(job)}\n\n先规划一份专业动画创意方案。只返回 JSON，字段包含 concept、style、palette、typography、scenes（每项含 start、duration、purpose、visual、motion、copy）、assetUsage、audioPlan、qualityChecklist。方案必须覆盖完整时长，控制文字密度，明确每段视觉焦点。`;
+  const prompt = `${commonContext(job, 'plan')}\n\n先规划一份专业动画创意方案。只返回 JSON，字段包含 concept、style、palette、typography、scenes（每项含 start、duration、purpose、visual、motion、copy）、assetUsage、audioPlan、qualityChecklist。方案必须覆盖完整时长，控制文字密度，明确每段视觉焦点。`;
   const response = await callLlm(job, 'planning', {
     progress: 8,
     temperature: 0.65,
@@ -169,7 +185,7 @@ async function generatePlan(job) {
 async function generateSource(job) {
   const guide = job.input.mode === 'tsx' ? TSX_GUIDE : JSON_GUIDE;
   const plan = job.plan ? `\n\n已批准的创意方案：\n${JSON.stringify(job.plan, null, 2)}` : '';
-  const prompt = `${commonContext(job)}${plan}\n\n${guide}\n请直接生成可渲染的完整${job.input.mode === 'tsx' ? ' TSX' : ' JSON DSL'}。专业结果必须有明确视觉层级、至少三种协调的帧动画、完整素材编排和可截图的关键画面。`;
+  const prompt = `${commonContext(job, 'code')}${plan}\n\n${guide}\n请直接生成可渲染的完整${job.input.mode === 'tsx' ? ' TSX' : ' JSON DSL'}。专业结果必须有明确视觉层级、至少三种协调的帧动画、完整素材编排和可截图的关键画面。`;
   const response = await callLlm(job, 'generating-code', {
     progress: job.input.quality === 'professional' ? 20 : 12,
     temperature: job.input.quality === 'professional' ? 0.25 : 0.3,
@@ -189,7 +205,7 @@ async function repairSource(job, source, errors, progress) {
     maxTokens: job.input.mode === 'tsx' ? 32_000 : 16_000,
     messages: [
       {role: 'system', content: '修复 Remotion 源码。只返回修复后的完整源码，不要解释、不要 Markdown。'},
-      {role: 'user', content: `${job.skill.text}\n\n模式：${job.input.mode}\n错误：\n${errors.join('\n')}\n\n待修复源码：\n${source}`},
+      {role: 'user', content: `${skillFor(job, 'repair').text}\n\n模式：${job.input.mode}\n错误：\n${errors.join('\n')}\n\n待修复源码：\n${source}`},
     ],
   });
   return stripFence(response.content);
@@ -197,7 +213,10 @@ async function repairSource(job, source, errors, progress) {
 
 async function ensureValidSource(job, source, progress) {
   let result = validateSource(job.input.mode, source, {assets: job.input.assets, profile: job.profile});
-  if (result.ok) return result.source || source;
+  if (result.ok) {
+    job.warnings.push(...(result.normalizations || []).filter((message) => !job.warnings.includes(message)));
+    return result.source || source;
+  }
   const repaired = await repairSource(job, source, result.errors || ['未知校验错误'], progress);
   result = validateSource(job.input.mode, repaired, {assets: job.input.assets, profile: job.profile});
   if (!result.ok) {
@@ -205,14 +224,20 @@ async function ensureValidSource(job, source, progress) {
     error.validationErrors = result.errors || [];
     throw error;
   }
+  job.warnings.push(...(result.normalizations || []).filter((message) => !job.warnings.includes(message)));
   return result.source || repaired;
 }
 
 async function prepareWorkspace(job) {
   fs.mkdirSync(job.workDir, {recursive: true});
   const publicDir = path.join(job.workDir, 'public');
-  const stagedAssets = await stageAssets(job.input.assets, path.join(publicDir, 'assets'));
-  job.prepared = {publicDir, stagedAssets};
+  const assetsDir = path.join(publicDir, 'assets');
+  const staged = await stageAssets(job.input.assets, assetsDir);
+  const detectSilence = /静音|去停顿|remove silence|silence/i.test(`${job.input.subject}\n${job.input.texts.map((item) => item.text).join('\n')}`);
+  const stagedAssets = await probeStagedAssets(staged, assetsDir, {detectSilence, signal: job.abortController.signal});
+  const llmAssets = stagedAssets.map((asset) => ({id: asset.id, url: path.join(assetsDir, asset.src)}));
+  const captionTracks = extractCaptionTracks(job.input.texts);
+  job.prepared = {publicDir, assetsDir, stagedAssets, llmAssets, captionTracks};
 }
 
 function parseWorkerLine(job, line, state, progressBase, progressSpan) {
@@ -294,7 +319,7 @@ function contactSheetPart(file) {
 }
 
 async function reviewSource(job, source, stills, round, includeImage = true) {
-  const prompt = `审查这段 Remotion 动画的六张时间顺序关键帧和源码。按排版、视觉层级、素材利用、文字溢出、动画节奏、镜头连续性评分。只返回 JSON：{"score":0-100,"criticalIssues":["..."],"summary":"...","revisedSource":"完整 TSX 或空字符串"}。分数低于 88 或存在严重问题时必须给出完整 revisedSource；不要返回补丁。\n\n创意方案：\n${JSON.stringify(job.plan || {}, null, 2)}\n\n当前源码：\n${source}`;
+  const prompt = `${skillFor(job, 'review').text}\n\n审查这段 Remotion 动画的六张时间顺序关键帧和源码。按排版、视觉层级、素材利用、文字溢出、动画节奏、镜头连续性评分。只返回 JSON：{"score":0-100,"criticalIssues":["..."],"summary":"...","revisedSource":"完整 TSX 或空字符串"}。分数低于 88 或存在严重问题时必须给出完整 revisedSource；不要返回补丁。\n\n创意方案：\n${JSON.stringify(job.plan || {}, null, 2)}\n\n当前源码：\n${source}`;
   const content = [{type: 'text', text: prompt}];
   if (includeImage) content.push(contactSheetPart(stills.contactSheet));
   const response = await callLlm(job, includeImage ? `reviewing-${round}` : `reviewing-text-${round}`, {
@@ -311,7 +336,6 @@ async function reviewSource(job, source, stills, round, includeImage = true) {
 }
 
 async function professionalPipeline(job, initialSource) {
-  await prepareWorkspace(job);
   let source = initialSource;
   let lastCompiled = '';
   for (let round = 1; round <= 2; round += 1) {
@@ -370,6 +394,8 @@ async function runJob(job) {
   job.status = 'running';
   job.updatedAt = Date.now();
   try {
+    update(job, 'preparing-assets', 3);
+    await prepareWorkspace(job);
     if (job.input.quality === 'professional') await generatePlan(job);
     let source = await generateSource(job);
     source = await ensureValidSource(job, source, job.input.quality === 'professional' ? 30 : 55);
@@ -425,6 +451,7 @@ function createGenerationJob(body, user) {
   const settings = loadSettingsImpl();
   if (!settings) throw new Error('无法读取 LLM 独立配置');
   const profile = normalizeProfile(input.profile);
+  const skill = buildSkillContext({...input, profile}, 'code');
   const id = genId();
   const now = Date.now();
   const job = {
@@ -432,7 +459,8 @@ function createGenerationJob(body, user) {
     input,
     profile,
     settings,
-    skill: buildSkillContext({...input, profile}),
+    skill,
+    skillContexts: {code: skill},
     userId: String(user?.id || ''),
     status: 'queued',
     phase: 'queued',
@@ -442,7 +470,7 @@ function createGenerationJob(body, user) {
     plan: null,
     planSummary: '',
     reviews: [],
-    warnings: [],
+    warnings: [...skill.warnings],
     createdAt: now,
     updatedAt: now,
     workDir: path.join(generationRoot(), id),

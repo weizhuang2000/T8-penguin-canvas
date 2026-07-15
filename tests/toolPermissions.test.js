@@ -87,17 +87,6 @@ test('tool permissions merge new default-visible nodes into old configs', () => 
   assert.equal(permissions.canUseNode({ id: 'u2', role: 'designer' }, 'exhibition-lighting-heatmap'), true);
 }));
 
-test('tool permissions expose Flux image node and migrate it into saved defaults', () => withTempData(() => {
-  const oldDefaults = permissions.DEFAULT_VISIBLE_NODE_TYPES.filter((type) => type !== 'flux-image');
-  permissions.writeDb({ defaultVisibleNodeTypes: oldDefaults, roleRules: {}, userRules: {} });
-
-  const resolved = permissions.resolveToolPermissions({ id: 'u2', role: 'designer' });
-  assert.equal(permissions.ALL_NODE_TYPES.includes('flux-image'), true);
-  assert.equal(permissions.DEFAULT_VISIBLE_NODE_TYPES.includes('flux-image'), true);
-  assert.equal(resolved.visibleNodeTypes.includes('flux-image'), true);
-  assert.equal(permissions.canUseNode({ id: 'u2', role: 'designer' }, 'flux-image'), true);
-}));
-
 test('tool permissions expose ACE-Step music node and migrate it into saved defaults', () => withTempData(() => {
   const oldDefaults = permissions.DEFAULT_VISIBLE_NODE_TYPES.filter((type) => type !== 'gitee-music');
   permissions.writeDb({ defaultVisibleNodeTypes: oldDefaults, roleRules: {}, userRules: {} });

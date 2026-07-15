@@ -83,11 +83,6 @@ const IMAGE_POLL_TIMEOUT_SECONDS = 3600;
 const minPollCountForTimeout = (intervalMs: number) =>
   Math.ceil((IMAGE_POLL_TIMEOUT_SECONDS * 1000) / Math.max(1, intervalMs));
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
-const GITEE_FLUX_SIZE_BY_LEVEL: Record<string, string> = {
-  '1K': '1024x1024',
-  '1.5K': '1536x1536',
-  '2K': '2048x2048',
-};
 const COMFY_NUMERIC_FIELD_SOURCES = new Set([
   'width',
   'height',
@@ -161,7 +156,7 @@ const comfyImageSourceIndex = (source: string) => {
   return match ? Math.max(1, Number(match[1]) || 1) : 0;
 };
 
-const ImageNode = ({ id, data, selected, type }: NodeProps) => {
+const ImageNode = ({ id, data, selected }: NodeProps) => {
   const update = useUpdateNodeData(id);
   const { loadedCanvasId } = useCanvasRuntime();
   const hasAutoOutput = useHasAutoOutput(id);
@@ -177,39 +172,21 @@ const ImageNode = ({ id, data, selected, type }: NodeProps) => {
 
   const [error, setError] = useState<string | null>(null);
   const d = data as any;
-  const isFluxNode = type === 'flux-image';
-  const model = isFluxNode ? 'flux-1-schnell' : (d?.model || IMAGE_MODELS[0].id);
-  const modelDef = useMemo(() => {
-    const found = IMAGE_MODELS.find((m) => m.id === model);
-    if (found) return found;
-    if (isFluxNode) {
-      return {
-        ...IMAGE_MODELS[0],
-        id: 'flux-1-schnell',
-        label: 'Flux 1 Schnell',
-        description: 'Gitee AI Serverless Flux 文生图',
-        aspectRatios: ['1:1'],
-        defaultAspectRatio: '1:1',
-        sizes: Object.keys(GITEE_FLUX_SIZE_BY_LEVEL),
-        defaultSize: '1K',
-      };
-    }
-    return IMAGE_MODELS[0];
-  }, [model, isFluxNode]);
+  const model = d?.model || IMAGE_MODELS[0].id;
+  const modelDef = useMemo(() => IMAGE_MODELS.find((m) => m.id === model) || IMAGE_MODELS[0], [model]);
   const advancedProviders = useApiKeysStore((s) => s.settings.advancedProviders);
-  const zhenzhenFallbackEnabled = useApiKeysStore((s) => s.settings.enableZhenzhenFallback !== false);
-  const allowZhenzhenFallback = !isFluxNode && zhenzhenFallbackEnabled;
+  const allowZhenzhenFallback = useApiKeysStore((s) => s.settings.enableZhenzhenFallback !== false);
   const imageAdvancedProviders = useMemo(
-    () => advancedProvidersForNode(advancedProviders, 'image').filter((provider) => !isFluxNode || provider.id === 'gitee-flux'),
-    [advancedProviders, isFluxNode],
+    () => advancedProvidersForNode(advancedProviders, 'image'),
+    [advancedProviders],
   );
   const providerSelection = useMemo(
     () => resolveAdvancedProviderSelection(advancedProviders, 'image', {
-      providerSource: isFluxNode ? 'gitee-flux' : d?.providerSource,
-      providerId: isFluxNode ? 'gitee-flux' : d?.providerId,
-      providerModel: isFluxNode ? 'flux-1-schnell' : d?.providerModel,
+      providerSource: d?.providerSource,
+      providerId: d?.providerId,
+      providerModel: d?.providerModel,
     }),
-    [advancedProviders, d?.providerSource, d?.providerId, d?.providerModel, isFluxNode],
+    [advancedProviders, d?.providerSource, d?.providerId, d?.providerModel],
   );
   const isExternalSelected = providerSelection.available && providerSelection.providerSource !== 'zhenzhen';
   const savedExternalMissing = !!d?.providerSource && d.providerSource !== 'zhenzhen' && !providerSelection.available;
@@ -391,16 +368,8 @@ const ImageNode = ({ id, data, selected, type }: NodeProps) => {
     },
   });
 
-  const aspectRatio = isFluxNode ? '1:1' : (d?.aspectRatio || modelDef.defaultAspectRatio);
-  const savedSizeLevel = String(d?.sizeLevel || modelDef.defaultSize);
-  const sizeLevel = isFluxNode && !GITEE_FLUX_SIZE_BY_LEVEL[savedSizeLevel] ? '1K' : savedSizeLevel;
-  useEffect(() => {
-    if (!isFluxNode) return;
-    const patch: Record<string, string> = {};
-    if (d?.aspectRatio !== '1:1') patch.aspectRatio = '1:1';
-    if (!GITEE_FLUX_SIZE_BY_LEVEL[String(d?.sizeLevel || '')]) patch.sizeLevel = '1K';
-    if (Object.keys(patch).length) update(patch);
-  }, [d?.aspectRatio, d?.sizeLevel, isFluxNode, update]);
+  const aspectRatio = d?.aspectRatio || modelDef.defaultAspectRatio;
+  const sizeLevel = d?.sizeLevel || modelDef.defaultSize;
   // 子模型变体(对齐 gpt-image-2-web 的 g_model/n_model)
   const savedApiModel = typeof d?.apiModel === 'string' ? d.apiModel : '';
   const apiModel = modelDef.apiModelOptions.some((opt) => opt.value === savedApiModel)
@@ -450,7 +419,7 @@ const ImageNode = ({ id, data, selected, type }: NodeProps) => {
   const MJ_REF_MAX = 2; // sref 与 oref 各最多 2 张
 
   // 参考图上限(FAL 使用 FAL_REGISTRY.maxRefs,其他走原设计)
-  const maxRefs = isFluxNode ? 0 : (isExternalSelected ? Math.max(8, modelDef.maxReferenceImages || 0) : (falDef?.maxRefs ?? modelDef.maxReferenceImages));
+  const maxRefs = isExternalSelected ? Math.max(8, modelDef.maxReferenceImages || 0) : (falDef?.maxRefs ?? modelDef.maxReferenceImages);
   const status: 'idle' | 'generating' | 'success' | 'error' = d?.status || 'idle';
   const imageUrl = d?.imageUrl as string | undefined;
   const localPrompt = d?.prompt || '';
@@ -606,10 +575,6 @@ const ImageNode = ({ id, data, selected, type }: NodeProps) => {
 
   const handleGenerate = async () => {
     setError(null);
-    if (isFluxNode && !isExternalSelected) {
-      setError('请先在 API 设置中启用 Gitee Flux，并填写 Gitee AI Access Token。');
-      return;
-    }
     const { prompt: upstreamPrompt, images: upstreamImages } = collectUpstream();
     const resolvedLocalPrompt = resolveMediaMentions(localPrompt, promptMentions, mentionMaterials);
     const comfyProviderPrompt = isComfyExternal
@@ -624,8 +589,8 @@ const ImageNode = ({ id, data, selected, type }: NodeProps) => {
     const historyContext = {
       canvasId: loadedCanvasId,
       sourceNodeId: id,
-      sourceNodeType: isFluxNode ? 'flux-image' : 'image',
-      nodeTitle: String(d?.label || (isFluxNode ? 'Flux 生图' : 'Image')),
+      sourceNodeType: 'image',
+      nodeTitle: String(d?.label || 'Image'),
       seed: historySeed,
     };
     if (!finalPrompt && (!isComfyExternal || comfyHasPromptField)) {
@@ -643,9 +608,7 @@ const ImageNode = ({ id, data, selected, type }: NodeProps) => {
       if (isExternalSelected && providerSelection.provider) {
         const providerModel = externalProviderModel;
         if (!providerModel) throw new Error('扩展平台未配置可用图像模型');
-        let size = isFluxNode
-          ? (GITEE_FLUX_SIZE_BY_LEVEL[sizeLevel] || GITEE_FLUX_SIZE_BY_LEVEL['1K'])
-          : externalImageSizeFor(aspectRatio, sizeLevel);
+        let size = externalImageSizeFor(aspectRatio, sizeLevel);
         if (isComfyExternal && comfyWorkflow) {
           const width = comfyNumberForSource('width', 1024);
           const height = comfyNumberForSource('height', 1024);

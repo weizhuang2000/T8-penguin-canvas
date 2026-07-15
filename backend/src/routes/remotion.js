@@ -4,12 +4,13 @@ const express = require('express');
 const { requireNodePermission } = require('../auth/toolPermissions');
 const manager = require('../tools/remotion/jobManager');
 const generationManager = require('../tools/remotion/generationManager');
+const {skillStatus} = require('../tools/remotion/skillPack');
 
 const router = express.Router();
 const permission = requireNodePermission('remotion-animation');
 
 router.get('/runtime/status', permission, (_req, res) => {
-  res.json({ success: true, data: manager.getRuntimeStatus() });
+  res.json({ success: true, data: {...manager.getRuntimeStatus(), skill: skillStatus()} });
 });
 
 router.post('/spec/validate', permission, (req, res) => {
@@ -19,7 +20,15 @@ router.post('/spec/validate', permission, (req, res) => {
     profile: req.body?.profile,
   });
   if (!result.ok) return res.status(400).json({ success: false, error: 'Remotion 描述校验失败', data: { errors: result.errors } });
-  return res.json({ success: true, data: { valid: true, spec: mode === 'json' ? result.data : undefined } });
+  return res.json({
+    success: true,
+    data: {
+      valid: true,
+      spec: mode === 'json' ? result.data : undefined,
+      source: mode === 'tsx' ? result.source : undefined,
+      normalizations: mode === 'tsx' ? (result.normalizations || []) : [],
+    },
+  });
 });
 
 router.post('/generation-jobs', permission, (req, res) => {

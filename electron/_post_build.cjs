@@ -441,6 +441,9 @@ function main() {
   checkFile(path.join(RES, 'backend-enc', 'tools', 'remotion', 'generationManager.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'tools', 'remotion', 'renderCoordinator.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'tools', 'remotion', 'skillPack.t8c'));
+  checkFile(path.join(RES, 'backend-enc', 'tools', 'remotion', 'skillCatalog.t8c'));
+  checkFile(path.join(RES, 'backend-enc', 'tools', 'remotion', 'captions.t8c'));
+  checkFile(path.join(RES, 'backend-enc', 'tools', 'remotion', 'mediaProbe.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'utils', 'duckPayload.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'utils', 'codexCliRunner.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'utils', 'figmaBridge.t8c'));

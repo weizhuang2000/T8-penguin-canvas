@@ -51,7 +51,6 @@ export const NODE_PORTS: Record<string, NodePorts> = {
   // ========== Core ==========
   text: { inputs: ['text', 'image', 'video', 'audio'], outputs: ['text'] },
   image: { inputs: ['text', 'image'], outputs: ['image'] },
-  'flux-image': { inputs: ['text'], outputs: ['image'] },
   'gitee-music': { inputs: ['text'], outputs: ['audio'] },
   // 视频节点默认模型仍只使用 text/image；选择即梦 CLI Seedance 时会消费 video/audio 参考。
   // 端口表是静态的，需提前允许四类输入，避免用户切到即梦 CLI 后无法连线。

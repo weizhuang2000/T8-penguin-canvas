@@ -8,7 +8,6 @@ export type NodeType =
   // Core (8)
   | 'text'
   | 'image'
-  | 'flux-image'
   | 'gitee-music'
   | 'video'
   | 'runninghub-video'
