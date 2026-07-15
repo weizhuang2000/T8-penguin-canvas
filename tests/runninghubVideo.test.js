@@ -351,6 +351,17 @@ test('RunningHub full-video catalog keeps only video categories and formats pric
   assert.equal(runninghubVideoCatalog.FALLBACK_RUNNINGHUB_VIDEO_CATALOG.length, 35);
   assert.equal((frontendFallback.match(/\bitem\('/g) || []).length, 35);
   assert.match(catalogSource, /encodeURIComponent\('全能视频'\)/);
+  assert.equal(
+    runninghubVideoCatalog.DEFAULT_RUNNINGHUB_CALL_API_BASE_URL,
+    'https://www.runninghub.ai/zh-cn/call-api',
+  );
+  assert.equal(
+    runninghubVideoCatalog.runningHubCallApiUrl('api-detail/2005884653783007234'),
+    'https://www.runninghub.ai/zh-cn/call-api/api-detail/2005884653783007234',
+  );
+  assert.match(catalogSource, /runningHubCallApiUrl\([\s\S]*?search-api\/standard-model/);
+  assert.match(catalogSource, /runningHubCallApiUrl\(`api-detail\/\$\{id\}`/);
+  assert.doesNotMatch(catalogSource, /runninghub\.cn.*call-api/);
 });
 
 test('Running video node and API key management expose all standard models', () => {
@@ -391,6 +402,7 @@ test('Running video node and API key management expose all standard models', () 
   assert.match(settings, /企业级-共享 API Key[\s\S]*Running 视频全部模型共用/);
   assert.match(proxy, /normalized\.path/);
   assert.match(proxy, /runninghub\/video\/catalog/);
+  assert.match(proxy, /config\.RH_CALL_API_BASE_URL/);
   assert.match(proxy, /resolveRunningHubVideoModel/);
   assert.match(proxy, /requireNodePermission\(\['video', 'runninghub-video', 'director-storyboard'\]\)/);
   assert.doesNotMatch(node, /<optgroup/);

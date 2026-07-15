@@ -195,6 +195,62 @@ test('exhibition img2img exclusions are managed separately from creative exclusi
   assert.deepEqual(listedCreative.data.exclusions.map((item) => item.id), ['creative-only']);
 });
 
+test('exhibition creative prompt constraints are admin-only and persisted', async (t) => {
+  const userBase = await startApp(t, { id: 'u1', username: 'alice', name: 'Alice', role: 'designer' });
+  const defaults = await fetch(`${userBase}/api/prompt-library/exhibition-creative/presets`).then((res) => res.json());
+  assert.equal(defaults.success, true);
+  assert.equal(defaults.data.constraints.length, 6);
+  assert.deepEqual(
+    defaults.data.constraints.slice(0, 2).map((item) => [item.id, item.label]),
+    [['structure-first', '结构优先'], ['narrative-focus', '叙事聚焦']],
+  );
+
+  const deniedUser = await fetch(`${userBase}/api/prompt-library/exhibition-creative/presets/constraints`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ presets: [{ id: 'denied', label: '无权限', text: '普通用户不能保存。' }] }),
+  });
+  assert.equal(deniedUser.status, 403);
+
+  const managerBase = await startApp(t, { id: 'm1', username: 'manager', name: 'Manager', role: 'manager' });
+  const deniedManager = await fetch(`${managerBase}/api/prompt-library/exhibition-creative/presets/constraints`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ presets: [{ id: 'denied', label: '无权限', text: '经理不能保存。' }] }),
+  });
+  assert.equal(deniedManager.status, 403);
+
+  const adminBase = await startApp(t, { id: 'admin', username: 'root', name: 'Root', role: 'admin' });
+  const saved = await fetch(`${adminBase}/api/prompt-library/exhibition-creative/presets/constraints`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      presets: [
+        { id: 'focus', label: '叙事聚焦', text: '只保留一条核心叙事线。', order: 8 },
+        { id: 'buildable', label: '施工可行', text: '所有结构必须可施工。', order: 2 },
+      ],
+    }),
+  }).then((res) => res.json());
+  assert.equal(saved.success, true);
+  assert.deepEqual(
+    saved.data.map((item) => [item.id, item.label, item.text, item.order]),
+    [
+      ['buildable', '施工可行', '所有结构必须可施工。', 0],
+      ['focus', '叙事聚焦', '只保留一条核心叙事线。', 1],
+    ],
+  );
+
+  const listed = await fetch(`${adminBase}/api/prompt-library/exhibition-creative/presets`).then((res) => res.json());
+  assert.deepEqual(listed.data.constraints.map((item) => item.id), ['buildable', 'focus']);
+
+  const empty = await fetch(`${adminBase}/api/prompt-library/exhibition-creative/presets/constraints`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ presets: [] }),
+  });
+  assert.equal(empty.status, 400);
+});
+
 test('admin can manage team entries and reject invalid dimensions', async (t) => {
   const base = await startApp(t, { id: 'admin', username: 'root', name: 'Root', role: 'manager' });
 

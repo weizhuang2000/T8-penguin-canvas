@@ -781,6 +781,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     documentSummaryMentions: [],
     creativeBrief: '',
     creativeBriefMentions: [],
+    promptConstraintIds: [],
     imageName: '',
     prompt: '',
     outputText: '',

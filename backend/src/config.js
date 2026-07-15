@@ -71,6 +71,9 @@ const config = {
   ZHENZHEN_BASE_URL: 'https://ai.t8star.org',
   LLM_DEFAULT_MODEL: 'gemini-3.1-flash-lite-preview',
   RH_BASE_URL: 'https://www.runninghub.cn',
+  // RunningHub 标准模型目录与详情页已迁移到国际站中文路径；仅用于读取 /call-api 页面。
+  // 真正的任务提交、查询与素材上传仍使用 RH_BASE_URL。
+  RH_CALL_API_BASE_URL: process.env.RH_CALL_API_BASE_URL || 'https://www.runninghub.ai/zh-cn/call-api',
 
   // v1.2.10.2: 全局生成素材自动保存到本地的默认路径
   //   用户可在「API 设置 → 文件自动保存路径」覆盖。

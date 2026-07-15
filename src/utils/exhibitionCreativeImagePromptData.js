@@ -209,6 +209,11 @@ export function buildExhibitionCreativeBriefPrompt(values = {}) {
   const previousBriefs = Array.isArray(values.previousBriefs)
     ? values.previousBriefs.map((item) => cleanExhibitionCreativeText(item, 800)).filter(Boolean)
     : [];
+  const promptCreationConstraints = Array.isArray(values.promptCreationConstraints)
+    ? values.promptCreationConstraints
+      .map((item) => cleanExhibitionCreativeText(item, 4000))
+      .filter(Boolean)
+    : [];
   const creativeInputText = hasColorMaterialReferenceImage ? '项目资料摘要、个人灵感和指定植入项' : '项目资料摘要、色彩与材质/个人灵感和指定植入项';
   const creativeRequirementText = hasColorMaterialReferenceImage ? '个人灵感要求' : '色彩与材质要求';
   const lines = [
@@ -219,6 +224,12 @@ export function buildExhibitionCreativeBriefPrompt(values = {}) {
     `请把提炼后的创意资料文档、${creativeRequirementText}与${insertItemsText}结合，进行有艺术性的展陈空间创作，从展陈叙事、空间气质、灯光氛围、材料语言、互动方式、观众视线组织和拍摄画面完成度等角度给出可直接用于图生图的创意描述。`,
     '输出 180 到 320 字中文自然段，只输出创意描述本身，不要标题、编号、Markdown、解释、参数表或英文翻译。',
   ];
+  if (promptCreationConstraints.length > 0) {
+    lines.push('提示词创作约束（全部必须遵守）：');
+    promptCreationConstraints.forEach((item, index) => {
+      lines.push(`${index + 1}. ${item}`);
+    });
+  }
   if (excludeItemsText) {
     lines.push(`排除项：${excludeItemsText}。创意描述中不要设计、暗示或要求生成这些内容。`);
   }

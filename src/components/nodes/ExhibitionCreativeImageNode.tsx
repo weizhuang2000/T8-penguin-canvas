@@ -64,11 +64,13 @@ import {
   MAX_DOCUMENT_FILE_SIZE,
   MAX_DOCUMENT_FILE_SIZE_MB,
   updateElevationColorMaterialPresets,
+  updateExhibitionCreativeConstraintPresets,
   updateExhibitionCreativeExcludePresets,
   updateExhibitionCreativeInsertPresets,
   updateExhibitionCreativeViewAnglePresets,
   type AuthUser,
   type ElevationColorMaterialPresetItem,
+  type ExhibitionCreativeConstraintPresetItem,
   type ExhibitionCreativeExcludePresetItem,
   type ExhibitionCreativeInsertPresetItem,
   type ExhibitionCreativeViewAnglePresetItem,
@@ -83,6 +85,7 @@ import { useThemeStore } from '../../stores/theme';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
+import PromptConstraintPresetEditorModal from './PromptConstraintPresetEditorModal';
 import MentionPromptInput from './MentionPromptInput';
 import { materialMentionKey, resolveMediaMentions, type MediaMention } from './mediaMentions';
 import NodeHelpButton from './NodeHelpButton';
@@ -816,10 +819,12 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const [insertPresets, setInsertPresets] = useState<ExhibitionCreativeInsertPresetItem[]>([]);
   const [excludePresets, setExcludePresets] = useState<ExhibitionCreativeExcludePresetItem[]>([]);
   const [viewAnglePresets, setViewAnglePresets] = useState<ExhibitionCreativeViewAnglePresetItem[]>([]);
+  const [constraintPresets, setConstraintPresets] = useState<ExhibitionCreativeConstraintPresetItem[]>([]);
   const [colorMaterialPresets, setColorMaterialPresets] = useState<ElevationColorMaterialPresetItem[]>([]);
   const [insertEditorOpen, setInsertEditorOpen] = useState(false);
   const [excludeEditorOpen, setExcludeEditorOpen] = useState(false);
   const [viewAngleEditorOpen, setViewAngleEditorOpen] = useState(false);
+  const [constraintEditorOpen, setConstraintEditorOpen] = useState(false);
   const [colorMaterialEditorOpen, setColorMaterialEditorOpen] = useState(false);
   const [insertEditorValue, setInsertEditorValue] = useState('');
   const [excludeEditorValue, setExcludeEditorValue] = useState('');
@@ -828,10 +833,12 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const [insertSaving, setInsertSaving] = useState(false);
   const [excludeSaving, setExcludeSaving] = useState(false);
   const [viewAngleSaving, setViewAngleSaving] = useState(false);
+  const [constraintSaving, setConstraintSaving] = useState(false);
   const [colorMaterialSaving, setColorMaterialSaving] = useState(false);
   const [insertError, setInsertError] = useState('');
   const [excludeError, setExcludeError] = useState('');
   const [viewAngleError, setViewAngleError] = useState('');
+  const [constraintError, setConstraintError] = useState('');
   const [colorMaterialError, setColorMaterialError] = useState('');
   const { style } = useThemeStore();
   const isPixel = style === 'pixel';
@@ -839,6 +846,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
   const activeCanvasId = useCanvasStore((state) => state.activeId);
   const isReadonly = activeCanvas?.access?.canEdit === false;
   const canManageTeam = currentUser?.role === 'admin' || currentUser?.role === 'manager';
+  const canManageConstraints = currentUser?.role === 'admin';
   const advancedProviders = useApiKeysStore((state) => state.settings.advancedProviders);
   const configuredLlmModel = useApiKeysStore((state) => state.settings.llmModel)?.trim() || DEFAULT_LLM_MODEL;
   const llmConfigs = useApiKeysStore((state) => state.settings.llmConfigs || state.settings.llmApiKeys) || [];
@@ -947,6 +955,20 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     [d.viewAngles, viewAngleOptions],
   );
   const selectedViewAngleIds = useMemo(() => selectedViewAngles.map((item) => item.id), [selectedViewAngles]);
+  const selectedConstraintIds = useMemo<string[]>(() => {
+    const ids: string[] = Array.isArray(d.promptConstraintIds)
+      ? d.promptConstraintIds.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+      : [];
+    const availableIds = new Set(constraintPresets.map((item) => item.id));
+    return Array.from(new Set(ids.filter((item: string) => availableIds.has(item))));
+  }, [constraintPresets, d.promptConstraintIds]);
+  const selectedPromptConstraints = useMemo(
+    () => constraintPresets
+      .filter((item) => selectedConstraintIds.includes(item.id))
+      .map((item) => item.text.trim())
+      .filter(Boolean),
+    [constraintPresets, selectedConstraintIds],
+  );
   const selectedColorMaterialPreset = useMemo(
     () => colorMaterialPresets.find((preset) => preset.id === d.colorMaterialPreset) || null,
     [colorMaterialPresets, d.colorMaterialPreset],
@@ -1342,11 +1364,13 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
         setInsertPresets(presets.inserts || []);
         setExcludePresets(presets.exclusions || []);
         setViewAnglePresets(presets.viewAngles || []);
+        setConstraintPresets(presets.constraints || []);
       })
       .catch(() => {
         setInsertPresets([]);
         setExcludePresets([]);
         setViewAnglePresets([]);
+        setConstraintPresets([]);
       });
     getElevationPromptPresets()
       .then((presets) => setColorMaterialPresets(presets.colorMaterial || []))
@@ -1479,6 +1503,23 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     }
   };
 
+  const saveConstraintPresets = async (presets: ExhibitionCreativeConstraintPresetItem[]) => {
+    if (!canManageConstraints) return;
+    setConstraintSaving(true);
+    setConstraintError('');
+    try {
+      const saved = await updateExhibitionCreativeConstraintPresets(presets);
+      setConstraintPresets(saved);
+      const savedIds = new Set(saved.map((item) => item.id));
+      update({ promptConstraintIds: selectedConstraintIds.filter((item) => savedIds.has(item)) });
+      setConstraintEditorOpen(false);
+    } catch (error: any) {
+      setConstraintError(error?.message || '保存提示词创作约束预设失败');
+    } finally {
+      setConstraintSaving(false);
+    }
+  };
+
   const toggleInsertItem = (itemId: string) => {
     if (isReadonly || busy) return;
     const next = selectedInsertIds.includes(itemId)
@@ -1515,6 +1556,14 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     update({ viewAngles: next });
   };
 
+  const togglePromptConstraint = (itemId: string) => {
+    if (isReadonly || busy) return;
+    const next = selectedConstraintIds.includes(itemId)
+      ? selectedConstraintIds.filter((item) => item !== itemId)
+      : [...selectedConstraintIds, itemId];
+    update({ promptConstraintIds: next });
+  };
+
   const toggleViewControl = (enabled: boolean) => {
     if (isReadonly || busy) return;
     update({
@@ -1539,6 +1588,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
       total: generationCount,
       previousBriefs,
       regenerateEachTime,
+      promptCreationConstraints: selectedPromptConstraints,
     });
     const response = await generateLlm({
       model: llmModel,
@@ -1573,6 +1623,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
     insertOptions,
     selectedExcludeIds,
     selectedInsertIds,
+    selectedPromptConstraints,
     spaceType,
   ]);
 
@@ -2541,6 +2592,73 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             </select>
             <PromptExpandableInput title="扩大编辑" className={FIELD} disabled value={llmModel} />
           </div>
+          <div data-exhibition-compact-item="prompt-constraints" className="space-y-1.5 rounded border border-cyan-300/15 bg-cyan-300/[0.05] p-2">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold text-cyan-100">提示词创作约束</span>
+              <span className="min-w-0 flex-1 truncate text-[9px] text-white/40">
+                可多选，也可以不选；所选约束会用于每次 LLM 创意描述
+              </span>
+              {selectedConstraintIds.length > 0 && (
+                <button
+                  type="button"
+                  className={BUTTON}
+                  disabled={isReadonly || busy}
+                  onClick={() => update({ promptConstraintIds: [] })}
+                >
+                  清空
+                </button>
+              )}
+              {canManageConstraints && (
+                <button
+                  type="button"
+                  className={BUTTON}
+                  disabled={busy}
+                  onClick={() => {
+                    setConstraintError('');
+                    setConstraintEditorOpen(true);
+                  }}
+                >
+                  编辑预设
+                </button>
+              )}
+            </div>
+            {constraintPresets.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {constraintPresets.map((item) => {
+                  const active = selectedConstraintIds.includes(item.id);
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      title={item.text}
+                      disabled={isReadonly || busy}
+                      aria-pressed={active}
+                      className={`rounded border px-1.5 py-1 text-[10px] transition ${
+                        active
+                          ? 'border-cyan-300/55 bg-cyan-300/15 text-cyan-100'
+                          : 'border-white/10 bg-black/15 text-white/55 hover:bg-white/[0.08]'
+                      } disabled:cursor-not-allowed disabled:opacity-45`}
+                      onClick={() => togglePromptConstraint(item.id)}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-[9px] text-white/35">暂未加载到约束预设，不影响创意生成。</div>
+            )}
+          </div>
+          {canManageConstraints && (
+            <PromptConstraintPresetEditorModal
+              open={constraintEditorOpen}
+              presets={constraintPresets}
+              saving={constraintSaving}
+              error={constraintError}
+              onClose={() => setConstraintEditorOpen(false)}
+              onSave={saveConstraintPresets}
+            />
+          )}
           <MentionPromptInput
             title="扩大编辑"
             className={`${FIELD} min-h-[132px] resize-y`}

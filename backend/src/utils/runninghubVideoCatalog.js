@@ -11,8 +11,15 @@ const VIDEO_CATEGORIES = new Set([
 ]);
 
 const CATALOG_CACHE_MS = 10 * 60 * 1000;
+const DEFAULT_RUNNINGHUB_CALL_API_BASE_URL = 'https://www.runninghub.ai/zh-cn/call-api';
 let catalogCache = null;
 let catalogCacheAt = 0;
+
+function runningHubCallApiUrl(pathname, callApiBaseUrl = DEFAULT_RUNNINGHUB_CALL_API_BASE_URL) {
+  const root = String(callApiBaseUrl || DEFAULT_RUNNINGHUB_CALL_API_BASE_URL).replace(/\/+$/, '');
+  const path = String(pathname || '').replace(/^\/+/, '');
+  return `${root}/${path}`;
+}
 
 const fallbackItem = (id, name, category, priceLabel) => ({ id, name, category, priceLabel, description: '', highlights: '', price: null });
 const FALLBACK_RUNNINGHUB_VIDEO_CATALOG = Object.freeze([
@@ -127,9 +134,11 @@ function extractNuxtPayload(html) {
   return match[1];
 }
 
-async function fetchRunningHubVideoCatalog(baseUrl) {
-  const root = String(baseUrl || 'https://www.runninghub.cn').replace(/\/+$/, '');
-  const response = await fetch(`${root}/call-api/search-api/standard-model?search=${encodeURIComponent('全能视频')}`, {
+async function fetchRunningHubVideoCatalog(callApiBaseUrl) {
+  const response = await fetch(runningHubCallApiUrl(
+    `search-api/standard-model?search=${encodeURIComponent('全能视频')}`,
+    callApiBaseUrl,
+  ), {
     headers: { Accept: 'text/html,application/xhtml+xml' },
   });
   if (!response.ok) throw new Error(`读取 RunningHub 标准模型目录失败 HTTP ${response.status}`);
@@ -142,11 +151,11 @@ async function fetchRunningHubVideoCatalog(baseUrl) {
     .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
 }
 
-async function listRunningHubVideoCatalog(baseUrl, { force = false } = {}) {
+async function listRunningHubVideoCatalog(callApiBaseUrl, { force = false } = {}) {
   if (!force && catalogCache && Date.now() - catalogCacheAt < CATALOG_CACHE_MS) return catalogCache;
   let catalog;
   try {
-    catalog = await fetchRunningHubVideoCatalog(baseUrl);
+    catalog = await fetchRunningHubVideoCatalog(callApiBaseUrl);
   } catch (error) {
     console.warn('RunningHub 视频目录在线刷新失败，使用内置快照:', error?.message || error);
     catalog = FALLBACK_RUNNINGHUB_VIDEO_CATALOG.map((item) => ({ ...item }));
@@ -156,14 +165,13 @@ async function listRunningHubVideoCatalog(baseUrl, { force = false } = {}) {
   return catalog;
 }
 
-async function resolveRunningHubVideoCatalogModel(baseUrl, modelId) {
+async function resolveRunningHubVideoCatalogModel(callApiBaseUrl, modelId) {
   const id = String(modelId || '').trim();
   if (!/^\d{12,24}$/.test(id)) throw new Error('无效的 RunningHub 视频模型 ID');
-  const catalog = await listRunningHubVideoCatalog(baseUrl);
+  const catalog = await listRunningHubVideoCatalog(callApiBaseUrl);
   const model = catalog.find((item) => item.id === id);
   if (!model) throw new Error('该模型不在 RunningHub 视频模型目录中');
-  const root = String(baseUrl || 'https://www.runninghub.cn').replace(/\/+$/, '');
-  const response = await fetch(`${root}/call-api/api-detail/${id}`, {
+  const response = await fetch(runningHubCallApiUrl(`api-detail/${id}`, callApiBaseUrl), {
     headers: { Accept: 'text/html,application/xhtml+xml' },
   });
   if (!response.ok) throw new Error(`读取 RunningHub 模型接口失败 HTTP ${response.status}`);
@@ -180,6 +188,8 @@ async function resolveRunningHubVideoCatalogModel(baseUrl, modelId) {
 
 module.exports = {
   VIDEO_CATEGORIES,
+  DEFAULT_RUNNINGHUB_CALL_API_BASE_URL,
+  runningHubCallApiUrl,
   FALLBACK_RUNNINGHUB_VIDEO_CATALOG,
   reviveNuxtPayload,
   findCatalogRecords,

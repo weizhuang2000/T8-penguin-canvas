@@ -61,6 +61,29 @@ test('exhibition creative brief prompt supports per-run LLM variation', () => {
   assert.match(prompt, /适合多方案比选/);
 });
 
+test('exhibition creative brief prompt injects selected prompt creation constraints only', () => {
+  const constrained = buildExhibitionCreativeBriefPrompt({
+    spaceType: 'intro-hall',
+    projectTheme: '城市记忆展',
+    promptCreationConstraints: [
+      '保持建筑轮廓、墙体、门窗、层高、开口和动线。',
+      '围绕项目资料建立一条明确主叙事线，避免无主题的元素堆砌。',
+      '   ',
+    ],
+  });
+  assert.match(constrained, /提示词创作约束（全部必须遵守）：/);
+  assert.match(constrained, /1\. 保持建筑轮廓、墙体、门窗、层高、开口和动线。/);
+  assert.match(constrained, /2\. 围绕项目资料建立一条明确主叙事线，避免无主题的元素堆砌。/);
+  assert.doesNotMatch(constrained, /3\.\s*$/m);
+
+  const unconstrained = buildExhibitionCreativeBriefPrompt({
+    spaceType: 'intro-hall',
+    projectTheme: '城市记忆展',
+    promptCreationConstraints: [],
+  });
+  assert.doesNotMatch(unconstrained, /提示词创作约束/);
+});
+
 test('exhibition creative image prompt places exclusions before LLM brief', () => {
   const prompt = buildExhibitionCreativeImagePrompt({
     spaceType: 'intro-hall',
@@ -296,6 +319,9 @@ test('exhibition creative image node supports random categorized insert items', 
   assert.match(canvas, /insertRandomCounts: \{\}/);
   assert.match(canvas, /projectThemeMentions: \[\]/);
   assert.match(canvas, /creativeBriefMentions: \[\]/);
+  assert.match(canvas, /promptConstraintIds: \[\]/);
+  assert.match(node, /promptCreationConstraints: selectedPromptConstraints/);
+  assert.match(node, /data-exhibition-compact-item="prompt-constraints"/);
   assert.match(canvas, /imageName: ''/);
   assert.match(canvas, /imageNames: \[\]/);
   assert.match(backend, /EXHIBITION_CREATIVE_INSERT_CATEGORIES/);

@@ -2586,7 +2586,7 @@ function resolveRunningHubCatalogMediaParams(value, key = '') {
 
 router.get('/runninghub/video/catalog', requireNodePermission(['video', 'runninghub-video', 'director-storyboard']), async (_req, res) => {
   try {
-    const models = await listRunningHubVideoCatalog(config.RH_BASE_URL);
+    const models = await listRunningHubVideoCatalog(config.RH_CALL_API_BASE_URL);
     return res.json({ success: true, data: models });
   } catch (e) {
     return res.status(502).json({ success: false, error: e?.message || '读取 RunningHub 视频模型目录失败' });
@@ -2595,7 +2595,7 @@ router.get('/runninghub/video/catalog', requireNodePermission(['video', 'running
 
 router.get('/runninghub/video/catalog/:modelId', requireNodePermission(['video', 'runninghub-video', 'director-storyboard']), async (req, res) => {
   try {
-    const model = await resolveRunningHubVideoCatalogModel(config.RH_BASE_URL, req.params.modelId);
+    const model = await resolveRunningHubVideoCatalogModel(config.RH_CALL_API_BASE_URL, req.params.modelId);
     return res.json({ success: true, data: {
       id: model.id,
       name: model.name,
@@ -2612,7 +2612,7 @@ router.post('/runninghub/video/catalog/submit', requireNodePermission(['video', 
   const apiKey = pickRhApiKey(settings);
   if (!apiKey) return res.status(400).json({ success: false, error: missingRhKeyError() });
   try {
-    const model = await resolveRunningHubVideoCatalogModel(config.RH_BASE_URL, req.body?.catalogModelId);
+    const model = await resolveRunningHubVideoCatalogModel(config.RH_CALL_API_BASE_URL, req.body?.catalogModelId);
     const body = resolveRunningHubCatalogMediaParams(normalizeRunningHubCatalogParams(req.body?.params));
     const response = await fetch(`${config.RH_BASE_URL}${model.endpoint}`, {
       method: 'POST',
@@ -2695,7 +2695,7 @@ router.post('/runninghub/video/query', requireNodePermission(['video', 'runningh
       || (String(req.body?.model || '').startsWith('catalog:') ? String(req.body.model).slice('catalog:'.length) : '');
     let queryModel;
     if (catalogModelId) {
-      const catalog = await listRunningHubVideoCatalog(config.RH_BASE_URL);
+      const catalog = await listRunningHubVideoCatalog(config.RH_CALL_API_BASE_URL);
       queryModel = catalog.find((item) => item.id === catalogModelId);
       if (!queryModel) throw new Error('该模型不在 RunningHub 视频模型目录中');
     } else {

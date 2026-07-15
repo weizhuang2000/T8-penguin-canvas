@@ -99,6 +99,7 @@ const EXHIBITION_COMPACT_FORM_DEFINITIONS = [
     ] },
     { id: 'insert', label: '\u5c55\u9879\u5143\u7d20', items: [
       { id: 'insert-options', label: '\u5c55\u9879\u5143\u7d20' },
+      { id: 'prompt-constraints', label: '\u63d0\u793a\u8bcd\u521b\u4f5c\u7ea6\u675f' },
       { id: 'random-count', label: '\u968f\u673a\u6570\u91cf' },
     ] },
     { id: 'color-material', label: '\u8272\u5f69\u6750\u8d28', items: [

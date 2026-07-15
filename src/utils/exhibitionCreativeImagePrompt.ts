@@ -68,6 +68,7 @@ export interface ExhibitionCreativeBriefPromptValues {
   generationCount?: number;
   previousBriefs?: string[];
   regenerateEachTime?: boolean;
+  promptCreationConstraints?: string[];
 }
 
 export interface ExhibitionCreativeImagePromptValues extends ExhibitionCreativeBriefPromptValues {

@@ -216,6 +216,39 @@ const DEFAULT_EXHIBITION_CREATIVE_VIEW_ANGLE_PRESETS = [
   { id: 'top-45', label: '上45度视角' },
 ].map((item, index) => ({ ...item, order: index }));
 
+const DEFAULT_EXHIBITION_CREATIVE_CONSTRAINT_PRESETS = [
+  {
+    id: 'structure-first',
+    label: '结构优先',
+    text: '保持输入空间的建筑轮廓、墙体、门窗、层高、开口和动线；创意只作用于展陈装置、叙事、灯光与材质。',
+  },
+  {
+    id: 'narrative-focus',
+    label: '叙事聚焦',
+    text: '围绕项目资料建立一条明确主叙事线，提出一个核心视觉母题和一个主装置，避免无主题的元素堆砌。',
+  },
+  {
+    id: 'buildable-design',
+    label: '落地可实施',
+    text: '装置、材料、尺度、灯光和互动方式应符合室内展陈施工、安全、维护与人流要求，避免不合理悬浮结构。',
+  },
+  {
+    id: 'spatial-depth',
+    label: '强化空间层次',
+    text: '明确前中后景、主次焦点、观看顺序、停留节点和视觉引导，使描述能够直接转化为空间构图。',
+  },
+  {
+    id: 'avoid-cliches',
+    label: '避免模板化',
+    text: '除非与项目主题直接相关，不得机械套用科技蓝、光环、粒子流、镜面屏幕等同质化视觉语言。',
+  },
+  {
+    id: 'restrained-text',
+    label: '文字克制',
+    text: '避免大段可读文字、表格和密集标语；必要主题字装置需说明位置、尺度和材质。',
+  },
+].map((item, index) => ({ ...item, order: index }));
+
 const DEFAULT_EXHIBITION_IMG2IMG_EXCLUDE_PRESETS = [
   { id: 'readable-wrong-text', label: '可读错字/乱码文字' },
   { id: 'real-brand-logo', label: '真实品牌标识' },
@@ -583,6 +616,31 @@ function normalizeCreativeViewAnglePresetList(value) {
     .map((item, index) => ({ ...item, order: index }));
 }
 
+function normalizeCreativeConstraintPresetList(value) {
+  const source = Array.isArray(value) && value.length > 0 ? value : DEFAULT_EXHIBITION_CREATIVE_CONSTRAINT_PRESETS;
+  const used = new Set();
+  return source
+    .map((raw, index) => {
+      const label = safeText(raw?.label, 120);
+      const text = safeText(raw?.text || raw?.prompt, 4000);
+      if (!label || !text) return null;
+      let id = safeText(raw?.id, 96).replace(/[^a-zA-Z0-9_-]/g, '');
+      if (!id) id = `constraint_${index + 1}`;
+      while (used.has(id)) id = `${id}_${index + 1}`;
+      used.add(id);
+      return {
+        id,
+        label,
+        text,
+        order: Number.isFinite(Number(raw?.order)) ? Number(raw.order) : index,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 80)
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+    .map((item, index) => ({ ...item, order: index }));
+}
+
 function normalizeHexColor(value, fallback) {
   const text = safeText(value, 32);
   if (/^#[0-9a-f]{6}$/i.test(text)) return text.toLowerCase();
@@ -860,6 +918,7 @@ function readCreativeDb() {
         insertPresets: normalizeCreativeInsertPresetList(DEFAULT_EXHIBITION_CREATIVE_INSERT_PRESETS),
         excludePresets: normalizeCreativeExcludePresetList(DEFAULT_EXHIBITION_CREATIVE_EXCLUDE_PRESETS),
         viewAnglePresets: normalizeCreativeViewAnglePresetList(DEFAULT_EXHIBITION_CREATIVE_VIEW_ANGLE_PRESETS),
+        constraintPresets: normalizeCreativeConstraintPresetList(DEFAULT_EXHIBITION_CREATIVE_CONSTRAINT_PRESETS),
       };
     }
     const raw = JSON.parse(fs.readFileSync(CREATIVE_DB_FILE, 'utf-8'));
@@ -867,12 +926,14 @@ function readCreativeDb() {
       insertPresets: normalizeCreativeInsertPresetList(raw?.insertPresets),
       excludePresets: normalizeCreativeExcludePresetList(raw?.excludePresets),
       viewAnglePresets: normalizeCreativeViewAnglePresetList(raw?.viewAnglePresets),
+      constraintPresets: normalizeCreativeConstraintPresetList(raw?.constraintPresets),
     };
   } catch {
     return {
       insertPresets: normalizeCreativeInsertPresetList(DEFAULT_EXHIBITION_CREATIVE_INSERT_PRESETS),
       excludePresets: normalizeCreativeExcludePresetList(DEFAULT_EXHIBITION_CREATIVE_EXCLUDE_PRESETS),
       viewAnglePresets: normalizeCreativeViewAnglePresetList(DEFAULT_EXHIBITION_CREATIVE_VIEW_ANGLE_PRESETS),
+      constraintPresets: normalizeCreativeConstraintPresetList(DEFAULT_EXHIBITION_CREATIVE_CONSTRAINT_PRESETS),
     };
   }
 }
@@ -885,6 +946,7 @@ function writeCreativeDb(db) {
       insertPresets: normalizeCreativeInsertPresetList(db?.insertPresets),
       excludePresets: normalizeCreativeExcludePresetList(db?.excludePresets),
       viewAnglePresets: normalizeCreativeViewAnglePresetList(db?.viewAnglePresets),
+      constraintPresets: normalizeCreativeConstraintPresetList(db?.constraintPresets),
     }, null, 2),
     'utf-8',
   );
@@ -1356,6 +1418,7 @@ router.get('/exhibition-creative/presets', (_req, res) => {
       inserts: normalizeCreativeInsertPresetList(db.insertPresets),
       exclusions: normalizeCreativeExcludePresetList(db.excludePresets),
       viewAngles: normalizeCreativeViewAnglePresetList(db.viewAnglePresets),
+      constraints: normalizeCreativeConstraintPresetList(db.constraintPresets),
     },
   });
 });
@@ -1390,6 +1453,23 @@ router.put('/exhibition-creative/presets/view-angles', (req, res) => {
   const db = readCreativeDb();
   const presets = normalizeCreativeViewAnglePresetList(req.body?.presets);
   writeCreativeDb({ ...db, viewAnglePresets: presets });
+  res.json({ success: true, data: presets });
+});
+
+router.put('/exhibition-creative/presets/constraints', (req, res) => {
+  const user = req.user;
+  if (user?.role !== 'admin') {
+    return res.status(403).json({ success: false, error: '只有系统管理员可以维护提示词创作约束预设' });
+  }
+  if (!Array.isArray(req.body?.presets) || req.body.presets.length === 0) {
+    return res.status(400).json({ success: false, error: '至少保留一个提示词创作约束预设' });
+  }
+  const presets = normalizeCreativeConstraintPresetList(req.body.presets);
+  if (!presets.length) {
+    return res.status(400).json({ success: false, error: '至少保留一个名称和约束正文完整的预设' });
+  }
+  const db = readCreativeDb();
+  writeCreativeDb({ ...db, constraintPresets: presets });
   res.json({ success: true, data: presets });
 });
 
