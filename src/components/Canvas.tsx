@@ -1710,7 +1710,7 @@ function exclusiveTargetHandlesForConnection(
   ) {
     return [handle];
   }
-  if (targetType === 'exhibition-style-transfer' && handle === 'style-reference') {
+  if (targetType === 'exhibition-style-transfer' && (handle === 'original-image' || handle === 'style-reference')) {
     return [handle];
   }
   if (targetType === 'exhibition-render-to-elevation' && handle === 'elevation-form-reference') {
