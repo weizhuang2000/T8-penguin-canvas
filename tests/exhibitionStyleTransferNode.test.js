@@ -32,4 +32,7 @@ test('exhibition style transfer node exposes image ports and shared controls', (
   assert.match(source, /生成风格迁移/);
   assert.match(source, /closestAspectRatio/);
   assert.match(source, /aspectRatioSource/);
+  assert.doesNotMatch(source, /analyzeDominantTone/);
+  assert.doesNotMatch(source, /styleReferenceTone/);
+  assert.doesNotMatch(source, /参考图主色调识别/);
 });

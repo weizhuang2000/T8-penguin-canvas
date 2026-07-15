@@ -51,10 +51,10 @@ function materialReplacementText(values) {
 function styleSourceText(mode, values) {
   if (mode === 'style-reference') {
     return [
-      '风格来源：设计风格参考图。',
-      '设计风格参考图只用于提取展陈设计风格、色彩体系、材质语言、表面肌理、光泽关系、灯光氛围和细部质感。',
-      '不得从设计风格参考图复制空间架构、展品、文字、展示手段、构图、透视、比例、动线或具体内容。',
-      cleanText(values.styleReferenceTone, 500) && `参考图主色调识别：${cleanText(values.styleReferenceTone, 500)}`,
+      '图像引用：@图片1 是原始图像，@图片2 是设计风格参考图。',
+      '必须以 @图片1 作为空间结构、展品、文字、展示手段、构图、透视、比例、动线和具体内容的唯一依据。',
+      '风格来源：仅从 @图片2 提取展陈设计风格、色彩体系、材质语言、表面肌理、光泽关系、灯光氛围和细部质感。',
+      '不得从 @图片2 复制空间架构、展品、文字、展示手段、构图、透视、比例、动线或具体内容。',
     ].filter(Boolean).join('\n');
   }
   if (mode === 'color-material-preset') {

@@ -8,14 +8,15 @@ import {
 test('style transfer prompt uses original image as the only structure source', () => {
   const prompt = buildExhibitionStyleTransferPrompt({
     mode: 'style-reference',
-    styleReferenceTone: '主色调：深红、黄铜、暗灰',
   });
 
+  assert.match(prompt, /@图片1 是原始图像，@图片2 是设计风格参考图/);
+  assert.match(prompt, /必须以 @图片1 作为空间结构、展品、文字、展示手段、构图、透视、比例、动线和具体内容的唯一依据/);
+  assert.match(prompt, /仅从 @图片2 提取展陈设计风格、色彩体系、材质语言/);
   assert.match(prompt, /原始图像是空间结构、展品、文字、展示手段、构图、视角、比例和动线/);
-  assert.match(prompt, /设计风格参考图只用于提取展陈设计风格、色彩体系、材质语言/);
-  assert.match(prompt, /不得从设计风格参考图复制空间架构、展品、文字、展示手段/);
+  assert.match(prompt, /不得从 @图片2 复制空间架构、展品、文字、展示手段/);
   assert.match(prompt, /禁止：改造空间、替换展品、改写文字、增加新展示方式/);
-  assert.match(prompt, /参考图主色调识别：主色调：深红、黄铜、暗灰/);
+  assert.doesNotMatch(prompt, /参考图主色调识别/);
 });
 
 test('style transfer prompt uses shared color material preset without reference role', () => {
@@ -29,7 +30,7 @@ test('style transfer prompt uses shared color material preset without reference 
   assert.match(prompt, /风格来源：已选择的共享色彩与材质预设/);
   assert.match(prompt, /Color palette：白色、银灰、冷蓝/);
   assert.match(prompt, /Materials\/textures：低反射金属、半透明亚克力/);
-  assert.doesNotMatch(prompt, /设计风格参考图只用于提取/);
+  assert.doesNotMatch(prompt, /@图片2/);
 });
 
 test('style transfer prompt uses unit panel materials as replacement source', () => {

@@ -19,7 +19,6 @@ export interface ExhibitionStyleTransferMaterialLike {
 
 export interface ExhibitionStyleTransferPromptValues {
   mode?: ExhibitionStyleTransferMode;
-  styleReferenceTone?: string;
   colorMaterial?: string;
   colorMaterialPalette?: string;
   colorMaterialTextures?: string;

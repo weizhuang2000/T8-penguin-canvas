@@ -100,87 +100,14 @@ function useInputImageByHandle(nodeId: string, handle: string): string {
   }, [nodesData]);
 }
 
-function rgbToHsl(red: number, green: number, blue: number): { h: number; s: number; l: number } {
-  const r = red / 255;
-  const g = green / 255;
-  const b = blue / 255;
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const l = (max + min) / 2;
-  if (max === min) return { h: 0, s: 0, l };
-  const delta = max - min;
-  const s = l > 0.5 ? delta / (2 - max - min) : delta / (max + min);
-  let h = 0;
-  if (max === r) h = ((g - b) / delta + (g < b ? 6 : 0)) / 6;
-  else if (max === g) h = ((b - r) / delta + 2) / 6;
-  else h = ((r - g) / delta + 4) / 6;
-  return { h: h * 360, s, l };
-}
-
-function toneName(red: number, green: number, blue: number) {
-  const { h, s, l } = rgbToHsl(red, green, blue);
-  if (l <= 0.12) return '黑色';
-  if (s <= 0.1) return l >= 0.82 ? '浅灰/白色' : l <= 0.32 ? '深灰' : '中性灰';
-  if (h < 20 || h >= 345) return '红色';
-  if (h < 46) return '橙褐/铜色';
-  if (h < 70) return '金黄';
-  if (h < 165) return '绿色';
-  if (h < 195) return '青色';
-  if (h < 250) return '蓝色';
-  if (h < 300) return '蓝紫';
-  return '紫红';
-}
-
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('参考图加载失败，无法识别主色调'));
+    image.onerror = () => reject(new Error('图像加载失败，无法读取尺寸'));
     if (/^https?:\/\//i.test(src)) image.crossOrigin = 'anonymous';
     image.src = src;
   });
-}
-
-async function analyzeDominantTone(imageUrl: string): Promise<string> {
-  const image = await loadImage(imageUrl);
-  const sourceWidth = image.naturalWidth || image.width;
-  const sourceHeight = image.naturalHeight || image.height;
-  if (!sourceWidth || !sourceHeight) throw new Error('参考图尺寸无效，无法识别主色调');
-  const maxSide = 96;
-  const scale = Math.min(1, maxSide / Math.max(sourceWidth, sourceHeight));
-  const width = Math.max(1, Math.round(sourceWidth * scale));
-  const height = Math.max(1, Math.round(sourceHeight * scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) throw new Error('当前浏览器无法创建主色调识别画布');
-  ctx.drawImage(image, 0, 0, width, height);
-  const pixels = ctx.getImageData(0, 0, width, height).data;
-  const buckets = new Map<string, number>();
-  let warm = 0;
-  let cool = 0;
-  let light = 0;
-  let count = 0;
-  for (let index = 0; index < pixels.length; index += 16) {
-    const alpha = pixels[index + 3];
-    if (alpha < 128) continue;
-    const red = pixels[index];
-    const green = pixels[index + 1];
-    const blue = pixels[index + 2];
-    const hsl = rgbToHsl(red, green, blue);
-    const name = toneName(red, green, blue);
-    const weight = 1 + Math.min(0.8, hsl.s);
-    buckets.set(name, (buckets.get(name) || 0) + weight);
-    if (hsl.s > 0.08 && (hsl.h < 75 || hsl.h >= 325)) warm += weight;
-    if (hsl.s > 0.08 && hsl.h >= 165 && hsl.h < 285) cool += weight;
-    light += hsl.l * weight;
-    count += weight;
-  }
-  const names = Array.from(buckets.entries()).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([name]) => name);
-  const lightText = count ? (light / count < 0.38 ? '明度偏暗' : light / count > 0.68 ? '明度偏亮' : '明度适中') : '明度适中';
-  const tempText = warm > cool * 1.2 ? '整体偏暖' : cool > warm * 1.2 ? '整体偏冷' : '冷暖较均衡';
-  return `主色调：${names.join('、') || '中性灰'}；${tempText}；${lightText}。`;
 }
 
 async function readImageNaturalRatio(imageUrl: string): Promise<number> {
@@ -317,14 +244,13 @@ const ExhibitionStyleTransferNode = ({ id, data, selected }: NodeProps) => {
 
   const prompt = useMemo(() => buildExhibitionStyleTransferPrompt({
     mode,
-    styleReferenceTone: d.styleReferenceTone,
     colorMaterial: colorMaterialTextFromPreset(selectedColorMaterialPreset),
     colorMaterialPalette: colorPaletteTextFromPreset(selectedColorMaterialPreset),
     colorMaterialTextures: materialTexturesTextFromPreset(selectedColorMaterialPreset),
     primaryMaterial: selectedPrimaryMaterial,
     secondaryMaterials: selectedSecondaryMaterials,
     supplement: d.supplement,
-  }), [d.styleReferenceTone, d.supplement, mode, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials]);
+  }), [d.supplement, mode, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials]);
 
   useEffect(() => {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
@@ -351,26 +277,10 @@ const ExhibitionStyleTransferNode = ({ id, data, selected }: NodeProps) => {
 
   useEffect(() => {
     if (mode === 'style-reference') return;
-    if (styleReferenceImage || d.styleReferenceTone || d.styleReferenceToneSource || d.styleReferenceToneStatus) {
+    if (styleReferenceImage) {
       rf.setEdges((eds) => eds.filter((edge: any) => edge.target !== id || (edge.targetHandle || '') !== 'style-reference'));
-      update({ styleReferenceTone: '', styleReferenceToneSource: '', styleReferenceToneStatus: '' });
     }
-  }, [d.styleReferenceTone, d.styleReferenceToneSource, d.styleReferenceToneStatus, id, mode, rf, styleReferenceImage, update]);
-
-  useEffect(() => {
-    if (mode !== 'style-reference' || !styleReferenceImage) return;
-    if (d.styleReferenceToneSource === styleReferenceImage && d.styleReferenceTone) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const tone = await analyzeDominantTone(styleReferenceImage);
-        if (!cancelled) update({ styleReferenceTone: tone, styleReferenceToneSource: styleReferenceImage, styleReferenceToneStatus: '' });
-      } catch (error: any) {
-        if (!cancelled) update({ styleReferenceTone: '主色调：识别失败，可手动填写。', styleReferenceToneSource: styleReferenceImage, styleReferenceToneStatus: error?.message || '主色调识别失败' });
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [d.styleReferenceTone, d.styleReferenceToneSource, mode, styleReferenceImage, update]);
+  }, [id, mode, rf, styleReferenceImage]);
 
   useEffect(() => {
     const refs = [originalImage, mode === 'style-reference' ? styleReferenceImage : ''].filter(Boolean);
@@ -417,9 +327,6 @@ const ExhibitionStyleTransferNode = ({ id, data, selected }: NodeProps) => {
     if (isReadonly || busy || nextMode === mode) return;
     const patch: Record<string, any> = { styleTransferMode: nextMode };
     if (nextMode !== 'style-reference') {
-      patch.styleReferenceTone = '';
-      patch.styleReferenceToneSource = '';
-      patch.styleReferenceToneStatus = '';
       rf.setEdges((eds) => eds.filter((edge: any) => edge.target !== id || (edge.targetHandle || '') !== 'style-reference'));
     }
     if (nextMode !== 'color-material-preset') patch.colorMaterialPreset = '';
@@ -679,22 +586,6 @@ const ExhibitionStyleTransferNode = ({ id, data, selected }: NodeProps) => {
               );
             })}
           </div>
-
-          {mode === 'style-reference' && (
-            <div className="rounded border border-white/10 bg-black/15 p-2">
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <span className="text-[10px] font-semibold text-rose-100/80">参考图主色调识别</span>
-                {d.styleReferenceToneStatus && <span className="truncate text-[8px] text-amber-200/75">{d.styleReferenceToneStatus}</span>}
-              </div>
-              <textarea
-                className={`${FIELD} min-h-[46px] resize-y text-[10px] leading-snug`}
-                value={d.styleReferenceTone || ''}
-                disabled={isReadonly || busy || !styleReferenceImage}
-                placeholder="连接设计风格参考图后自动识别，可手动修正"
-                onChange={(event) => update({ styleReferenceTone: event.target.value, styleReferenceToneSource: styleReferenceImage, styleReferenceToneStatus: '' })}
-              />
-            </div>
-          )}
 
           {mode === 'color-material-preset' && (
             <div className="space-y-2 rounded border border-white/10 bg-black/15 p-2">
