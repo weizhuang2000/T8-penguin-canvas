@@ -67,3 +67,41 @@ server {
 - 同时备份两台 ECS 的输出目录；中央索引不是文件内容的副本。
 - 大视频播放依赖 HTTPS 代理保留 Range 请求，部署后应测试拖动播放进度。
 - Token 泄露时，在第二台 ECS 更新环境变量并重启，再在第一台 ECS 设置中覆盖 Token。
+
+## 5. 百度网盘作为输出空间（AList WebDAV）
+
+百度网盘 VIP 不会直接提供 WebDAV 地址。需要在第一台 ECS 部署 AList，并在 AList 中绑定百度网盘账号。推荐让 AList 只监听本机：
+
+```bash
+docker run -d \
+  --name alist \
+  --restart unless-stopped \
+  -p 127.0.0.1:5244:5244 \
+  -v /opt/alist:/opt/alist/data \
+  xhofe/alist:latest
+```
+
+在 AList 管理界面完成以下配置：
+
+1. 添加百度网盘存储并挂载到 `/百度网盘`，按 AList 当前版本的登录说明完成百度账号授权。
+2. 在百度网盘中创建 `T8PenguinCanvas` 目录。
+3. 创建专用 AList 用户，只授予百度网盘挂载和 `T8PenguinCanvas` 目录的读写权限；不要让 T8 使用 AList 管理员账号。
+4. 不要把 5244 端口开放到公网；主后端通过回环地址访问。
+
+然后在 T8 的“API Key 设置 → 云端上传目标 → 百度网盘”填写：
+
+```text
+WebDAV 地址：http://127.0.0.1:5244/dav/百度网盘
+用户名：AList 专用用户名
+密码：AList 专用用户密码或令牌
+网盘目录：/T8PenguinCanvas
+```
+
+开启百度网盘目标并点击配置检查。保存设置后，“输出保存空间”会自动出现“百度网盘”，无需再次填写 WebDAV 凭据。选择它后：
+
+- 新文件写入 `/T8PenguinCanvas/output/`。
+- “对账文件”扫描整个 `/T8PenguinCanvas`，旧媒体进入管理员可见的“未归档”历史。
+- 浏览器仍只使用 `/files/output/*`，WebDAV 用户名和密码不会发给前端。
+- AList 或百度网盘不可用时，新生成文件回落第一台 ECS。
+
+首次启用后应验证一张图片和一个大视频，包括历史预览、下载、视频拖动进度、再次生成和彻底删除。AList WebDAV 必须正确支持 Range 请求，否则大视频无法正常跳转播放位置。

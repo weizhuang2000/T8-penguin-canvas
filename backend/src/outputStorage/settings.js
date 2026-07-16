@@ -19,6 +19,8 @@ const DEFAULT_REMOTE_OUTPUT_SPACE = Object.freeze({
   apiToken: '',
 });
 
+const BAIDU_OUTPUT_SPACE_ID = 'cloud-baidu-netdisk';
+
 function cleanText(value, max = 160) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max);
 }
@@ -61,7 +63,7 @@ function cleanBaseUrl(value, fallback = '') {
   }
 }
 
-function normalizeOutputStorageSpaces(rawSpaces, currentSpaces = []) {
+function normalizeOutputStorageSpaces(rawSpaces, currentSpaces = [], cloudTargets = null) {
   const current = Array.isArray(currentSpaces) ? currentSpaces : [];
   const currentById = new Map(current.map((item) => [cleanId(item?.id), item]));
   const incoming = Array.isArray(rawSpaces) ? rawSpaces : [];
@@ -76,19 +78,46 @@ function normalizeOutputStorageSpaces(rawSpaces, currentSpaces = []) {
     const id = cleanId(raw.id);
     if (!id || id === 'primary' || used.has(id)) continue;
     const previous = currentById.get(id) || {};
-    const type = raw.type === 't8-storage-node' ? raw.type : previous.type;
-    if (type !== 't8-storage-node') continue;
-    result.push({
-      id,
-      type,
-      label: cleanText(raw.label || previous.label || id, 80) || id,
-      enabled: raw.enabled === true,
-      baseUrl: cleanBaseUrl(raw.baseUrl, previous.baseUrl),
-      apiToken: cleanSecret(raw.apiToken, previous.apiToken),
-    });
+    const type = ['t8-storage-node', 'cloud-upload-target'].includes(raw.type) ? raw.type : previous.type;
+    if (type === 't8-storage-node') {
+      result.push({
+        id,
+        type,
+        label: cleanText(raw.label || previous.label || id, 80) || id,
+        enabled: raw.enabled === true,
+        baseUrl: cleanBaseUrl(raw.baseUrl, previous.baseUrl),
+        apiToken: cleanSecret(raw.apiToken, previous.apiToken),
+      });
+    } else if (type === 'cloud-upload-target') {
+      result.push({
+        id,
+        type,
+        label: cleanText(raw.label || previous.label || id, 80) || id,
+        enabled: raw.enabled === true,
+        cloudTargetId: cleanId(raw.cloudTargetId || previous.cloudTargetId),
+        provider: raw.provider === 'baidu-netdisk' ? 'baidu-netdisk' : previous.provider,
+        managed: true,
+      });
+    } else continue;
     used.add(id);
   }
   if (result.length === 1) result.push({ ...DEFAULT_REMOTE_OUTPUT_SPACE });
+  if (Array.isArray(cloudTargets)) {
+    const target = cloudTargets.find((item) => item?.id === 'baidu-netdisk' || item?.provider === 'baidu-netdisk');
+    const cfg = target?.baiduNetdisk || {};
+    const derived = {
+      id: BAIDU_OUTPUT_SPACE_ID,
+      type: 'cloud-upload-target',
+      label: cleanText(target?.label || '百度网盘', 80) || '百度网盘',
+      enabled: target?.enabled === true && !!String(cfg.webdavUrl || '').trim(),
+      cloudTargetId: target?.id || 'baidu-netdisk',
+      provider: 'baidu-netdisk',
+      managed: true,
+    };
+    const existingIndex = result.findIndex((item) => item.id === BAIDU_OUTPUT_SPACE_ID);
+    if (existingIndex >= 0) result[existingIndex] = derived;
+    else result.push(derived);
+  }
   return result;
 }
 
@@ -97,6 +126,7 @@ function normalizeActiveOutputStorageSpaceId(value, spaces) {
   const target = (Array.isArray(spaces) ? spaces : []).find((item) => item.id === id);
   if (!target || !target.enabled) return 'primary';
   if (target.type === 't8-storage-node' && (!target.baseUrl || !target.apiToken)) return 'primary';
+  if (target.type === 'cloud-upload-target' && (!target.cloudTargetId || target.provider !== 'baidu-netdisk')) return 'primary';
   return target.id;
 }
 
@@ -120,6 +150,7 @@ function summarizeOutputStorageSpaces(spaces, activeId) {
 }
 
 module.exports = {
+  BAIDU_OUTPUT_SPACE_ID,
   DEFAULT_REMOTE_OUTPUT_SPACE,
   PRIMARY_OUTPUT_SPACE,
   cleanBaseUrl,

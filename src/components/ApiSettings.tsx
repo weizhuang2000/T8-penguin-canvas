@@ -1393,7 +1393,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       const available = formatStorageBytes(data.availableBytes || data.freeBytes);
       setOutputStorageTestStatus((prev) => ({
         ...prev,
-        [space.id]: { ok: true, message: available ? `连接成功，可用 ${available}` : '连接成功' },
+        [space.id]: { ok: true, message: available ? `连接成功，可用 ${available}` : (data.capacityManagedExternally ? '连接成功，容量由网盘管理' : '连接成功') },
       }));
     } catch (e: any) {
       setOutputStorageTestStatus((prev) => ({
@@ -3985,14 +3985,14 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                 }}
               >
                 {outputStorageSpacesInput.map((space) => {
-                  const configured = space.id === 'primary' || (
-                    space.enabled && !!space.baseUrl && (!!space.apiToken || !!space.hasApiToken)
-                  );
+                  const configured = space.id === 'primary'
+                    || (space.type === 'cloud-upload-target' && space.enabled)
+                    || (space.type === 't8-storage-node' && space.enabled && !!space.baseUrl && (!!space.apiToken || !!space.hasApiToken));
                   return <option key={space.id} value={space.id} disabled={!configured}>{space.label}{configured ? '' : '（未配置）'}</option>;
                 })}
               </select>
             </div>
-            {outputStorageSpacesInput.filter((space) => space.type === 't8-storage-node').map((space) => {
+            {outputStorageSpacesInput.filter((space) => space.type !== 'local').map((space) => {
               const testState = outputStorageTestStatus[space.id];
               const updateSpace = (patch: Partial<OutputStorageSpaceConfig>) => {
                 setOutputStorageSpacesInput((prev) => prev.map((item) => item.id === space.id ? { ...item, ...patch } : item));
@@ -4000,6 +4000,19 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
               };
               return (
                 <div key={space.id} className={isPixel ? 't8-api-settings-section border p-3 space-y-2' : 't8-api-settings-section rounded-lg border p-3 space-y-2'}>
+                  {space.type === 'cloud-upload-target' ? (
+                    <>
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className={`text-sm font-medium ${labelCls}`}>{space.label}</div>
+                          <div className={`text-[11px] ${hintCls}`}>复用“云端上传目标 → 百度网盘”的 WebDAV 配置</div>
+                        </div>
+                        <span className={`text-[11px] ${space.enabled ? 'text-emerald-500' : hintCls}`}>{space.enabled ? '可用' : '未配置或未启用'}</span>
+                      </div>
+                      <div className={`text-[11px] ${hintCls}`}>请在上方“云端上传目标”中修改 AList WebDAV 地址、账号、密码和目录；此处不会保存第二份凭据。</div>
+                    </>
+                  ) : (
+                    <>
                   <div className="flex items-center justify-between gap-3">
                     <input className={`${inputCls} max-w-[240px]`} value={space.label} onChange={(e) => updateSpace({ label: e.target.value })} placeholder="第二台 ECS" />
                     <label className={`flex items-center gap-2 text-xs ${labelCls}`}>
@@ -4009,6 +4022,8 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                   </div>
                   <input className={inputCls} value={space.baseUrl || ''} onChange={(e) => updateSpace({ baseUrl: e.target.value })} placeholder="https://storage.example.com" autoComplete="off" spellCheck={false} />
                   <input type="password" className={inputCls} value={space.apiToken || ''} onChange={(e) => updateSpace({ apiToken: e.target.value })} placeholder={space.hasApiToken ? '已保存 Token；留空或保持掩码不变' : '存储节点访问 Token'} autoComplete="new-password" />
+                    </>
+                  )}
                   <div className="flex items-center gap-2 flex-wrap">
                     <button type="button" className={isPixel ? 'px-btn px-btn--ghost' : 'h-8 px-3 rounded-md border text-xs flex items-center gap-1.5'} disabled={testState?.loading} onClick={() => void handleTestOutputStorage(space)}>
                       {testState?.loading ? <Loader2 size={12} className="animate-spin" /> : <TestTube2 size={12} />} 测试连接

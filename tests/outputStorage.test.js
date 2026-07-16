@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import http from 'node:http';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -22,6 +23,99 @@ test('output storage settings normalize active space and preserve masked token',
   assert.equal(settings.normalizeActiveOutputStorageSpaceId('ecs-secondary', next), 'ecs-secondary');
   assert.equal(settings.maskOutputStorageSpaces(next).find((item) => item.id === 'ecs-secondary').apiToken, '****7890');
 });
+
+test('enabled Baidu cloud target is derived as an output storage space', () => {
+  const settings = require('../backend/src/outputStorage/settings.js');
+  const spaces = settings.normalizeOutputStorageSpaces([], [], [{
+    id: 'baidu-netdisk',
+    provider: 'baidu-netdisk',
+    label: '我的百度网盘',
+    enabled: true,
+    baiduNetdisk: { webdavUrl: 'http://127.0.0.1:5244/dav/baidu' },
+  }]);
+  const baidu = spaces.find((item) => item.id === 'cloud-baidu-netdisk');
+  assert.equal(baidu.type, 'cloud-upload-target');
+  assert.equal(baidu.cloudTargetId, 'baidu-netdisk');
+  assert.equal(baidu.enabled, true);
+  assert.equal(settings.normalizeActiveOutputStorageSpaceId(baidu.id, spaces), baidu.id);
+});
+
+function createMockWebdavServer() {
+  const files = new Map();
+  const directories = new Set(['/']);
+  const rootPrefix = '/dav/百度网盘';
+  const remotePath = (url) => {
+    const pathname = decodeURIComponent(new URL(url, 'http://localhost').pathname);
+    const relative = pathname.startsWith(rootPrefix) ? pathname.slice(rootPrefix.length) : pathname;
+    return `/${relative.split('/').filter(Boolean).join('/')}`;
+  };
+  const parent = (value) => {
+    const parts = value.split('/').filter(Boolean);
+    parts.pop();
+    return parts.length ? `/${parts.join('/')}` : '/';
+  };
+  const href = (value) => `${encodeURI(rootPrefix)}${value.split('/').map((part) => encodeURIComponent(part)).join('/')}`;
+  const server = http.createServer(async (req, res) => {
+    if (req.headers.authorization !== `Basic ${Buffer.from('alist-user:alist-pass').toString('base64')}`) {
+      res.writeHead(401).end();
+      return;
+    }
+    const key = remotePath(req.url);
+    if (req.method === 'MKCOL') {
+      directories.add(key);
+      res.writeHead(201).end();
+      return;
+    }
+    if (req.method === 'PUT') {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      directories.add(parent(key));
+      files.set(key, Buffer.concat(chunks));
+      res.writeHead(201).end();
+      return;
+    }
+    if (req.method === 'HEAD') {
+      const body = files.get(key);
+      if (!body) { res.writeHead(404).end(); return; }
+      res.writeHead(200, { 'Content-Length': body.length, 'Content-Type': 'application/octet-stream', ETag: 'mock-etag' }).end();
+      return;
+    }
+    if (req.method === 'GET') {
+      const body = files.get(key);
+      if (!body) { res.writeHead(404).end(); return; }
+      const match = /^bytes=(\d+)-(\d*)$/.exec(String(req.headers.range || ''));
+      if (match) {
+        const start = Number(match[1]);
+        const end = match[2] ? Number(match[2]) : body.length - 1;
+        const part = body.subarray(start, Math.min(end + 1, body.length));
+        res.writeHead(206, { 'Content-Length': part.length, 'Content-Range': `bytes ${start}-${start + part.length - 1}/${body.length}`, 'Accept-Ranges': 'bytes' });
+        res.end(part);
+      } else {
+        res.writeHead(200, { 'Content-Length': body.length, 'Accept-Ranges': 'bytes' });
+        res.end(body);
+      }
+      return;
+    }
+    if (req.method === 'DELETE') {
+      const existed = files.delete(key) || directories.delete(key);
+      res.writeHead(existed ? 204 : 404).end();
+      return;
+    }
+    if (req.method === 'PROPFIND') {
+      const children = [];
+      for (const dir of directories) if (dir !== key && parent(dir) === key) children.push({ key: dir, directory: true, size: 0 });
+      for (const [file, body] of files) if (parent(file) === key) children.push({ key: file, directory: false, size: body.length });
+      const responseXml = [{ key, directory: true, size: 0 }, ...children].map((item) => (
+        `<d:response><d:href>${href(item.key)}</d:href><d:propstat><d:prop><d:resourcetype>${item.directory ? '<d:collection/>' : ''}</d:resourcetype><d:getcontentlength>${item.size}</d:getcontentlength><d:getcontenttype>${item.directory ? '' : 'application/octet-stream'}</d:getcontenttype><d:getetag>mock-etag</d:getetag><d:getlastmodified>Wed, 16 Jul 2026 00:00:00 GMT</d:getlastmodified></d:prop></d:propstat></d:response>`
+      )).join('');
+      res.writeHead(207, { 'Content-Type': 'application/xml' });
+      res.end(`<?xml version="1.0"?><d:multistatus xmlns:d="DAV:">${responseXml}</d:multistatus>`);
+      return;
+    }
+    res.writeHead(405).end();
+  });
+  return { server, files, directories };
+}
 
 test('storage node and manager upload, proxy metadata, reconcile and delete remote output', async (t) => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 't8-output-storage-'));
@@ -105,6 +199,88 @@ test('storage node and manager upload, proxy metadata, reconcile and delete remo
   assert.equal(manager.storageEntryForKey(key), null);
 });
 
+test('Baidu WebDAV works as active output storage and reconciles the whole T8 directory', async (t) => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 't8-baidu-output-'));
+  const mock = createMockWebdavServer();
+  await new Promise((resolve) => mock.server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => mock.server.close(resolve)));
+  const webdavUrl = `http://127.0.0.1:${mock.server.address().port}/dav/%E7%99%BE%E5%BA%A6%E7%BD%91%E7%9B%98`;
+
+  const config = require('../backend/src/config.js');
+  config.DATA_DIR = path.join(temp, 'data');
+  config.OUTPUT_DIR = path.join(temp, 'output');
+  config.SETTINGS_FILE = path.join(config.DATA_DIR, 'settings.json');
+  config.CANVAS_FILE = path.join(config.DATA_DIR, 'canvas_list.json');
+  fs.mkdirSync(config.DATA_DIR, { recursive: true });
+  fs.mkdirSync(config.OUTPUT_DIR, { recursive: true });
+  fs.writeFileSync(config.CANVAS_FILE, '[]');
+  fs.writeFileSync(config.SETTINGS_FILE, JSON.stringify({
+    activeOutputStorageSpaceId: 'cloud-baidu-netdisk',
+    outputStorageSpaces: [
+      { id: 'primary', type: 'local', label: 'Primary', enabled: true },
+      { id: 'ecs-secondary', type: 't8-storage-node', label: 'ECS 2', enabled: false },
+    ],
+    cloudUploadTargets: [{
+      id: 'baidu-netdisk', provider: 'baidu-netdisk', label: '百度网盘', enabled: true,
+      prefix: 'T8PenguinCanvas/{kind}/{yyyy-mm}',
+      baiduNetdisk: { webdavUrl, username: 'alist-user', password: 'alist-pass', folder: '/T8PenguinCanvas' },
+    }],
+  }));
+
+  const managerPath = require.resolve('../backend/src/outputStorage/manager.js');
+  delete require.cache[managerPath];
+  const manager = require(managerPath);
+  const settings = manager.getStorageSettings();
+  const baiduSpace = settings.spaces.find((item) => item.id === 'cloud-baidu-netdisk');
+  assert.equal(settings.activeId, 'cloud-baidu-netdisk');
+  assert.equal(baiduSpace.enabled, true);
+
+  const key = 'image/baidu-generated.png';
+  const local = path.join(config.OUTPUT_DIR, 'image', 'baidu-generated.png');
+  fs.mkdirSync(path.dirname(local), { recursive: true });
+  fs.writeFileSync(local, Buffer.from('baidu-generated-payload'));
+  await manager.scanAndPublishNewFiles();
+  await manager.scanAndPublishNewFiles();
+  await manager.scanAndPublishNewFiles();
+  const entry = manager.storageEntryForKey(key);
+  assert.equal(entry.storageSpaceId, 'cloud-baidu-netdisk');
+  assert.equal(entry.provider, 'baidu-netdisk');
+  assert.equal(entry.remotePath, '/T8PenguinCanvas/output/image/baidu-generated.png');
+  assert.equal(fs.existsSync(local), false);
+  assert.equal(mock.files.get(entry.remotePath).toString(), 'baidu-generated-payload');
+
+  const proxyApp = require('../backend/node_modules/express')();
+  proxyApp.get('/files/output/*', manager.serveOutputFile);
+  const proxyServer = await new Promise((resolve) => {
+    const instance = proxyApp.listen(0, '127.0.0.1', () => resolve(instance));
+  });
+  t.after(() => new Promise((resolve) => proxyServer.close(resolve)));
+  const proxied = await fetch(`http://127.0.0.1:${proxyServer.address().port}/files/output/${key}`, { headers: { Range: 'bytes=0-3' } });
+  assert.equal(proxied.status, 206);
+  assert.equal(await proxied.text(), 'baid');
+
+  const materialized = await manager.materializeOutputUrl('/files/output/image/baidu-generated.png');
+  assert.equal(fs.readFileSync(materialized, 'utf8'), 'baidu-generated-payload');
+
+  mock.directories.add('/T8PenguinCanvas/archive');
+  mock.files.set('/T8PenguinCanvas/archive/manual-old.png', Buffer.from('manual-old'));
+  const reconciled = await manager.reconcileRemoteSpace(baiduSpace);
+  assert.equal(reconciled.scanned, 2);
+  assert.equal(reconciled.added, 1);
+  const imported = Object.values(manager.loadIndex().items).find((item) => item.remotePath === '/T8PenguinCanvas/archive/manual-old.png');
+  assert.match(imported.key, /^baidu-import\//);
+  assert.equal(imported.importedFromCloud, true);
+
+  const historyPath = require.resolve('../backend/src/utils/generationHistory.js');
+  delete require.cache[historyPath];
+  const history = require(historyPath);
+  assert.equal(history.listVisibleItems({ id: 'designer', role: 'designer' }).some((item) => item.storageKey === imported.key), false);
+  assert.equal(history.listVisibleItems({ id: 'admin', role: 'admin' }).some((item) => item.storageKey === imported.key), true);
+
+  await manager.deleteOutputByKey(imported.key);
+  assert.equal(mock.files.has('/T8PenguinCanvas/archive/manual-old.png'), false);
+});
+
 test('manager falls back to primary when remote storage is unavailable', async () => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 't8-output-fallback-'));
   const config = require('../backend/src/config.js');
@@ -182,4 +358,22 @@ test('settings route masks output storage token and preserves it on masked updat
   });
   const raw = await fetch(`${base}/raw`).then((res) => res.json());
   assert.equal(raw.data.outputStorageSpaces[1].apiToken, 'route-secret-abcdefghijklmnopqrstuvwxyz');
+
+  await fetch(base, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      cloudUploadTargets: [{
+        id: 'baidu-netdisk', provider: 'baidu-netdisk', label: '我的百度网盘', enabled: true,
+        baiduNetdisk: { webdavUrl: 'http://127.0.0.1:5244/dav/baidu', username: 'alist', password: 'alist-secret', folder: '/T8PenguinCanvas' },
+      }],
+      activeOutputStorageSpaceId: 'cloud-baidu-netdisk',
+    }),
+  });
+  const withBaidu = await fetch(base).then((res) => res.json());
+  const baidu = withBaidu.data.outputStorageSpaces.find((item) => item.id === 'cloud-baidu-netdisk');
+  assert.equal(baidu.type, 'cloud-upload-target');
+  assert.equal(baidu.enabled, true);
+  assert.equal(withBaidu.data.activeOutputStorageSpaceId, 'cloud-baidu-netdisk');
+  assert.equal(JSON.stringify(baidu).includes('alist-secret'), false);
 });

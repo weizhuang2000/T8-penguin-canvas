@@ -264,7 +264,7 @@ export interface CloudUploadSummary {
   defaultLabel?: string;
 }
 
-export type OutputStorageSpaceType = 'local' | 't8-storage-node';
+export type OutputStorageSpaceType = 'local' | 't8-storage-node' | 'cloud-upload-target';
 
 export interface OutputStorageSpaceConfig {
   id: string;
@@ -275,6 +275,9 @@ export interface OutputStorageSpaceConfig {
   baseUrl?: string;
   apiToken?: string;
   hasApiToken?: boolean;
+  cloudTargetId?: string;
+  provider?: CloudUploadProvider;
+  managed?: boolean;
 }
 
 export interface OutputStorageSummary {

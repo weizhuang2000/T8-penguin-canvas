@@ -428,6 +428,7 @@ function main() {
   checkFile(path.join(RES, 'backend-enc', 'outputStorage', 'settings.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'outputStorage', 'client.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'outputStorage', 'manager.t8c'));
+  checkFile(path.join(RES, 'backend-enc', 'outputStorage', 'webdav.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'extensions', 'runtimeHooks.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'providers', 'registry.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'providers', 'mediaResolver.t8c'));

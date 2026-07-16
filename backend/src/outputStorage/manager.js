@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const config = require('../config');
+const { normalizeCloudUploadTargets } = require('../cloudUploads/settings');
 const {
   normalizeActiveOutputStorageSpaceId,
   normalizeOutputStorageSpaces,
@@ -13,9 +14,18 @@ const {
   downloadStorageFile,
   listStorageFiles,
   proxyStorageFile,
-  testStorageSpace,
+  testStorageSpace: testNodeStorageSpace,
   uploadStorageFile,
 } = require('./client');
+const {
+  deletePath: deleteWebdavPath,
+  downloadFile: downloadWebdavFile,
+  joinRemotePath,
+  listFilesRecursive,
+  proxyFile: proxyWebdavFile,
+  putFile: putWebdavFile,
+  testConnection: testWebdavConnection,
+} = require('./webdav');
 
 const INDEX_FILE = path.join(config.DATA_DIR, 'output_storage_index.json');
 const SCAN_INTERVAL_MS = Math.max(1000, Number(process.env.T8_OUTPUT_STORAGE_SCAN_MS) || 2500);
@@ -33,7 +43,7 @@ const MIME_BY_EXT = {
 };
 
 function emptyIndex() {
-  return { schema: 't8-output-storage-index', version: 1, updatedAt: new Date().toISOString(), items: {} };
+  return { schema: 't8-output-storage-index', version: 2, updatedAt: new Date().toISOString(), items: {} };
 }
 
 function safeKey(value) {
@@ -78,11 +88,27 @@ function readRawSettings() {
 
 function getStorageSettings() {
   const raw = readRawSettings();
-  const spaces = normalizeOutputStorageSpaces(raw.outputStorageSpaces, raw.outputStorageSpaces);
+  const cloudTargets = normalizeCloudUploadTargets(raw.cloudUploadTargets, raw.cloudUploadTargets);
+  const spaces = normalizeOutputStorageSpaces(raw.outputStorageSpaces, raw.outputStorageSpaces, cloudTargets);
   return {
     spaces,
+    cloudTargets,
     activeId: normalizeActiveOutputStorageSpaceId(raw.activeOutputStorageSpaceId, spaces),
   };
+}
+
+function cloudTargetForSpace(settings, space) {
+  if (space?.type !== 'cloud-upload-target') return null;
+  return settings.cloudTargets.find((item) => item.id === space.cloudTargetId && item.provider === space.provider) || null;
+}
+
+function webdavConfigForTarget(target) {
+  return target?.provider === 'baidu-netdisk' ? target.baiduNetdisk || {} : {};
+}
+
+function webdavOutputPath(target, key) {
+  const cfg = webdavConfigForTarget(target);
+  return joinRemotePath(cfg.folder || '/T8PenguinCanvas', 'output', key);
 }
 
 function loadIndex() {
@@ -91,7 +117,7 @@ function loadIndex() {
   if (indexCache && mtime === indexMtime) return indexCache;
   try {
     const parsed = JSON.parse(fs.readFileSync(INDEX_FILE, 'utf8'));
-    indexCache = parsed?.items && typeof parsed.items === 'object' ? parsed : emptyIndex();
+    indexCache = parsed?.items && typeof parsed.items === 'object' ? { ...parsed, version: 2 } : emptyIndex();
   } catch {
     indexCache = emptyIndex();
   }
@@ -174,7 +200,7 @@ function registerExistingLocalFiles() {
   if (changed) writeIndex(index);
 }
 
-async function publishLocalFile(file, activeSpace) {
+async function publishLocalFile(file, activeSpace, storageSettings = getStorageSettings()) {
   const contentType = MIME_BY_EXT[path.extname(file.key).toLowerCase()] || 'application/octet-stream';
   if (!activeSpace || activeSpace.id === 'primary') {
     return upsertEntry(file.key, {
@@ -182,7 +208,24 @@ async function publishLocalFile(file, activeSpace) {
     });
   }
   try {
-    const result = await uploadStorageFile(activeSpace, file.key, file.filePath, { contentType });
+    let result;
+    let storagePatch = {};
+    if (activeSpace.type === 'cloud-upload-target') {
+      const target = cloudTargetForSpace(storageSettings, activeSpace);
+      if (!target?.enabled) throw new Error('百度网盘云端目标未启用');
+      const cfg = webdavConfigForTarget(target);
+      if (!cfg.webdavUrl) throw new Error('百度网盘缺少 WebDAV 地址');
+      const remotePath = webdavOutputPath(target, file.key);
+      result = await putWebdavFile(cfg, remotePath, file.filePath, contentType);
+      storagePatch = {
+        cloudTargetId: target.id,
+        provider: target.provider,
+        remotePath: result.remotePath,
+        sha256: result.sha256,
+      };
+    } else {
+      result = await uploadStorageFile(activeSpace, file.key, file.filePath, { contentType });
+    }
     const entry = upsertEntry(file.key, {
       storageSpaceId: activeSpace.id,
       size: Number(result?.data?.size ?? result?.size ?? file.size) || file.size,
@@ -190,6 +233,7 @@ async function publishLocalFile(file, activeSpace) {
       etag: result?.data?.etag || result?.etag || '',
       createdAt: file.mtimeMs || Date.now(),
       storageFallbackFrom: '',
+      ...storagePatch,
     });
     try { fs.unlinkSync(file.filePath); } catch (error) {
       console.warn(`[output-storage] 远端上传成功，但无法删除暂存文件 ${file.key}:`, error?.message || error);
@@ -210,7 +254,8 @@ async function scanAndPublishNewFiles() {
   scanRunning = true;
   try {
     const index = loadIndex();
-    const { spaces, activeId } = getStorageSettings();
+    const storageSettings = getStorageSettings();
+    const { spaces, activeId } = storageSettings;
     const activeSpace = spaces.find((item) => item.id === activeId) || spaces[0];
     const files = listLocalFiles();
     const present = new Set(files.map((item) => item.key));
@@ -227,7 +272,7 @@ async function scanAndPublishNewFiles() {
       // 连续两个扫描周期大小和 mtime 都不再变化，避免把仍在渲染的大视频提前上传。
       if (previous.stableCount < 2) continue;
       stableFiles.delete(file.key);
-      await publishLocalFile(file, activeSpace);
+      await publishLocalFile(file, activeSpace, storageSettings);
     }
   } finally {
     scanRunning = false;
@@ -267,10 +312,16 @@ async function serveOutputFile(req, res) {
   const entry = storageEntryForKey(key);
   if (!entry) return res.status(404).json({ success: false, error: 'Output file not found' });
   if (entry.storageSpaceId === 'primary') return res.status(404).json({ success: false, error: 'Output file not found' });
-  const { spaces } = getStorageSettings();
+  const storageSettings = getStorageSettings();
+  const { spaces } = storageSettings;
   const space = spaces.find((item) => item.id === entry.storageSpaceId && item.enabled);
   if (!space) return res.status(503).json({ success: false, error: '文件所属存储空间当前未启用' });
   try {
+    if (space.type === 'cloud-upload-target') {
+      const target = cloudTargetForSpace(storageSettings, space);
+      if (!target) throw new Error('百度网盘云端目标配置不存在');
+      return await proxyWebdavFile(webdavConfigForTarget(target), entry.remotePath || webdavOutputPath(target, key), req, res);
+    }
     return await proxyStorageFile(space, key, req, res);
   } catch (error) {
     if (!res.headersSent) return res.status(502).json({ success: false, error: `远端存储读取失败: ${error?.message || error}` });
@@ -285,10 +336,17 @@ async function deleteOutputByKey(key) {
   if (!entry || entry.storageSpaceId === 'primary') {
     if (localPath && fs.existsSync(localPath)) fs.unlinkSync(localPath);
   } else {
-    const { spaces } = getStorageSettings();
+    const storageSettings = getStorageSettings();
+    const { spaces } = storageSettings;
     const space = spaces.find((item) => item.id === entry.storageSpaceId);
     if (!space) throw new Error('文件所属存储空间配置不存在');
-    await deleteStorageFile(space, safe);
+    if (space.type === 'cloud-upload-target') {
+      const target = cloudTargetForSpace(storageSettings, space);
+      if (!target) throw new Error('百度网盘云端目标配置不存在');
+      await deleteWebdavPath(webdavConfigForTarget(target), entry.remotePath || webdavOutputPath(target, safe));
+    } else {
+      await deleteStorageFile(space, safe);
+    }
     if (localPath && fs.existsSync(localPath)) fs.unlinkSync(localPath);
   }
   const index = loadIndex();
@@ -304,18 +362,75 @@ async function materializeOutputUrl(url) {
   if (localPath && fs.existsSync(localPath)) return localPath;
   const entry = storageEntryForKey(key);
   if (!entry || entry.storageSpaceId === 'primary') return '';
-  const { spaces } = getStorageSettings();
+  const storageSettings = getStorageSettings();
+  const { spaces } = storageSettings;
   const space = spaces.find((item) => item.id === entry.storageSpaceId && item.enabled);
   if (!space) throw new Error('文件所属存储空间当前未启用');
   const ext = path.extname(key).slice(0, 16);
   const cacheDir = path.join(config.DATA_DIR, 'output-cache');
   const cachePath = path.join(cacheDir, `${crypto.createHash('sha256').update(`${entry.storageSpaceId}:${key}`).digest('hex')}${ext}`);
   if (fs.existsSync(cachePath)) return cachePath;
-  await downloadStorageFile(space, key, cachePath);
+  if (space.type === 'cloud-upload-target') {
+    const target = cloudTargetForSpace(storageSettings, space);
+    if (!target) throw new Error('百度网盘云端目标配置不存在');
+    await downloadWebdavFile(webdavConfigForTarget(target), entry.remotePath || webdavOutputPath(target, key), cachePath);
+  } else {
+    await downloadStorageFile(space, key, cachePath);
+  }
   return cachePath;
 }
 
 async function reconcileRemoteSpace(space) {
+  if (space?.type === 'cloud-upload-target') {
+    const storageSettings = getStorageSettings();
+    const target = cloudTargetForSpace(storageSettings, space);
+    if (!target) throw new Error('百度网盘云端目标配置不存在');
+    const cfg = webdavConfigForTarget(target);
+    const root = joinRemotePath(cfg.folder || '/T8PenguinCanvas');
+    const outputRoot = joinRemotePath(root, 'output');
+    const files = await listFilesRecursive(cfg, root);
+    const knownRemotePaths = new Set(
+      Object.values(loadIndex().items || {})
+        .filter((item) => item?.storageSpaceId === space.id && item?.remotePath)
+        .map((item) => String(item.remotePath)),
+    );
+    let added = 0;
+    let skipped = 0;
+    for (const file of files) {
+      const remotePath = joinRemotePath(file.remotePath);
+      if (knownRemotePaths.has(remotePath)) { skipped += 1; continue; }
+      let key = '';
+      if (remotePath.startsWith(`${outputRoot}/`)) {
+        key = safeKey(remotePath.slice(outputRoot.length + 1));
+      } else {
+        const base = safeKey(path.basename(remotePath)) || 'file.bin';
+        const digest = crypto.createHash('sha1').update(remotePath).digest('hex').slice(0, 16);
+        key = safeKey(`baidu-import/${digest}/${base}`);
+      }
+      const conflicting = key ? storageEntryForKey(key) : null;
+      if (conflicting && conflicting.remotePath !== remotePath) {
+        const base = safeKey(path.basename(remotePath)) || 'file.bin';
+        const digest = crypto.createHash('sha1').update(remotePath).digest('hex').slice(0, 16);
+        key = safeKey(`baidu-import/${digest}/${base}`);
+      }
+      if (!key || storageEntryForKey(key)) { skipped += 1; continue; }
+      upsertEntry(key, {
+        storageSpaceId: space.id,
+        cloudTargetId: target.id,
+        provider: target.provider,
+        remotePath,
+        size: Number(file.size) || 0,
+        contentType: file.contentType || MIME_BY_EXT[path.extname(remotePath).toLowerCase()] || 'application/octet-stream',
+        etag: file.etag || '',
+        createdAt: Number(file.mtimeMs) || Date.now(),
+        reconciled: true,
+        importedFromCloud: !remotePath.startsWith(`${outputRoot}/`),
+      });
+      knownRemotePaths.add(remotePath);
+      added += 1;
+    }
+    return { added, skipped, scanned: files.length };
+  }
   let cursor = '';
   let added = 0;
   do {
@@ -337,6 +452,14 @@ async function reconcileRemoteSpace(space) {
     cursor = String(data.nextCursor || '');
   } while (cursor);
   return { added };
+}
+
+async function testStorageSpace(space) {
+  if (space?.type !== 'cloud-upload-target') return testNodeStorageSpace(space);
+  const storageSettings = getStorageSettings();
+  const target = cloudTargetForSpace(storageSettings, space);
+  if (!target?.enabled) throw new Error('百度网盘云端目标未启用');
+  return testWebdavConnection(webdavConfigForTarget(target));
 }
 
 function storageMetadataForUrl(url) {

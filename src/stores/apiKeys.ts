@@ -167,18 +167,25 @@ function normalizeOutputStorageSpaces(value: unknown): OutputStorageSpaceConfig[
     .map((space) => ({
       ...(space as OutputStorageSpaceConfig),
       id: String(space.id || ''),
-      type: space.type === 't8-storage-node' ? 't8-storage-node' as const : 'local' as const,
+      type: space.type === 't8-storage-node'
+        ? 't8-storage-node' as const
+        : space.type === 'cloud-upload-target'
+          ? 'cloud-upload-target' as const
+          : 'local' as const,
       label: String(space.label || space.id || ''),
       enabled: space.id === 'primary' ? true : space.enabled === true,
       baseUrl: typeof space.baseUrl === 'string' ? space.baseUrl : '',
       apiToken: typeof space.apiToken === 'string' ? space.apiToken : '',
       hasApiToken: space.hasApiToken === true,
+      cloudTargetId: typeof space.cloudTargetId === 'string' ? space.cloudTargetId : undefined,
+      provider: space.provider,
+      managed: space.managed === true,
     }))
     .filter((space) => !!space.id);
   if (!spaces.some((space) => space.id === 'primary')) {
     spaces.unshift({
       id: 'primary', type: 'local', label: '当前服务器', enabled: true, immutable: true,
-      baseUrl: '', apiToken: '', hasApiToken: false,
+      baseUrl: '', apiToken: '', hasApiToken: false, cloudTargetId: undefined, provider: undefined, managed: false,
     });
   }
   return spaces.length ? spaces : [...(DEFAULT.outputStorageSpaces || [])];

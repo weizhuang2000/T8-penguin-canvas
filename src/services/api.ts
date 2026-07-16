@@ -1704,14 +1704,14 @@ export function getOutputStorageStatus() {
 }
 
 export function testOutputStorageSpace(payload: { spaceId?: string; space?: OutputStorageSpaceConfig }) {
-  return safeRequest<{ ok: boolean; local?: boolean; totalBytes?: number; freeBytes?: number; availableBytes?: number }>(
+  return safeRequest<{ ok: boolean; local?: boolean; totalBytes?: number; freeBytes?: number; availableBytes?: number; capacityManagedExternally?: boolean }>(
     `${BASE}/output-storage/test`,
     { method: 'POST', body: JSON.stringify(payload) },
   );
 }
 
 export function reconcileOutputStorageSpace(spaceId: string) {
-  return safeRequest<{ added: number }>(`${BASE}/output-storage/reconcile`, {
+  return safeRequest<{ added: number; skipped?: number; scanned?: number }>(`${BASE}/output-storage/reconcile`, {
     method: 'POST',
     body: JSON.stringify({ spaceId }),
   });

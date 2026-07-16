@@ -5,6 +5,10 @@ const fs = require('fs');
 const path = require('path');
 const config = require('../config');
 const { materializeOutputUrl } = require('../outputStorage/manager');
+const {
+  buildWebdavUrl: buildSharedWebdavUrl,
+  webdavAuthHeaders: sharedWebdavAuthHeaders,
+} = require('../outputStorage/webdav');
 
 const RESOURCE_DB_FILE = 'resource_library.json';
 const REMOTE_FETCH_TIMEOUT_MS = 30_000;
@@ -691,14 +695,7 @@ function encodeRemotePath(value) {
 }
 
 function buildWebdavUrl(baseUrl, remotePath = '') {
-  const parsed = new URL(String(baseUrl || ''));
-  parsed.username = '';
-  parsed.password = '';
-  parsed.search = '';
-  parsed.hash = '';
-  const base = parsed.href.replace(/\/+$/, '');
-  const suffix = encodeRemotePath(remotePath);
-  return suffix ? `${base}/${suffix}` : base;
+  return buildSharedWebdavUrl(baseUrl, remotePath);
 }
 
 function getWebdavConfig(target) {
@@ -708,13 +705,7 @@ function getWebdavConfig(target) {
 }
 
 function webdavAuthHeaders(cfg = {}) {
-  const headers = {};
-  const username = String(cfg.username || '').trim();
-  const password = String(cfg.password || '').trim();
-  if (username || password) {
-    headers.Authorization = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
-  }
-  return headers;
+  return sharedWebdavAuthHeaders(cfg);
 }
 
 function webdavFileUrl(target, cfg, remotePath) {

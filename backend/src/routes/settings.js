@@ -355,7 +355,11 @@ function syncLegacyLlmConfig(settings) {
 }
 
 function loadSettings({ persistMigrations = true } = {}) {
-  if (!fs.existsSync(config.SETTINGS_FILE)) return { ...DEFAULT_SETTINGS };
+  if (!fs.existsSync(config.SETTINGS_FILE)) {
+    const defaults = { ...DEFAULT_SETTINGS };
+    defaults.outputStorageSpaces = normalizeOutputStorageSpaces(defaults.outputStorageSpaces, defaults.outputStorageSpaces, defaults.cloudUploadTargets);
+    return defaults;
+  }
   try {
     const data = JSON.parse(fs.readFileSync(config.SETTINGS_FILE, 'utf-8'));
     const legacyGiteeFluxProvider = (Array.isArray(data.advancedProviders) ? data.advancedProviders : [])
@@ -375,7 +379,7 @@ function loadSettings({ persistMigrations = true } = {}) {
     Object.assign(merged, syncLegacyLlmConfig(merged));
     merged.advancedProviders = normalizeAdvancedProviders(data.advancedProviders);
     merged.cloudUploadTargets = normalizeCloudUploadTargets(data.cloudUploadTargets);
-    merged.outputStorageSpaces = normalizeOutputStorageSpaces(data.outputStorageSpaces, data.outputStorageSpaces);
+    merged.outputStorageSpaces = normalizeOutputStorageSpaces(data.outputStorageSpaces, data.outputStorageSpaces, merged.cloudUploadTargets);
     merged.activeOutputStorageSpaceId = normalizeActiveOutputStorageSpaceId(
       data.activeOutputStorageSpaceId,
       merged.outputStorageSpaces,
@@ -390,7 +394,9 @@ function loadSettings({ persistMigrations = true } = {}) {
     }
     return migrated.settings;
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    const defaults = { ...DEFAULT_SETTINGS };
+    defaults.outputStorageSpaces = normalizeOutputStorageSpaces(defaults.outputStorageSpaces, defaults.outputStorageSpaces, defaults.cloudUploadTargets);
+    return defaults;
   }
 }
 
@@ -662,8 +668,8 @@ router.post('/', requireAdmin, (req, res) => {
     ? normalizeCloudUploadTargets(incoming.cloudUploadTargets, current.cloudUploadTargets)
     : normalizeCloudUploadTargets(current.cloudUploadTargets);
   merged.outputStorageSpaces = hasOutputStorageSpaces
-    ? normalizeOutputStorageSpaces(incoming.outputStorageSpaces, current.outputStorageSpaces)
-    : normalizeOutputStorageSpaces(current.outputStorageSpaces, current.outputStorageSpaces);
+    ? normalizeOutputStorageSpaces(incoming.outputStorageSpaces, current.outputStorageSpaces, merged.cloudUploadTargets)
+    : normalizeOutputStorageSpaces(current.outputStorageSpaces, current.outputStorageSpaces, merged.cloudUploadTargets);
   merged.activeOutputStorageSpaceId = normalizeActiveOutputStorageSpaceId(
     hasActiveOutputStorageSpaceId ? incoming.activeOutputStorageSpaceId : current.activeOutputStorageSpaceId,
     merged.outputStorageSpaces,
