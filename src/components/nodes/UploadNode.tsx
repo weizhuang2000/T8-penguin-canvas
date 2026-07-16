@@ -7,6 +7,7 @@ import {
   Edit3,
   FileImage,
   FileVideo,
+  Loader2,
   Music,
   RotateCcw,
   Trash2,
@@ -152,6 +153,8 @@ const UploadNode = ({ id, data, selected, type }: NodeProps) => {
 
   const [error, setError] = useState<string | null>(null);
   const [rhCapabilityBusy, setRhCapabilityBusy] = useState(false);
+  const [annotationModifyBusy, setAnnotationModifyBusy] = useState(false);
+  const [annotationModifyError, setAnnotationModifyError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   // 图像编辑弹窗 src URL（与 OutputNode 双击逻辑保持一致）
@@ -1013,6 +1016,20 @@ const UploadNode = ({ id, data, selected, type }: NodeProps) => {
             <span className="break-all">{error}</span>
           </div>
         )}
+        {(annotationModifyBusy || annotationModifyError) && (
+          <div
+            className={`flex items-center gap-1.5 rounded px-2 py-1 text-[10px] ${
+              annotationModifyError
+                ? 'border border-red-500/25 bg-red-500/10 text-red-300'
+                : isDark
+                ? 'border border-amber-400/25 bg-amber-400/10 text-amber-100'
+                : 'border border-amber-300 bg-amber-50 text-amber-700'
+            }`}
+          >
+            {annotationModifyBusy && <Loader2 size={11} className="animate-spin flex-shrink-0" />}
+            <span className="break-all">{annotationModifyError || '修改生成中...'}</span>
+          </div>
+        )}
 
         {/* 输出说明 */}
         {meta && (
@@ -1031,6 +1048,10 @@ const UploadNode = ({ id, data, selected, type }: NodeProps) => {
           srcUrl={editingUrl}
           onClose={() => setEditingUrl(null)}
           onProduce={handleProduce}
+          onModifyRunningChange={(running, error) => {
+            setAnnotationModifyBusy(running);
+            setAnnotationModifyError(error || null);
+          }}
         />
       )}
     </div>

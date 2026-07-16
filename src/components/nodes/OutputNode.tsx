@@ -8,7 +8,7 @@ import {
   type NodeProps,
   type Node,
 } from '@xyflow/react';
-import { Box, MonitorPlay, Type as TypeIcon, Image as ImageIcon, Video as VideoIcon, Music, Download, Pencil, Check, Edit3, GitCompare, Trash2 } from 'lucide-react';
+import { Box, MonitorPlay, Type as TypeIcon, Image as ImageIcon, Video as VideoIcon, Music, Download, Pencil, Check, Edit3, GitCompare, Trash2, Loader2 } from 'lucide-react';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useThemeStore } from '../../stores/theme';
 import { logBus } from '../../stores/logs';
@@ -103,6 +103,8 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
   const d = (data as any) || {};
   const rf = useReactFlow();
   const [rhCapabilityBusy, setRhCapabilityBusy] = useState(false);
+  const [annotationModifyBusy, setAnnotationModifyBusy] = useState(false);
+  const [annotationModifyError, setAnnotationModifyError] = useState<string | null>(null);
   const activeTemplate = useMemo(
     () => resolveThemeTemplate(templateId, customTemplates),
     [templateId, customTemplates],
@@ -1506,11 +1508,29 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
         )}
       </div>
       </div>
+      {(annotationModifyBusy || annotationModifyError) && (
+        <div
+          className={`mx-3 mb-3 flex items-center gap-1.5 rounded px-2 py-1 text-[10px] ${
+            annotationModifyError
+              ? 'border border-red-500/25 bg-red-500/10 text-red-300'
+              : isDark
+              ? 'border border-amber-400/25 bg-amber-400/10 text-amber-100'
+              : 'border border-amber-300 bg-amber-50 text-amber-700'
+          }`}
+        >
+          {annotationModifyBusy && <Loader2 size={11} className="animate-spin flex-shrink-0" />}
+          <span className="break-all">{annotationModifyError || '修改生成中...'}</span>
+        </div>
+      )}
       {editingUrl && (
         <ImageEditModal
           srcUrl={editingUrl}
           onClose={() => setEditingUrl(null)}
           onProduce={handleProduce}
+          onModifyRunningChange={(running, error) => {
+            setAnnotationModifyBusy(running);
+            setAnnotationModifyError(error || null);
+          }}
         />
       )}
       {compareState && (

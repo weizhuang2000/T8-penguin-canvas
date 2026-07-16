@@ -73,6 +73,7 @@ interface Props {
   onClose: () => void;
   /** 产物 urls 注入到外部 (在 OutputNode 中创建 N 个新 OutputNode) */
   onProduce: (urls: string[], meta: ImageEditProduceMeta) => void | Promise<void>;
+  onModifyRunningChange?: (running: boolean, error?: string | null) => void;
 }
 
 type EditMode = 'crop' | 'mask' | 'brush' | 'grid' | 'compose';
@@ -307,7 +308,7 @@ function computeRects(
   return rects;
 }
 
-const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
+const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange }: Props) => {
   const { theme, style } = useThemeStore();
   const isDark = theme === 'dark';
   const isPixel = style === 'pixel';
@@ -1902,9 +1903,13 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
     setBusy(true);
     setBusyAction('annotation-modify');
     setErrMsg(null);
+    let handedOff = false;
     try {
       const payload = await buildAnnotationEditImages();
       if (!payload) return;
+      handedOff = true;
+      onModifyRunningChange?.(true, null);
+      onClose();
       let result = await generateExternalImage({
         providerId: firstImageAdvancedProvider.id,
         providerModel: firstImageProviderModel,
@@ -1942,12 +1947,16 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce }: Props) => {
         providerId: firstImageAdvancedProvider.id,
         providerModel: firstImageProviderModel,
       });
-      onClose();
+      onModifyRunningChange?.(false, null);
     } catch (e: any) {
-      setErrMsg(e?.message || '修改失败');
+      const message = e?.message || '修改失败';
+      if (handedOff) onModifyRunningChange?.(false, message);
+      else setErrMsg(message);
     } finally {
-      setBusyAction(null);
-      setBusy(false);
+      if (!handedOff) {
+        setBusyAction(null);
+        setBusy(false);
+      }
     }
   }
 
