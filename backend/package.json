@@ -6,7 +6,8 @@
   "type": "commonjs",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node src/server.js"
+    "dev": "node src/server.js",
+    "storage-node": "node src/storageNodeServer.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

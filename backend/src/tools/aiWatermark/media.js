@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const config = require('../../config');
+const { materializeOutputUrl } = require('../../outputStorage/manager');
 
 const RESOURCE_DB_FILE = 'resource_library.json';
 const REMOTE_FETCH_TIMEOUT_MS = 30_000;
@@ -268,6 +269,17 @@ async function resolveAiWatermarkMediaRef(value) {
       mime: mimeFromPath(localPath),
       source: t8Path ? 't8-local' : 'local-path',
     };
+  }
+  if (text.startsWith('/files/output/') || text.startsWith('/output/')) {
+    const materialized = await materializeOutputUrl(text);
+    if (materialized && fs.existsSync(materialized)) {
+      return {
+        path: materialized,
+        kind: kindFromPath(materialized),
+        mime: mimeFromPath(materialized),
+        source: 't8-remote-storage',
+      };
+    }
   }
 
   throw new Error(`无法解析输入素材：${text.slice(0, 160)}`);

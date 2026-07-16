@@ -38,13 +38,13 @@ router.patch('/items/:id', express.json({ limit: '1mb' }), (req, res) => {
   }
 });
 
-router.delete('/items/:id', (req, res) => {
+router.delete('/items/:id', async (req, res) => {
   try {
     const mode = String(req.query?.mode || 'hide');
     if (mode !== 'hide' && mode !== 'delete-file') {
       return res.status(400).json({ success: false, error: 'mode must be hide or delete-file' });
     }
-    const result = deleteHistoryItem(req.user, req.params.id, mode);
+    const result = await Promise.resolve(deleteHistoryItem(req.user, req.params.id, mode));
     if (result.status !== 200) return res.status(result.status).json({ success: false, error: result.error });
     res.json({ success: true, data: result.item });
   } catch (e) {

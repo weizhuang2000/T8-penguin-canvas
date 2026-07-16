@@ -10,6 +10,7 @@ const fsp = require('fs').promises;
 const path = require('path');
 const sharp = require('sharp');
 const config = require('../config');
+const { materializeOutputUrl } = require('../outputStorage/manager');
 
 const router = express.Router();
 const RESOURCE_DB_FILE = 'resource_library.json';
@@ -105,6 +106,10 @@ function resolveLocalUrl(url) {
 async function fetchImageBuffer(url) {
   const local = resolveLocalUrl(url);
   if (local && fs.existsSync(local)) return fs.readFileSync(local);
+  if (url && (url.startsWith('/files/output/') || url.startsWith('/output/'))) {
+    const materialized = await materializeOutputUrl(url);
+    if (materialized && fs.existsSync(materialized)) return fs.readFileSync(materialized);
+  }
   if (url && /^https?:/i.test(url)) {
     const r = await fetch(url);
     if (!r.ok) throw new Error(`下载失败: ${r.status}`);

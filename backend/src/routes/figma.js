@@ -4,6 +4,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const config = require('../config');
+const { materializeOutputUrl } = require('../outputStorage/manager');
 const { ensureFigmaBridgeRunning } = require('../utils/figmaBridge');
 
 const router = express.Router();
@@ -92,8 +93,11 @@ function absoluteLocalUrl(url) {
   return `http://127.0.0.1:${config.PORT}${clean}`;
 }
 
-function materialToBridgeItem(item) {
-  const localPath = item.url ? resolveKnownLocalFile(item.url) : null;
+async function materialToBridgeItem(item) {
+  let localPath = item.url ? resolveKnownLocalFile(item.url) : null;
+  if (item.url && (!localPath || !fs.existsSync(localPath)) && (item.url.startsWith('/files/output/') || item.url.startsWith('/output/'))) {
+    localPath = await materializeOutputUrl(item.url).catch(() => '');
+  }
   return {
     id: item.id,
     kind: item.kind,
@@ -150,7 +154,7 @@ router.post('/import', express.json({ limit: '8mb' }), async (req, res) => {
     const payload = {
       app: 't8-penguin-canvas',
       tags: Array.isArray(req.body?.tags) ? req.body.tags.map((x) => safeText(x, '', 60)).filter(Boolean).slice(0, 20) : ['T8', '贞贞画布'],
-      materials: materials.map(materialToBridgeItem),
+      materials: await Promise.all(materials.map(materialToBridgeItem)),
     };
     let result;
     try {

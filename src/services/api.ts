@@ -11,6 +11,8 @@ import type {
   CanvasShareEntry,
   CloudUploadSummary,
   CloudUploadTargetConfig,
+  OutputStorageSpaceConfig,
+  OutputStorageSummary,
 } from '../types/canvas';
 import type { ExhibitionCompactFormConfig } from '../config/exhibitionCompactForm';
 import type { ThemeTemplate } from '../theme/types';
@@ -1682,6 +1684,39 @@ export function uploadCloudAsset(payload: {
   });
 }
 
+export interface OutputStorageStatus {
+  spaces: OutputStorageSpaceConfig[];
+  summary: OutputStorageSummary;
+  statuses: Array<{
+    id: string;
+    ok: boolean;
+    local?: boolean;
+    configured?: boolean;
+    totalBytes?: number;
+    freeBytes?: number;
+    availableBytes?: number;
+    error?: string;
+  }>;
+}
+
+export function getOutputStorageStatus() {
+  return safeRequest<OutputStorageStatus>(`${BASE}/output-storage/status`);
+}
+
+export function testOutputStorageSpace(payload: { spaceId?: string; space?: OutputStorageSpaceConfig }) {
+  return safeRequest<{ ok: boolean; local?: boolean; totalBytes?: number; freeBytes?: number; availableBytes?: number }>(
+    `${BASE}/output-storage/test`,
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+}
+
+export function reconcileOutputStorageSpace(spaceId: string) {
+  return safeRequest<{ added: number }>(`${BASE}/output-storage/reconcile`, {
+    method: 'POST',
+    body: JSON.stringify({ spaceId }),
+  });
+}
+
 // ========== 主题成就 / 时长 ==========
 export type AchievementEventType =
   | 'theme.active_tick'
@@ -1927,6 +1962,10 @@ export interface GenerationHistoryProject {
 }
 
 export interface GenerationHistoryItem {
+  storageSpaceId?: string;
+  storageKey?: string;
+  storageFallbackFrom?: string;
+  storageError?: string;
   id: string;
   kind: GenerationHistoryKind;
   url: string;

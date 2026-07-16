@@ -4,8 +4,8 @@ import * as LucideIcons from 'lucide-react';
 import { useApiKeysStore, FIXED_ZHENZHEN_BASE, RH_BASE, normalizeApiSettings } from '../stores/apiKeys';
 import { taskCompletionSound as taskCompletionSoundController } from '../stores/taskCompletionSound';
 import { useThemeStore } from '../stores/theme';
-import type { AdvancedProviderConfig, AdvancedProviderProtocol, ApiSettings, CloudUploadProvider, CloudUploadTargetConfig, LlmConfig } from '../types/canvas';
-import { getRawSettings, resetTaskCompletionSound, resetTaskFailureSound, testAdvancedProvider, testCloudUploadTarget, uploadTaskCompletionSound, uploadTaskFailureSound, getNodeHelps, saveNodeHelp, deleteNodeHelp, exportNodeHelps, importNodeHelps, bulkReplaceNodeHelps, type NodeHelpMap } from '../services/api';
+import type { AdvancedProviderConfig, AdvancedProviderProtocol, ApiSettings, CloudUploadProvider, CloudUploadTargetConfig, LlmConfig, OutputStorageSpaceConfig } from '../types/canvas';
+import { getRawSettings, resetTaskCompletionSound, resetTaskFailureSound, testAdvancedProvider, testCloudUploadTarget, testOutputStorageSpace, reconcileOutputStorageSpace, uploadTaskCompletionSound, uploadTaskFailureSound, getNodeHelps, saveNodeHelp, deleteNodeHelp, exportNodeHelps, importNodeHelps, bulkReplaceNodeHelps, type NodeHelpMap } from '../services/api';
 import { playTaskCompletionSound, playTaskFailureSound } from '../utils/taskCompletionSound';
 import { DEFAULT_LLM_MODEL } from '../providers/models';
 import { DEFAULT_NODE_HELPS } from '../config/nodeHelpDefaults';
@@ -327,6 +327,17 @@ function normalizeCloudUploadTargetForms(value: unknown): CloudUploadTargetConfi
   return normalizeApiSettings({ cloudUploadTargets: value as CloudUploadTargetConfig[] }).cloudUploadTargets || [];
 }
 
+function normalizeOutputStorageSpaceForms(value: unknown): OutputStorageSpaceConfig[] {
+  return normalizeApiSettings({ outputStorageSpaces: value as OutputStorageSpaceConfig[] }).outputStorageSpaces || [];
+}
+
+function formatStorageBytes(value?: number): string {
+  const bytes = Number(value) || 0;
+  if (!bytes) return '';
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+}
+
 function normalizeCanvasNodeMenuPreferenceForms(value: unknown): CanvasNodeMenuPreferences {
   return normalizeCanvasNodeMenuPreferences(value);
 }
@@ -413,6 +424,10 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   const [activeCloudTargetId, setActiveCloudTargetId] = useState<string>('');
   const [cloudUploadDirty, setCloudUploadDirty] = useState(false);
   const [cloudTestStatus, setCloudTestStatus] = useState<Record<string, { loading?: boolean; ok?: boolean; message?: string }>>({});
+  const [outputStorageSpacesInput, setOutputStorageSpacesInput] = useState<OutputStorageSpaceConfig[]>([]);
+  const [activeOutputStorageSpaceIdInput, setActiveOutputStorageSpaceIdInput] = useState('primary');
+  const [outputStorageDirty, setOutputStorageDirty] = useState(false);
+  const [outputStorageTestStatus, setOutputStorageTestStatus] = useState<Record<string, { loading?: boolean; ok?: boolean; message?: string }>>({});
   const [nodeMenuOpen, setNodeMenuOpen] = useState(false);
   const [nodeMenuPreferencesInput, setNodeMenuPreferencesInput] = useState<CanvasNodeMenuPreferences>(
     () => normalizeCanvasNodeMenuPreferenceForms(undefined),
@@ -473,6 +488,10 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       setActiveCloudTargetId(cloudTargets[0]?.id || '');
       setCloudUploadDirty(false);
       setCloudTestStatus({});
+      setOutputStorageSpacesInput(normalizeOutputStorageSpaceForms((settings as any)?.outputStorageSpaces));
+      setActiveOutputStorageSpaceIdInput((settings as any)?.activeOutputStorageSpaceId || 'primary');
+      setOutputStorageDirty(false);
+      setOutputStorageTestStatus({});
       setNodeMenuOpen(false);
       setNodeMenuPreferencesInput(normalizeCanvasNodeMenuPreferenceForms((settings as any)?.canvasNodeMenuPreferences));
       setNodeMenuDirty(false);
@@ -566,6 +585,10 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     ...(llmConfigsDirty ? { llmConfigs: llmConfigsInput } : {}),
     ...(advancedDirty ? { advancedProviders: advancedProvidersInput } : {}),
     ...(cloudUploadDirty ? { cloudUploadTargets: cloudUploadTargetsInput } : {}),
+    ...(outputStorageDirty ? {
+      outputStorageSpaces: outputStorageSpacesInput,
+      activeOutputStorageSpaceId: activeOutputStorageSpaceIdInput,
+    } : {}),
     ...(nodeMenuDirty ? { canvasNodeMenuPreferences: nodeMenuPreferencesInput } : {}),
   });
 
@@ -607,6 +630,10 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     }
     if (Array.isArray((source as any).cloudUploadTargets)) {
       next.cloudUploadTargets = normalizeCloudUploadTargetForms((source as any).cloudUploadTargets);
+    }
+    if (Array.isArray((source as any).outputStorageSpaces)) {
+      next.outputStorageSpaces = normalizeOutputStorageSpaceForms((source as any).outputStorageSpaces);
+      next.activeOutputStorageSpaceId = String((source as any).activeOutputStorageSpaceId || 'primary');
     }
     if ((source as any).canvasNodeMenuPreferences && typeof (source as any).canvasNodeMenuPreferences === 'object') {
       next.canvasNodeMenuPreferences = normalizeCanvasNodeMenuPreferenceForms((source as any).canvasNodeMenuPreferences);
@@ -695,6 +722,11 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       setActiveCloudTargetId(targets[0]?.id || '');
       setCloudUploadDirty(true);
       setCloudUploadOpen(true);
+    }
+    if (Array.isArray((patch as any).outputStorageSpaces)) {
+      setOutputStorageSpacesInput(normalizeOutputStorageSpaceForms((patch as any).outputStorageSpaces));
+      setActiveOutputStorageSpaceIdInput((patch as any).activeOutputStorageSpaceId || 'primary');
+      setOutputStorageDirty(true);
     }
     if ((patch as any).canvasNodeMenuPreferences) {
       setNodeMenuPreferencesInput(normalizeCanvasNodeMenuPreferenceForms((patch as any).canvasNodeMenuPreferences));
@@ -817,6 +849,10 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     }
     if (cloudUploadDirty) {
       (patch as any).cloudUploadTargets = cloudUploadTargetsInput;
+    }
+    if (outputStorageDirty) {
+      (patch as any).outputStorageSpaces = outputStorageSpacesInput;
+      (patch as any).activeOutputStorageSpaceId = activeOutputStorageSpaceIdInput;
     }
     if (nodeMenuDirty) {
       (patch as any).canvasNodeMenuPreferences = nodeMenuPreferencesInput;
@@ -1344,6 +1380,42 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       setCloudTestStatus((prev) => ({
         ...prev,
         [target.id]: { ok: false, message: e?.message || '配置检查失败' },
+      }));
+    }
+  };
+
+  const handleTestOutputStorage = async (space: OutputStorageSpaceConfig) => {
+    setOutputStorageTestStatus((prev) => ({ ...prev, [space.id]: { loading: true } }));
+    try {
+      const result = await testOutputStorageSpace({ space });
+      if (!result.success) throw new Error(result.error);
+      const data = result.data;
+      const available = formatStorageBytes(data.availableBytes || data.freeBytes);
+      setOutputStorageTestStatus((prev) => ({
+        ...prev,
+        [space.id]: { ok: true, message: available ? `连接成功，可用 ${available}` : '连接成功' },
+      }));
+    } catch (e: any) {
+      setOutputStorageTestStatus((prev) => ({
+        ...prev,
+        [space.id]: { ok: false, message: e?.message || '连接失败' },
+      }));
+    }
+  };
+
+  const handleReconcileOutputStorage = async (space: OutputStorageSpaceConfig) => {
+    setOutputStorageTestStatus((prev) => ({ ...prev, [space.id]: { loading: true } }));
+    try {
+      const result = await reconcileOutputStorageSpace(space.id);
+      if (!result.success) throw new Error(result.error);
+      setOutputStorageTestStatus((prev) => ({
+        ...prev,
+        [space.id]: { ok: true, message: `对账完成，新增 ${result.data.added || 0} 个文件` },
+      }));
+    } catch (e: any) {
+      setOutputStorageTestStatus((prev) => ({
+        ...prev,
+        [space.id]: { ok: false, message: e?.message || '对账失败' },
       }));
     }
   };
@@ -3894,6 +3966,62 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                 )}
               </div>
             </div>
+          </div>
+
+          <div className="t8-api-settings-divider pt-3 border-t space-y-3">
+            <label className={`text-sm font-medium flex items-center gap-2 flex-wrap ${labelCls}`}>
+              <ServerCog size={14} className="t8-api-settings-icon" />
+              输出保存空间
+              <span className={`text-[11px] font-normal ${hintCls}`}>· 新生成文件写入当前空间，历史生成始终聚合所有空间</span>
+            </label>
+            <div className="grid gap-2 sm:grid-cols-[140px_1fr] sm:items-center">
+              <span className={`text-xs ${hintCls}`}>当前保存空间</span>
+              <select
+                className={inputCls}
+                value={activeOutputStorageSpaceIdInput}
+                onChange={(e) => {
+                  setActiveOutputStorageSpaceIdInput(e.target.value);
+                  setOutputStorageDirty(true);
+                }}
+              >
+                {outputStorageSpacesInput.map((space) => {
+                  const configured = space.id === 'primary' || (
+                    space.enabled && !!space.baseUrl && (!!space.apiToken || !!space.hasApiToken)
+                  );
+                  return <option key={space.id} value={space.id} disabled={!configured}>{space.label}{configured ? '' : '（未配置）'}</option>;
+                })}
+              </select>
+            </div>
+            {outputStorageSpacesInput.filter((space) => space.type === 't8-storage-node').map((space) => {
+              const testState = outputStorageTestStatus[space.id];
+              const updateSpace = (patch: Partial<OutputStorageSpaceConfig>) => {
+                setOutputStorageSpacesInput((prev) => prev.map((item) => item.id === space.id ? { ...item, ...patch } : item));
+                setOutputStorageDirty(true);
+              };
+              return (
+                <div key={space.id} className={isPixel ? 't8-api-settings-section border p-3 space-y-2' : 't8-api-settings-section rounded-lg border p-3 space-y-2'}>
+                  <div className="flex items-center justify-between gap-3">
+                    <input className={`${inputCls} max-w-[240px]`} value={space.label} onChange={(e) => updateSpace({ label: e.target.value })} placeholder="第二台 ECS" />
+                    <label className={`flex items-center gap-2 text-xs ${labelCls}`}>
+                      <input type="checkbox" checked={space.enabled === true} onChange={(e) => updateSpace({ enabled: e.target.checked })} />
+                      启用
+                    </label>
+                  </div>
+                  <input className={inputCls} value={space.baseUrl || ''} onChange={(e) => updateSpace({ baseUrl: e.target.value })} placeholder="https://storage.example.com" autoComplete="off" spellCheck={false} />
+                  <input type="password" className={inputCls} value={space.apiToken || ''} onChange={(e) => updateSpace({ apiToken: e.target.value })} placeholder={space.hasApiToken ? '已保存 Token；留空或保持掩码不变' : '存储节点访问 Token'} autoComplete="new-password" />
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button type="button" className={isPixel ? 'px-btn px-btn--ghost' : 'h-8 px-3 rounded-md border text-xs flex items-center gap-1.5'} disabled={testState?.loading} onClick={() => void handleTestOutputStorage(space)}>
+                      {testState?.loading ? <Loader2 size={12} className="animate-spin" /> : <TestTube2 size={12} />} 测试连接
+                    </button>
+                    <button type="button" className={isPixel ? 'px-btn px-btn--ghost' : 'h-8 px-3 rounded-md border text-xs'} disabled={testState?.loading || !space.enabled} onClick={() => void handleReconcileOutputStorage(space)}>
+                      对账文件
+                    </button>
+                    {testState?.message && <span className={`text-[11px] ${testState.ok ? 'text-emerald-500' : 'text-red-400'}`}>{testState.message}</span>}
+                  </div>
+                </div>
+              );
+            })}
+            <div className={`text-[11px] ${hintCls}`}>切换只影响新文件；第二台 ECS 写入失败时会回落当前服务器。Token 仅保存在第一台 ECS 后端。</div>
           </div>
 
           {/* v1.2.10.2: 文件自动保存路径 */}

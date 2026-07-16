@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { materializeOutputUrl } = require('../outputStorage/manager');
 const config = require('../config');
 
 const DEFAULT_BASE_URL = `http://127.0.0.1:${config.PORT}`;
@@ -279,7 +280,11 @@ async function resolveMediaRef(value, options = {}) {
   }
 
   const resourcePath = resolveResourceLibraryMediaPath(text, options);
-  const t8Path = resourcePath?.path || resolveT8LocalMediaPath(text, options);
+  let remoteOutputPath = '';
+  if (text.startsWith('/files/output/') || text.startsWith('/output/')) {
+    remoteOutputPath = await materializeOutputUrl(text).catch(() => '');
+  }
+  const t8Path = resourcePath?.path || remoteOutputPath || resolveT8LocalMediaPath(text, options);
   const localPath = t8Path || resolveDirectLocalPath(text);
 
   if (target === 'local-path') {

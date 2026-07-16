@@ -8,6 +8,7 @@ const dns = require('dns').promises;
 const net = require('net');
 const sharp = require('sharp');
 const config = require('../config');
+const { materializeOutputUrl } = require('../outputStorage/manager');
 
 const router = express.Router();
 
@@ -605,6 +606,16 @@ function resolveLocalSource(url, root, db) {
 }
 
 async function readSource(url, root, db) {
+  if (String(url || '').startsWith('/files/output/') || String(url || '').startsWith('/output/')) {
+    const materialized = await materializeOutputUrl(url).catch(() => '');
+    if (materialized) {
+      return {
+        buffer: fs.readFileSync(materialized),
+        originalName: path.basename(String(url).split(/[?#]/)[0]),
+        mime: mimeFromExt(path.extname(materialized)),
+      };
+    }
+  }
   const local = resolveLocalSource(url, root, db);
   if (local) {
     if (!fs.existsSync(local.filePath)) throw new Error('源文件不存在');

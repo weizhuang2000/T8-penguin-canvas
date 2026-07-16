@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const { spawn } = require('child_process');
 const sharp = require('sharp');
 const config = require('../config');
+const { materializeOutputUrl, storageEntryForKey } = require('../outputStorage/manager');
 const { tryDecodeDuckPayload } = require('../utils/duckPayload');
 
 const router = express.Router();
@@ -221,10 +222,15 @@ function ensureUniqueFile(targetDir, filename, overwrite) {
   const base = sanitizeOutputPart(parsed.name, 'batch-item');
   const ext = sanitizeOutputPart(parsed.ext.replace(/^\./, ''), 'bin');
   let candidate = `${base}.${ext}`;
-  if (overwrite || !fs.existsSync(path.join(targetDir, candidate))) return candidate;
+  const occupied = (name) => {
+    const local = path.join(targetDir, name);
+    const key = path.relative(config.OUTPUT_DIR, local).split(path.sep).join('/');
+    return fs.existsSync(local) || !!storageEntryForKey(key);
+  };
+  if (overwrite || !occupied(candidate)) return candidate;
   for (let i = 2; i < 10000; i += 1) {
     candidate = `${base}_${i}.${ext}`;
-    if (!fs.existsSync(path.join(targetDir, candidate))) return candidate;
+    if (!occupied(candidate)) return candidate;
   }
   return `${base}_${Date.now()}.${ext}`;
 }
@@ -379,7 +385,10 @@ router.get('/thumbnail', async (req, res) => {
     if (!url || !THUMBNAIL_IMAGE_RE.test(url.split('?')[0].split('#')[0])) {
       return res.status(400).json({ success: false, error: '不支持的图片预览地址' });
     }
-    const sourcePath = resolveLocalFileUrl(url);
+    let sourcePath = resolveLocalFileUrl(url);
+    if (sourcePath && !fs.existsSync(sourcePath) && (url.startsWith('/files/output/') || url.startsWith('/output/'))) {
+      sourcePath = await materializeOutputUrl(url).catch(() => '');
+    }
     if (!sourcePath) {
       return res.status(400).json({ success: false, error: '只支持本地 input/output 图片缩略图' });
     }
@@ -484,7 +493,10 @@ router.post('/copy-to-output', express.json({ limit: '2mb' }), async (req, res) 
     if (!url || typeof url !== 'string') {
       return res.status(400).json({ success: false, error: '缺少 url' });
     }
-    const src = resolveLocalFileUrl(url);
+    let src = resolveLocalFileUrl(url);
+    if (src && !fs.existsSync(src) && (url.startsWith('/files/output/') || url.startsWith('/output/'))) {
+      src = await materializeOutputUrl(url).catch(() => '');
+    }
     if (!src || !fs.existsSync(src)) {
       return res.status(404).json({ success: false, error: '只支持已落地的本地 input/output 文件' });
     }
@@ -599,8 +611,8 @@ router.post('/save-to-disk', express.json({ limit: '2mb' }), async (req, res) =>
       return res.json({ success: true, data: { path: target, exist: false, source: 'copy' } });
     };
     if (url.startsWith('/files/output/')) {
-      const rel = decodeURIComponent(url.replace('/files/output/', ''));
-      return localCopy(path.join(config.OUTPUT_DIR, rel));
+      const source = await materializeOutputUrl(url).catch(() => '');
+      return localCopy(source);
     }
     if (url.startsWith('/files/input/')) {
       const rel = decodeURIComponent(url.replace('/files/input/', ''));

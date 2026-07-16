@@ -4,6 +4,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const config = require('../config');
+const { materializeOutputUrl } = require('../outputStorage/manager');
 
 const router = express.Router();
 
@@ -229,7 +230,10 @@ router.post('/import', express.json({ limit: '4mb' }), async (req, res) => {
           continue;
         }
 
-        const localPath = resolveKnownLocalFile(item.url) || resolveResourceFile(item.url);
+        let localPath = resolveKnownLocalFile(item.url) || resolveResourceFile(item.url);
+        if ((!localPath || !fs.existsSync(localPath)) && (item.url.startsWith('/files/output/') || item.url.startsWith('/output/'))) {
+          localPath = await materializeOutputUrl(item.url).catch(() => '');
+        }
         if (localPath) {
           if (!fs.existsSync(localPath)) throw new Error('本地文件不存在');
           const result = await addPathToEagle(base, localPath, payload);

@@ -264,6 +264,26 @@ export interface CloudUploadSummary {
   defaultLabel?: string;
 }
 
+export type OutputStorageSpaceType = 'local' | 't8-storage-node';
+
+export interface OutputStorageSpaceConfig {
+  id: string;
+  type: OutputStorageSpaceType;
+  label: string;
+  enabled?: boolean;
+  immutable?: boolean;
+  baseUrl?: string;
+  apiToken?: string;
+  hasApiToken?: boolean;
+}
+
+export interface OutputStorageSummary {
+  totalCount: number;
+  enabledCount: number;
+  activeSpaceId: string;
+  activeLabel: string;
+}
+
 export type CanvasNodeMenuScene = 'quickAdd' | 'connectFromInput' | 'connectToOutput';
 
 export interface CanvasNodeMenuItemPreference {
@@ -487,6 +507,9 @@ export interface ApiSettings {
   advancedProviderSummary?: AdvancedProviderSummary;
   cloudUploadTargets?: CloudUploadTargetConfig[];
   cloudUploadSummary?: CloudUploadSummary;
+  outputStorageSpaces?: OutputStorageSpaceConfig[];
+  activeOutputStorageSpaceId?: string;
+  outputStorageSummary?: OutputStorageSummary;
   canvasNodeMenuPreferences?: CanvasNodeMenuPreferences;
   taskCompletionSound?: {
     mode?: 'default' | 'custom';

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { AdvancedProviderConfig, ApiSettings, CloudUploadTargetConfig, LlmConfig } from '../types/canvas';
+import type { AdvancedProviderConfig, ApiSettings, CloudUploadTargetConfig, LlmConfig, OutputStorageSpaceConfig } from '../types/canvas';
 import * as api from '../services/api';
 import { DEFAULT_LLM_MODEL } from '../providers/models';
 import { createDefaultCanvasNodeMenuPreferences, normalizeCanvasNodeMenuPreferences } from '../utils/canvasNodeMenuPreferences';
@@ -62,6 +62,12 @@ const DEFAULT: ApiSettings = {
     defaultTargetId: '',
     defaultLabel: '',
   },
+  outputStorageSpaces: [
+    { id: 'primary', type: 'local', label: '当前服务器', enabled: true, immutable: true },
+    { id: 'ecs-secondary', type: 't8-storage-node', label: '第二台 ECS', enabled: false, baseUrl: '', apiToken: '' },
+  ],
+  activeOutputStorageSpaceId: 'primary',
+  outputStorageSummary: { totalCount: 2, enabledCount: 1, activeSpaceId: 'primary', activeLabel: '当前服务器' },
   canvasNodeMenuPreferences: createDefaultCanvasNodeMenuPreferences(),
   taskCompletionSound: { mode: 'default', url: '' },
   taskFailureSound: { mode: 'default', url: '' },
@@ -154,6 +160,30 @@ function normalizeCloudUploadTargets(value: unknown): CloudUploadTargetConfig[] 
     }));
 }
 
+function normalizeOutputStorageSpaces(value: unknown): OutputStorageSpaceConfig[] {
+  const source = Array.isArray(value) ? value : [];
+  const spaces = source
+    .filter((item): item is Record<string, any> => !!item && typeof item === 'object' && !Array.isArray(item))
+    .map((space) => ({
+      ...(space as OutputStorageSpaceConfig),
+      id: String(space.id || ''),
+      type: space.type === 't8-storage-node' ? 't8-storage-node' as const : 'local' as const,
+      label: String(space.label || space.id || ''),
+      enabled: space.id === 'primary' ? true : space.enabled === true,
+      baseUrl: typeof space.baseUrl === 'string' ? space.baseUrl : '',
+      apiToken: typeof space.apiToken === 'string' ? space.apiToken : '',
+      hasApiToken: space.hasApiToken === true,
+    }))
+    .filter((space) => !!space.id);
+  if (!spaces.some((space) => space.id === 'primary')) {
+    spaces.unshift({
+      id: 'primary', type: 'local', label: '当前服务器', enabled: true, immutable: true,
+      baseUrl: '', apiToken: '', hasApiToken: false,
+    });
+  }
+  return spaces.length ? spaces : [...(DEFAULT.outputStorageSpaces || [])];
+}
+
 export function normalizeApiSettings(data: Partial<ApiSettings>): ApiSettings {
   const merged = { ...DEFAULT, ...(data || {}) };
   const llmConfigs = normalizeLlmConfigs(merged.llmConfigs || merged.llmApiKeys);
@@ -163,6 +193,8 @@ export function normalizeApiSettings(data: Partial<ApiSettings>): ApiSettings {
     llmConfigs,
     advancedProviders: normalizeAdvancedProviders(merged.advancedProviders),
     cloudUploadTargets: normalizeCloudUploadTargets(merged.cloudUploadTargets),
+    outputStorageSpaces: normalizeOutputStorageSpaces(merged.outputStorageSpaces),
+    activeOutputStorageSpaceId: merged.activeOutputStorageSpaceId || 'primary',
     advancedProviderSummary: {
       enabledCount: Number(merged.advancedProviderSummary?.enabledCount) || 0,
       configuredKeyCount: Number(merged.advancedProviderSummary?.configuredKeyCount) || 0,
@@ -176,6 +208,12 @@ export function normalizeApiSettings(data: Partial<ApiSettings>): ApiSettings {
       supportedUploadCount: Number(merged.cloudUploadSummary?.supportedUploadCount) || 0,
       defaultTargetId: merged.cloudUploadSummary?.defaultTargetId || '',
       defaultLabel: merged.cloudUploadSummary?.defaultLabel || '',
+    },
+    outputStorageSummary: {
+      totalCount: Number(merged.outputStorageSummary?.totalCount) || normalizeOutputStorageSpaces(merged.outputStorageSpaces).length,
+      enabledCount: Number(merged.outputStorageSummary?.enabledCount) || 1,
+      activeSpaceId: merged.outputStorageSummary?.activeSpaceId || merged.activeOutputStorageSpaceId || 'primary',
+      activeLabel: merged.outputStorageSummary?.activeLabel || '当前服务器',
     },
     canvasNodeMenuPreferences: normalizeCanvasNodeMenuPreferences(merged.canvasNodeMenuPreferences),
     taskCompletionSound: {

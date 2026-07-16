@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const config = require('../config');
+const { materializeOutputUrl } = require('../outputStorage/manager');
 
 const RESOURCE_DB_FILE = 'resource_library.json';
 const REMOTE_FETCH_TIMEOUT_MS = 30_000;
@@ -249,6 +250,10 @@ async function resolveUploadSource(value) {
   const t8Path = resolveT8LocalPath(text);
   const localPath = t8Path || resolveDirectLocalPath(text);
   if (localPath && fs.existsSync(localPath)) return localPath;
+  if (text.startsWith('/files/output/') || text.startsWith('/output/')) {
+    const materialized = await materializeOutputUrl(text);
+    if (materialized && fs.existsSync(materialized)) return materialized;
+  }
 
   throw new Error(`无法解析上传素材：${text.slice(0, 160)}`);
 }

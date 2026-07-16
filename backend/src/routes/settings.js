@@ -16,6 +16,12 @@ const {
   normalizeCloudUploadTargets,
   summarizeCloudUploadTargets,
 } = require('../cloudUploads/settings');
+const {
+  maskOutputStorageSpaces,
+  normalizeActiveOutputStorageSpaceId,
+  normalizeOutputStorageSpaces,
+  summarizeOutputStorageSpaces,
+} = require('../outputStorage/settings');
 
 const router = express.Router();
 
@@ -54,6 +60,8 @@ const DEFAULT_SETTINGS = {
   advancedProviders: normalizeAdvancedProviders(),
   // v1.9.x: 云端上传目标（可选）。默认禁用，不影响资源库/自动保存主流程。
   cloudUploadTargets: normalizeCloudUploadTargets(),
+  outputStorageSpaces: normalizeOutputStorageSpaces(),
+  activeOutputStorageSpaceId: 'primary',
   canvasNodeMenuPreferences: {
     quickAdd: {
       enabled: true,
@@ -367,6 +375,11 @@ function loadSettings({ persistMigrations = true } = {}) {
     Object.assign(merged, syncLegacyLlmConfig(merged));
     merged.advancedProviders = normalizeAdvancedProviders(data.advancedProviders);
     merged.cloudUploadTargets = normalizeCloudUploadTargets(data.cloudUploadTargets);
+    merged.outputStorageSpaces = normalizeOutputStorageSpaces(data.outputStorageSpaces, data.outputStorageSpaces);
+    merged.activeOutputStorageSpaceId = normalizeActiveOutputStorageSpaceId(
+      data.activeOutputStorageSpaceId,
+      merged.outputStorageSpaces,
+    );
     merged.canvasNodeMenuPreferences = normalizeCanvasNodeMenuPreferences(data.canvasNodeMenuPreferences);
     merged.taskCompletionSound = normalizeTaskCompletionSound(data.taskCompletionSound);
     merged.taskFailureSound = normalizeTaskFailureSound(data.taskFailureSound);
@@ -423,6 +436,11 @@ router.get('/', (_req, res) => {
     advancedProviderSummary: summarizeAdvancedProviders(settings.advancedProviders),
     cloudUploadTargets: maskCloudUploadTargets(settings.cloudUploadTargets),
     cloudUploadSummary: summarizeCloudUploadTargets(settings.cloudUploadTargets),
+    outputStorageSpaces: maskOutputStorageSpaces(settings.outputStorageSpaces),
+    outputStorageSummary: summarizeOutputStorageSpaces(
+      settings.outputStorageSpaces,
+      settings.activeOutputStorageSpaceId,
+    ),
   };
   for (const f of CLASSIFIED_KEY_FIELDS) {
     masked[f] = maskKey(settings[f]);
@@ -579,6 +597,8 @@ router.post('/', requireAdmin, (req, res) => {
   const incoming = req.body || {};
   const hasAdvancedProviders = Object.prototype.hasOwnProperty.call(incoming, 'advancedProviders');
   const hasCloudUploadTargets = Object.prototype.hasOwnProperty.call(incoming, 'cloudUploadTargets');
+  const hasOutputStorageSpaces = Object.prototype.hasOwnProperty.call(incoming, 'outputStorageSpaces');
+  const hasActiveOutputStorageSpaceId = Object.prototype.hasOwnProperty.call(incoming, 'activeOutputStorageSpaceId');
   const hasCanvasNodeMenuPreferences = Object.prototype.hasOwnProperty.call(incoming, 'canvasNodeMenuPreferences');
   const hasLlmConfigs = Object.prototype.hasOwnProperty.call(incoming, 'llmConfigs');
   const hasLlmApiKeys = Object.prototype.hasOwnProperty.call(incoming, 'llmApiKeys');
@@ -641,6 +661,13 @@ router.post('/', requireAdmin, (req, res) => {
   merged.cloudUploadTargets = hasCloudUploadTargets
     ? normalizeCloudUploadTargets(incoming.cloudUploadTargets, current.cloudUploadTargets)
     : normalizeCloudUploadTargets(current.cloudUploadTargets);
+  merged.outputStorageSpaces = hasOutputStorageSpaces
+    ? normalizeOutputStorageSpaces(incoming.outputStorageSpaces, current.outputStorageSpaces)
+    : normalizeOutputStorageSpaces(current.outputStorageSpaces, current.outputStorageSpaces);
+  merged.activeOutputStorageSpaceId = normalizeActiveOutputStorageSpaceId(
+    hasActiveOutputStorageSpaceId ? incoming.activeOutputStorageSpaceId : current.activeOutputStorageSpaceId,
+    merged.outputStorageSpaces,
+  );
   merged.canvasNodeMenuPreferences = hasCanvasNodeMenuPreferences
     ? normalizeCanvasNodeMenuPreferences(incoming.canvasNodeMenuPreferences)
     : normalizeCanvasNodeMenuPreferences(current.canvasNodeMenuPreferences);

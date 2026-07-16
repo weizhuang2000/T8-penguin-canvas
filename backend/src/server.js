@@ -5,6 +5,7 @@ const path = require('path');
 const config = require('./config');
 const { requireAuth } = require('./auth/middleware');
 const { startFigmaBridgeOnAppStart } = require('./utils/figmaBridge');
+const { serveOutputFile, startOutputStorageManager } = require('./outputStorage/manager');
 
 const app = express();
 const CAM_OUTPUT_IMAGE_RE = /\.(png|jpe?g|webp|gif|bmp|avif|tiff?)$/i;
@@ -69,10 +70,12 @@ app.get('/files/cam-output/:project/:filename', requireAuth, (req, res) => {
   return res.sendFile(file);
 });
 
-app.use('/files/output', requireAuth, express.static(config.OUTPUT_DIR));
+app.get('/files/output/*', requireAuth, serveOutputFile);
+app.head('/files/output/*', requireAuth, serveOutputFile);
 app.use('/files/input', requireAuth, express.static(config.INPUT_DIR));
 app.use('/files/thumbnails', requireAuth, express.static(config.THUMBNAILS_DIR));
-app.use('/output', requireAuth, express.static(config.OUTPUT_DIR));
+app.get('/output/*', requireAuth, serveOutputFile);
+app.head('/output/*', requireAuth, serveOutputFile);
 app.use('/input', requireAuth, express.static(config.INPUT_DIR));
 
 // ========== 健康检查 ==========
@@ -113,6 +116,7 @@ const animeTagsRouter = require('./routes/animeTags');
 const nodeHelpRouter = require('./routes/nodeHelp');
 const floorplanRouter = require('./routes/floorplan');
 const remotionRouter = require('./routes/remotion');
+const outputStorageRouter = require('./routes/outputStorage');
 const { registerLocalExtensions } = require('./extensions/localExtensions');
 const localHooks = require('./extensions/runtimeHooks');
 
@@ -147,6 +151,7 @@ app.use('/api/anime-tags', animeTagsRouter);
 app.use('/api/node-help', nodeHelpRouter);
 app.use('/api/floorplan', floorplanRouter);
 app.use('/api/remotion', remotionRouter);
+app.use('/api/output-storage', outputStorageRouter);
 registerLocalExtensions(app, { config, express, logger: console, hooks: localHooks });
 
 // ========== 前端静态资源(仅打包模式) ==========
@@ -164,6 +169,7 @@ const PORT = config.PORT;
 const HOST = config.HOST;
 
 app.listen(PORT, HOST, () => {
+  startOutputStorageManager();
   console.log('==================================================');
   console.log('🐧 T8-penguin-canvas 后端服务');
   console.log('==================================================');

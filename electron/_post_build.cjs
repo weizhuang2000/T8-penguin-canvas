@@ -417,6 +417,7 @@ function main() {
   checkFile(path.join(RES, 'backend-enc', 'routes', 'remotion.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'routes', 'aiWatermark.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'routes', 'cloudUploads.t8c'));
+  checkFile(path.join(RES, 'backend-enc', 'routes', 'outputStorage.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'routes', 'parseHub.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'routes', 'achievements.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'routes', 'topaz.t8c'));
@@ -424,6 +425,9 @@ function main() {
   checkFile(path.join(RES, 'backend-enc', 'achievements', 'store.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'cloudUploads', 'settings.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'cloudUploads', 'uploader.t8c'));
+  checkFile(path.join(RES, 'backend-enc', 'outputStorage', 'settings.t8c'));
+  checkFile(path.join(RES, 'backend-enc', 'outputStorage', 'client.t8c'));
+  checkFile(path.join(RES, 'backend-enc', 'outputStorage', 'manager.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'extensions', 'runtimeHooks.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'providers', 'registry.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'providers', 'mediaResolver.t8c'));

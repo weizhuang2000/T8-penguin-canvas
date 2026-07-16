@@ -7,6 +7,15 @@ const config = require('../config');
 const { canManageCanvasSharing, canViewCanvas, isCanvasOwner } = require('../auth/canvasAccess');
 const { isAdminRole } = require('../auth/middleware');
 const { findUserById } = require('../auth/designTeamDb');
+const {
+  INDEX_FILE: OUTPUT_STORAGE_INDEX_FILE,
+  deleteOutputByKey,
+  keyFromOutputUrl,
+  loadIndex: loadStorageIndex,
+  pathForLocalKey,
+  storageEntryForKey,
+  storageMetadataForUrl,
+} = require('../outputStorage/manager');
 
 const KINDS = new Set(['image', 'video', 'audio']);
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.avif']);
@@ -149,6 +158,10 @@ function normalizeItem(raw) {
     createdByUserId: raw.createdByUserId != null ? String(raw.createdByUserId) : '',
     createdByUserName: safeText(raw.createdByUserName),
     createdByUserRole: safeText(raw.createdByUserRole),
+    storageSpaceId: safeText(raw.storageSpaceId, 'primary') || 'primary',
+    storageKey: safeText(raw.storageKey || keyFromOutputUrl(url)),
+    storageFallbackFrom: safeText(raw.storageFallbackFrom),
+    storageError: safeText(raw.storageError),
   };
 }
 
@@ -233,12 +246,10 @@ function canManageHistoryItem(user, item, canvases) {
 }
 
 function outputPathForItem(item) {
-  const fileName = outputUrlToFilename(item?.url) || item?.fileName;
-  if (!fileName) return '';
-  const root = path.resolve(config.OUTPUT_DIR);
-  const target = path.resolve(root, fileName);
-  if (target !== root && !target.startsWith(root + path.sep)) return '';
-  return target;
+  const key = item?.storageKey || keyFromOutputUrl(item?.url) || item?.fileName;
+  const entry = key ? storageEntryForKey(key) : null;
+  if (entry && entry.storageSpaceId !== 'primary') return '';
+  return key ? pathForLocalKey(key) : '';
 }
 
 function readPngSize(buffer) {
@@ -387,8 +398,10 @@ function decorateItem(item, user, canvases, seedReaderCache = null) {
     width = size.width;
     height = size.height;
   }
+  const storage = storageMetadataForUrl(item.url);
   return {
     ...item,
+    ...storage,
     seed: fallbackSeed,
     width,
     height,
@@ -440,6 +453,7 @@ function addHistoryItems(items, context = {}, user = null) {
       createdByUserId: user?.id != null ? String(user.id) : '',
       createdByUserName: safeText(user?.name || user?.realName || user?.username),
       createdByUserRole: safeText(user?.role),
+      ...storageMetadataForUrl(url),
     };
     if (existing) {
       Object.assign(existing, Object.fromEntries(Object.entries(patch).filter(([key, value]) => value !== '' && (key !== 'seed' || value > 0))));
@@ -500,15 +514,43 @@ function scanOutputItems() {
   return entries.filter(Boolean);
 }
 
+function scanIndexedOutputItems() {
+  const entries = [];
+  const index = loadStorageIndex();
+  for (const entry of Object.values(index.items || {})) {
+    const key = String(entry?.key || '').trim();
+    const url = key ? urlFromFilename(key) : '';
+    const kind = normalizeKind('', url);
+    if (!key || !kind) continue;
+    const item = normalizeItem({
+      id: `storage_${crypto.createHash('sha1').update(`${entry.storageSpaceId}:${key}`).digest('hex').slice(0, 16)}`,
+      kind,
+      url,
+      fileName: key,
+      title: path.basename(key),
+      canvasId: UNARCHIVED_PROJECT_ID,
+      createdAt: Number(entry.createdAt) || now(),
+      storageSpaceId: entry.storageSpaceId,
+      storageKey: key,
+      storageFallbackFrom: entry.storageFallbackFrom,
+      storageError: entry.storageError,
+    });
+    if (item) entries.push(item);
+  }
+  return entries;
+}
+
 function collectMergedItems() {
-  const cacheKey = `${dbFile()}|${path.resolve(config.OUTPUT_DIR)}`;
+  const cacheKey = `${dbFile()}|${path.resolve(config.OUTPUT_DIR)}|${OUTPUT_STORAGE_INDEX_FILE}`;
   const dbMtimeMs = mtimeMs(dbFile());
   const outputMtimeMs = mtimeMs(config.OUTPUT_DIR);
+  const storageIndexMtimeMs = mtimeMs(OUTPUT_STORAGE_INDEX_FILE);
   if (
     mergedItemsCache &&
     mergedItemsCache.cacheKey === cacheKey &&
     mergedItemsCache.dbMtimeMs === dbMtimeMs &&
-    mergedItemsCache.outputMtimeMs === outputMtimeMs
+    mergedItemsCache.outputMtimeMs === outputMtimeMs &&
+    mergedItemsCache.storageIndexMtimeMs === storageIndexMtimeMs
   ) {
     return mergedItemsCache.items;
   }
@@ -527,7 +569,13 @@ function collectMergedItems() {
       merged.push(item);
     }
   }
-  mergedItemsCache = { cacheKey, dbMtimeMs, outputMtimeMs, items: merged };
+  for (const item of scanIndexedOutputItems()) {
+    if (!seen.has(item.url)) {
+      seen.add(item.url);
+      merged.push(item);
+    }
+  }
+  mergedItemsCache = { cacheKey, dbMtimeMs, outputMtimeMs, storageIndexMtimeMs, items: merged };
   return merged;
 }
 
@@ -684,12 +732,25 @@ function deleteHistoryItem(user, id, mode = 'hide') {
   if (!canViewProject(user, item.canvasId, canvases)) return { status: 403, error: 'No permission to access this history item' };
   if (mode === 'delete-file') {
     if (!isAdminRole(user?.role)) return { status: 403, error: 'Only admin or manager can delete files' };
+    const key = item.storageKey || keyFromOutputUrl(item.url);
+    if (!key) return { status: 400, error: 'Invalid output file path' };
+    const finalize = () => {
+      item.deletedAt = now();
+      item.deletedByUserId = String(user.id);
+      item.hidden = true;
+      writeDb(db);
+      return { status: 200, item: decorateItem(item, user, canvases) };
+    };
+    const entry = storageEntryForKey(key);
+    if (entry && entry.storageSpaceId !== 'primary') {
+      return deleteOutputByKey(key)
+        .then(finalize)
+        .catch((error) => ({ status: 502, error: `Failed to delete remote output file: ${error?.message || error}` }));
+    }
     const target = outputPathForItem(item);
-    if (!target) return { status: 400, error: 'Invalid output file path' };
-    if (fs.existsSync(target)) fs.unlinkSync(target);
-    item.deletedAt = now();
-    item.deletedByUserId = String(user.id);
-    item.hidden = true;
+    if (target && fs.existsSync(target)) fs.unlinkSync(target);
+    deleteOutputByKey(key).catch(() => {});
+    return finalize();
   } else {
     if (!canManageHistoryItem(user, item, canvases)) return { status: 403, error: 'No permission to manage this history item' };
     item.hidden = true;

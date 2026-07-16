@@ -13,6 +13,7 @@ const { getWhitePng } = require('../utils/whitePng');
 const { tryDecodeDuckPayload } = require('../utils/duckPayload');
 const { normalizeImageOutputFormat, writeImageOutput } = require('../utils/imageOutput');
 const { addHistoryItems, kindFromUrl } = require('../utils/generationHistory');
+const { materializeOutputUrl } = require('../outputStorage/manager');
 const { resolveLlmChatCompletionsUrl } = require('../utils/llmBaseUrl');
 const { resolveLlmConfig: resolveReusableLlmConfig } = require('../providers/llmClient');
 const { mimeFromPath, resolveMediaRef } = require('../providers/mediaResolver');
@@ -158,7 +159,26 @@ function bufferFromLocalMediaRef(ref) {
   return { buf, mime, ext: ext === 'jpeg' ? 'jpg' : ext };
 }
 
-function runningHubVideoImageRef(ref, maxImageBytes) {
+async function bufferFromAvailableMediaRef(ref) {
+  const local = bufferFromLocalMediaRef(ref);
+  if (local) return local;
+  const text = String(ref || '');
+  if (text.startsWith('/files/output/') || text.startsWith('/output/')) {
+    const materialized = await materializeOutputUrl(text).catch(() => '');
+    if (materialized && fs.existsSync(materialized)) {
+      const buf = fs.readFileSync(materialized);
+      const ext = path.extname(materialized).replace(/^\./, '').toLowerCase() || 'bin';
+      const mime = {
+        png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif',
+        mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime', mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4',
+      }[ext] || 'application/octet-stream';
+      return { buf, mime, ext };
+    }
+  }
+  return null;
+}
+
+async function runningHubVideoImageRef(ref, maxImageBytes) {
   const value = String(ref || '').trim();
   if (/^https?:\/\//i.test(value)) return value;
   if (/^data:image\//i.test(value)) {
@@ -174,7 +194,7 @@ function runningHubVideoImageRef(ref, maxImageBytes) {
     }
     return value;
   }
-  const local = bufferFromLocalMediaRef(value);
+  const local = await bufferFromAvailableMediaRef(value);
   if (!local) throw new Error(`无法读取 RunningHub 参考图: ${value}`);
   if (local.buf.length > maxImageBytes) {
     throw new Error(`RunningHub 单张参考图不能超过 ${Math.round(maxImageBytes / 1024 / 1024)}MB`);
@@ -182,7 +202,7 @@ function runningHubVideoImageRef(ref, maxImageBytes) {
   return `data:${local.mime};base64,${local.buf.toString('base64')}`;
 }
 
-function runningHubVideoMediaRef(ref, maxBytes, kind) {
+async function runningHubVideoMediaRef(ref, maxBytes, kind) {
   if (kind === 'image') return runningHubVideoImageRef(ref, maxBytes);
   const label = kind === 'audio' ? '参考音频' : '参考视频';
   const value = String(ref || '').trim();
@@ -200,7 +220,7 @@ function runningHubVideoMediaRef(ref, maxBytes, kind) {
     }
     return value;
   }
-  const local = bufferFromLocalMediaRef(value);
+  const local = await bufferFromAvailableMediaRef(value);
   if (!local) throw new Error(`无法读取 RunningHub ${label}: ${value}`);
   if (!String(local.mime).startsWith(`${kind}/`)) throw new Error(`RunningHub ${label}格式无效: ${value}`);
   if (local.buf.length > maxBytes) {
@@ -480,7 +500,7 @@ async function refToBuffer(ref) {
     const ext = (mime.split('/')[1] || 'png').replace('jpeg', 'jpg');
     return { buf, mime, ext };
   }
-  const local = bufferFromLocalMediaRef(ref);
+  const local = await bufferFromAvailableMediaRef(ref);
   if (local) return local;
   if (ref.startsWith('http://') || ref.startsWith('https://') || ref.startsWith('/files/')) {
     // /files/* 是本地静态,走 127.0.0.1:18766
@@ -500,7 +520,7 @@ async function refToBananaImage(ref) {
   if (typeof ref !== 'string' || !ref) return null;
   if (ref.startsWith('data:')) return ref;
   if (ref.startsWith('http://') || ref.startsWith('https://')) return ref;
-  const local = bufferFromLocalMediaRef(ref);
+  const local = await bufferFromAvailableMediaRef(ref);
   if (local) return `data:${local.mime};base64,${local.buf.toString('base64')}`;
   if (ref.startsWith('/files/')) {
     // 本地资源 → 转 base64
@@ -519,7 +539,7 @@ async function refToBananaImage(ref) {
 async function refToGrokImage(ref) {
   if (typeof ref !== 'string' || !ref) return null;
   if (ref.startsWith('data:')) return ref.startsWith('data:image') ? ref : null;
-  const local = bufferFromLocalMediaRef(ref);
+  const local = await bufferFromAvailableMediaRef(ref);
   if (local) return `data:${local.mime};base64,${local.buf.toString('base64')}`;
   if (ref.startsWith('http://') || ref.startsWith('https://') || ref.startsWith('/files/')) {
     try {
@@ -2569,8 +2589,8 @@ function normalizeRunningHubCatalogParams(value) {
   return visit(value);
 }
 
-function resolveRunningHubCatalogMediaParams(value, key = '') {
-  if (Array.isArray(value)) return value.map((item) => resolveRunningHubCatalogMediaParams(item, key));
+async function resolveRunningHubCatalogMediaParams(value, key = '') {
+  if (Array.isArray(value)) return Promise.all(value.map((item) => resolveRunningHubCatalogMediaParams(item, key)));
   if (!value || typeof value !== 'object') {
     if (typeof value !== 'string') return value;
     const field = String(key || '').toLowerCase();
@@ -2579,7 +2599,7 @@ function resolveRunningHubCatalogMediaParams(value, key = '') {
   }
   const output = {};
   for (const [childKey, childValue] of Object.entries(value)) {
-    output[childKey] = resolveRunningHubCatalogMediaParams(childValue, childKey);
+    output[childKey] = await resolveRunningHubCatalogMediaParams(childValue, childKey);
   }
   return output;
 }
@@ -2613,7 +2633,7 @@ router.post('/runninghub/video/catalog/submit', requireNodePermission(['video', 
   if (!apiKey) return res.status(400).json({ success: false, error: missingRhKeyError() });
   try {
     const model = await resolveRunningHubVideoCatalogModel(config.RH_CALL_API_BASE_URL, req.body?.catalogModelId);
-    const body = resolveRunningHubCatalogMediaParams(normalizeRunningHubCatalogParams(req.body?.params));
+    const body = await resolveRunningHubCatalogMediaParams(normalizeRunningHubCatalogParams(req.body?.params));
     const response = await fetch(`${config.RH_BASE_URL}${model.endpoint}`, {
       method: 'POST',
       headers: {
@@ -2651,10 +2671,10 @@ router.post('/runninghub/video/submit', requireNodePermission(['video', 'running
   try {
     const normalized = normalizeRunningHubVideoRequest(req.body || {});
     const body = { ...normalized.body };
-    const convertedImages = normalized.imageUrls.map((ref) => runningHubVideoMediaRef(ref, normalized.maxImageBytes, 'image'));
+    const convertedImages = await Promise.all(normalized.imageUrls.map((ref) => runningHubVideoMediaRef(ref, normalized.maxImageBytes, 'image')));
     if (normalized.imageField === 'imageUrl') body.imageUrl = convertedImages[0];
     else if (normalized.imageField === 'imageUrls') body.imageUrls = convertedImages;
-    const convertedVideos = normalized.videoUrls.map((ref) => runningHubVideoMediaRef(ref, normalized.maxVideoBytes, 'video'));
+    const convertedVideos = await Promise.all(normalized.videoUrls.map((ref) => runningHubVideoMediaRef(ref, normalized.maxVideoBytes, 'video')));
     if (normalized.videoField === 'videoUrl') body.videoUrl = convertedVideos[0];
     const response = await fetch(`${config.RH_BASE_URL}${normalized.path}`, {
       method: 'POST',
