@@ -42,6 +42,8 @@ import { opCrop, opGridCrop, uploadDataUrl, uploadFileBlob } from '../../service
 import { generateExternalImage, queryExternalImageStatus, type GenerationHistoryContext } from '../../services/generation';
 import { createMaxCropBoxForAspect, fitCropBoxToAspect, resizeCropBoxWithAspect } from '../../utils/imageCropAspect';
 import { advancedProviderModelOptions, advancedProvidersForNode, externalImageSizeFor } from '../../utils/advancedProviders';
+import { materialMentionKey, resolveMediaMentions, type MediaMention } from './mediaMentions';
+import type { Material } from './useUpstreamMaterials';
 
 /**
  * ImageEditModal
@@ -85,7 +87,7 @@ type CropAspectPreset = 'free' | '16:9' | '9:16' | '4:3' | '3:4' | '1:1' | 'cust
 
 const AUTO_ANNOTATION_TEXT_ID = 'annotation-instruction-text';
 const ANNOTATION_EDIT_DEFAULT_INSTRUCTION = '请根据标注图，在干净原图上完成对应的 AI 改图；非标注区域尽量保持不变。';
-const ANNOTATION_MODIFY_PROMPT = '按图1中标注要求修改图2。图1是带箭头、框选、标号或文字的标注参考图；图2是需要被修改的干净原图。只输出修改后的最终图片，不要保留标注元素；非标注区域尽量不要有任何调整，保持原图内容、构图、质感和细节。';
+const ANNOTATION_MODIFY_PROMPT = '按 @image1 中的标注要求修改 @image2。@image1 是标注参考图，@image2 是需要被修改的干净原图。只输出修改后的最终图片，不要保留标注元素；非标注区域尽量不要有任何调整，保持原图内容、构图、质感和细节。';
 const ANNOTATION_MODIFY_ASPECT_RATIO = '1:1';
 const ANNOTATION_MODIFY_IMAGE_SIZE = '4K';
 const ANNOTATION_MODIFY_POLL_INTERVAL_MS = 3000;
@@ -114,6 +116,49 @@ function cropAspectValue(preset: CropAspectPreset, customW: number, customH: num
     return customW > 0 && customH > 0 ? customW / customH : null;
   }
   return CROP_ASPECT_VALUES[preset] ?? null;
+}
+
+function buildAnnotationModifyMentionPrompt(annotatedDataUrl: string, originDataUrl: string) {
+  const mentionMaterials: Material[] = [
+    {
+      id: 'annotation-modify-markup',
+      kind: 'image',
+      url: annotatedDataUrl,
+      sourceNodeId: 'annotation-modify',
+      origin: 'local',
+      label: '标注参考图',
+    },
+    {
+      id: 'annotation-modify-source',
+      kind: 'image',
+      url: originDataUrl,
+      sourceNodeId: 'annotation-modify',
+      origin: 'local',
+      label: '干净原图',
+    },
+  ];
+  const mentions: MediaMention[] = [];
+  const tokens = ['@image1', '@image2'];
+  mentionMaterials.forEach((material, index) => {
+    const token = tokens[index];
+    let start = ANNOTATION_MODIFY_PROMPT.indexOf(token);
+    let occurrence = 0;
+    while (start >= 0) {
+      occurrence += 1;
+      mentions.push({
+        id: `${material.id}:mention:${occurrence}`,
+        kind: 'image',
+        materialKey: materialMentionKey(material),
+        url: material.url,
+        label: material.label,
+        token,
+        start,
+        end: start + token.length,
+      });
+      start = ANNOTATION_MODIFY_PROMPT.indexOf(token, start + token.length);
+    }
+  });
+  return resolveMediaMentions(ANNOTATION_MODIFY_PROMPT, mentions, mentionMaterials);
 }
 
 // ---- compose v2 图层类型 ----
@@ -1908,6 +1953,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
     try {
       const payload = await buildAnnotationEditImages();
       if (!payload) return;
+      const modifyPrompt = buildAnnotationModifyMentionPrompt(payload.annotatedDataUrl, payload.originDataUrl);
       handedOff = true;
       onModifyRunningChange?.(true, null);
       onClose();
@@ -1915,7 +1961,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
         providerId: firstImageAdvancedProvider.id,
         providerModel: firstImageProviderModel,
         model: firstImageProviderModel,
-        prompt: ANNOTATION_MODIFY_PROMPT,
+        prompt: modifyPrompt,
         size: externalImageSizeFor(ANNOTATION_MODIFY_ASPECT_RATIO, ANNOTATION_MODIFY_IMAGE_SIZE),
         aspect_ratio: ANNOTATION_MODIFY_ASPECT_RATIO,
         image_size: ANNOTATION_MODIFY_IMAGE_SIZE,
@@ -1946,7 +1992,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
       if (!urls.length) throw new Error(result.error || '扩展平台完成但未返回图片');
       await onProduce([urls[0]], {
         type: 'annotation-modify',
-        prompt: ANNOTATION_MODIFY_PROMPT,
+        prompt: modifyPrompt,
         providerId: firstImageAdvancedProvider.id,
         providerModel: firstImageProviderModel,
       });
