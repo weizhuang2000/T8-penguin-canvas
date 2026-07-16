@@ -39,7 +39,7 @@ import {
 import { useThemeStore } from '../../stores/theme';
 import { useApiKeysStore } from '../../stores/apiKeys';
 import { opCrop, opGridCrop, uploadDataUrl, uploadFileBlob } from '../../services/imageOps';
-import { generateExternalImage, queryExternalImageStatus } from '../../services/generation';
+import { generateExternalImage, queryExternalImageStatus, type GenerationHistoryContext } from '../../services/generation';
 import { createMaxCropBoxForAspect, fitCropBoxToAspect, resizeCropBoxWithAspect } from '../../utils/imageCropAspect';
 import { advancedProviderModelOptions, advancedProvidersForNode, externalImageSizeFor } from '../../utils/advancedProviders';
 
@@ -74,6 +74,7 @@ interface Props {
   /** 产物 urls 注入到外部 (在 OutputNode 中创建 N 个新 OutputNode) */
   onProduce: (urls: string[], meta: ImageEditProduceMeta) => void | Promise<void>;
   onModifyRunningChange?: (running: boolean, error?: string | null) => void;
+  historyContext?: GenerationHistoryContext;
 }
 
 type EditMode = 'crop' | 'mask' | 'brush' | 'grid' | 'compose';
@@ -308,7 +309,7 @@ function computeRects(
   return rects;
 }
 
-const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange }: Props) => {
+const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, historyContext }: Props) => {
   const { theme, style } = useThemeStore();
   const isDark = theme === 'dark';
   const isPixel = style === 'pixel';
@@ -1920,6 +1921,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange }: P
         image_size: ANNOTATION_MODIFY_IMAGE_SIZE,
         images: [payload.annotatedDataUrl, payload.originDataUrl],
         n: 1,
+        historyContext,
         async: true,
       });
       const maxPoll = Math.ceil(ANNOTATION_MODIFY_TIMEOUT_MS / ANNOTATION_MODIFY_POLL_INTERVAL_MS);
@@ -1932,6 +1934,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange }: P
             providerId: firstImageAdvancedProvider.id,
             providerModel: firstImageProviderModel,
             taskId,
+            historyContext,
           });
           taskId = result.taskId || taskId;
           if (result.imageUrls?.length) break;

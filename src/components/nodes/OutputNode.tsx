@@ -41,6 +41,7 @@ import {
   type ImageCompareCandidate,
 } from '../../utils/imageCompare';
 import { collectMaterialSetBucketsFromData, valueOfMaterialSetItem } from '../../utils/materialSet';
+import { useCanvasRuntime } from './canvasRuntimeContext';
 // v1.2.10.5: 节点落点防重叠 —— 双击编辑产出 N 节点 3 列宫格整组避让
 import { placeBatchNodes, defaultSizeOf, type Rect as PlacementRect } from '../../utils/nodePlacement';
 
@@ -98,6 +99,7 @@ interface Collected {
 
 const OutputNode = ({ id, data, selected }: NodeProps) => {
   const update = useUpdateNodeData(id);
+  const { loadedCanvasId } = useCanvasRuntime();
   const { theme, templateId, customTemplates } = useThemeStore();
   const isDark = theme === 'dark';
   const d = (data as any) || {};
@@ -1530,6 +1532,13 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
           onModifyRunningChange={(running, error) => {
             setAnnotationModifyBusy(running);
             setAnnotationModifyError(error || null);
+          }}
+          historyContext={{
+            canvasId: loadedCanvasId,
+            sourceNodeId: id,
+            sourceNodeType: 'output',
+            nodeTitle: String(d?.label || '输出素材'),
+            outputTitle: '修改结果',
           }}
         />
       )}

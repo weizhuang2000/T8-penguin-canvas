@@ -32,6 +32,7 @@ import RhImageCapabilityRail from '../RhImageCapabilityRail';
 import SmartImage from '../SmartImage';
 import { decodeDuckFiles, type DuckDecodeFileItem } from '../../services/api';
 import { resolveThemeTemplate } from '../../theme/defaultTemplates';
+import { useCanvasRuntime } from './canvasRuntimeContext';
 import {
   createEmptyUploadMediaData,
   createOutputDataFromItems,
@@ -133,6 +134,7 @@ function autoOutputNodeTypeForMedia(kind: MediaKind): 'output' | 'model-3d-previ
 
 const UploadNode = ({ id, data, selected, type }: NodeProps) => {
   const update = useUpdateNodeData(id);
+  const { loadedCanvasId } = useCanvasRuntime();
   const { theme, style, templateId, customTemplates } = useThemeStore();
   const isDark = theme === 'dark';
   const isPixel = style === 'pixel';
@@ -1051,6 +1053,13 @@ const UploadNode = ({ id, data, selected, type }: NodeProps) => {
           onModifyRunningChange={(running, error) => {
             setAnnotationModifyBusy(running);
             setAnnotationModifyError(error || null);
+          }}
+          historyContext={{
+            canvasId: loadedCanvasId,
+            sourceNodeId: id,
+            sourceNodeType: String(type || 'upload'),
+            nodeTitle: String(d?.label || '上传素材'),
+            outputTitle: '修改结果',
           }}
         />
       )}
