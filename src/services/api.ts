@@ -79,6 +79,19 @@ export interface AuthUser {
   permissions?: ResolvedToolPermissions;
 }
 
+export interface SystemNotification {
+  id: string;
+  title: string;
+  content: string;
+  publishedAt: string;
+  publishedBy: {
+    id: string;
+    name: string;
+  };
+  status: 'active' | 'archived';
+  read: boolean;
+}
+
 export interface ToolPermissionRule {
   mode: 'inherit' | 'custom';
   allowedNodeTypes: string[];
@@ -352,6 +365,32 @@ export async function logout(): Promise<void> {
   } finally {
     clearSharedGetCache();
   }
+}
+
+export async function getNotifications(includeArchived = false): Promise<SystemNotification[]> {
+  const path = includeArchived ? '/notifications/admin' : '/notifications';
+  const res = await request<{ success: boolean; data: SystemNotification[] }>(`${BASE}${path}`);
+  return res.data || [];
+}
+
+export async function publishNotification(payload: { title: string; content: string }): Promise<SystemNotification> {
+  const res = await request<{ success: boolean; data: SystemNotification }>(`${BASE}/notifications`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return res.data;
+}
+
+export async function markNotificationRead(id: string): Promise<void> {
+  await request(`${BASE}/notifications/${encodeURIComponent(id)}/read`, { method: 'POST' });
+}
+
+export async function markAllNotificationsRead(): Promise<void> {
+  await request(`${BASE}/notifications/read-all`, { method: 'POST' });
+}
+
+export async function archiveNotification(id: string): Promise<void> {
+  await request(`${BASE}/notifications/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 export async function searchUsers(q = ''): Promise<AuthUser[]> {

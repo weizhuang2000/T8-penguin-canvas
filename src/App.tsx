@@ -7,6 +7,7 @@ import Sidebar from './components/Sidebar';
 import GenerationHistoryDrawer from './components/GenerationHistoryDrawer';
 import MaterialContextMenu from './components/MaterialContextMenu';
 import UserManagementModal from './components/UserManagementModal';
+import NotificationCenterModal from './components/NotificationCenterModal';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoginScreen from './components/LoginScreen';
 import type { AddNodeFn, InsertWorkflowFn } from './components/Canvas';
@@ -17,7 +18,7 @@ import AchievementToast from './components/AchievementToast';
 import AchievementTracker from './components/AchievementTracker';
 import { RHToolsProvider } from './providers/RHToolsProvider';
 import * as api from './services/api';
-import type { AuthUser } from './services/api';
+import type { AuthUser, SystemNotification } from './services/api';
 import type { NodeType } from './types/canvas';
 import type { ResourceItem } from './services/api';
 import { applyThemeTemplate } from './theme/applyTheme';
@@ -139,6 +140,8 @@ function App() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [themeManagerOpen, setThemeManagerOpen] = useState(false);
   const [userManagementOpen, setUserManagementOpen] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
   // 画布接收节点添加的 ref(从 Sidebar -> Canvas)
   const addNodeRef = useRef<AddNodeFn | null>(null);
   const insertWorkflowRef = useRef<InsertWorkflowFn | null>(null);
@@ -252,6 +255,24 @@ function App() {
     loadCustomTemplates();
   }, [authUser, loadSettings, loadCustomTemplates]);
 
+  useEffect(() => {
+    if (!authUser?.id) return;
+    let cancelled = false;
+    api.getNotifications()
+      .then((items) => {
+        if (cancelled) return;
+        const unreadCount = items.filter((item) => item.status === 'active' && !item.read).length;
+        setNotificationUnreadCount(unreadCount);
+        if (unreadCount > 0) setNotificationOpen(true);
+      })
+      .catch((error) => {
+        console.warn('[notifications] 读取通知失败:', error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser?.id]);
+
   // 资源库快捷键：未选中任何节点时打开 / 关闭资源库。输入框内不拦截，避免打断提示词编辑。
   useEffect(() => {
     if (!authUser) return;
@@ -290,6 +311,10 @@ function App() {
   const refreshAuthUser = async () => {
     const user = await api.getCurrentUser();
     if (user) setAuthUser(user);
+  };
+
+  const handleNotificationsChanged = (items: SystemNotification[]) => {
+    setNotificationUnreadCount(items.filter((item) => item.status === 'active' && !item.read).length);
   };
 
   const handleAddNode = (type: NodeType) => {
@@ -633,6 +658,22 @@ function App() {
           </button>
           )}
           <button
+            onClick={() => setNotificationOpen(true)}
+            className={
+              isPixel
+                ? 'px-btn px-btn--icon px-btn--ghost relative'
+                : `relative p-2 rounded-md ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`
+            }
+            title={notificationUnreadCount > 0 ? `系统通知（${notificationUnreadCount} 条未读）` : '系统通知'}
+          >
+            <Bell size={isPixel ? 14 : 16} />
+            {notificationUnreadCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex min-w-4 h-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold leading-none text-white">
+                {notificationUnreadCount > 99 ? '99+' : notificationUnreadCount}
+              </span>
+            )}
+          </button>
+          <button
             onClick={toggleTheme}
             className={
               isPixel
@@ -696,6 +737,12 @@ function App() {
           onPermissionsChanged={refreshAuthUser}
         />
       )}
+      <NotificationCenterModal
+        open={notificationOpen}
+        canManage={canManageSettings}
+        onClose={() => setNotificationOpen(false)}
+        onNotificationsChanged={handleNotificationsChanged}
+      />
       <Suspense fallback={null}>
         {canManageSettings && settingsOpen && <ApiSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />}
         {themeManagerOpen && (

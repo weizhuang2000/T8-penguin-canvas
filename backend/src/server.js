@@ -117,6 +117,7 @@ const nodeHelpRouter = require('./routes/nodeHelp');
 const floorplanRouter = require('./routes/floorplan');
 const remotionRouter = require('./routes/remotion');
 const outputStorageRouter = require('./routes/outputStorage');
+const notificationsRouter = require('./routes/notifications');
 const { registerLocalExtensions } = require('./extensions/localExtensions');
 const localHooks = require('./extensions/runtimeHooks');
 
@@ -152,6 +153,7 @@ app.use('/api/node-help', nodeHelpRouter);
 app.use('/api/floorplan', floorplanRouter);
 app.use('/api/remotion', remotionRouter);
 app.use('/api/output-storage', outputStorageRouter);
+app.use('/api/notifications', notificationsRouter);
 registerLocalExtensions(app, { config, express, logger: console, hooks: localHooks });
 
 // ========== 前端静态资源(仅打包模式) ==========
