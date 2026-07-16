@@ -87,7 +87,7 @@ type CropAspectPreset = 'free' | '16:9' | '9:16' | '4:3' | '3:4' | '1:1' | 'cust
 
 const AUTO_ANNOTATION_TEXT_ID = 'annotation-instruction-text';
 const ANNOTATION_EDIT_DEFAULT_INSTRUCTION = '请根据标注图，在干净原图上完成对应的 AI 改图；非标注区域尽量保持不变。';
-const ANNOTATION_MODIFY_PROMPT = '按 @image1 中的标注要求修改 @image2。@image1 是标注参考图，@image2 是需要被修改的干净原图。只输出修改后的最终图片，不要保留标注元素；非标注区域尽量不要有任何调整，保持原图内容、构图、质感和细节。';
+const ANNOTATION_MODIFY_PROMPT = '按 @image1 中的标注要求修改 @image2。@image1 是标注参考图，@image2 是需要被修改的干净原图。只输出修改后的最终图片，不要保留标注元素。';
 const ANNOTATION_MODIFY_ASPECT_RATIO = '1:1';
 const ANNOTATION_MODIFY_IMAGE_SIZE = '4K';
 const ANNOTATION_MODIFY_POLL_INTERVAL_MS = 3000;
