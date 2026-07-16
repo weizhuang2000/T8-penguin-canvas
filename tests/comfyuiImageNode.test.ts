@@ -32,6 +32,21 @@ test('ImageNode local prompt supports @ image mentions', () => {
   assert.doesNotMatch(localPromptBlock, /promptMentions: \[\]/);
 });
 
+test('ImageNode exposes exhibition-style output format and sends it to image backends', () => {
+  const canvasSource = fs.readFileSync(path.join(root, 'src/components/Canvas.tsx'), 'utf8');
+
+  assert.match(canvasSource, /image:\s*\{[\s\S]*outputFormat:\s*'jpg'/);
+  assert.match(imageNodeSource, /const outputFormat: 'jpg' \| 'png' = d\?\.outputFormat === 'png' \? 'png' : 'jpg'/);
+  assert.match(imageNodeSource, /data-exhibition-compact-item="output-format"/);
+  assert.match(imageNodeSource, /value=\{outputFormat\}[\s\S]*onChange=\{\(event\) => update\(\{ outputFormat: event\.target\.value \}\)\}/);
+  assert.match(imageNodeSource, /generateExternalImage\(\{[\s\S]*outputFormat/);
+  assert.match(imageNodeSource, /queryExternalImageStatus\(\{[\s\S]*outputFormat/);
+  assert.match(imageNodeSource, /submitImageFal\(\{[\s\S]*outputFormat/);
+  assert.match(imageNodeSource, /queryImageFal\(\{[\s\S]*outputFormat/);
+  assert.match(imageNodeSource, /submitImageAsync\(\{[\s\S]*outputFormat/);
+  assert.match(imageNodeSource, /queryImageStatus\(taskId, apiModel, outputFormat, historyContext\)/);
+});
+
 test('ComfyUI source labels include positive prompt and media inputs', () => {
   assert.match(comfyAppsSource, /positive: '正向 Prompt'/);
   assert.match(comfyAppsSource, /image1: '图片输入 1'/);

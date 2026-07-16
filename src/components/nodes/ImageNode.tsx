@@ -422,6 +422,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
   const maxRefs = isExternalSelected ? Math.max(8, modelDef.maxReferenceImages || 0) : (falDef?.maxRefs ?? modelDef.maxReferenceImages);
   const status: 'idle' | 'generating' | 'success' | 'error' = d?.status || 'idle';
   const imageUrl = d?.imageUrl as string | undefined;
+  const outputFormat: 'jpg' | 'png' = d?.outputFormat === 'png' ? 'png' : 'jpg';
   const localPrompt = d?.prompt || '';
   const promptMentions: MediaMention[] = Array.isArray(d?.promptMentions) ? d.promptMentions : [];
   // 节点内本地上传的参考图(除了上游接入的,这里是手动上传)
@@ -654,6 +655,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           aspect_ratio: aspectRatio,
           image_size: sizeLevel,
           images: allRefs,
+          outputFormat,
           negativePrompt: externalNegativePrompt || undefined,
           negative: externalNegativePrompt || undefined,
           n: Math.max(1, Math.min(4, Number(d?.providerParams?.n || 1))),
@@ -674,6 +676,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
                 providerId: providerSelection.provider.id,
                 providerModel,
                 taskId: pollingTaskId,
+                outputFormat,
                 historyContext,
               });
               transientFailures = 0;
@@ -841,6 +844,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           system_prompt: falKind === 'nbpro-fal' ? nbSysPrompt : undefined,
           enable_web_search: falKind === 'nbpro-fal' ? nbWebSearch : undefined,
           image_mode: falKind === 'nbpro-fal' ? nbImgMode : undefined,
+          outputFormat,
           providerParams,
           historyContext,
         });
@@ -873,7 +877,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         const maxPoll = minPollCountForTimeout(interval);
         for (let i = 0; i < maxPoll; i++) {
           await new Promise((r) => setTimeout(r, interval));
-          const q = await queryImageFal({ responseUrl, endpoint, requestId, historyContext });
+          const q = await queryImageFal({ responseUrl, endpoint, requestId, outputFormat, historyContext });
           const st = String(q.status || '').toLowerCase();
           if (st === 'completed') {
             const url = q.urls?.[0];
@@ -916,6 +920,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         image_size: sizeLevel,
         images: allRefs,
         n: 1,
+        outputFormat,
         providerParams,
         historyContext,
       });
@@ -947,7 +952,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
       let lastProg = '5%';
       for (let i = 0; i < maxPoll; i++) {
         await new Promise((r) => setTimeout(r, interval));
-        const q = await queryImageStatus(taskId, apiModel, undefined, historyContext);
+        const q = await queryImageStatus(taskId, apiModel, outputFormat, historyContext);
         if (q.progress && q.progress !== lastProg) {
           lastProg = q.progress;
           update({ progress: q.progress });
@@ -1537,6 +1542,21 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
               </div>
             )}
           </div>
+        )}
+
+        {!isMj && (
+          <label data-exhibition-compact-item="output-format" className="space-y-1 text-[10px] text-white/55">
+            <span>输出格式</span>
+            <select
+              value={outputFormat}
+              onChange={(event) => update({ outputFormat: event.target.value })}
+              style={{ background: '#18181b', color: '#ffffff' }}
+              className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
+            >
+              <option value="jpg" style={{ background: '#18181b', color: '#ffffff' }}>JPG</option>
+              <option value="png" style={{ background: '#18181b', color: '#ffffff' }}>PNG</option>
+            </select>
+          </label>
         )}
 
         {/* ========== FAL 专属参数面板(完全对齐 gpt-image-2-web gf_panel / nano_fal_panel) ========== */}
