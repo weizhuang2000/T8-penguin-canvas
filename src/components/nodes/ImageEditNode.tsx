@@ -207,6 +207,7 @@ const ImageEditNode = ({ id, data, selected }: NodeProps) => {
           initialMode={editingMode}
           initialDraft={activeDraft}
           enableModifyGeneration
+          availableModes={['mask', 'brush']}
           onDraftSave={saveDraft}
           onClose={() => setEditingMode(null)}
           onProduce={handleProduce}

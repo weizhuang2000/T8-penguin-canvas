@@ -82,9 +82,11 @@ interface Props {
   initialDraft?: ImageEditDraft | null;
   onDraftSave?: (draft: ImageEditDraft) => void;
   enableModifyGeneration?: boolean;
+  availableModes?: EditMode[];
 }
 
 export type EditMode = 'crop' | 'mask' | 'brush' | 'grid' | 'compose';
+const ALL_EDIT_MODES: EditMode[] = ['crop', 'mask', 'brush', 'grid', 'compose'];
 type GridSubMode = 'preset' | 'custom';
 type BrushTool = 'free' | 'line' | 'arrow' | 'rect' | 'ellipse' | 'label' | 'text';
 type BrushFillMode = 'stroke' | 'fill';
@@ -92,7 +94,7 @@ type CropAspectPreset = 'free' | '16:9' | '9:16' | '4:3' | '3:4' | '1:1' | 'cust
 
 const AUTO_ANNOTATION_TEXT_ID = 'annotation-instruction-text';
 const ANNOTATION_EDIT_DEFAULT_INSTRUCTION = '请根据标注图，在干净原图上完成对应的 AI 改图；非标注区域尽量保持不变。';
-const ANNOTATION_MODIFY_PROMPT = '按 @image1 中的标注要求修改 @image2。@image1 是标注参考图，@image2 是需要被修改的干净原图。只输出修改后的最终图片，不要保留标注元素。';
+const ANNOTATION_MODIFY_PROMPT = '基于 @image1进行局部编辑，输出编辑后的完整照片，将 @image2 中框线、箭头、标号或文字标出的部分按标注要求修改。 @image2做为框线标注参考使用。\n新内容需要与周围画面自然融合，保持一致的透视关系、物体比例、光线方向、色温、阴影、反射、景深、清晰度、颗粒和摄影风格。\n框线标注之外的内容保持不变：不要改变构图、背景、人物身份、面部、姿势、服装、其他物体、文字、曝光或颜色。编辑边缘自然过渡，不要出现接缝、晕边、重复纹理或模糊。只输出修改后的最终图片，不要保留框线、箭头、标号或文字标注。';
 const ANNOTATION_MODIFY_ASPECT_RATIO = '1:1';
 const ANNOTATION_MODIFY_IMAGE_SIZE = '4K';
 const ANNOTATION_MODIFY_POLL_INTERVAL_MS = 3000;
@@ -126,16 +128,8 @@ function cropAspectValue(preset: CropAspectPreset, customW: number, customH: num
   return CROP_ASPECT_VALUES[preset] ?? null;
 }
 
-function buildAnnotationModifyMentionPrompt(annotatedDataUrl: string, originDataUrl: string) {
+function buildAnnotationModifyMentionPrompt(originDataUrl: string, annotatedDataUrl: string) {
   const mentionMaterials: Material[] = [
-    {
-      id: 'annotation-modify-markup',
-      kind: 'image',
-      url: annotatedDataUrl,
-      sourceNodeId: 'annotation-modify',
-      origin: 'local',
-      label: '标注参考图',
-    },
     {
       id: 'annotation-modify-source',
       kind: 'image',
@@ -143,6 +137,14 @@ function buildAnnotationModifyMentionPrompt(annotatedDataUrl: string, originData
       sourceNodeId: 'annotation-modify',
       origin: 'local',
       label: '干净原图',
+    },
+    {
+      id: 'annotation-modify-markup',
+      kind: 'image',
+      url: annotatedDataUrl,
+      sourceNodeId: 'annotation-modify',
+      origin: 'local',
+      label: '框线标注参考图',
     },
   ];
   const mentions: MediaMention[] = [];
@@ -468,6 +470,7 @@ const ImageEditModal = ({
   initialDraft,
   onDraftSave,
   enableModifyGeneration = false,
+  availableModes,
 }: Props) => {
   const { theme, style } = useThemeStore();
   const isDark = theme === 'dark';
@@ -511,8 +514,18 @@ const ImageEditModal = ({
     initialDraft?.generation?.sizeLevel || ANNOTATION_MODIFY_IMAGE_SIZE,
   );
   const canModifyGenerate = enableModifyGeneration === true;
+  const enabledModes = (availableModes?.length ? availableModes : ALL_EDIT_MODES).filter((item) =>
+    ALL_EDIT_MODES.includes(item),
+  );
+  const enabledModeSet = new Set<EditMode>(enabledModes);
+  const initialResolvedMode =
+    initialMode && enabledModeSet.has(initialMode)
+      ? initialMode
+      : initialDraft?.mode && enabledModeSet.has(initialDraft.mode)
+      ? initialDraft.mode
+      : enabledModes[0] || 'brush';
 
-  const [mode, setMode] = useState<EditMode>(initialMode || initialDraft?.mode || 'brush');
+  const [mode, setMode] = useState<EditMode>(initialResolvedMode);
   const [gridMode, setGridMode] = useState<GridSubMode>(initialDraft?.grid?.gridMode || 'preset');
   const [crop, setCrop] = useState<CropBox>(() => cloneDraftValue(initialDraft?.crop?.crop || { x: 0.1, y: 0.1, w: 0.8, h: 0.8 }));
   const [cropAspectPreset, setCropAspectPreset] = useState<CropAspectPreset>(initialDraft?.crop?.cropAspectPreset || 'free');
@@ -816,11 +829,11 @@ const ImageEditModal = ({
         return;
       }
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-        if (e.key === '1') setMode('crop');
-        else if (e.key === '2') setMode('mask');
-        else if (e.key === '3') setMode('brush');
-        else if (e.key === '4') setMode('grid');
-        else if (e.key === '5') setMode('compose');
+        if (e.key === '1' && enabledModeSet.has('crop')) setMode('crop');
+        else if (e.key === '2' && enabledModeSet.has('mask')) setMode('mask');
+        else if (e.key === '3' && enabledModeSet.has('brush')) setMode('brush');
+        else if (e.key === '4' && enabledModeSet.has('grid')) setMode('grid');
+        else if (e.key === '5' && enabledModeSet.has('compose')) setMode('compose');
         else if (e.key === '[') {
           if (mode === 'mask') setMaskBrushSize((s) => Math.max(2, s - 4));
           else if (mode === 'brush') setBrushSize((s) => Math.max(2, s - 2));
@@ -2256,7 +2269,7 @@ const ImageEditModal = ({
     try {
       const payload = await buildAnnotationEditImages();
       if (!payload) return;
-      const modifyPrompt = buildAnnotationModifyMentionPrompt(payload.annotatedDataUrl, payload.originDataUrl);
+      const modifyPrompt = buildAnnotationModifyMentionPrompt(payload.originDataUrl, payload.annotatedDataUrl);
       handedOff = true;
       onModifyRunningChange?.(true, null);
       closeWithDraft();
@@ -2268,7 +2281,7 @@ const ImageEditModal = ({
         size: externalImageSizeFor(imageModifyAspectRatio, imageModifySizeLevel),
         aspect_ratio: imageModifyAspectRatio,
         image_size: imageModifySizeLevel,
-        images: [payload.annotatedDataUrl, payload.originDataUrl],
+        images: [payload.originDataUrl, payload.annotatedDataUrl],
         n: 1,
         historyContext,
         async: true,
@@ -2615,21 +2628,31 @@ const ImageEditModal = ({
           </div>
           <div style={{ flex: 1 }} />
           <div style={{ display: 'flex', gap: 6 }}>
-            <button style={tabBtn(mode === 'crop')} onClick={() => setMode('crop')} title="裁剪 (1)">
-              <CropIcon size={14} /> 裁剪
-            </button>
-            <button style={tabBtn(mode === 'mask')} onClick={() => setMode('mask')} title="遮罩 (2)">
-              <Brush size={14} /> 遮罩
-            </button>
-            <button style={tabBtn(mode === 'brush')} onClick={() => setMode('brush')} title="画板 (3)">
-              <Paintbrush size={14} /> 画板
-            </button>
-            <button style={tabBtn(mode === 'grid')} onClick={() => setMode('grid')} title="宫格切分 (4)">
-              <Grid3x3 size={14} /> 宫格切分
-            </button>
-            <button style={tabBtn(mode === 'compose')} onClick={() => setMode('compose')} title="图层组合 (5)">
-              <LayersIcon size={14} /> 组合
-            </button>
+            {enabledModeSet.has('crop') && (
+              <button style={tabBtn(mode === 'crop')} onClick={() => setMode('crop')} title="裁剪 (1)">
+                <CropIcon size={14} /> 裁剪
+              </button>
+            )}
+            {enabledModeSet.has('mask') && (
+              <button style={tabBtn(mode === 'mask')} onClick={() => setMode('mask')} title="遮罩 (2)">
+                <Brush size={14} /> 遮罩
+              </button>
+            )}
+            {enabledModeSet.has('brush') && (
+              <button style={tabBtn(mode === 'brush')} onClick={() => setMode('brush')} title="画板 (3)">
+                <Paintbrush size={14} /> 画板
+              </button>
+            )}
+            {enabledModeSet.has('grid') && (
+              <button style={tabBtn(mode === 'grid')} onClick={() => setMode('grid')} title="宫格切分 (4)">
+                <Grid3x3 size={14} /> 宫格切分
+              </button>
+            )}
+            {enabledModeSet.has('compose') && (
+              <button style={tabBtn(mode === 'compose')} onClick={() => setMode('compose')} title="图层组合 (5)">
+                <LayersIcon size={14} /> 组合
+              </button>
+            )}
           </div>
           <button style={btnBase} onClick={closeWithDraft} title="关闭 (ESC)">
             <X size={14} />
