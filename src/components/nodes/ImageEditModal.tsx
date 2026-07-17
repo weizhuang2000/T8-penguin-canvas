@@ -94,7 +94,7 @@ type CropAspectPreset = 'free' | '16:9' | '9:16' | '4:3' | '3:4' | '1:1' | 'cust
 
 const AUTO_ANNOTATION_TEXT_ID = 'annotation-instruction-text';
 const ANNOTATION_EDIT_DEFAULT_INSTRUCTION = '请根据标注图，在干净原图上完成对应的 AI 改图；非标注区域尽量保持不变。';
-const ANNOTATION_MODIFY_PROMPT = '基于 @image1进行局部编辑，输出编辑后的完整照片，将 @image2 中框线、箭头、标号或文字标出的部分按标注要求修改。 @image2做为框线标注参考使用。\n新内容需要与周围画面自然融合，保持一致的透视关系、物体比例、光线方向、色温、阴影、反射、景深、清晰度、颗粒和摄影风格。\n框线标注之外的内容保持不变：不要改变构图、背景、人物身份、面部、姿势、服装、其他物体、文字、曝光或颜色。编辑边缘自然过渡，不要出现接缝、晕边、重复纹理或模糊。只输出修改后的最终图片，不要保留框线、箭头、标号或文字标注。';
+const ANNOTATION_MODIFY_PROMPT = '基于 @image1进行局部编辑，输出编辑后的完整照片，按照 @image2 中框线、箭头、标号或文字标出的部分按标注要求修改。 @image2做为框线标注参考使用。\n新内容需要与周围画面自然融合，保持一致的透视关系、物体比例、光线方向、色温、阴影、反射、景深、清晰度、颗粒和摄影风格。\n框线标注之外的内容保持不变：不要改变构图、背景、人物身份、面部、姿势、服装、其他物体、文字、曝光或颜色。编辑边缘自然过渡，不要出现接缝、晕边、重复纹理或模糊。只输出修改后的最终图片，不要保留框线、箭头、标号或文字标注。';
 const ANNOTATION_MODIFY_ASPECT_RATIO = '1:1';
 const ANNOTATION_MODIFY_IMAGE_SIZE = '4K';
 const ANNOTATION_MODIFY_POLL_INTERVAL_MS = 3000;
@@ -128,7 +128,7 @@ function cropAspectValue(preset: CropAspectPreset, customW: number, customH: num
   return CROP_ASPECT_VALUES[preset] ?? null;
 }
 
-function buildAnnotationModifyMentionPrompt(originDataUrl: string, annotatedDataUrl: string) {
+function buildAnnotationModifyMentionPrompt(originDataUrl: string, annotationOverlayDataUrl: string) {
   const mentionMaterials: Material[] = [
     {
       id: 'annotation-modify-source',
@@ -141,7 +141,7 @@ function buildAnnotationModifyMentionPrompt(originDataUrl: string, annotatedData
     {
       id: 'annotation-modify-markup',
       kind: 'image',
-      url: annotatedDataUrl,
+      url: annotationOverlayDataUrl,
       sourceNodeId: 'annotation-modify',
       origin: 'local',
       label: '框线标注参考图',
@@ -2218,9 +2218,19 @@ const ImageEditModal = ({
     for (const s of brushStrokes) drawStrokeOnCtx(annotatedCtx, s, annotatedCv.width, annotatedCv.height);
     const annotatedDataUrl = annotatedCv.toDataURL('image/png');
 
+    const annotationOverlayCv = document.createElement('canvas');
+    annotationOverlayCv.width = naturalSize.w;
+    annotationOverlayCv.height = naturalSize.h;
+    const annotationOverlayCtx = annotationOverlayCv.getContext('2d');
+    if (!annotationOverlayCtx) throw new Error('canvas unavailable');
+    annotationOverlayCtx.clearRect(0, 0, annotationOverlayCv.width, annotationOverlayCv.height);
+    for (const s of brushStrokes) drawStrokeOnCtx(annotationOverlayCtx, s, annotationOverlayCv.width, annotationOverlayCv.height);
+    const annotationOverlayDataUrl = annotationOverlayCv.toDataURL('image/png');
+
     return {
       originDataUrl,
       annotatedDataUrl,
+      annotationOverlayDataUrl,
       strokeCount: brushStrokes.length,
       annotationTextCount,
       annotationShapeCount,
@@ -2269,7 +2279,7 @@ const ImageEditModal = ({
     try {
       const payload = await buildAnnotationEditImages();
       if (!payload) return;
-      const modifyPrompt = buildAnnotationModifyMentionPrompt(payload.originDataUrl, payload.annotatedDataUrl);
+      const modifyPrompt = buildAnnotationModifyMentionPrompt(payload.originDataUrl, payload.annotationOverlayDataUrl);
       handedOff = true;
       onModifyRunningChange?.(true, null);
       closeWithDraft();
@@ -2281,7 +2291,7 @@ const ImageEditModal = ({
         size: externalImageSizeFor(imageModifyAspectRatio, imageModifySizeLevel),
         aspect_ratio: imageModifyAspectRatio,
         image_size: imageModifySizeLevel,
-        images: [payload.originDataUrl, payload.annotatedDataUrl],
+        images: [payload.originDataUrl, payload.annotationOverlayDataUrl],
         n: 1,
         historyContext,
         async: true,
