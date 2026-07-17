@@ -119,6 +119,18 @@ export interface NotificationImageAsset {
   size: number;
 }
 
+export interface NotificationDraft {
+  id: string;
+  title: string;
+  contentBlocks: NotificationContentBlock[];
+  createdAt: string;
+  updatedAt: string;
+  createdBy: {
+    id: string;
+    name: string;
+  };
+}
+
 export interface ToolPermissionRule {
   mode: 'inherit' | 'custom';
   allowedNodeTypes: string[];
@@ -405,12 +417,37 @@ export async function publishNotification(payload: {
   title: string;
   content?: string;
   contentBlocks?: NotificationContentBlock[];
+  draftId?: string;
 }): Promise<SystemNotification> {
   const res = await request<{ success: boolean; data: SystemNotification }>(`${BASE}/notifications`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
   return res.data;
+}
+
+export async function getNotificationDrafts(): Promise<NotificationDraft[]> {
+  const res = await request<{ success: boolean; data: NotificationDraft[] }>(`${BASE}/notifications/drafts`);
+  return res.data || [];
+}
+
+export async function saveNotificationDraft(payload: {
+  id?: string;
+  title: string;
+  contentBlocks: NotificationContentBlock[];
+}): Promise<NotificationDraft> {
+  const url = payload.id
+    ? `${BASE}/notifications/drafts/${encodeURIComponent(payload.id)}`
+    : `${BASE}/notifications/drafts`;
+  const res = await request<{ success: boolean; data: NotificationDraft }>(url, {
+    method: payload.id ? 'PUT' : 'POST',
+    body: JSON.stringify({ title: payload.title, contentBlocks: payload.contentBlocks }),
+  });
+  return res.data;
+}
+
+export async function deleteNotificationDraft(id: string): Promise<void> {
+  await request(`${BASE}/notifications/drafts/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 export async function uploadNotificationImage(file: Blob, filename = 'notification-image'): Promise<NotificationImageAsset> {

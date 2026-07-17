@@ -15,6 +15,7 @@ const MAX_TITLE_LENGTH = 100;
 const MAX_CONTENT_LENGTH = 5000;
 const MAX_CONTENT_BLOCKS = 50;
 const MAX_CONTENT_IMAGES = 12;
+const MAX_DRAFTS_PER_USER = 20;
 const MAX_IMAGE_FILE_SIZE = 20 * 1024 * 1024;
 const NOTIFICATION_ASSET_RE = /^\/api\/notifications\/assets\/([a-f0-9-]+\.webp)$/i;
 const ASSET_FILE_RE = /^[a-f0-9-]+\.webp$/i;
@@ -24,7 +25,7 @@ const uploadImage = multer({
 }).single('image');
 
 function emptyDb() {
-  return { version: 2, notifications: [], readByUser: {} };
+  return { version: 3, notifications: [], drafts: [], readByUser: {} };
 }
 
 function normalizeContentBlocks(value, legacyContent = '') {
@@ -104,10 +105,34 @@ function normalizeNotification(value) {
   };
 }
 
+function normalizeDraft(value) {
+  if (!value || typeof value !== 'object') return null;
+  const id = String(value.id || '').trim();
+  const title = String(value.title || '').trim().slice(0, MAX_TITLE_LENGTH);
+  const contentBlocks = normalizeContentBlocks(value.contentBlocks, value.content);
+  const createdById = String(value.createdBy?.id || '').trim();
+  if (!id || !createdById || (!title && contentBlocks.length === 0)) return null;
+  return {
+    id,
+    title,
+    contentBlocks,
+    createdAt: String(value.createdAt || new Date().toISOString()),
+    updatedAt: String(value.updatedAt || value.createdAt || new Date().toISOString()),
+    createdBy: {
+      id: createdById,
+      name: String(value.createdBy?.name || value.createdBy?.username || '系统管理员').slice(0, 100),
+    },
+  };
+}
+
 function normalizeDb(value) {
   const source = value && typeof value === 'object' ? value : {};
   const notifications = (Array.isArray(source.notifications) ? source.notifications : [])
     .map(normalizeNotification)
+    .filter(Boolean)
+    .slice(0, MAX_NOTIFICATIONS);
+  const drafts = (Array.isArray(source.drafts) ? source.drafts : [])
+    .map(normalizeDraft)
     .filter(Boolean)
     .slice(0, MAX_NOTIFICATIONS);
   const validIds = new Set(notifications.map((item) => item.id));
@@ -119,7 +144,7 @@ function normalizeDb(value) {
       readByUser[normalizedUserId] = Array.from(new Set(ids.map(String).filter((id) => validIds.has(id))));
     }
   }
-  return { version: 2, notifications, readByUser };
+  return { version: 3, notifications, drafts, readByUser };
 }
 
 function readDb() {
@@ -167,6 +192,85 @@ router.get('/admin', requireAdmin, (req, res) => {
     res.json({ success: true, data: publicItems(readDb(), userIdOf(req), true) });
   } catch (error) {
     res.status(500).json({ success: false, error: error?.message || '读取通知失败' });
+  }
+});
+
+router.get('/drafts', requireAdmin, (req, res) => {
+  try {
+    const userId = userIdOf(req);
+    const data = readDb().drafts
+      .filter((draft) => draft.createdBy.id === userId)
+      .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error?.message || '读取通知草稿失败' });
+  }
+});
+
+router.post('/drafts', requireAdmin, (req, res) => {
+  try {
+    const db = readDb();
+    const userId = userIdOf(req);
+    const ownDraftCount = db.drafts.filter((draft) => draft.createdBy.id === userId).length;
+    if (ownDraftCount >= MAX_DRAFTS_PER_USER) {
+      return res.status(400).json({ success: false, error: `每位管理员最多保存 ${MAX_DRAFTS_PER_USER} 个草稿` });
+    }
+    const now = new Date().toISOString();
+    const draft = normalizeDraft({
+      id: crypto.randomUUID(),
+      title: req.body?.title,
+      contentBlocks: req.body?.contentBlocks,
+      content: req.body?.content,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: {
+        id: userId,
+        name: req.user?.name || req.user?.username || '系统管理员',
+      },
+    });
+    if (!draft) return res.status(400).json({ success: false, error: '草稿标题和内容不能同时为空' });
+    db.drafts.unshift(draft);
+    writeDb(db);
+    return res.status(201).json({ success: true, data: draft });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error?.message || '保存通知草稿失败' });
+  }
+});
+
+router.put('/drafts/:id', requireAdmin, (req, res) => {
+  try {
+    const db = readDb();
+    const userId = userIdOf(req);
+    const index = db.drafts.findIndex((draft) => draft.id === req.params.id && draft.createdBy.id === userId);
+    if (index < 0) return res.status(404).json({ success: false, error: '通知草稿不存在' });
+    const current = db.drafts[index];
+    const draft = normalizeDraft({
+      ...current,
+      title: req.body?.title,
+      contentBlocks: req.body?.contentBlocks,
+      content: req.body?.content,
+      updatedAt: new Date().toISOString(),
+    });
+    if (!draft) return res.status(400).json({ success: false, error: '草稿标题和内容不能同时为空' });
+    db.drafts[index] = draft;
+    writeDb(db);
+    return res.json({ success: true, data: draft });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error?.message || '保存通知草稿失败' });
+  }
+});
+
+router.delete('/drafts/:id', requireAdmin, (req, res) => {
+  try {
+    const db = readDb();
+    const userId = userIdOf(req);
+    const index = db.drafts.findIndex((draft) => draft.id === req.params.id && draft.createdBy.id === userId);
+    if (index < 0) return res.status(404).json({ success: false, error: '通知草稿不存在' });
+    const [removed] = db.drafts.splice(index, 1);
+    writeDb(db);
+    return res.json({ success: true, data: removed });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error?.message || '删除通知草稿失败' });
   }
 });
 
@@ -254,6 +358,10 @@ router.post('/', requireAdmin, (req, res) => {
       status: 'active',
     });
     db.notifications.unshift(notification);
+    const draftId = String(req.body?.draftId || '').trim();
+    if (draftId) {
+      db.drafts = db.drafts.filter((draft) => !(draft.id === draftId && draft.createdBy.id === userIdOf(req)));
+    }
     db.readByUser[userIdOf(req)] = Array.from(new Set([
       ...(db.readByUser[userIdOf(req)] || []),
       notification.id,

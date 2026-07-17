@@ -9,6 +9,7 @@ import {
   ImagePlus,
   Loader2,
   Plus,
+  Save,
   Send,
   Trash2,
   Upload,
@@ -18,6 +19,7 @@ import * as api from '../services/api';
 import type {
   GenerationHistoryItem,
   NotificationContentBlock,
+  NotificationDraft,
   NotificationImageBlock,
   NotificationTextBlock,
   SystemNotification,
@@ -114,6 +116,9 @@ export default function NotificationCenterModal({
   const [uploadingImage, setUploadingImage] = useState(false);
   const [title, setTitle] = useState('');
   const [contentBlocks, setContentBlocks] = useState<NotificationContentBlock[]>([newTextBlock()]);
+  const [drafts, setDrafts] = useState<NotificationDraft[]>([]);
+  const [activeDraftId, setActiveDraftId] = useState('');
+  const [draftWorking, setDraftWorking] = useState(false);
   const [message, setMessage] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyItems, setHistoryItems] = useState<GenerationHistoryItem[]>([]);
@@ -140,8 +145,12 @@ export default function NotificationCenterModal({
     setLoading(true);
     setMessage('');
     try {
-      const next = await api.getNotifications(canManage);
+      const [next, nextDrafts] = await Promise.all([
+        api.getNotifications(canManage),
+        canManage ? api.getNotificationDrafts() : Promise.resolve([]),
+      ]);
       setItems(next);
+      setDrafts(nextDrafts);
       onNotificationsChanged(next);
     } catch (error: any) {
       setMessage(error?.message || '读取通知失败');
@@ -178,6 +187,71 @@ export default function NotificationCenterModal({
       [next[index], next[target]] = [next[target], next[index]];
       return next;
     });
+  };
+
+  const resetEditor = () => {
+    setActiveDraftId('');
+    setTitle('');
+    setContentBlocks([newTextBlock()]);
+  };
+
+  const selectDraft = (id: string) => {
+    if (!id) {
+      resetEditor();
+      return;
+    }
+    const draft = drafts.find((item) => item.id === id);
+    if (!draft) return;
+    setActiveDraftId(draft.id);
+    setTitle(draft.title);
+    setContentBlocks(draft.contentBlocks.length > 0
+      ? draft.contentBlocks.map((block) => ({ ...block, id: block.id || blockId() }))
+      : [newTextBlock()]);
+    setMessage(`已打开草稿“${draft.title || '未命名草稿'}”`);
+  };
+
+  const saveDraft = async () => {
+    if (!title.trim() && !hasContent) {
+      setMessage('草稿标题和内容不能同时为空');
+      return;
+    }
+    if (totalTextLength > MAX_TEXT_LENGTH) {
+      setMessage(`通知文本不能超过 ${MAX_TEXT_LENGTH} 字`);
+      return;
+    }
+    setDraftWorking(true);
+    setMessage('');
+    try {
+      const saved = await api.saveNotificationDraft({
+        id: activeDraftId || undefined,
+        title: title.trim(),
+        contentBlocks,
+      });
+      setActiveDraftId(saved.id);
+      setDrafts((current) => [saved, ...current.filter((draft) => draft.id !== saved.id)]);
+      setMessage(activeDraftId ? '草稿已更新' : '草稿已保存');
+    } catch (error: any) {
+      setMessage(error?.message || '保存草稿失败');
+    } finally {
+      setDraftWorking(false);
+    }
+  };
+
+  const deleteDraft = async () => {
+    if (!activeDraftId) return;
+    const draft = drafts.find((item) => item.id === activeDraftId);
+    if (!window.confirm(`确定删除草稿“${draft?.title || '未命名草稿'}”吗？`)) return;
+    setDraftWorking(true);
+    try {
+      await api.deleteNotificationDraft(activeDraftId);
+      setDrafts((current) => current.filter((item) => item.id !== activeDraftId));
+      resetEditor();
+      setMessage('草稿已删除');
+    } catch (error: any) {
+      setMessage(error?.message || '删除草稿失败');
+    } finally {
+      setDraftWorking(false);
+    }
   };
 
   const appendUploadedImage = async (blob: Blob, filename: string, alt: string) => {
@@ -278,9 +352,10 @@ export default function NotificationCenterModal({
     setWorking(true);
     setMessage('');
     try {
-      await api.publishNotification({ title: normalizedTitle, contentBlocks: normalizedBlocks });
-      setTitle('');
-      setContentBlocks([newTextBlock()]);
+      await api.publishNotification({ title: normalizedTitle, contentBlocks: normalizedBlocks, draftId: activeDraftId || undefined });
+      const publishedDraftId = activeDraftId;
+      resetEditor();
+      if (publishedDraftId) setDrafts((current) => current.filter((draft) => draft.id !== publishedDraftId));
       await load();
       setMessage('通知已发布，用户下次打开或刷新画布时将看到此消息');
     } catch (error: any) {
@@ -382,6 +457,32 @@ export default function NotificationCenterModal({
                   <div className="text-sm font-semibold">发布通知</div>
                   <div className={`mt-0.5 text-[11px] ${isDark ? 'text-white/45' : 'text-zinc-500'}`}>文字段可分别设置字号和颜色；上传及历史图片都会复制到服务器，确保所有用户可见。</div>
                 </div>
+                <div className={`mb-3 flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 ${isDark ? 'border-white/10 bg-black/15' : 'border-black/10 bg-white'}`}>
+                  <span className="text-xs font-semibold">草稿</span>
+                  <select
+                    className={`${inputCls} min-w-48 flex-1 !py-1.5 text-xs`}
+                    value={activeDraftId}
+                    onChange={(event) => selectDraft(event.target.value)}
+                  >
+                    <option value="">新建通知（未保存）</option>
+                    {drafts.map((draft) => (
+                      <option key={draft.id} value={draft.id}>
+                        {draft.title || '未命名草稿'} · {formatPublishedAt(draft.updatedAt)}
+                      </option>
+                    ))}
+                  </select>
+                  <button className={buttonCls} type="button" onClick={resetEditor} disabled={draftWorking}>
+                    <Plus size={13} /> 新建
+                  </button>
+                  <button className={buttonCls} type="button" onClick={() => void saveDraft()} disabled={draftWorking || uploadingImage || (!title.trim() && !hasContent) || totalTextLength > MAX_TEXT_LENGTH}>
+                    {draftWorking ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} 保存草稿
+                  </button>
+                  {activeDraftId && (
+                    <button className={buttonCls} type="button" onClick={() => void deleteDraft()} disabled={draftWorking}>
+                      <Trash2 size={13} /> 删除草稿
+                    </button>
+                  )}
+                </div>
                 <input
                   className={`${inputCls} mb-3 w-full`}
                   value={title}
@@ -474,7 +575,7 @@ export default function NotificationCenterModal({
                     className={isPixel ? 'px-btn px-btn--sm px-btn--mint' : 'inline-flex items-center gap-1.5 rounded-md bg-sky-500 px-4 py-2 text-xs font-semibold text-white hover:bg-sky-400 disabled:opacity-50'}
                     type="button"
                     onClick={publish}
-                    disabled={working || uploadingImage || !!importingHistoryId || !title.trim() || !hasContent || totalTextLength > MAX_TEXT_LENGTH}
+                    disabled={working || draftWorking || uploadingImage || !!importingHistoryId || !title.trim() || !hasContent || totalTextLength > MAX_TEXT_LENGTH}
                   >
                     {working ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                     发布通知

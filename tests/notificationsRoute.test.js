@@ -59,6 +59,61 @@ test('notifications are admin-published and keep per-user read state', async (t)
   assert.equal(denied.response.status, 403);
   assert.equal(denied.data.success, false);
 
+  const deniedDrafts = await requestJson(`${base}/drafts`);
+  assert.equal(deniedDrafts.response.status, 403);
+
+  const createdDraft = await requestJson(`${base}/drafts`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-test-user': 'admin-1',
+      'x-test-role': 'admin',
+    },
+    body: JSON.stringify({
+      title: '维护草稿',
+      contentBlocks: [{ id: 'draft-text', type: 'text', text: '尚未发布', fontSize: 18, color: '#0284c7' }],
+    }),
+  });
+  assert.equal(createdDraft.response.status, 201);
+  const draftId = createdDraft.data.data.id;
+
+  const ownDrafts = await requestJson(`${base}/drafts`, {
+    headers: { 'x-test-user': 'admin-1', 'x-test-role': 'admin' },
+  });
+  assert.equal(ownDrafts.data.data.length, 1);
+  assert.equal(ownDrafts.data.data[0].contentBlocks[0].fontSize, 18);
+
+  const otherAdminDrafts = await requestJson(`${base}/drafts`, {
+    headers: { 'x-test-user': 'admin-2', 'x-test-role': 'admin' },
+  });
+  assert.deepEqual(otherAdminDrafts.data.data, []);
+
+  const forbiddenDraftUpdate = await requestJson(`${base}/drafts/${draftId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-test-user': 'admin-2',
+      'x-test-role': 'admin',
+    },
+    body: JSON.stringify({ title: '越权修改', contentBlocks: [] }),
+  });
+  assert.equal(forbiddenDraftUpdate.response.status, 404);
+
+  const updatedDraft = await requestJson(`${base}/drafts/${draftId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-test-user': 'admin-1',
+      'x-test-role': 'admin',
+    },
+    body: JSON.stringify({
+      title: '维护草稿（已更新）',
+      contentBlocks: [{ id: 'draft-text', type: 'text', text: '准备发布', fontSize: 20, color: '#16a34a' }],
+    }),
+  });
+  assert.equal(updatedDraft.data.data.title, '维护草稿（已更新）');
+  assert.equal(updatedDraft.data.data.contentBlocks[0].fontSize, 20);
+
   const onePixelPng = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
     'base64',
@@ -89,6 +144,7 @@ test('notifications are admin-published and keep per-user read state', async (t)
     },
     body: JSON.stringify({
       title: '系统维护',
+      draftId,
       contentBlocks: [
         { id: 'text-1', type: 'text', text: '今晚 22:00 进行系统维护。', fontSize: 24, color: '#DC2626' },
         { id: 'image-1', type: 'image', url: uploadedImage.data.data.url, alt: '维护说明图', width: 1, height: 1 },
@@ -104,6 +160,26 @@ test('notifications are admin-published and keep per-user read state', async (t)
   assert.equal(published.data.data.contentBlocks[1].url, uploadedImage.data.data.url);
   assert.equal(published.data.data.read, true, 'publisher should not receive their own notification as unread');
   const notificationId = published.data.data.id;
+
+  const draftsAfterPublish = await requestJson(`${base}/drafts`, {
+    headers: { 'x-test-user': 'admin-1', 'x-test-role': 'admin' },
+  });
+  assert.deepEqual(draftsAfterPublish.data.data, [], 'publishing a draft should remove it');
+
+  const disposableDraft = await requestJson(`${base}/drafts`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-test-user': 'admin-1',
+      'x-test-role': 'admin',
+    },
+    body: JSON.stringify({ title: '待删除草稿', contentBlocks: [] }),
+  });
+  const deletedDraft = await requestJson(`${base}/drafts/${disposableDraft.data.data.id}`, {
+    method: 'DELETE',
+    headers: { 'x-test-user': 'admin-1', 'x-test-role': 'admin' },
+  });
+  assert.equal(deletedDraft.data.success, true);
 
   const firstUserList = await requestJson(base, { headers: { 'x-test-user': 'user-1' } });
   assert.equal(firstUserList.data.unreadCount, 1);
@@ -141,8 +217,9 @@ test('notifications are admin-published and keep per-user read state', async (t)
 
   const saved = JSON.parse(fs.readFileSync(config.NOTIFICATIONS_FILE, 'utf8'));
   assert.equal(saved.notifications.length, 1);
-  assert.equal(saved.version, 2);
+  assert.equal(saved.version, 3);
   assert.equal(saved.notifications[0].contentBlocks[1].type, 'image');
+  assert.deepEqual(saved.drafts, []);
   assert.deepEqual(saved.readByUser['user-1'], [notificationId]);
 });
 

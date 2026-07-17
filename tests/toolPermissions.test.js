@@ -134,6 +134,24 @@ test('tool permissions keep render-to-elevation grants when saved from user mana
   assert.equal(permissions.canUseNode({ id: 'u2', role: 'designer' }, 'exhibition-render-to-elevation', db), true);
 }));
 
+test('tool permissions keep image edit node grants when saved from user management', () => withTempData(() => {
+  permissions.writeDb({
+    defaultVisibleNodeTypes: ['text'],
+    roleRules: {
+      designer: { mode: 'custom', allowedNodeTypes: ['image-edit'], deniedNodeTypes: [] },
+    },
+    userRules: {},
+  });
+
+  const db = permissions.readDb();
+  const resolved = permissions.resolveToolPermissions({ id: 'u2', role: 'designer' }, db);
+  assert.equal(permissions.ALL_NODE_TYPES.includes('image-edit'), true);
+  assert.equal(permissions.DEFAULT_VISIBLE_NODE_TYPES.includes('image-edit'), true);
+  assert.deepEqual(db.roleRules.designer.allowedNodeTypes, ['image-edit']);
+  assert.equal(resolved.visibleNodeTypes.includes('image-edit'), true);
+  assert.equal(permissions.canUseNode({ id: 'u2', role: 'designer' }, 'image-edit', db), true);
+}));
+
 test('tool permissions default exhibition compact form for old configs', () => withTempData(() => {
   permissions.writeDb({
     defaultVisibleNodeTypes: ['text'],
