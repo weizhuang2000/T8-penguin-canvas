@@ -93,8 +93,6 @@ type BrushFillMode = 'stroke' | 'fill';
 type CropAspectPreset = 'free' | '16:9' | '9:16' | '4:3' | '3:4' | '1:1' | 'custom';
 
 const AUTO_ANNOTATION_TEXT_ID = 'annotation-instruction-text';
-const ANNOTATION_EDIT_DEFAULT_INSTRUCTION = '请根据标注图，在干净原图上完成对应的 AI 改图；非标注区域尽量保持不变。';
-const ANNOTATION_MODIFY_PROMPT = '基于 @image1进行局部编辑，输出编辑后的完整照片，将 @image2 中红色框线内的部分的【修改文字】。 @image2做为框线标注参考使用。\n新内容需要与周围画面自然融合，保持一致的透视关系、物体比例、光线方向、色温、阴影、反射、景深、清晰度、颗粒和摄影风格。\n框线标注之外的内容保持不变：不要改变构图、背景、人物身份、面部、姿势、服装、其他物体、文字、曝光或颜色。编辑边缘自然过渡，不要出现接缝、晕边、重复纹理或模糊。只输出修改后的最终图片，不要保留框线、箭头、标号或文字标注。';
 const ANNOTATION_MODIFY_ASPECT_RATIO = '1:1';
 const ANNOTATION_MODIFY_IMAGE_SIZE = '4K';
 const ANNOTATION_MODIFY_POLL_INTERVAL_MS = 3000;
@@ -103,6 +101,11 @@ const MASK_MODIFY_PROMPT_SUFFIX = '新内容需要与周围画面自然融合，
 const IMAGE_EDIT_MODIFY_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'];
 const IMAGE_EDIT_MODIFY_SIZE_LEVELS = ['1K', '2K', '4K'];
 const IMAGE_EDIT_FRAME_COLORS = ['#ef4444', '#2563eb', '#22c55e'];
+const IMAGE_EDIT_FRAME_COLOR_LABELS: Record<string, string> = {
+  '#ef4444': '红色',
+  '#2563eb': '蓝色',
+  '#22c55e': '绿色',
+};
 
 const CROP_ASPECT_PRESETS: Array<{ id: CropAspectPreset; label: string }> = [
   { id: 'free', label: '自由' },
@@ -129,8 +132,20 @@ function cropAspectValue(preset: CropAspectPreset, customW: number, customH: num
   return CROP_ASPECT_VALUES[preset] ?? null;
 }
 
-function buildAnnotationModifyMentionPrompt(originDataUrl: string, annotationOverlayDataUrl: string, command: string) {
-  const prompt = ANNOTATION_MODIFY_PROMPT.replace('【修改文字】', command);
+function buildAnnotationModifyMentionPrompt(
+  originDataUrl: string,
+  annotationOverlayDataUrl: string,
+  commands: Record<string, string>,
+) {
+  const clauses = IMAGE_EDIT_FRAME_COLORS
+    .map((color) => {
+      const command = String(commands[color] || '').trim();
+      if (!command) return '';
+      return `将 @image2 中${IMAGE_EDIT_FRAME_COLOR_LABELS[color]}框线内的部分的${command}`;
+    })
+    .filter(Boolean)
+    .join('；');
+  const prompt = `基于 @image1进行局部编辑，输出编辑后的完整照片，${clauses || '按照 @image2 中框线标出的部分按标注要求修改'}。 @image2做为框线标注参考使用。\n新内容需要与周围画面自然融合，保持一致的透视关系、物体比例、光线方向、色温、阴影、反射、景深、清晰度、颗粒和摄影风格。\n框线标注之外的内容保持不变：不要改变构图、背景、人物身份、面部、姿势、服装、其他物体、文字、曝光或颜色。编辑边缘自然过渡，不要出现接缝、晕边、重复纹理或模糊。只输出修改后的最终图片，不要保留框线、箭头、标号或文字标注。`;
   const mentionMaterials: Material[] = [
     {
       id: 'annotation-modify-source',
@@ -301,6 +316,8 @@ export interface ImageEditDraft {
     brushSize: number;
     brushFillMode: BrushFillMode;
     annotationInstruction: string;
+    annotationBlueInstruction?: string;
+    annotationGreenInstruction?: string;
     labelCounter: number;
   };
   compose?: {
@@ -336,6 +353,12 @@ function annotationFrameStrokeForModify(stroke: DrawStroke): DrawStroke | null {
     return { ...stroke, color: normalizeFrameColor(stroke.color) };
   }
   return null;
+}
+
+function annotationFrameColorForModify(stroke: DrawStroke): string | null {
+  const frameStroke = annotationFrameStrokeForModify(stroke);
+  if (!frameStroke || !('color' in frameStroke)) return null;
+  return normalizeFrameColor(frameStroke.color);
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -575,10 +598,31 @@ const ImageEditModal = ({
   const [brushSize, setBrushSize] = useState(initialDraft?.brush?.brushSize || 14);
   const [brushFillMode, setBrushFillMode] = useState<BrushFillMode>(initialDraft?.brush?.brushFillMode || 'stroke');
   const [annotationInstruction, setAnnotationInstruction] = useState(initialDraft?.brush?.annotationInstruction || '');
+  const [annotationBlueInstruction, setAnnotationBlueInstruction] = useState(initialDraft?.brush?.annotationBlueInstruction || '');
+  const [annotationGreenInstruction, setAnnotationGreenInstruction] = useState(initialDraft?.brush?.annotationGreenInstruction || '');
   const [labelCounter, setLabelCounter] = useState(initialDraft?.brush?.labelCounter || 1);
   const [selectedAnnotationTextId, setSelectedAnnotationTextId] = useState<string | null>(null);
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const hasAnnotationTextDraft = brushStrokes.some((stroke) => stroke.kind === 'brush-text' && stroke.id === AUTO_ANNOTATION_TEXT_ID);
+  const annotationFrameColors = useMemo(() => {
+    const colors = new Set<string>();
+    brushStrokes.forEach((stroke) => {
+      const color = annotationFrameColorForModify(stroke);
+      if (color) colors.add(color);
+    });
+    return colors;
+  }, [brushStrokes]);
+  const annotationModifyCommands = useMemo(
+    () => ({
+      [IMAGE_EDIT_FRAME_COLORS[0]]: annotationInstruction.trim(),
+      [IMAGE_EDIT_FRAME_COLORS[1]]: annotationBlueInstruction.trim(),
+      [IMAGE_EDIT_FRAME_COLORS[2]]: annotationGreenInstruction.trim(),
+    }),
+    [annotationBlueInstruction, annotationGreenInstruction, annotationInstruction],
+  );
+  const hasUsableAnnotationModifyCommand = IMAGE_EDIT_FRAME_COLORS.some(
+    (color) => annotationFrameColors.has(color) && Boolean(annotationModifyCommands[color]),
+  );
 
   // ---- compose v2 ----
   const [composeLayers, setComposeLayers] = useState<Layer[]>(() => cloneDraftValue(initialDraft?.compose?.composeLayers || []));
@@ -703,6 +747,8 @@ const ImageEditModal = ({
       setBrushStrokes([]);
       setLabelCounter(1);
       setAnnotationInstruction('');
+      setAnnotationBlueInstruction('');
+      setAnnotationGreenInstruction('');
       setSelectedAnnotationTextId(null);
     }
   };
@@ -812,6 +858,8 @@ const ImageEditModal = ({
       brushSize,
       brushFillMode,
       annotationInstruction,
+      annotationBlueInstruction,
+      annotationGreenInstruction,
       labelCounter,
     },
     compose: {
@@ -2201,31 +2249,6 @@ const ImageEditModal = ({
     }
   }
 
-  async function applyBrush() {
-    if (!naturalSize || brushStrokes.length === 0) return;
-    setBusy(true);
-    setErrMsg(null);
-    try {
-      const img = await loadImage(srcUrl);
-      const cv = document.createElement('canvas');
-      cv.width = naturalSize.w;
-      cv.height = naturalSize.h;
-      const ctx = cv.getContext('2d');
-      if (!ctx) throw new Error('canvas 不可用');
-      ctx.drawImage(img, 0, 0, cv.width, cv.height);
-      for (const s of brushStrokes) drawStrokeOnCtx(ctx, s, cv.width, cv.height);
-      const dataUrl = cv.toDataURL('image/png');
-      const url = await uploadDataUrl(dataUrl, 'brush');
-      onProduce([url], { type: 'brush', strokeCount: brushStrokes.length });
-      closeWithDraft();
-    } catch (e: any) {
-      setErrMsg(e?.message || '应用画板失败');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-
   async function buildAnnotationEditImages() {
     if (!naturalSize || brushStrokes.length === 0) return;
     const annotationTextCount = brushStrokes.filter((stroke) => stroke.kind === 'brush-label' || stroke.kind === 'brush-text').length;
@@ -2257,7 +2280,10 @@ const ImageEditModal = ({
     annotationOverlayCtx.clearRect(0, 0, annotationOverlayCv.width, annotationOverlayCv.height);
     for (const s of brushStrokes) {
       const frameStroke = annotationFrameStrokeForModify(s);
-      if (frameStroke) drawStrokeOnCtx(annotationOverlayCtx, frameStroke, annotationOverlayCv.width, annotationOverlayCv.height);
+      const color = annotationFrameColorForModify(s);
+      if (frameStroke && color && annotationModifyCommands[color]) {
+        drawStrokeOnCtx(annotationOverlayCtx, frameStroke, annotationOverlayCv.width, annotationOverlayCv.height);
+      }
     }
     const annotationOverlayDataUrl = annotationOverlayCv.toDataURL('image/png');
 
@@ -2271,40 +2297,15 @@ const ImageEditModal = ({
     };
   }
 
-  async function applyAnnotationEdit() {
-    if (!naturalSize || brushStrokes.length === 0) return;
-    setBusy(true);
-    setErrMsg(null);
-    try {
-      const payload = await buildAnnotationEditImages();
-      if (!payload) return;
-      const originUrl = await uploadDataUrl(payload.originDataUrl, 'annotation-source');
-      const annotatedUrl = await uploadDataUrl(payload.annotatedDataUrl, 'annotation-markup');
-      await onProduce([originUrl, annotatedUrl], {
-        type: 'annotation-edit',
-        instruction: ANNOTATION_EDIT_DEFAULT_INSTRUCTION,
-        strokeCount: payload.strokeCount,
-        annotationTextCount: payload.annotationTextCount,
-        annotationShapeCount: payload.annotationShapeCount,
-      });
-      closeWithDraft();
-    } catch (e: any) {
-      setErrMsg(e?.message || 'Annotation edit failed');
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function applyAnnotationModify() {
     if (!canModifyGenerate) return;
     if (!naturalSize || brushStrokes.length === 0) return;
-    const command = annotationInstruction.trim();
-    if (!command) {
-      setErrMsg('请输入修改文字');
-      return;
-    }
     if (!brushStrokes.some((stroke) => annotationFrameStrokeForModify(stroke))) {
       setErrMsg('请先用红色、蓝色或绿色线框标出编辑区域');
+      return;
+    }
+    if (!hasUsableAnnotationModifyCommand) {
+      setErrMsg('请为已有颜色线框输入对应的修改文字');
       return;
     }
     if (!selectedImageAdvancedProvider) {
@@ -2322,7 +2323,7 @@ const ImageEditModal = ({
     try {
       const payload = await buildAnnotationEditImages();
       if (!payload) return;
-      const modifyPrompt = buildAnnotationModifyMentionPrompt(payload.originDataUrl, payload.annotationOverlayDataUrl, command);
+      const modifyPrompt = buildAnnotationModifyMentionPrompt(payload.originDataUrl, payload.annotationOverlayDataUrl, annotationModifyCommands);
       handedOff = true;
       onModifyRunningChange?.(true, null);
       closeWithDraft();
@@ -3893,20 +3894,58 @@ const ImageEditModal = ({
             </>
           ) : mode === 'brush' ? (
             <>
-              <input
-                className="nodrag"
-                style={{
-                  ...inputStyle,
-                  minWidth: 260,
-                  maxWidth: 420,
-                  flex: '1 1 260px',
-                  width: 'auto',
-                }}
-                value={annotationInstruction}
-                onChange={(event) => setAnnotationInstruction(event.target.value)}
-                placeholder={canModifyGenerate ? '输入修改文字（写入提示词，不会落在图片上）' : '输入文字，在图片上添加可编辑标注'}
-                title={canModifyGenerate ? '修改文字' : '文字标注'}
-              />
+              {canModifyGenerate ? (
+                IMAGE_EDIT_FRAME_COLORS.map((color) => {
+                  const enabled = annotationFrameColors.has(color);
+                  const value =
+                    color === IMAGE_EDIT_FRAME_COLORS[0]
+                      ? annotationInstruction
+                      : color === IMAGE_EDIT_FRAME_COLORS[1]
+                      ? annotationBlueInstruction
+                      : annotationGreenInstruction;
+                  const setValue =
+                    color === IMAGE_EDIT_FRAME_COLORS[0]
+                      ? setAnnotationInstruction
+                      : color === IMAGE_EDIT_FRAME_COLORS[1]
+                      ? setAnnotationBlueInstruction
+                      : setAnnotationGreenInstruction;
+                  return (
+                    <input
+                      key={color}
+                      className="nodrag"
+                      style={{
+                        ...inputStyle,
+                        minWidth: 180,
+                        maxWidth: 280,
+                        flex: '1 1 180px',
+                        width: 'auto',
+                        border: enabled ? (isPixel ? `2px solid ${color}` : `1px solid ${color}`) : inputStyle.border,
+                        opacity: enabled ? 1 : 0.5,
+                      }}
+                      value={value}
+                      onChange={(event) => setValue(event.target.value)}
+                      disabled={busy || !enabled}
+                      placeholder={`${IMAGE_EDIT_FRAME_COLOR_LABELS[color]}框线修改文字`}
+                      title={enabled ? `${IMAGE_EDIT_FRAME_COLOR_LABELS[color]}框线修改文字` : `没有${IMAGE_EDIT_FRAME_COLOR_LABELS[color]}框线`}
+                    />
+                  );
+                })
+              ) : (
+                <input
+                  className="nodrag"
+                  style={{
+                    ...inputStyle,
+                    minWidth: 260,
+                    maxWidth: 420,
+                    flex: '1 1 260px',
+                    width: 'auto',
+                  }}
+                  value={annotationInstruction}
+                  onChange={(event) => setAnnotationInstruction(event.target.value)}
+                  placeholder="输入文字，在图片上添加可编辑标注"
+                  title="文字标注"
+                />
+              )}
               {!canModifyGenerate && (
                 <button
                   style={btnBase}
@@ -3917,48 +3956,16 @@ const ImageEditModal = ({
                   <Check size={14} /> 确认文字
                 </button>
               )}
-              <button
-                style={btnBase}
-                onClick={applyBrush}
-                disabled={busy || !naturalSize || brushStrokes.length === 0}
-                title={brushStrokes.length === 0 ? '请先在画板上添加标注' : ''}
-              >
-                {busy ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" /> 处理中...
-                  </>
-                ) : (
-                  <>
-                    <Check size={14} /> 应用画板
-                  </>
-                )}
-              </button>
-              <button
-                style={btnPrimary}
-                onClick={applyAnnotationEdit}
-                disabled={busy || !naturalSize || brushStrokes.length === 0}
-                title={brushStrokes.length === 0 ? '请先用箭头、框选、标号或文字标出编辑目标' : '发送干净原图和标注参考图进行 AI 编辑'}
-              >
-                {busy ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" /> 处理中...
-                  </>
-                ) : (
-                  <>
-                    <Paintbrush size={14} /> 标注编辑
-                  </>
-                )}
-              </button>
               {canModifyGenerate && (
                 <button
                   style={btnPrimary}
                   onClick={applyAnnotationModify}
-                  disabled={busy || !naturalSize || brushStrokes.length === 0 || !annotationInstruction.trim()}
+                  disabled={busy || !naturalSize || brushStrokes.length === 0 || !hasUsableAnnotationModifyCommand}
                   title={
                     brushStrokes.length === 0
                       ? '请先用红色、蓝色或绿色线框标出编辑区域'
-                      : !annotationInstruction.trim()
-                      ? '请输入修改文字'
+                      : !hasUsableAnnotationModifyCommand
+                      ? '请为已有颜色线框输入对应的修改文字'
                       : '静默调用扩展平台模型生成修改结果'
                   }
                 >
