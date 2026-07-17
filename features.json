@@ -5157,12 +5157,17 @@
     },
     "utility": {
       "label": "工具节点",
-      "count": 14,
+      "count": 15,
       "nodes": [
         {
           "type": "drawing-board",
           "label": "画板",
           "description": "v1.6.1 开放，v1.9.0 增强。图层画板：支持 16:9 / 9:16 等比例、空白图层、图层组折叠、可见/锁定、载入上游或本地图片、手绘/文字/矩形/圆形/箭头、缩放旋转、套索/钢笔非破坏式抠图、放大编辑窗口、导入导出画板 JSON，并可运行输出 PNG 图像"
+        },
+        {
+          "type": "image-edit",
+          "label": "编辑图片",
+          "description": "接入原始图后打开裁剪、遮罩、画板、宫格切分和组合编辑窗；关闭保存每张原图的可续编草稿，应用后从节点自身输出 image 结果"
         },
         {
           "type": "browser",
@@ -5968,6 +5973,7 @@
       "bp",
       "relay",
       "material-set",
+      "image-edit",
       "portrait-metadata",
       "storyboard-grid",
       "video-output",

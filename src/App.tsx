@@ -133,6 +133,7 @@ function App() {
     [templateId, customTemplates],
   );
   const [backendStatus, setBackendStatus] = useState<'checking' | 'ok' | 'error'>('checking');
+  const backendFailureCountRef = useRef(0);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -230,7 +231,13 @@ function App() {
   useEffect(() => {
     const check = async () => {
       const ok = await api.checkBackendStatus();
-      setBackendStatus(ok ? 'ok' : 'error');
+      if (ok) {
+        backendFailureCountRef.current = 0;
+        setBackendStatus('ok');
+        return;
+      }
+      backendFailureCountRef.current += 1;
+      if (backendFailureCountRef.current >= 2) setBackendStatus('error');
     };
     check();
     const t = window.setInterval(check, 15_000);
@@ -713,7 +720,7 @@ function App() {
 
       {/* 主体两栏布局 */}
       <div className="flex-1 flex overflow-hidden">
-        <Sidebar onAddNode={handleAddNode} visibleNodeTypes={visibleNodeTypes} />
+        <Sidebar onAddNode={handleAddNode} visibleNodeTypes={visibleNodeTypes} currentUserId={authUser.id} />
         <ErrorBoundary fallbackTitle="画布渲染出错了，已被错误边界捕获">
           <Suspense fallback={<InfiniteCanvasBootLoading />}>
             <Canvas

@@ -78,9 +78,12 @@ interface Props {
   onProduce: (urls: string[], meta: ImageEditProduceMeta) => void | Promise<void>;
   onModifyRunningChange?: (running: boolean, error?: string | null) => void;
   historyContext?: GenerationHistoryContext;
+  initialMode?: EditMode;
+  initialDraft?: ImageEditDraft | null;
+  onDraftSave?: (draft: ImageEditDraft) => void;
 }
 
-type EditMode = 'crop' | 'mask' | 'brush' | 'grid' | 'compose';
+export type EditMode = 'crop' | 'mask' | 'brush' | 'grid' | 'compose';
 type GridSubMode = 'preset' | 'custom';
 type BrushTool = 'free' | 'line' | 'arrow' | 'rect' | 'ellipse' | 'label' | 'text';
 type BrushFillMode = 'stroke' | 'fill';
@@ -260,6 +263,52 @@ interface CropBox {
   h: number;
 }
 
+export interface ImageEditDraft {
+  sourceUrl: string;
+  updatedAt: number;
+  mode: EditMode;
+  crop?: {
+    crop: CropBox;
+    cropAspectPreset: CropAspectPreset;
+    customAspectW: number;
+    customAspectH: number;
+  };
+  grid?: {
+    gridMode: GridSubMode;
+    rows: number;
+    cols: number;
+    gap: number;
+    orient: 'h' | 'v';
+    customLines: Line[];
+  };
+  mask?: {
+    maskStrokes: DrawStroke[];
+    maskBrushSize: number;
+    maskErasing: boolean;
+    maskModifyInstruction: string;
+  };
+  brush?: {
+    brushStrokes: DrawStroke[];
+    brushTool: BrushTool;
+    brushColor: string;
+    brushSize: number;
+    brushFillMode: BrushFillMode;
+    annotationInstruction: string;
+    labelCounter: number;
+  };
+  compose?: {
+    composeLayers: Layer[];
+    selectedIds: string[];
+    canvasW: number;
+    canvasH: number;
+  };
+}
+
+function cloneDraftValue<T>(value: T): T {
+  if (typeof structuredClone === 'function') return structuredClone(value);
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const EDIT_STAGE_PADDING = 32;
 const EDIT_STAGE_MIN_PREVIEW = 180;
@@ -400,7 +449,16 @@ function computeRects(
   return rects;
 }
 
-const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, historyContext }: Props) => {
+const ImageEditModal = ({
+  srcUrl,
+  onClose,
+  onProduce,
+  onModifyRunningChange,
+  historyContext,
+  initialMode,
+  initialDraft,
+  onDraftSave,
+}: Props) => {
   const { theme, style } = useThemeStore();
   const isDark = theme === 'dark';
   const isPixel = style === 'pixel';
@@ -416,17 +474,17 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
     [firstImageAdvancedProvider],
   );
 
-  const [mode, setMode] = useState<EditMode>('brush');
-  const [gridMode, setGridMode] = useState<GridSubMode>('preset');
-  const [crop, setCrop] = useState<CropBox>({ x: 0.1, y: 0.1, w: 0.8, h: 0.8 });
-  const [cropAspectPreset, setCropAspectPreset] = useState<CropAspectPreset>('free');
-  const [customAspectW, setCustomAspectW] = useState(16);
-  const [customAspectH, setCustomAspectH] = useState(9);
-  const [rows, setRows] = useState(3);
-  const [cols, setCols] = useState(3);
-  const [gap, setGap] = useState(0);
-  const [orient, setOrient] = useState<'h' | 'v'>('h');
-  const [customLines, setCustomLines] = useState<Line[]>([]);
+  const [mode, setMode] = useState<EditMode>(initialMode || initialDraft?.mode || 'brush');
+  const [gridMode, setGridMode] = useState<GridSubMode>(initialDraft?.grid?.gridMode || 'preset');
+  const [crop, setCrop] = useState<CropBox>(() => cloneDraftValue(initialDraft?.crop?.crop || { x: 0.1, y: 0.1, w: 0.8, h: 0.8 }));
+  const [cropAspectPreset, setCropAspectPreset] = useState<CropAspectPreset>(initialDraft?.crop?.cropAspectPreset || 'free');
+  const [customAspectW, setCustomAspectW] = useState(initialDraft?.crop?.customAspectW || 16);
+  const [customAspectH, setCustomAspectH] = useState(initialDraft?.crop?.customAspectH || 9);
+  const [rows, setRows] = useState(initialDraft?.grid?.rows || 3);
+  const [cols, setCols] = useState(initialDraft?.grid?.cols || 3);
+  const [gap, setGap] = useState(initialDraft?.grid?.gap || 0);
+  const [orient, setOrient] = useState<'h' | 'v'>(initialDraft?.grid?.orient || 'h');
+  const [customLines, setCustomLines] = useState<Line[]>(() => cloneDraftValue(initialDraft?.grid?.customLines || []));
   const [history, setHistory] = useState<Line[][]>([]);
   const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -434,31 +492,31 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
   const [errMsg, setErrMsg] = useState<string | null>(null);
 
   // ---- mask / brush ----
-  const [maskStrokes, setMaskStrokes] = useState<DrawStroke[]>([]);
+  const [maskStrokes, setMaskStrokes] = useState<DrawStroke[]>(() => cloneDraftValue(initialDraft?.mask?.maskStrokes || []));
   const [maskHistory, setMaskHistory] = useState<DrawStroke[][]>([]);
   const [maskRedo, setMaskRedo] = useState<DrawStroke[][]>([]);
-  const [brushStrokes, setBrushStrokes] = useState<DrawStroke[]>([]);
+  const [brushStrokes, setBrushStrokes] = useState<DrawStroke[]>(() => cloneDraftValue(initialDraft?.brush?.brushStrokes || []));
   const [brushHistory, setBrushHistory] = useState<DrawStroke[][]>([]);
   const [brushRedo, setBrushRedo] = useState<DrawStroke[][]>([]);
-  const [maskBrushSize, setMaskBrushSize] = useState(42); // 0..1 不使用 —— 存 px @ natural
-  const [maskErasing, setMaskErasing] = useState(false);
-  const [maskModifyInstruction, setMaskModifyInstruction] = useState('');
-  const [brushTool, setBrushTool] = useState<BrushTool>('free');
-  const [brushColor, setBrushColor] = useState('#ff2d55');
-  const [brushSize, setBrushSize] = useState(14);
-  const [brushFillMode, setBrushFillMode] = useState<BrushFillMode>('stroke');
-  const [annotationInstruction, setAnnotationInstruction] = useState('');
-  const [labelCounter, setLabelCounter] = useState(1);
+  const [maskBrushSize, setMaskBrushSize] = useState(initialDraft?.mask?.maskBrushSize || 42); // 0..1 不使用 —— 存 px @ natural
+  const [maskErasing, setMaskErasing] = useState(initialDraft?.mask?.maskErasing || false);
+  const [maskModifyInstruction, setMaskModifyInstruction] = useState(initialDraft?.mask?.maskModifyInstruction || '');
+  const [brushTool, setBrushTool] = useState<BrushTool>(initialDraft?.brush?.brushTool || 'free');
+  const [brushColor, setBrushColor] = useState(initialDraft?.brush?.brushColor || '#ff2d55');
+  const [brushSize, setBrushSize] = useState(initialDraft?.brush?.brushSize || 14);
+  const [brushFillMode, setBrushFillMode] = useState<BrushFillMode>(initialDraft?.brush?.brushFillMode || 'stroke');
+  const [annotationInstruction, setAnnotationInstruction] = useState(initialDraft?.brush?.annotationInstruction || '');
+  const [labelCounter, setLabelCounter] = useState(initialDraft?.brush?.labelCounter || 1);
   const [selectedAnnotationTextId, setSelectedAnnotationTextId] = useState<string | null>(null);
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const hasAnnotationTextDraft = brushStrokes.some((stroke) => stroke.kind === 'brush-text' && stroke.id === AUTO_ANNOTATION_TEXT_ID);
 
   // ---- compose v2 ----
-  const [composeLayers, setComposeLayers] = useState<Layer[]>([]);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [canvasW, setCanvasW] = useState(1024);
-  const [canvasH, setCanvasH] = useState(1024);
-  const [composeInited, setComposeInited] = useState(false);
+  const [composeLayers, setComposeLayers] = useState<Layer[]>(() => cloneDraftValue(initialDraft?.compose?.composeLayers || []));
+  const [selectedIds, setSelectedIds] = useState<string[]>(() => cloneDraftValue(initialDraft?.compose?.selectedIds || []));
+  const [canvasW, setCanvasW] = useState(initialDraft?.compose?.canvasW || 1024);
+  const [canvasH, setCanvasH] = useState(initialDraft?.compose?.canvasH || 1024);
+  const [composeInited, setComposeInited] = useState(Boolean(initialDraft?.compose?.composeLayers?.length));
   const [composeHistory, setComposeHistory] = useState<
     Array<{ layers: Layer[]; selectedIds: string[]; canvasW: number; canvasH: number }>
   >([]);
@@ -641,11 +699,60 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
     setSelectedAnnotationTextId(lockedText.id);
   }
 
+  const buildDraft = (): ImageEditDraft => ({
+    sourceUrl: srcUrl,
+    updatedAt: Date.now(),
+    mode,
+    crop: {
+      crop: cloneDraftValue(crop),
+      cropAspectPreset,
+      customAspectW,
+      customAspectH,
+    },
+    grid: {
+      gridMode,
+      rows,
+      cols,
+      gap,
+      orient,
+      customLines: cloneDraftValue(customLines),
+    },
+    mask: {
+      maskStrokes: cloneDraftValue(maskStrokes),
+      maskBrushSize,
+      maskErasing,
+      maskModifyInstruction,
+    },
+    brush: {
+      brushStrokes: cloneDraftValue(brushStrokes),
+      brushTool,
+      brushColor,
+      brushSize,
+      brushFillMode,
+      annotationInstruction,
+      labelCounter,
+    },
+    compose: {
+      composeLayers: cloneDraftValue(composeLayers),
+      selectedIds: cloneDraftValue(selectedIds),
+      canvasW,
+      canvasH,
+    },
+  });
+
+  const closeWithDraft = () => {
+    try {
+      onDraftSave?.(buildDraft());
+    } finally {
+      onClose();
+    }
+  };
+
   // ESC 关闭 + Ctrl+Z/Y 撤销恢复 + 1/2/3/4 切换 mode + [/] 调笔刷
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        closeWithDraft();
         return;
       }
       // 避免 input/textarea 输入时拦截
@@ -682,7 +789,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onClose, undo, redo, mode]);
+  }, [closeWithDraft, undo, redo, mode]);
 
   // 主题样式 token
   const accent = isPixel ? '#C73B6B' : '#22d3ee';
@@ -905,7 +1012,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
       };
       const { imageUrl } = await opCrop(srcUrl, px.x, px.y, px.w, px.h);
       onProduce([imageUrl], { type: 'crop', rect: px });
-      onClose();
+      closeWithDraft();
     } catch (e: any) {
       setErrMsg(e?.message || '裁剪失败');
     } finally {
@@ -939,7 +1046,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
         rects,
       );
       onProduce(urls, { type: 'grid-split', layout, rects });
-      onClose();
+      closeWithDraft();
     } catch (e: any) {
       setErrMsg(e?.message || '宫格切分失败');
     } finally {
@@ -1137,7 +1244,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
         canvasW,
         canvasH,
       });
-      onClose();
+      closeWithDraft();
     } catch (e: any) {
       setErrMsg(e?.message || '应用图层组合失败');
     } finally {
@@ -1918,7 +2025,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
       const originUrl = await fetchAndUpload(srcUrl, 'mask-src');
       const maskUrl = await uploadDataUrl(maskDataUrl, 'mask');
       onProduce([originUrl, maskUrl], { type: 'mask', strokeCount: maskStrokes.length });
-      onClose();
+      closeWithDraft();
     } catch (e: any) {
       setErrMsg(e?.message || '应用遮罩失败');
     } finally {
@@ -1952,7 +2059,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
       const modifyPrompt = buildMaskModifyMentionPrompt(payload.originDataUrl, payload.maskDataUrl, command);
       handedOff = true;
       onModifyRunningChange?.(true, null);
-      onClose();
+      closeWithDraft();
       let result = await generateExternalImage({
         providerId: firstImageAdvancedProvider.id,
         providerModel: firstImageProviderModel,
@@ -2021,7 +2128,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
       const dataUrl = cv.toDataURL('image/png');
       const url = await uploadDataUrl(dataUrl, 'brush');
       onProduce([url], { type: 'brush', strokeCount: brushStrokes.length });
-      onClose();
+      closeWithDraft();
     } catch (e: any) {
       setErrMsg(e?.message || '应用画板失败');
     } finally {
@@ -2078,7 +2185,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
         annotationTextCount: payload.annotationTextCount,
         annotationShapeCount: payload.annotationShapeCount,
       });
-      onClose();
+      closeWithDraft();
     } catch (e: any) {
       setErrMsg(e?.message || 'Annotation edit failed');
     } finally {
@@ -2106,7 +2213,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
       const modifyPrompt = buildAnnotationModifyMentionPrompt(payload.annotatedDataUrl, payload.originDataUrl);
       handedOff = true;
       onModifyRunningChange?.(true, null);
-      onClose();
+      closeWithDraft();
       let result = await generateExternalImage({
         providerId: firstImageAdvancedProvider.id,
         providerModel: firstImageProviderModel,
@@ -2343,7 +2450,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
     <div
       className="img-edit-overlay"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) closeWithDraft();
       }}
       onClick={(e) => e.stopPropagation()}
     >
@@ -2404,7 +2511,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
               <LayersIcon size={14} /> 组合
             </button>
           </div>
-          <button style={btnBase} onClick={onClose} title="关闭 (ESC)">
+          <button style={btnBase} onClick={closeWithDraft} title="关闭 (ESC)">
             <X size={14} />
           </button>
         </div>
@@ -3499,7 +3606,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
             <div style={{ color: '#EF4444', fontSize: 12, fontWeight: 600 }}>{errMsg}</div>
           )}
           <div style={{ flex: 1 }} />
-          <button style={btnBase} onClick={onClose} disabled={busy}>
+          <button style={btnBase} onClick={closeWithDraft} disabled={busy}>
             取消
           </button>
           {mode === 'crop' ? (

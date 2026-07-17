@@ -41,6 +41,7 @@ export type NodeType =
   | 'storyboard-grid'
   // Utility (9)
   | 'drawing-board'
+  | 'image-edit'
   | 'browser'
   | 'image-compare'
   | 'frame-extractor'

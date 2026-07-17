@@ -154,6 +154,7 @@ import PortraitMetadataNode from './nodes/PortraitMetadataNode';
 import StoryboardGridNode from './nodes/StoryboardGridNode';
 import PresetImageNode from './nodes/PresetImageNode';
 import DrawingBoardNode from './nodes/DrawingBoardNode';
+import ImageEditNode from './nodes/ImageEditNode';
 import BrowserNode from './nodes/BrowserNode';
 import FrameExtractorNode from './nodes/FrameExtractorNode';
 import FramePairNode from './nodes/FramePairNode';
@@ -213,6 +214,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'storyboard-grid': StoryboardGridNode,
   // Utility (9)
   'drawing-board': DrawingBoardNode,
+  'image-edit': ImageEditNode,
   browser: BrowserNode,
   'image-compare': ImageCompareNode,
   'frame-extractor': FrameExtractorNode,
@@ -607,6 +609,7 @@ function ExhibitionCompactFormController({
 const INITIAL_DATA: Record<string, Record<string, any>> = {
   image: { model: 'gpt-image-2', aspectRatio: '1:1', sizeLevel: '1K', referenceImages: [], outputFormat: 'jpg' },
   edit: { mode: 'edit', model: 'gpt-image-2', aspectRatio: '1:1', sizeLevel: '1K', referenceImages: [] },
+  'image-edit': { imageEditDrafts: {}, status: 'idle' },
   'codex-image-conjure': {
     codexConjureSource: 'codex-cli',
     codexConjureMaterialOrder: [],
@@ -2438,6 +2441,8 @@ function CanvasInner({
   const [edges, setEdges] = useState<Edge[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadedCanvasId, setLoadedCanvasId] = useState<string | null>(null);
+  const [canvasLoadError, setCanvasLoadError] = useState('');
+  const [canvasReloadToken, setCanvasReloadToken] = useState(0);
   const saveTimersByCanvasRef = useRef<Map<string, number>>(new Map());
   const pendingSaveByCanvasRef = useRef<Map<string, { nodes: Node[]; edges: Edge[]; snapshot?: string; nextNodeSerialId: number }>>(new Map());
   const lastSavedByCanvasRef = useRef<Map<string, string>>(new Map());
@@ -2622,21 +2627,53 @@ function CanvasInner({
       setEdges([]);
       setLoaded(false);
       setLoadedCanvasId(null);
+      setCanvasLoadError('');
       histReset();
       return;
     }
     const requestedCanvasId = activeId;
     setLoaded(false);
     setLoadedCanvasId(null);
+    setCanvasLoadError('');
+    let cancelled = false;
+    let hydrationTimer: number | null = null;
+
+    const finishHydration = (fallbackNodeCount: number) => {
+      if (hydrationTimer) window.clearTimeout(hydrationTimer);
+      hydrationTimer = window.setTimeout(() => {
+        if (cancelled || useCanvasStore.getState().activeId !== requestedCanvasId) return;
+        const settledNodes = nodesRef.current
+          .filter((node) => node.id !== BULK_PHANTOM_ID)
+          .map(canvasNodeForPersistence);
+        const settledEdges = edgesRef.current
+          .filter((edge) => edge.source !== BULK_PHANTOM_ID && edge.target !== BULK_PHANTOM_ID)
+          .map(canvasEdgeForPersistence);
+        lastSavedByCanvasRef.current.set(requestedCanvasId, JSON.stringify({
+          nodes: settledNodes,
+          edges: settledEdges,
+          nextNodeSerialId: nextNodeSerialIdRef.current,
+        }));
+        lastSavedNodeCountByCanvasRef.current.set(requestedCanvasId, settledNodes.length || fallbackNodeCount);
+        setLoadedCanvasId(requestedCanvasId);
+        setLoaded(true);
+      }, 300);
+    };
+
     const cachedData = api.getCachedCanvasData(requestedCanvasId);
     if (cachedData) {
       const cached = prepareCanvasSnapshot(cachedData);
       nextNodeSerialIdRef.current = cached.nextNodeSerialId;
       setNodes(cached.nodes);
       setEdges(cached.edges);
+      setLoadedCanvasId(requestedCanvasId);
       histReset({ nodes: cached.nodes, edges: cached.edges });
+      finishHydration(cached.nodes.length);
+    } else {
+      nextNodeSerialIdRef.current = 1;
+      setNodes([]);
+      setEdges([]);
+      histReset();
     }
-    let cancelled = false;
     api
       .getCanvasData(requestedCanvasId, { force: true })
       .then((data) => {
@@ -2657,17 +2694,10 @@ function CanvasInner({
         const normalized = normalizeCanvasNodeSerials(fixedNsBeforeSerials, savedNextNodeSerialId);
         nextNodeSerialIdRef.current = normalized.nextNodeSerialId;
         const fixedNs = normalized.nodes;
+        setLoaded(false);
         setNodes(fixedNs);
         setEdges(persistedEdges);
-        const normalizedSnapshot = JSON.stringify({
-          nodes: fixedNs,
-          edges: persistedEdges,
-          nextNodeSerialId: normalized.nextNodeSerialId,
-        });
-        // 加载期的序号补齐、旧 group 修复和 ReactFlow 测量都属于内存归一化，
-        // 不应在纯切换画布时触发整画布 PUT；下一次真实业务修改会一并持久化。
-        lastSavedByCanvasRef.current.set(requestedCanvasId, normalizedSnapshot);
-        lastSavedNodeCountByCanvasRef.current.set(requestedCanvasId, Array.isArray(data.nodes) ? data.nodes.length : 0);
+        setLoadedCanvasId(requestedCanvasId);
         allowEmptySaveCanvasIdsRef.current.delete(requestedCanvasId);
         histReset({ nodes: fixedNs, edges: persistedEdges });
         const restoredViewport =
@@ -2677,23 +2707,26 @@ function CanvasInner({
         if (restoredViewport) {
           void setViewport(restoredViewport, { duration: 0 });
         }
-        setLoadedCanvasId(requestedCanvasId);
-        setLoaded(true);
+        finishHydration(Array.isArray(data.nodes) ? data.nodes.length : 0);
       })
       .catch((e) => {
         if (cancelled || useCanvasStore.getState().activeId !== requestedCanvasId) return;
-        console.error('加载画布失败', e);
-        nextNodeSerialIdRef.current = 1;
-        setNodes([]);
-        setEdges([]);
-        histReset();
-        setLoadedCanvasId(requestedCanvasId);
-        setLoaded(true);
+        const message = e?.message || '画布加载失败';
+        setCanvasLoadError(message);
+        if (cachedData) {
+          console.warn('画布在线数据加载失败，继续使用缓存', e);
+          finishHydration(cachedData.nodes?.length || 0);
+        } else {
+          console.error('加载画布失败', e);
+          setLoaded(false);
+          setLoadedCanvasId(null);
+        }
       });
     return () => {
       cancelled = true;
+      if (hydrationTimer) window.clearTimeout(hydrationTimer);
     };
-  }, [activeId, currentUserId, histReset, setViewport]);
+  }, [activeId, canvasReloadToken, currentUserId, histReset, setViewport]);
 
   const handleMoveEnd = useCallback((_event: MouseEvent | TouchEvent | null, viewport: Viewport) => {
     if (!activeId || !loaded || loadedCanvasId !== activeId) return;
@@ -6190,6 +6223,10 @@ function CanvasInner({
     );
   }
 
+  const canvasContentMatchesActive = loadedCanvasId === activeId;
+  const flowNodes = canvasContentMatchesActive ? nodes : [];
+  const flowEdges = canvasContentMatchesActive ? edges : [];
+
   return (
     <div
       className={`t8-canvas-shell flex-1 relative${connectionPanModeActive ? ' connection-pan-mode-active' : ''}`}
@@ -6223,6 +6260,33 @@ function CanvasInner({
         onToggleOutputMaterialPersistence={() => {}}
         onAlignSelection={handleAlignSelection}
       />
+      {(!canvasContentMatchesActive || !loaded) && (
+        <div className="absolute inset-0 z-[90] flex items-center justify-center bg-black/35 backdrop-blur-[1px]">
+          <div className="rounded-lg border border-white/15 bg-zinc-950/90 px-5 py-4 text-center text-sm text-white shadow-2xl">
+            <div>{canvasLoadError ? '画布加载失败' : '正在切换画布…'}</div>
+            {canvasLoadError && <div className="mt-1 max-w-md text-xs text-red-300">{canvasLoadError}</div>}
+            {canvasLoadError && (
+              <button
+                type="button"
+                className="mt-3 rounded-md bg-cyan-500/20 px-3 py-1.5 text-xs text-cyan-200 hover:bg-cyan-500/30"
+                onClick={() => setCanvasReloadToken((value) => value + 1)}
+              >
+                重新加载
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      {canvasLoadError && canvasContentMatchesActive && loaded && (
+        <button
+          type="button"
+          className="absolute left-1/2 top-3 z-[85] -translate-x-1/2 rounded-md border border-amber-300/30 bg-zinc-950/90 px-3 py-1.5 text-xs text-amber-200 shadow-lg"
+          title={canvasLoadError}
+          onClick={() => setCanvasReloadToken((value) => value + 1)}
+        >
+          当前显示缓存，点击重试在线同步
+        </button>
+      )}
       {isReadonlyCanvas && (
         <div
           className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-md border border-amber-300/40 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-100 shadow-lg backdrop-blur"
@@ -6248,8 +6312,8 @@ function CanvasInner({
       />
       <CanvasRuntimeProvider value={{ loadedCanvasId }}>
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={flowNodes}
+        edges={flowEdges}
         nodeTypes={memoNodeTypes}
         edgeTypes={memoEdgeTypes}
         onNodesChange={onNodesChange}
@@ -6270,10 +6334,10 @@ function CanvasInner({
         onSelectionEnd={onSelectionEnd}
         onMoveEnd={handleMoveEnd}
         onError={handleFlowError}
-        nodesDraggable={canEditActiveCanvas}
-        nodesConnectable={canEditActiveCanvas}
-        elementsSelectable
-        deleteKeyCode={canEditActiveCanvas ? ['Backspace', 'Delete'] : null}
+        nodesDraggable={loaded && canEditActiveCanvas}
+        nodesConnectable={loaded && canEditActiveCanvas}
+        elementsSelectable={loaded}
+        deleteKeyCode={loaded && canEditActiveCanvas ? ['Backspace', 'Delete'] : null}
         selectionKeyCode={memoSelectionKeyCode}
         multiSelectionKeyCode={memoMultiSelectionKeyCode}
         selectionMode={SelectionMode.Partial}

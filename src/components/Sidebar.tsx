@@ -378,9 +378,10 @@ const SAINT_SEIYA_ICON_BY_TYPE: Record<string, string> = {
 interface SidebarProps {
   onAddNode: (type: NodeType) => void;
   visibleNodeTypes?: string[];
+  currentUserId: string;
 }
 
-export default function Sidebar({ onAddNode, visibleNodeTypes }: SidebarProps) {
+export default function Sidebar({ onAddNode, visibleNodeTypes, currentUserId }: SidebarProps) {
   const { theme, style, templateId, customTemplates } = useThemeStore();
   const currentTemplate = useMemo(
     () => resolveThemeTemplate(templateId, customTemplates),
@@ -446,8 +447,8 @@ export default function Sidebar({ onAddNode, visibleNodeTypes }: SidebarProps) {
   const [canvasKeyword, setCanvasKeyword] = useState('');
 
   useEffect(() => {
-    loadCanvases();
-  }, [loadCanvases]);
+    loadCanvases({ userId: currentUserId });
+  }, [currentUserId, loadCanvases]);
 
   const handleCreateCanvas = async () => {
     await createCanvas();

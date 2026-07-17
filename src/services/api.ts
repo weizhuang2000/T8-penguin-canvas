@@ -120,6 +120,7 @@ export interface ToolPermissionsConfig {
 const canvasDataCache = new Map<string, CanvasData>();
 const pendingCanvasDataRequests = new Map<string, Promise<CanvasData>>();
 const canvasSaveQueues = new Map<string, Promise<void>>();
+let pendingBackendStatusRequest: Promise<boolean> | null = null;
 const CANVAS_DATA_CACHE_PREFIX = 't8pc:canvas-data:v1:';
 const MAX_PERSISTED_CANVAS_CACHE_CHARS = 2_000_000;
 const canvasPersistVersions = new Map<string, number>();
@@ -428,13 +429,19 @@ export async function updateExhibitionCompactForm(payload: ExhibitionCompactForm
   return res.data;
 }
 
-export async function checkBackendStatus(): Promise<boolean> {
-  try {
-    const res = await fetch(`${BASE}/status`);
-    return res.ok;
-  } catch {
-    return false;
-  }
+export function checkBackendStatus(): Promise<boolean> {
+  if (pendingBackendStatusRequest) return pendingBackendStatusRequest;
+  pendingBackendStatusRequest = (async () => {
+    try {
+      const res = await fetch(`${BASE}/status`, { cache: 'no-store' });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  })().finally(() => {
+    pendingBackendStatusRequest = null;
+  });
+  return pendingBackendStatusRequest;
 }
 
 export interface ExtractedDocument {

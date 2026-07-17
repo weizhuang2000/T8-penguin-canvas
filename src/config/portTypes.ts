@@ -120,6 +120,7 @@ export const NODE_PORTS: Record<string, NodePorts> = {
 
   // ========== Utility ==========
   'drawing-board': { inputs: ['image'], outputs: ['image'] },
+  'image-edit': { inputs: ['image'], outputs: ['image'] },
   browser: { inputs: [], outputs: ['text', 'image'] },
   'image-compare': { inputs: ['image'], outputs: ['image'] },
   'frame-extractor': { inputs: ['video'], outputs: ['image'] },
