@@ -609,7 +609,7 @@ function ExhibitionCompactFormController({
 const INITIAL_DATA: Record<string, Record<string, any>> = {
   image: { model: 'gpt-image-2', aspectRatio: '1:1', sizeLevel: '1K', referenceImages: [], outputFormat: 'jpg' },
   edit: { mode: 'edit', model: 'gpt-image-2', aspectRatio: '1:1', sizeLevel: '1K', referenceImages: [] },
-  'image-edit': { imageEditDrafts: {}, status: 'idle' },
+  'image-edit': { imageEditDrafts: {}, status: 'idle', denoiseThresholdPx: 4 },
   'codex-image-conjure': {
     codexConjureSource: 'codex-cli',
     codexConjureMaterialOrder: [],
