@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   drawAligned,
   drawDiffPixels,
@@ -68,6 +68,7 @@ export default function ImageCompareStage(props: {
   split: number;
   opacity: number;
   threshold: number;
+  onSplitChange?: (split: number) => void;
   labels?: [string, string];
   className?: string;
 }) {
@@ -79,10 +80,13 @@ export default function ImageCompareStage(props: {
     split,
     opacity,
     threshold,
+    onSplitChange,
     labels = ['输入图', '结果图'],
     className = 'aspect-video',
   } = props;
   const [blinkOn, setBlinkOn] = useState(false);
+  const [draggingSplit, setDraggingSplit] = useState(false);
+  const stageRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (mode !== 'blink') {
@@ -94,6 +98,37 @@ export default function ImageCompareStage(props: {
   }, [mode]);
 
   const imageFit = align === 'fill' ? 'fill' : align;
+  const updateSplitFromPointer = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!onSplitChange) return;
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0) return;
+    const next = ((event.clientX - rect.left) / rect.width) * 100;
+    onSplitChange(Math.max(0, Math.min(100, Math.round(next))));
+  }, [onSplitChange]);
+
+  const beginSplitDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (mode !== 'slider') return;
+    event.preventDefault();
+    event.stopPropagation();
+    stageRef.current?.setPointerCapture?.(event.pointerId);
+    setDraggingSplit(true);
+    updateSplitFromPointer(event);
+  }, [mode, updateSplitFromPointer]);
+
+  const continueSplitDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!draggingSplit) return;
+    event.preventDefault();
+    event.stopPropagation();
+    updateSplitFromPointer(event);
+  }, [draggingSplit, updateSplitFromPointer]);
+
+  const endSplitDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!draggingSplit) return;
+    event.preventDefault();
+    event.stopPropagation();
+    stageRef.current?.releasePointerCapture?.(event.pointerId);
+    setDraggingSplit(false);
+  }, [draggingSplit]);
 
   if (mode === 'side-by-side') {
     return (
@@ -114,10 +149,16 @@ export default function ImageCompareStage(props: {
   }
 
   return (
-    <div className={`relative overflow-hidden rounded-lg border border-[var(--t8-border)] bg-[var(--t8-bg-panel-muted)] select-none ${className}`}>
+    <div
+      ref={stageRef}
+      className={`relative overflow-hidden rounded-lg border border-[var(--t8-border)] bg-[var(--t8-bg-panel-muted)] select-none ${className}`}
+      onPointerMove={continueSplitDrag}
+      onPointerUp={endSplitDrag}
+      onPointerCancel={endSplitDrag}
+    >
       <img
-        src={before}
-        alt={labels[0]}
+        src={mode === 'slider' ? after : before}
+        alt={mode === 'slider' ? labels[1] : labels[0]}
         className="absolute inset-0 w-full h-full"
         style={{ objectFit: imageFit as any, opacity: mode === 'blink' && blinkOn ? 0 : mode === 'heatmap' ? 0.35 : 1 }}
         draggable={false}
@@ -125,13 +166,30 @@ export default function ImageCompareStage(props: {
       {mode === 'slider' && (
         <>
           <img
-            src={after}
-            alt={labels[1]}
+            src={before}
+            alt={labels[0]}
             className="absolute inset-0 w-full h-full"
             style={{ objectFit: imageFit as any, clipPath: `inset(0 ${100 - split}% 0 0)` }}
             draggable={false}
           />
+          <div className="absolute bottom-2 left-2 rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-bold text-white">
+            {labels[0]}
+          </div>
+          <div className="absolute bottom-2 right-2 rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-bold text-white">
+            {labels[1]}
+          </div>
           <div className="absolute inset-y-0 w-0.5 bg-[var(--t8-accent)] shadow" style={{ left: `calc(${split}% - 1px)` }} />
+          <div
+            className="absolute inset-y-0 w-6 -translate-x-1/2 cursor-ew-resize touch-none"
+            style={{ left: `${split}%` }}
+            onPointerDown={beginSplitDrag}
+            role="slider"
+            aria-label="拖动分隔线"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={split}
+            title="拖动分隔线"
+          />
         </>
       )}
       {mode === 'overlay' && (

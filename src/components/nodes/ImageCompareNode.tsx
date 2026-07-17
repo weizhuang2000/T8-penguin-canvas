@@ -69,31 +69,22 @@ const ImageCompareNode = (p: NodeProps) => {
 
     const aCandidates: string[] = [];
     const bCandidates: string[] = [];
-    const autoCandidates: string[] = [];
-    const allCandidates: string[] = [];
 
     for (const c of conns as any[]) {
       const n = nodeMap.get(c.source);
       const imgs = extractImagesFromData(n?.data, c.sourceHandle ?? null);
       for (const img of imgs) {
-        if (!allCandidates.includes(img)) allCandidates.push(img);
         if (c.targetHandle === 'a') {
           if (!aCandidates.includes(img)) aCandidates.push(img);
         } else if (c.targetHandle === 'b') {
           if (!bCandidates.includes(img)) bCandidates.push(img);
-        } else if (!autoCandidates.includes(img)) {
-          autoCandidates.push(img);
         }
       }
     }
 
-    const before = aCandidates[0] || autoCandidates[0] || allCandidates[0] || '';
-    const after =
-      bCandidates[0] ||
-      autoCandidates.find((u) => u !== before) ||
-      allCandidates.find((u) => u !== before) ||
-      '';
-    return { before, after, count: allCandidates.length };
+    const before = aCandidates[0] || '';
+    const after = bCandidates[0] || '';
+    return { before, after, count: Number(Boolean(before)) + Number(Boolean(after)) };
   }, [conns, upstreamNodes, upstreamSig]);
 
   const before = pair.before;
@@ -121,7 +112,7 @@ const ImageCompareNode = (p: NodeProps) => {
   const handleRun = useCallback(async () => {
     setError(null);
     if (!before || !after) {
-      const msg = '请连接 2 张上游图像';
+      const msg = '请分别连接上接口和下接口图像';
       setError(msg);
       update({ status: 'error', error: msg });
       return;
@@ -182,20 +173,23 @@ const ImageCompareNode = (p: NodeProps) => {
   };
 
   const renderPreview = () => {
-    if (!before) {
+    if (!before && !after) {
       return (
         <div className="aspect-video rounded-lg border border-dashed border-[var(--t8-border)] bg-[var(--t8-bg-panel-muted)] flex items-center justify-center text-xs text-[var(--t8-text-dim)]">
-          连接第一张图
+          连接上接口和下接口图像
         </div>
       );
     }
-    if (!after) {
+    if (!before || !after) {
+      const previewUrl = before || after;
+      const previewLabel = before ? '上接口' : '下接口';
+      const missingLabel = before ? '下接口' : '上接口';
       return (
         <div className="space-y-2">
           <div className="aspect-video rounded-lg overflow-hidden bg-[var(--t8-bg-panel-muted)] border border-[var(--t8-border)]">
-            <img src={before} alt="原图 A" className="w-full h-full object-contain" draggable={false} />
+            <img src={previewUrl} alt={previewLabel} className="w-full h-full object-contain" draggable={false} />
           </div>
-          <div className="text-center text-xs text-[var(--t8-text-dim)]">继续连接第二张图</div>
+          <div className="text-center text-xs text-[var(--t8-text-dim)]">继续连接{missingLabel}图像</div>
         </div>
       );
     }
@@ -209,7 +203,8 @@ const ImageCompareNode = (p: NodeProps) => {
         split={split}
         opacity={opacity}
         threshold={threshold}
-        labels={['原图', '对比图']}
+        onSplitChange={(nextSplit) => update({ split: nextSplit })}
+        labels={['上接口', '下接口']}
         className="aspect-video"
       />
     );
@@ -289,10 +284,10 @@ const ImageCompareNode = (p: NodeProps) => {
 
           <div className="grid grid-cols-3 gap-1.5 text-[10px] text-[var(--t8-text-muted)]">
             <div className="rounded-md border border-[var(--t8-border)] bg-[var(--t8-bg-panel-muted)] px-2 py-1">
-              原图 {stats ? `${stats.imageA.width}×${stats.imageA.height}` : '--'}
+              上接口 {stats ? `${stats.imageA.width}×${stats.imageA.height}` : '--'}
             </div>
             <div className="rounded-md border border-[var(--t8-border)] bg-[var(--t8-bg-panel-muted)] px-2 py-1">
-              对比 {stats ? `${stats.imageB.width}×${stats.imageB.height}` : '--'}
+              下接口 {stats ? `${stats.imageB.width}×${stats.imageB.height}` : '--'}
             </div>
             <div className="rounded-md border border-[var(--t8-border)] bg-[var(--t8-bg-panel-muted)] px-2 py-1">
               变化 {stats?.changedRatio !== undefined ? `${Math.round(stats.changedRatio * 100)}%` : '--'}

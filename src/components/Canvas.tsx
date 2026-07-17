@@ -1668,6 +1668,9 @@ function exclusiveTargetHandlesForConnection(
   targetHandle: string | null | undefined,
 ): string[] {
   const handle = targetHandle || '';
+  if (targetType === 'image-compare' && (handle === 'a' || handle === 'b')) {
+    return [handle];
+  }
   if (targetType === 'exhibition-img2img') {
     if (handle === 'structure' || handle === 'plan-layout') return ['structure', 'plan-layout'];
     if (handle === 'color-material-reference' || handle === 'style') return ['color-material-reference', 'style'];
