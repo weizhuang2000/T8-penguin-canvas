@@ -100,11 +100,12 @@ const ANNOTATION_MODIFY_TIMEOUT_MS = 3600 * 1000;
 const MASK_MODIFY_PROMPT_SUFFIX = '新内容需要与周围画面自然融合，保持一致的透视关系、物体比例、光线方向、色温、阴影、反射、景深、清晰度、颗粒和摄影风格。\n蒙版之外的内容保持不变：不要改变构图、背景、人物身份、面部、姿势、服装、其他物体、文字、曝光或颜色。编辑边缘自然过渡，不要出现接缝、晕边、重复纹理或模糊。';
 const IMAGE_EDIT_MODIFY_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'];
 const IMAGE_EDIT_MODIFY_SIZE_LEVELS = ['1K', '2K', '4K'];
-const IMAGE_EDIT_FRAME_COLORS = ['#ef4444', '#2563eb', '#22c55e'];
+const IMAGE_EDIT_FRAME_COLORS = ['#ef4444', '#2563eb', '#22c55e', '#eab308'];
 const IMAGE_EDIT_FRAME_COLOR_LABELS: Record<string, string> = {
   '#ef4444': '红色',
   '#2563eb': '蓝色',
   '#22c55e': '绿色',
+  '#eab308': '黄色',
 };
 
 const CROP_ASPECT_PRESETS: Array<{ id: CropAspectPreset; label: string }> = [
@@ -318,6 +319,7 @@ export interface ImageEditDraft {
     annotationInstruction: string;
     annotationBlueInstruction?: string;
     annotationGreenInstruction?: string;
+    annotationYellowInstruction?: string;
     labelCounter: number;
   };
   compose?: {
@@ -600,6 +602,7 @@ const ImageEditModal = ({
   const [annotationInstruction, setAnnotationInstruction] = useState(initialDraft?.brush?.annotationInstruction || '');
   const [annotationBlueInstruction, setAnnotationBlueInstruction] = useState(initialDraft?.brush?.annotationBlueInstruction || '');
   const [annotationGreenInstruction, setAnnotationGreenInstruction] = useState(initialDraft?.brush?.annotationGreenInstruction || '');
+  const [annotationYellowInstruction, setAnnotationYellowInstruction] = useState(initialDraft?.brush?.annotationYellowInstruction || '');
   const [labelCounter, setLabelCounter] = useState(initialDraft?.brush?.labelCounter || 1);
   const [selectedAnnotationTextId, setSelectedAnnotationTextId] = useState<string | null>(null);
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
@@ -617,8 +620,9 @@ const ImageEditModal = ({
       [IMAGE_EDIT_FRAME_COLORS[0]]: annotationInstruction.trim(),
       [IMAGE_EDIT_FRAME_COLORS[1]]: annotationBlueInstruction.trim(),
       [IMAGE_EDIT_FRAME_COLORS[2]]: annotationGreenInstruction.trim(),
+      [IMAGE_EDIT_FRAME_COLORS[3]]: annotationYellowInstruction.trim(),
     }),
-    [annotationBlueInstruction, annotationGreenInstruction, annotationInstruction],
+    [annotationBlueInstruction, annotationGreenInstruction, annotationInstruction, annotationYellowInstruction],
   );
   const hasUsableAnnotationModifyCommand = IMAGE_EDIT_FRAME_COLORS.some(
     (color) => annotationFrameColors.has(color) && Boolean(annotationModifyCommands[color]),
@@ -749,6 +753,7 @@ const ImageEditModal = ({
       setAnnotationInstruction('');
       setAnnotationBlueInstruction('');
       setAnnotationGreenInstruction('');
+      setAnnotationYellowInstruction('');
       setSelectedAnnotationTextId(null);
     }
   };
@@ -860,6 +865,7 @@ const ImageEditModal = ({
       annotationInstruction,
       annotationBlueInstruction,
       annotationGreenInstruction,
+      annotationYellowInstruction,
       labelCounter,
     },
     compose: {
@@ -2961,7 +2967,7 @@ const ImageEditModal = ({
                       key={color}
                       type="button"
                       onClick={() => setBrushColor(color)}
-                      title={color === IMAGE_EDIT_FRAME_COLORS[0] ? '红色框线' : color === IMAGE_EDIT_FRAME_COLORS[1] ? '蓝色框线' : '绿色框线'}
+                      title={`${IMAGE_EDIT_FRAME_COLOR_LABELS[color]}框线`}
                       style={{
                         width: 24,
                         height: 24,
@@ -3902,13 +3908,17 @@ const ImageEditModal = ({
                       ? annotationInstruction
                       : color === IMAGE_EDIT_FRAME_COLORS[1]
                       ? annotationBlueInstruction
-                      : annotationGreenInstruction;
+                      : color === IMAGE_EDIT_FRAME_COLORS[2]
+                      ? annotationGreenInstruction
+                      : annotationYellowInstruction;
                   const setValue =
                     color === IMAGE_EDIT_FRAME_COLORS[0]
                       ? setAnnotationInstruction
                       : color === IMAGE_EDIT_FRAME_COLORS[1]
                       ? setAnnotationBlueInstruction
-                      : setAnnotationGreenInstruction;
+                      : color === IMAGE_EDIT_FRAME_COLORS[2]
+                      ? setAnnotationGreenInstruction
+                      : setAnnotationYellowInstruction;
                   return (
                     <input
                       key={color}

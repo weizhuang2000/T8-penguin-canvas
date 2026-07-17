@@ -49,6 +49,7 @@ const config = {
   SESSION_FILE: path.join(DATA_ROOT, 'data', 'auth_sessions.json'),
   TOOL_PERMISSIONS_FILE: path.join(DATA_ROOT, 'data', 'tool_permissions.json'),
   NOTIFICATIONS_FILE: path.join(DATA_ROOT, 'data', 'notifications.json'),
+  NOTIFICATIONS_ASSET_DIR: path.join(DATA_ROOT, 'data', 'notification-assets'),
   ACHIEVEMENTS_FILE: path.join(DATA_ROOT, 'data', 'achievements.json'),
   RH_APPS_FILE: path.join(DATA_ROOT, 'data', 'rh_apps.json'),
   // v1.2.10+ RH 工具节点专用数据（与 rh_apps.json 完全分开）

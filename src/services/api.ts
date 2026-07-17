@@ -83,6 +83,7 @@ export interface SystemNotification {
   id: string;
   title: string;
   content: string;
+  contentBlocks: NotificationContentBlock[];
   publishedAt: string;
   publishedBy: {
     id: string;
@@ -90,6 +91,32 @@ export interface SystemNotification {
   };
   status: 'active' | 'archived';
   read: boolean;
+}
+
+export type NotificationContentBlock = NotificationTextBlock | NotificationImageBlock;
+
+export interface NotificationTextBlock {
+  id: string;
+  type: 'text';
+  text: string;
+  fontSize: number;
+  color: string;
+}
+
+export interface NotificationImageBlock {
+  id: string;
+  type: 'image';
+  url: string;
+  alt: string;
+  width: number;
+  height: number;
+}
+
+export interface NotificationImageAsset {
+  url: string;
+  width: number;
+  height: number;
+  size: number;
 }
 
 export interface ToolPermissionRule {
@@ -374,10 +401,25 @@ export async function getNotifications(includeArchived = false): Promise<SystemN
   return res.data || [];
 }
 
-export async function publishNotification(payload: { title: string; content: string }): Promise<SystemNotification> {
+export async function publishNotification(payload: {
+  title: string;
+  content?: string;
+  contentBlocks?: NotificationContentBlock[];
+}): Promise<SystemNotification> {
   const res = await request<{ success: boolean; data: SystemNotification }>(`${BASE}/notifications`, {
     method: 'POST',
     body: JSON.stringify(payload),
+  });
+  return res.data;
+}
+
+export async function uploadNotificationImage(file: Blob, filename = 'notification-image'): Promise<NotificationImageAsset> {
+  const form = new FormData();
+  form.append('image', file, filename);
+  const res = await request<{ success: boolean; data: NotificationImageAsset }>(`${BASE}/notifications/assets`, {
+    method: 'POST',
+    headers: {},
+    body: form,
   });
   return res.data;
 }

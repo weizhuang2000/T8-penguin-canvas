@@ -19,13 +19,22 @@ test('notifications are admin-published and keep per-user read state', async (t)
 
   const config = require('../backend/src/config.js');
   const previousFile = config.NOTIFICATIONS_FILE;
+  const previousAssetDir = config.NOTIFICATIONS_ASSET_DIR;
   config.NOTIFICATIONS_FILE = path.join(tmpDir, 'notifications.json');
+  config.NOTIFICATIONS_ASSET_DIR = path.join(tmpDir, 'notification-assets');
   t.after(() => {
     config.NOTIFICATIONS_FILE = previousFile;
+    config.NOTIFICATIONS_ASSET_DIR = previousAssetDir;
   });
 
   const express = require('express');
   const notificationsRouter = require('../backend/src/routes/notifications.js');
+  const legacy = notificationsRouter.normalizeDb({
+    notifications: [{ id: 'legacy', title: '旧通知', content: '旧版纯文本', publishedAt: new Date().toISOString() }],
+    readByUser: {},
+  });
+  assert.equal(legacy.notifications[0].contentBlocks[0].type, 'text');
+  assert.equal(legacy.notifications[0].contentBlocks[0].text, '旧版纯文本');
   const app = express();
   app.use(express.json({ limit: '1mb' }));
   app.use((req, _res, next) => {
@@ -50,6 +59,27 @@ test('notifications are admin-published and keep per-user read state', async (t)
   assert.equal(denied.response.status, 403);
   assert.equal(denied.data.success, false);
 
+  const onePixelPng = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64',
+  );
+  const imageForm = new FormData();
+  imageForm.append('image', new Blob([onePixelPng], { type: 'image/png' }), 'notice.png');
+  const uploadedImage = await requestJson(`${base}/assets`, {
+    method: 'POST',
+    headers: { 'x-test-user': 'admin-1', 'x-test-role': 'admin' },
+    body: imageForm,
+  });
+  assert.equal(uploadedImage.response.status, 201);
+  assert.match(uploadedImage.data.data.url, /^\/api\/notifications\/assets\/[a-f0-9-]+\.webp$/);
+  assert.equal(fs.existsSync(path.join(config.NOTIFICATIONS_ASSET_DIR, path.basename(uploadedImage.data.data.url))), true);
+
+  const servedImage = await fetch(`http://127.0.0.1:${server.address().port}${uploadedImage.data.data.url}`, {
+    headers: { 'x-test-user': 'user-1' },
+  });
+  assert.equal(servedImage.status, 200);
+  assert.equal(servedImage.headers.get('content-type'), 'image/webp');
+
   const published = await requestJson(base, {
     method: 'POST',
     headers: {
@@ -57,11 +87,21 @@ test('notifications are admin-published and keep per-user read state', async (t)
       'x-test-user': 'admin-1',
       'x-test-role': 'admin',
     },
-    body: JSON.stringify({ title: '系统维护', content: '今晚 22:00 进行系统维护。' }),
+    body: JSON.stringify({
+      title: '系统维护',
+      contentBlocks: [
+        { id: 'text-1', type: 'text', text: '今晚 22:00 进行系统维护。', fontSize: 24, color: '#DC2626' },
+        { id: 'image-1', type: 'image', url: uploadedImage.data.data.url, alt: '维护说明图', width: 1, height: 1 },
+      ],
+    }),
   });
   assert.equal(published.response.status, 201);
   assert.equal(published.data.success, true);
   assert.equal(published.data.data.title, '系统维护');
+  assert.equal(published.data.data.contentBlocks.length, 2);
+  assert.equal(published.data.data.contentBlocks[0].fontSize, 24);
+  assert.equal(published.data.data.contentBlocks[0].color, '#dc2626');
+  assert.equal(published.data.data.contentBlocks[1].url, uploadedImage.data.data.url);
   assert.equal(published.data.data.read, true, 'publisher should not receive their own notification as unread');
   const notificationId = published.data.data.id;
 
@@ -101,6 +141,8 @@ test('notifications are admin-published and keep per-user read state', async (t)
 
   const saved = JSON.parse(fs.readFileSync(config.NOTIFICATIONS_FILE, 'utf8'));
   assert.equal(saved.notifications.length, 1);
+  assert.equal(saved.version, 2);
+  assert.equal(saved.notifications[0].contentBlocks[1].type, 'image');
   assert.deepEqual(saved.readByUser['user-1'], [notificationId]);
 });
 
@@ -110,9 +152,12 @@ test('notification publishing validates required fields and length limits', asyn
 
   const config = require('../backend/src/config.js');
   const previousFile = config.NOTIFICATIONS_FILE;
+  const previousAssetDir = config.NOTIFICATIONS_ASSET_DIR;
   config.NOTIFICATIONS_FILE = path.join(tmpDir, 'notifications.json');
+  config.NOTIFICATIONS_ASSET_DIR = path.join(tmpDir, 'notification-assets');
   t.after(() => {
     config.NOTIFICATIONS_FILE = previousFile;
+    config.NOTIFICATIONS_ASSET_DIR = previousAssetDir;
   });
 
   const express = require('express');
@@ -143,5 +188,15 @@ test('notification publishing validates required fields and length limits', asyn
     body: JSON.stringify({ title: 'a'.repeat(101), content: '内容' }),
   });
   assert.equal(tooLong.response.status, 400);
+
+  const externalImage = await requestJson(base, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      title: '外链图片',
+      contentBlocks: [{ id: 'bad', type: 'image', url: 'https://example.com/image.png', alt: 'bad' }],
+    }),
+  });
+  assert.equal(externalImage.response.status, 400);
   assert.equal(fs.existsSync(config.NOTIFICATIONS_FILE), false);
 });
