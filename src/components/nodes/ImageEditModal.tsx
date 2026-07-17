@@ -81,6 +81,7 @@ interface Props {
   initialMode?: EditMode;
   initialDraft?: ImageEditDraft | null;
   onDraftSave?: (draft: ImageEditDraft) => void;
+  enableModifyGeneration?: boolean;
 }
 
 export type EditMode = 'crop' | 'mask' | 'brush' | 'grid' | 'compose';
@@ -97,6 +98,8 @@ const ANNOTATION_MODIFY_IMAGE_SIZE = '4K';
 const ANNOTATION_MODIFY_POLL_INTERVAL_MS = 3000;
 const ANNOTATION_MODIFY_TIMEOUT_MS = 3600 * 1000;
 const MASK_MODIFY_PROMPT_SUFFIX = '新内容需要与周围画面自然融合，保持一致的透视关系、物体比例、光线方向、色温、阴影、反射、景深、清晰度、颗粒和摄影风格。\n蒙版之外的内容保持不变：不要改变构图、背景、人物身份、面部、姿势、服装、其他物体、文字、曝光或颜色。编辑边缘自然过渡，不要出现接缝、晕边、重复纹理或模糊。';
+const IMAGE_EDIT_MODIFY_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'];
+const IMAGE_EDIT_MODIFY_SIZE_LEVELS = ['1K', '2K', '4K'];
 
 const CROP_ASPECT_PRESETS: Array<{ id: CropAspectPreset; label: string }> = [
   { id: 'free', label: '自由' },
@@ -302,6 +305,12 @@ export interface ImageEditDraft {
     canvasW: number;
     canvasH: number;
   };
+  generation?: {
+    providerId: string;
+    providerModel: string;
+    aspectRatio: string;
+    sizeLevel: string;
+  };
 }
 
 function cloneDraftValue<T>(value: T): T {
@@ -458,14 +467,19 @@ const ImageEditModal = ({
   initialMode,
   initialDraft,
   onDraftSave,
+  enableModifyGeneration = false,
 }: Props) => {
   const { theme, style } = useThemeStore();
   const isDark = theme === 'dark';
   const isPixel = style === 'pixel';
   const advancedProviders = useApiKeysStore((state) => state.settings.advancedProviders);
-  const firstImageAdvancedProvider = useMemo(
-    () => advancedProvidersForNode(advancedProviders, 'image')[0] || null,
+  const imageAdvancedProviders = useMemo(
+    () => advancedProvidersForNode(advancedProviders, 'image'),
     [advancedProviders],
+  );
+  const firstImageAdvancedProvider = useMemo(
+    () => imageAdvancedProviders[0] || null,
+    [imageAdvancedProviders],
   );
   const firstImageProviderModel = useMemo(
     () => firstImageAdvancedProvider
@@ -473,6 +487,30 @@ const ImageEditModal = ({
       : '',
     [firstImageAdvancedProvider],
   );
+  const [imageModifyProviderId, setImageModifyProviderId] = useState(initialDraft?.generation?.providerId || '');
+  const selectedImageAdvancedProvider = useMemo(
+    () =>
+      imageAdvancedProviders.find((provider) => provider.id === imageModifyProviderId) ||
+      firstImageAdvancedProvider,
+    [firstImageAdvancedProvider, imageAdvancedProviders, imageModifyProviderId],
+  );
+  const imageModifyModelOptions = useMemo(
+    () => selectedImageAdvancedProvider
+      ? advancedProviderModelOptions(selectedImageAdvancedProvider, 'image')
+      : [],
+    [selectedImageAdvancedProvider],
+  );
+  const [imageModifyProviderModel, setImageModifyProviderModel] = useState(initialDraft?.generation?.providerModel || '');
+  const selectedImageProviderModel = imageModifyModelOptions.includes(imageModifyProviderModel)
+    ? imageModifyProviderModel
+    : imageModifyModelOptions[0] || firstImageProviderModel;
+  const [imageModifyAspectRatio, setImageModifyAspectRatio] = useState(
+    initialDraft?.generation?.aspectRatio || ANNOTATION_MODIFY_ASPECT_RATIO,
+  );
+  const [imageModifySizeLevel, setImageModifySizeLevel] = useState(
+    initialDraft?.generation?.sizeLevel || ANNOTATION_MODIFY_IMAGE_SIZE,
+  );
+  const canModifyGenerate = enableModifyGeneration === true;
 
   const [mode, setMode] = useState<EditMode>(initialMode || initialDraft?.mode || 'brush');
   const [gridMode, setGridMode] = useState<GridSubMode>(initialDraft?.grid?.gridMode || 'preset');
@@ -737,6 +775,12 @@ const ImageEditModal = ({
       selectedIds: cloneDraftValue(selectedIds),
       canvasW,
       canvasH,
+    },
+    generation: {
+      providerId: selectedImageAdvancedProvider?.id || imageModifyProviderId || '',
+      providerModel: selectedImageProviderModel || imageModifyProviderModel || '',
+      aspectRatio: imageModifyAspectRatio,
+      sizeLevel: imageModifySizeLevel,
     },
   });
 
@@ -2035,17 +2079,18 @@ const ImageEditModal = ({
 
   // ---- 应用 brush: 原图 + 涵盖所有画笔 → 上传 → produce 1 张 ----
   async function applyMaskModify() {
+    if (!canModifyGenerate) return;
     if (!naturalSize || maskStrokes.length === 0) return;
     const command = maskModifyInstruction.trim();
     if (!command) {
       setErrMsg('请输入修改命令');
       return;
     }
-    if (!firstImageAdvancedProvider) {
+    if (!selectedImageAdvancedProvider) {
       setErrMsg('未配置可用的图像扩展平台');
       return;
     }
-    if (!firstImageProviderModel) {
+    if (!selectedImageProviderModel) {
       setErrMsg('扩展平台未配置可用图像模型');
       return;
     }
@@ -2061,13 +2106,13 @@ const ImageEditModal = ({
       onModifyRunningChange?.(true, null);
       closeWithDraft();
       let result = await generateExternalImage({
-        providerId: firstImageAdvancedProvider.id,
-        providerModel: firstImageProviderModel,
-        model: firstImageProviderModel,
+        providerId: selectedImageAdvancedProvider.id,
+        providerModel: selectedImageProviderModel,
+        model: selectedImageProviderModel,
         prompt: modifyPrompt,
-        size: externalImageSizeFor(ANNOTATION_MODIFY_ASPECT_RATIO, ANNOTATION_MODIFY_IMAGE_SIZE),
-        aspect_ratio: ANNOTATION_MODIFY_ASPECT_RATIO,
-        image_size: ANNOTATION_MODIFY_IMAGE_SIZE,
+        size: externalImageSizeFor(imageModifyAspectRatio, imageModifySizeLevel),
+        aspect_ratio: imageModifyAspectRatio,
+        image_size: imageModifySizeLevel,
         images: [payload.originDataUrl, payload.maskDataUrl],
         n: 1,
         historyContext,
@@ -2080,8 +2125,8 @@ const ImageEditModal = ({
         for (let i = 0; i < maxPoll; i += 1) {
           await new Promise((resolve) => setTimeout(resolve, ANNOTATION_MODIFY_POLL_INTERVAL_MS));
           result = await queryExternalImageStatus({
-            providerId: firstImageAdvancedProvider.id,
-            providerModel: firstImageProviderModel,
+            providerId: selectedImageAdvancedProvider.id,
+            providerModel: selectedImageProviderModel,
             taskId,
             historyContext,
           });
@@ -2096,8 +2141,8 @@ const ImageEditModal = ({
       await onProduce([urls[0]], {
         type: 'mask-modify',
         prompt: modifyPrompt,
-        providerId: firstImageAdvancedProvider.id,
-        providerModel: firstImageProviderModel,
+        providerId: selectedImageAdvancedProvider.id,
+        providerModel: selectedImageProviderModel,
       });
       onModifyRunningChange?.(false, null);
     } catch (e: any) {
@@ -2194,12 +2239,13 @@ const ImageEditModal = ({
   }
 
   async function applyAnnotationModify() {
+    if (!canModifyGenerate) return;
     if (!naturalSize || brushStrokes.length === 0) return;
-    if (!firstImageAdvancedProvider) {
+    if (!selectedImageAdvancedProvider) {
       setErrMsg('未配置可用的图像扩展平台');
       return;
     }
-    if (!firstImageProviderModel) {
+    if (!selectedImageProviderModel) {
       setErrMsg('扩展平台未配置可用图像模型');
       return;
     }
@@ -2215,13 +2261,13 @@ const ImageEditModal = ({
       onModifyRunningChange?.(true, null);
       closeWithDraft();
       let result = await generateExternalImage({
-        providerId: firstImageAdvancedProvider.id,
-        providerModel: firstImageProviderModel,
-        model: firstImageProviderModel,
+        providerId: selectedImageAdvancedProvider.id,
+        providerModel: selectedImageProviderModel,
+        model: selectedImageProviderModel,
         prompt: modifyPrompt,
-        size: externalImageSizeFor(ANNOTATION_MODIFY_ASPECT_RATIO, ANNOTATION_MODIFY_IMAGE_SIZE),
-        aspect_ratio: ANNOTATION_MODIFY_ASPECT_RATIO,
-        image_size: ANNOTATION_MODIFY_IMAGE_SIZE,
+        size: externalImageSizeFor(imageModifyAspectRatio, imageModifySizeLevel),
+        aspect_ratio: imageModifyAspectRatio,
+        image_size: imageModifySizeLevel,
         images: [payload.annotatedDataUrl, payload.originDataUrl],
         n: 1,
         historyContext,
@@ -2234,8 +2280,8 @@ const ImageEditModal = ({
         for (let i = 0; i < maxPoll; i += 1) {
           await new Promise((resolve) => setTimeout(resolve, ANNOTATION_MODIFY_POLL_INTERVAL_MS));
           result = await queryExternalImageStatus({
-            providerId: firstImageAdvancedProvider.id,
-            providerModel: firstImageProviderModel,
+            providerId: selectedImageAdvancedProvider.id,
+            providerModel: selectedImageProviderModel,
             taskId,
             historyContext,
           });
@@ -2250,8 +2296,8 @@ const ImageEditModal = ({
       await onProduce([urls[0]], {
         type: 'annotation-modify',
         prompt: modifyPrompt,
-        providerId: firstImageAdvancedProvider.id,
-        providerModel: firstImageProviderModel,
+        providerId: selectedImageAdvancedProvider.id,
+        providerModel: selectedImageProviderModel,
       });
       onModifyRunningChange?.(false, null);
     } catch (e: any) {
@@ -2360,6 +2406,80 @@ const ImageEditModal = ({
     fontSize: 12,
     textAlign: 'center',
   };
+  const imageGenerationSelectStyle: React.CSSProperties = {
+    ...inputStyle,
+    width: 'auto',
+    minWidth: 92,
+    maxWidth: 180,
+    textAlign: 'left',
+  };
+
+  const renderImageGenerationControls = () => (
+    <>
+      <div
+        style={{
+          width: 1,
+          height: 18,
+          background: isPixel ? '#1A1410' : 'rgba(127,127,127,.3)',
+          margin: '0 2px',
+        }}
+      />
+      <span style={{ color: subText }}>生图平台</span>
+      <select
+        value={selectedImageAdvancedProvider?.id || ''}
+        disabled={busy || imageAdvancedProviders.length === 0}
+        onChange={(event) => {
+          const provider = imageAdvancedProviders.find((item) => item.id === event.target.value);
+          if (!provider) return;
+          const models = advancedProviderModelOptions(provider, 'image');
+          setImageModifyProviderId(provider.id);
+          setImageModifyProviderModel(models[0] || '');
+        }}
+        style={imageGenerationSelectStyle}
+        title="生图平台"
+      >
+        {imageAdvancedProviders.length > 0
+          ? imageAdvancedProviders.map((provider) => (
+              <option key={provider.id} value={provider.id}>
+                {provider.label || provider.id}
+              </option>
+            ))
+          : <option value="">未配置平台</option>}
+      </select>
+      <span style={{ color: subText }}>模型</span>
+      <select
+        value={selectedImageProviderModel || ''}
+        disabled={busy || imageModifyModelOptions.length === 0}
+        onChange={(event) => setImageModifyProviderModel(event.target.value)}
+        style={{ ...imageGenerationSelectStyle, minWidth: 140, maxWidth: 240 }}
+        title="生图模型"
+      >
+        {imageModifyModelOptions.length > 0
+          ? imageModifyModelOptions.map((item) => <option key={item} value={item}>{item}</option>)
+          : <option value="">未配置图像模型</option>}
+      </select>
+      <span style={{ color: subText }}>比例</span>
+      <select
+        value={imageModifyAspectRatio}
+        disabled={busy}
+        onChange={(event) => setImageModifyAspectRatio(event.target.value)}
+        style={imageGenerationSelectStyle}
+        title="画面比例"
+      >
+        {IMAGE_EDIT_MODIFY_ASPECT_RATIOS.map((item) => <option key={item} value={item}>{item}</option>)}
+      </select>
+      <span style={{ color: subText }}>尺寸</span>
+      <select
+        value={imageModifySizeLevel}
+        disabled={busy}
+        onChange={(event) => setImageModifySizeLevel(event.target.value)}
+        style={imageGenerationSelectStyle}
+        title="分辨率"
+      >
+        {IMAGE_EDIT_MODIFY_SIZE_LEVELS.map((item) => <option key={item} value={item}>{item}</option>)}
+      </select>
+    </>
+  );
 
   function renderBrushToolIcon(icon: (typeof IMAGE_EDIT_BRUSH_TOOLS)[number]['icon']) {
     if (icon === 'brush') return <Paintbrush size={13} />;
@@ -2735,6 +2855,7 @@ const ImageEditModal = ({
               <button style={btnBase} onClick={clearCurrent} title="清空遮罩">
                 <Eraser size={13} /> 清空
               </button>
+              {canModifyGenerate && renderImageGenerationControls()}
               <div style={{ flex: 1 }} />
               <span style={{ color: subText }}>产物：原图 + 黑底白笔 mask</span>
             </>
@@ -2816,6 +2937,7 @@ const ImageEditModal = ({
               <button style={btnBase} onClick={clearCurrent} title="清空画板">
                 <Eraser size={13} /> 清空
               </button>
+              {canModifyGenerate && renderImageGenerationControls()}
               <div style={{ flex: 1 }} />
               <span style={{ color: subText }}>输出：干净原图 + 标注参考图</span>
             </>
@@ -3623,42 +3745,46 @@ const ImageEditModal = ({
             </button>
           ) : mode === 'mask' ? (
             <>
-              <input
-                className="nodrag"
-                style={{
-                  ...inputStyle,
-                  minWidth: 260,
-                  maxWidth: 420,
-                  flex: '1 1 260px',
-                  width: 'auto',
-                }}
-                value={maskModifyInstruction}
-                onChange={(event) => setMaskModifyInstruction(event.target.value)}
-                placeholder="输入蒙版白色部分的修改命令"
-                title="遮罩修改命令"
-              />
-              <button
-                style={btnPrimary}
-                onClick={applyMaskModify}
-                disabled={busy || !naturalSize || maskStrokes.length === 0 || !maskModifyInstruction.trim()}
-                title={
-                  maskStrokes.length === 0
-                    ? '请先绘制遮罩区域'
-                    : !maskModifyInstruction.trim()
-                    ? '请输入修改命令'
-                    : '静默调用第一个扩展平台模型生成修改结果'
-                }
-              >
-                {busy && busyAction === 'mask-modify' ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" /> 生成中...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles size={14} /> 修改
-                  </>
-                )}
-              </button>
+              {canModifyGenerate && (
+                <>
+                  <input
+                    className="nodrag"
+                    style={{
+                      ...inputStyle,
+                      minWidth: 260,
+                      maxWidth: 420,
+                      flex: '1 1 260px',
+                      width: 'auto',
+                    }}
+                    value={maskModifyInstruction}
+                    onChange={(event) => setMaskModifyInstruction(event.target.value)}
+                    placeholder="输入蒙版白色部分的修改命令"
+                    title="遮罩修改命令"
+                  />
+                  <button
+                    style={btnPrimary}
+                    onClick={applyMaskModify}
+                    disabled={busy || !naturalSize || maskStrokes.length === 0 || !maskModifyInstruction.trim()}
+                    title={
+                      maskStrokes.length === 0
+                        ? '请先绘制遮罩区域'
+                        : !maskModifyInstruction.trim()
+                        ? '请输入修改命令'
+                        : '静默调用扩展平台模型生成修改结果'
+                    }
+                  >
+                    {busy && busyAction === 'mask-modify' ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" /> 生成中...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={14} /> 修改
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
               <button
                 style={btnPrimary}
                 onClick={applyMask}
@@ -3732,22 +3858,24 @@ const ImageEditModal = ({
                   </>
                 )}
               </button>
-              <button
-                style={btnPrimary}
-                onClick={applyAnnotationModify}
-                disabled={busy || !naturalSize || brushStrokes.length === 0}
-                title={brushStrokes.length === 0 ? '请先用箭头、框选、标号或文字标出编辑目标' : '静默调用第一个扩展平台模型生成修改结果'}
-              >
-                {busy && busyAction === 'annotation-modify' ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" /> 生成中...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles size={14} /> 修改
-                  </>
-                )}
-              </button>
+              {canModifyGenerate && (
+                <button
+                  style={btnPrimary}
+                  onClick={applyAnnotationModify}
+                  disabled={busy || !naturalSize || brushStrokes.length === 0}
+                  title={brushStrokes.length === 0 ? '请先用箭头、框选、标号或文字标出编辑目标' : '静默调用扩展平台模型生成修改结果'}
+                >
+                  {busy && busyAction === 'annotation-modify' ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" /> 生成中...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={14} /> 修改
+                    </>
+                  )}
+                </button>
+              )}
             </>
           ) : mode === 'compose' ? (
             <button

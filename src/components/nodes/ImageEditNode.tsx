@@ -1,6 +1,6 @@
 import { memo, useMemo, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { AlertCircle, Brush, Crop, Edit3, Grid3x3, Image as ImageIcon, Layers, Loader2, Paintbrush, type LucideIcon } from 'lucide-react';
+import { AlertCircle, Brush, Edit3, Image as ImageIcon, Loader2, Paintbrush, type LucideIcon } from 'lucide-react';
 import { PORT_COLOR } from '../../config/portTypes';
 import { useCanvasRuntime } from './canvasRuntimeContext';
 import ImageEditModal, {
@@ -14,11 +14,8 @@ import { useUpstreamMaterials } from './useUpstreamMaterials';
 type ImageEditDraftMap = Record<string, ImageEditDraft>;
 
 const MODE_BUTTONS: Array<{ mode: EditMode; label: string; icon: LucideIcon }> = [
-  { mode: 'crop', label: '裁剪', icon: Crop },
   { mode: 'mask', label: '遮罩', icon: Brush },
   { mode: 'brush', label: '画板', icon: Paintbrush },
-  { mode: 'grid', label: '宫格切分', icon: Grid3x3 },
-  { mode: 'compose', label: '组合', icon: Layers },
 ];
 
 function hashSourceUrl(url: string) {
@@ -209,6 +206,7 @@ const ImageEditNode = ({ id, data, selected }: NodeProps) => {
           srcUrl={sourceImage}
           initialMode={editingMode}
           initialDraft={activeDraft}
+          enableModifyGeneration
           onDraftSave={saveDraft}
           onClose={() => setEditingMode(null)}
           onProduce={handleProduce}
