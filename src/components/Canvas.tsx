@@ -2121,10 +2121,9 @@ nodeTypes.bulkPhantom = BulkPhantomNode;
 const BULK_PHANTOM_ID = '__bulk_phantom__';
 const USER_CANVAS_VIEWPORT_STORAGE_PREFIX = 't8:canvas-viewport:v1';
 const MIN_REMEMBERED_VIEWPORT_ZOOM = 0.02;
-const MAX_REMEMBERED_VIEWPORT_ZOOM = 4;
 
 function clampRememberedViewportZoom(zoom: number) {
-  return Math.max(MIN_REMEMBERED_VIEWPORT_ZOOM, Math.min(MAX_REMEMBERED_VIEWPORT_ZOOM, zoom));
+  return Math.max(MIN_REMEMBERED_VIEWPORT_ZOOM, zoom);
 }
 
 function normalizeRememberedViewport(value: unknown): Viewport | null {
@@ -6346,6 +6345,7 @@ function CanvasInner({
         elevateNodesOnSelect={false}
         fitView
         minZoom={0}
+        maxZoom={Infinity}
         proOptions={memoProOptions}
         defaultEdgeOptions={memoDefaultEdgeOptions}
       >

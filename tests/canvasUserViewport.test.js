@@ -15,6 +15,8 @@ test('Canvas remembers viewport per current user and canvas in local storage', (
   assert.match(canvas, /function readUserCanvasViewport/);
   assert.match(canvas, /function writeUserCanvasViewport/);
   assert.match(canvas, /onMoveEnd=\{handleMoveEnd\}/);
+  assert.match(canvas, /maxZoom=\{Infinity\}/);
+  assert.doesNotMatch(canvas, /MAX_REMEMBERED_VIEWPORT_ZOOM/);
   assert.match(canvas, /writeUserCanvasViewport\(currentUserId,\s*activeId,\s*viewport\)/);
   assert.match(canvas, /readUserCanvasViewport\(currentUserId,\s*requestedCanvasId\)\s*\|\|\s*normalizeRememberedViewport\(data\.viewport\)/);
   assert.match(canvas, /pendingSendFocusRef\.current\?\.canvasId === requestedCanvasId[\s\S]*\?\s*null/);
