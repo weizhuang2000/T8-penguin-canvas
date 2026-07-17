@@ -2147,34 +2147,6 @@ const ImageEditModal = ({
     return { originDataUrl, maskDataUrl, strokeCount: maskStrokes.length };
   }
 
-  async function applyMask() {
-    if (!naturalSize || maskStrokes.length === 0) return;
-    setBusy(true);
-    setErrMsg(null);
-    try {
-      // 离屏 canvas A: mask (黑底白笔)
-      const cv = document.createElement('canvas');
-      cv.width = naturalSize.w;
-      cv.height = naturalSize.h;
-      const ctx = cv.getContext('2d');
-      if (!ctx) throw new Error('canvas 不可用');
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, cv.width, cv.height);
-      for (const s of maskStrokes) drawStrokeOnCtx(ctx, s, cv.width, cv.height);
-      const maskDataUrl = cv.toDataURL('image/png');
-
-      // 原图转存（同步上传一份与 mask 同源）
-      const originUrl = await fetchAndUpload(srcUrl, 'mask-src');
-      const maskUrl = await uploadDataUrl(maskDataUrl, 'mask');
-      onProduce([originUrl, maskUrl], { type: 'mask', strokeCount: maskStrokes.length });
-      closeWithDraft();
-    } catch (e: any) {
-      setErrMsg(e?.message || '应用遮罩失败');
-    } finally {
-      setBusy(false);
-    }
-  }
-
   // ---- 应用 brush: 原图 + 涵盖所有画笔 → 上传 → produce 1 张 ----
   async function applyMaskModify() {
     if (!canModifyGenerate) return;
@@ -2385,18 +2357,6 @@ const ImageEditModal = ({
     }
   }
 
-  // 将任意 url 原图转存为本地 dataUrl 后上传，保障同源 + 外链不被黑名单
-  async function fetchAndUpload(srcUrl: string, prefix: string): Promise<string> {
-    const img = await loadImage(srcUrl);
-    const cv = document.createElement('canvas');
-    cv.width = img.naturalWidth;
-    cv.height = img.naturalHeight;
-    const ctx = cv.getContext('2d');
-    if (!ctx) throw new Error('canvas 不可用');
-    ctx.drawImage(img, 0, 0);
-    const dataUrl = cv.toDataURL('image/png');
-    return uploadDataUrl(dataUrl, prefix);
-  }
   function loadImage(src: string): Promise<HTMLImageElement> {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -2940,7 +2900,6 @@ const ImageEditModal = ({
               </button>
               {canModifyGenerate && renderImageGenerationControls()}
               <div style={{ flex: 1 }} />
-              <span style={{ color: subText }}>产物：原图 + 黑底白笔 mask</span>
             </>
           )}
           {mode === 'brush' && (
@@ -3881,22 +3840,6 @@ const ImageEditModal = ({
                   </button>
                 </>
               )}
-              <button
-                style={btnPrimary}
-                onClick={applyMask}
-                disabled={busy || !naturalSize || maskStrokes.length === 0}
-                title={maskStrokes.length === 0 ? '请先绘制遮罩区域' : ''}
-              >
-                {busy ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" /> 处理中…
-                  </>
-                ) : (
-                  <>
-                    <Check size={14} /> 应用遮罩
-                  </>
-                )}
-              </button>
             </>
           ) : mode === 'brush' ? (
             <>
