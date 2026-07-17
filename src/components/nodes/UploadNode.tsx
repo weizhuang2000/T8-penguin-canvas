@@ -479,7 +479,7 @@ const UploadNode = ({ id, data, selected, type }: NodeProps) => {
         .toString(36)
         .slice(2, 6)}`;
       const isAnnotationEdit = _meta?.type === 'annotation-edit';
-      const isAnnotationModify = _meta?.type === 'annotation-modify';
+      const isAnnotationModify = _meta?.type === 'annotation-modify' || _meta?.type === 'mask-modify';
       const annotationLabel = isAnnotationEdit
         ? i === 0
           ? 'Annotation source'

@@ -68,6 +68,7 @@ export type ImageEditProduceMeta =
   | { type: 'brush'; strokeCount: number }
   | { type: 'annotation-edit'; instruction: string; strokeCount: number; annotationTextCount: number; annotationShapeCount: number }
   | { type: 'annotation-modify'; prompt: string; providerId: string; providerModel: string }
+  | { type: 'mask-modify'; prompt: string; providerId: string; providerModel: string }
   | { type: 'compose'; layerCount: number; canvasW: number; canvasH: number };
 
 interface Props {
@@ -92,6 +93,7 @@ const ANNOTATION_MODIFY_ASPECT_RATIO = '1:1';
 const ANNOTATION_MODIFY_IMAGE_SIZE = '4K';
 const ANNOTATION_MODIFY_POLL_INTERVAL_MS = 3000;
 const ANNOTATION_MODIFY_TIMEOUT_MS = 3600 * 1000;
+const MASK_MODIFY_PROMPT_SUFFIX = '新内容需要与周围画面自然融合，保持一致的透视关系、物体比例、光线方向、色温、阴影、反射、景深、清晰度、颗粒和摄影风格。\n蒙版之外的内容保持不变：不要改变构图、背景、人物身份、面部、姿势、服装、其他物体、文字、曝光或颜色。编辑边缘自然过渡，不要出现接缝、晕边、重复纹理或模糊。';
 
 const CROP_ASPECT_PRESETS: Array<{ id: CropAspectPreset; label: string }> = [
   { id: 'free', label: '自由' },
@@ -159,6 +161,50 @@ function buildAnnotationModifyMentionPrompt(annotatedDataUrl: string, originData
     }
   });
   return resolveMediaMentions(ANNOTATION_MODIFY_PROMPT, mentions, mentionMaterials);
+}
+
+function buildMaskModifyMentionPrompt(originDataUrl: string, maskDataUrl: string, command: string) {
+  const prompt = `基于 @image1进行局部编辑，输出编辑后的完整照片，将蒙版白色部分的${command}。 @image2做为蒙版使用。\n${MASK_MODIFY_PROMPT_SUFFIX}`;
+  const mentionMaterials: Material[] = [
+    {
+      id: 'mask-modify-source',
+      kind: 'image',
+      url: originDataUrl,
+      sourceNodeId: 'mask-modify',
+      origin: 'local',
+      label: '干净原图',
+    },
+    {
+      id: 'mask-modify-mask',
+      kind: 'image',
+      url: maskDataUrl,
+      sourceNodeId: 'mask-modify',
+      origin: 'local',
+      label: '蒙版图',
+    },
+  ];
+  const mentions: MediaMention[] = [];
+  const tokens = ['@image1', '@image2'];
+  mentionMaterials.forEach((material, index) => {
+    const token = tokens[index];
+    let start = prompt.indexOf(token);
+    let occurrence = 0;
+    while (start >= 0) {
+      occurrence += 1;
+      mentions.push({
+        id: `${material.id}:mention:${occurrence}`,
+        kind: 'image',
+        materialKey: materialMentionKey(material),
+        url: material.url,
+        label: material.label,
+        token,
+        start,
+        end: start + token.length,
+      });
+      start = prompt.indexOf(token, start + token.length);
+    }
+  });
+  return resolveMediaMentions(prompt, mentions, mentionMaterials);
 }
 
 // ---- compose v2 图层类型 ----
@@ -384,7 +430,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
   const [history, setHistory] = useState<Line[][]>([]);
   const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [busyAction, setBusyAction] = useState<'annotation-modify' | null>(null);
+  const [busyAction, setBusyAction] = useState<'annotation-modify' | 'mask-modify' | null>(null);
   const [errMsg, setErrMsg] = useState<string | null>(null);
 
   // ---- mask / brush ----
@@ -396,6 +442,7 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
   const [brushRedo, setBrushRedo] = useState<DrawStroke[][]>([]);
   const [maskBrushSize, setMaskBrushSize] = useState(42); // 0..1 不使用 —— 存 px @ natural
   const [maskErasing, setMaskErasing] = useState(false);
+  const [maskModifyInstruction, setMaskModifyInstruction] = useState('');
   const [brushTool, setBrushTool] = useState<BrushTool>('free');
   const [brushColor, setBrushColor] = useState('#ff2d55');
   const [brushSize, setBrushSize] = useState(14);
@@ -1826,6 +1873,31 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
   const onDrawPointerLeave = () => setCursor(null);
 
   // ---- 应用 mask: 黑底白笔 → 上传 → produce 2 张 (原图 + mask) ----
+  async function buildMaskEditImages() {
+    if (!naturalSize || maskStrokes.length === 0) return;
+    const img = await loadImage(srcUrl);
+
+    const originCv = document.createElement('canvas');
+    originCv.width = naturalSize.w;
+    originCv.height = naturalSize.h;
+    const originCtx = originCv.getContext('2d');
+    if (!originCtx) throw new Error('canvas unavailable');
+    originCtx.drawImage(img, 0, 0, originCv.width, originCv.height);
+    const originDataUrl = originCv.toDataURL('image/png');
+
+    const maskCv = document.createElement('canvas');
+    maskCv.width = naturalSize.w;
+    maskCv.height = naturalSize.h;
+    const maskCtx = maskCv.getContext('2d');
+    if (!maskCtx) throw new Error('canvas unavailable');
+    maskCtx.fillStyle = '#000';
+    maskCtx.fillRect(0, 0, maskCv.width, maskCv.height);
+    for (const s of maskStrokes) drawStrokeOnCtx(maskCtx, s, maskCv.width, maskCv.height);
+    const maskDataUrl = maskCv.toDataURL('image/png');
+
+    return { originDataUrl, maskDataUrl, strokeCount: maskStrokes.length };
+  }
+
   async function applyMask() {
     if (!naturalSize || maskStrokes.length === 0) return;
     setBusy(true);
@@ -1855,6 +1927,84 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
   }
 
   // ---- 应用 brush: 原图 + 涵盖所有画笔 → 上传 → produce 1 张 ----
+  async function applyMaskModify() {
+    if (!naturalSize || maskStrokes.length === 0) return;
+    const command = maskModifyInstruction.trim();
+    if (!command) {
+      setErrMsg('请输入修改命令');
+      return;
+    }
+    if (!firstImageAdvancedProvider) {
+      setErrMsg('未配置可用的图像扩展平台');
+      return;
+    }
+    if (!firstImageProviderModel) {
+      setErrMsg('扩展平台未配置可用图像模型');
+      return;
+    }
+    setBusy(true);
+    setBusyAction('mask-modify');
+    setErrMsg(null);
+    let handedOff = false;
+    try {
+      const payload = await buildMaskEditImages();
+      if (!payload) return;
+      const modifyPrompt = buildMaskModifyMentionPrompt(payload.originDataUrl, payload.maskDataUrl, command);
+      handedOff = true;
+      onModifyRunningChange?.(true, null);
+      onClose();
+      let result = await generateExternalImage({
+        providerId: firstImageAdvancedProvider.id,
+        providerModel: firstImageProviderModel,
+        model: firstImageProviderModel,
+        prompt: modifyPrompt,
+        size: externalImageSizeFor(ANNOTATION_MODIFY_ASPECT_RATIO, ANNOTATION_MODIFY_IMAGE_SIZE),
+        aspect_ratio: ANNOTATION_MODIFY_ASPECT_RATIO,
+        image_size: ANNOTATION_MODIFY_IMAGE_SIZE,
+        images: [payload.originDataUrl, payload.maskDataUrl],
+        n: 1,
+        historyContext,
+        async: true,
+      });
+      const maxPoll = Math.ceil(ANNOTATION_MODIFY_TIMEOUT_MS / ANNOTATION_MODIFY_POLL_INTERVAL_MS);
+      const runningStatuses = new Set(['running', 'pending', 'submitted', 'in_progress', 'processing', 'queued']);
+      if ((!result.imageUrls?.length) && result.taskId && runningStatuses.has(String(result.code || result.status || '').toLowerCase())) {
+        let taskId = result.taskId;
+        for (let i = 0; i < maxPoll; i += 1) {
+          await new Promise((resolve) => setTimeout(resolve, ANNOTATION_MODIFY_POLL_INTERVAL_MS));
+          result = await queryExternalImageStatus({
+            providerId: firstImageAdvancedProvider.id,
+            providerModel: firstImageProviderModel,
+            taskId,
+            historyContext,
+          });
+          taskId = result.taskId || taskId;
+          if (result.imageUrls?.length) break;
+          const status = String(result.code || result.status || '').toLowerCase();
+          if (status && !runningStatuses.has(status)) break;
+        }
+      }
+      const urls = (result.imageUrls || []).filter(Boolean);
+      if (!urls.length) throw new Error(result.error || '扩展平台完成但未返回图片');
+      await onProduce([urls[0]], {
+        type: 'mask-modify',
+        prompt: modifyPrompt,
+        providerId: firstImageAdvancedProvider.id,
+        providerModel: firstImageProviderModel,
+      });
+      onModifyRunningChange?.(false, null);
+    } catch (e: any) {
+      const message = e?.message || '修改失败';
+      if (handedOff) onModifyRunningChange?.(false, message);
+      else setErrMsg(message);
+    } finally {
+      if (!handedOff) {
+        setBusyAction(null);
+        setBusy(false);
+      }
+    }
+  }
+
   async function applyBrush() {
     if (!naturalSize || brushStrokes.length === 0) return;
     setBusy(true);
@@ -3365,22 +3515,60 @@ const ImageEditModal = ({ srcUrl, onClose, onProduce, onModifyRunningChange, his
               )}
             </button>
           ) : mode === 'mask' ? (
-            <button
-              style={btnPrimary}
-              onClick={applyMask}
-              disabled={busy || !naturalSize || maskStrokes.length === 0}
-              title={maskStrokes.length === 0 ? '请先绘制遮罩区域' : ''}
-            >
-              {busy ? (
-                <>
-                  <Loader2 size={14} className="animate-spin" /> 处理中…
-                </>
-              ) : (
-                <>
-                  <Check size={14} /> 应用遮罩
-                </>
-              )}
-            </button>
+            <>
+              <input
+                className="nodrag"
+                style={{
+                  ...inputStyle,
+                  minWidth: 260,
+                  maxWidth: 420,
+                  flex: '1 1 260px',
+                  width: 'auto',
+                }}
+                value={maskModifyInstruction}
+                onChange={(event) => setMaskModifyInstruction(event.target.value)}
+                placeholder="输入蒙版白色部分的修改命令"
+                title="遮罩修改命令"
+              />
+              <button
+                style={btnPrimary}
+                onClick={applyMaskModify}
+                disabled={busy || !naturalSize || maskStrokes.length === 0 || !maskModifyInstruction.trim()}
+                title={
+                  maskStrokes.length === 0
+                    ? '请先绘制遮罩区域'
+                    : !maskModifyInstruction.trim()
+                    ? '请输入修改命令'
+                    : '静默调用第一个扩展平台模型生成修改结果'
+                }
+              >
+                {busy && busyAction === 'mask-modify' ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" /> 生成中...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={14} /> 修改
+                  </>
+                )}
+              </button>
+              <button
+                style={btnPrimary}
+                onClick={applyMask}
+                disabled={busy || !naturalSize || maskStrokes.length === 0}
+                title={maskStrokes.length === 0 ? '请先绘制遮罩区域' : ''}
+              >
+                {busy ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" /> 处理中…
+                  </>
+                ) : (
+                  <>
+                    <Check size={14} /> 应用遮罩
+                  </>
+                )}
+              </button>
+            </>
           ) : mode === 'brush' ? (
             <>
               <input
