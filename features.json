@@ -858,7 +858,7 @@
     "date": "2026-06-12",
     "nodeType": "codex-cli-agent",
     "category": "codex",
-    "description": "新增 Codex CLI 创作者 Agent 节点：把本机 Codex CLI 接入画布，面向创作者提供流式对话、提示词增强、图像/视频/音频/3D 产物规划、Skill 调用、项目 Skill 创建、版本树和产物入库。",
+    "description": "Codex CLI 创作者 Agent 节点使用 LLM 独立配置中的平台、模型、Base URL 和 API Key 驱动本机 Codex CLI，无需 Codex 登录，并提供流式对话、Skill 调用、项目 Skill、版本树和产物入库。",
     "ports": {
       "inputs": [
         "text",
@@ -877,9 +877,10 @@
     "capabilities": [
       "简约生成模式保留一个 Prompt 输入、创作预设、Skill 选择和一键运行，适合快速生成提示词、脚本或素材方案。",
       "Codex 创作台模式提供流式消息、运行事件、产物库、版本树、质量检查和项目 Skill 抽屉，适合连续创作与多轮修改。",
+      "Agent 平台从 LLM 独立配置中选择，模型严格跟随所选配置；后端以 Responses Provider 和子进程环境变量注入 API Key，不把密钥写入画布、命令行、日志或 SSE。",
       "后端 /api/codex-cli 封装 Codex CLI status、skills、skills/project 和 agent/stream 路由，使用 SSE 返回 turn.started、message.delta、tool.progress、artifact.completed 等事件。",
       "运行前读取 codex features list，只有当前 CLI 明确支持的 feature 才发送 --enable，避免 plan_tool / web_search 等未知开关导致任务失败。",
-      "状态刷新成功会清理旧的 404/登录/旧 feature 错误；节点标题区提供明确拖动面，输入和按钮继续保留 nodrag。",
+      "Agent 状态使用 runtimeOnly 探测 CLI 安装、版本和 Feature，不执行 codex login status；节点标题区提供明确拖动面，输入和按钮继续保留 nodrag。",
       "Electron 后置检查锁住 routes/codexCli.t8c 与 utils/codexCliRunner.t8c，避免桌面包漏路由后出现 /api/codex-cli 404。",
       "Skill 扫描覆盖 CODEX_HOME 全局 Skills、用户 .agents/skills、项目 .agents/skills 和节点工作区项目 Skills；节点内可创建当前项目专用 Skill。",
       "产物解析覆盖文本、图片、视频、音频和 3D 模型 URL；发布后写回节点标准输出字段，也可保存到资源库。"
