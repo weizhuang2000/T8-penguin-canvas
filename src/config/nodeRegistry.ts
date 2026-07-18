@@ -22,6 +22,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
   // ========== Core 核心节点(6) ==========
   { type: 'text', label: '文本', category: 'core', description: '提示词文本节点', icon: 'Type', color: 'sky' },
   { type: 'image', label: '图像', category: 'core', description: 'GPT Image 2 / Nano Banana Pro / Nano Banana 2 (多 TAB 模型切换)', icon: 'Image', color: 'amber' },
+  { type: 'fhl-image-gen', label: 'FHL 生图', category: 'core', description: 'FHL Images API 原生生图与批改：多 worker、连续生成、批量队列和工作流修复', icon: 'Images', color: 'cyan' },
   { type: 'gitee-music', label: 'ACE-Step 音乐', category: 'core', description: '通过 Gitee AI Serverless API 调用 ACE-Step-v1-3.5B 生成 30–240 秒音乐', icon: 'Music2', color: 'violet' },
   { type: 'video', label: '视频', category: 'core', description: 'Veo / Grok Video', icon: 'Video', color: 'rose' },
   { type: 'seedance', label: 'SD2.0', category: 'core', description: 'Seedance 2.0 视频分镜', icon: 'Film', color: 'fuchsia' },
@@ -48,7 +49,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: 'grok-oauth-agent', label: 'Grok OAuth Agent', category: 'grok', description: '独立 Grok / xAI OAuth Agent 工作台：流式聊天、图像、视频、TTS、STT，多模态输入并输出四类素材', icon: 'Bot', color: 'emerald' },
 
   // ========== Codex Agent ==========
-  { type: 'codex-cli-agent', label: 'Codex Agent', category: 'codex', description: 'LLM Agent 与 IMG 图片 Provider 双平台创作：多轮对话、提示词优化、直接生图、Skill 规范和产物库', icon: 'TerminalSquare', color: 'sky' },
+  { type: 'codex-cli-agent', label: 'Codex Agent', category: 'codex', description: '直连 LLM 独立配置的创作者 Agent：多轮对话、图像生成提示词、Skill 规范、产物库和版本树', icon: 'TerminalSquare', color: 'sky' },
   { type: 'codex-image-conjure', label: 'Codex 生图工作台', category: 'codex', description: '基于 Codex CLI imagegen 的专用生图工作台：提示词模板、片段、参考图和公共图库', icon: 'ImagePlus', color: 'sky' },
 
   // ========== Inspiration 灵感之源 ==========

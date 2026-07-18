@@ -102,6 +102,7 @@ import type { ExhibitionCompactFormConfig } from '../config/exhibitionCompactFor
 import PlaceholderNode from './nodes/PlaceholderNode';
 import TextNode from './nodes/TextNode';
 import ImageNode from './nodes/ImageNode';
+import FhlImageGenNode from './nodes/FhlImageGenNode';
 import LLMNode from './nodes/LLMNode';
 import RemotionAnimationNode from './nodes/RemotionAnimationNode';
 import VideoNode from './nodes/VideoNode';
@@ -190,6 +191,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   // Core (8)
   text: TextNode,
   image: ImageNode,
+  'fhl-image-gen': FhlImageGenNode,
   video: VideoNode,
   'runninghub-video': VideoNode,
   seedance: SeedanceNode, // 完全对齐 gpt-image-2-web Seedance2.0(独立 /seedance/v3 路径)
@@ -608,6 +610,19 @@ function ExhibitionCompactFormController({
 // 节点初始 data(用于区分共享组件的 kind/preset/model 等)
 const INITIAL_DATA: Record<string, Record<string, any>> = {
   image: { model: 'gpt-image-2', aspectRatio: '1:1', sizeLevel: '1K', referenceImages: [], outputFormat: 'jpg' },
+  'fhl-image-gen': {
+    fhlPanel: 'quick',
+    fhlQuality: '2K',
+    fhlAspect: '1:1',
+    fhlQuickKind: 'count',
+    fhlCount: 1,
+    fhlRepeat: 10,
+    fhlConcurrency: 1,
+    fhlRepairPasses: 2,
+    fhlAdaptive: true,
+    fhlFixedImages: [],
+    fhlItemImages: [],
+  },
   edit: { mode: 'edit', model: 'gpt-image-2', aspectRatio: '1:1', sizeLevel: '1K', referenceImages: [] },
   'image-edit': { imageEditDrafts: {}, status: 'idle', denoiseThresholdPx: 4 },
   'codex-image-conjure': {
@@ -1739,7 +1754,7 @@ function filterExclusiveTargetEdges(
 // 可被“批量运行”调起的节点类型集合
 // upload 亦被纳入: 点击 RUN 后会根据已上传素材创建下游 OutputNode (見 UploadNode.handleRun)
 const EXECUTABLE_NODE_TYPES = new Set<string>([
-  'image', 'edit',
+  'image', 'edit', 'fhl-image-gen',
   'multi-angle-3d', 'panorama-720', 'penguin-portrait',
   'video', 'runninghub-video', 'seedance', 'audio', 'llm', 'remotion-animation', 'runninghub', 'runninghub-wallet',
   // v1.2.10.1: rh-tools 与 RunningHub 同质，同样可被批量运行调起

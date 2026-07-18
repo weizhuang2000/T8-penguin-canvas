@@ -30,6 +30,7 @@ test('task completion sound stays silent when disabled', () => {
 
 test('task completion sound is only eligible for core generation nodes', () => {
   assert.equal(isCompletionSoundEligibleNodeType('image'), true);
+  assert.equal(isCompletionSoundEligibleNodeType('fhl-image-gen'), true);
   assert.equal(isCompletionSoundEligibleNodeType('video'), true);
   assert.equal(isCompletionSoundEligibleNodeType('seedance'), true);
   assert.equal(isCompletionSoundEligibleNodeType('audio'), true);

@@ -8,6 +8,7 @@ export type NodeType =
   // Core (8)
   | 'text'
   | 'image'
+  | 'fhl-image-gen'
   | 'gitee-music'
   | 'video'
   | 'runninghub-video'
@@ -316,17 +317,102 @@ export interface CanvasNodeData {
   providerId?: string;
   providerModel?: string;
   llmKeyId?: string;
-  codexImageProviderKind?: 'builtin' | 'external';
-  codexImageProviderSource?: CanvasProviderSource;
-  codexImageProviderId?: string;
-  codexImageProviderModel?: string;
-  codexImageModel?: string;
-  codexImageApiModel?: string;
   providerParams?: Record<string, any>;
   status?: 'idle' | 'generating' | 'success' | 'error';
   error?: string;
   // 通用扩展字段
   [key: string]: any;
+}
+
+export interface FhlWorkerSummary {
+  index: number;
+  id: string;
+  name: string;
+  enabled: boolean;
+  hasApiKey: boolean;
+  keyPreview: string;
+  createdAt?: string;
+}
+
+export interface FhlConfigSummary {
+  apiRoot: string;
+  model: 'gpt-image-2';
+  apiMode: 'images';
+  workerLimit: number;
+  workerCount: number;
+  enabledWorkerCount: number;
+  workers: FhlWorkerSummary[];
+  defaults: { quality: '2K'; aspect: string; concurrency: number; repairPasses: number };
+  ratioSupport: Record<'generate' | 'edit', Record<'2K' | '4K', string[]>>;
+  importedCount?: number;
+}
+
+export type FhlJobMode = 'generate' | 'edit' | 'batch-generate' | 'batch-edit' | 'workflow-batch-edit';
+
+export interface FhlJobRequest {
+  mode: FhlJobMode;
+  prompt?: string;
+  prompts?: string[];
+  fixedImages?: string[];
+  itemImages?: string[];
+  templates?: Array<{ key?: string; label?: string; prompt: string }>;
+  preset?: '' | 'nail-tryon';
+  quality?: '2K' | '4K';
+  aspect?: string;
+  count?: number;
+  repeat?: number;
+  concurrency?: number;
+  repairPasses?: number;
+  limit?: number;
+  adaptive?: boolean;
+  resize?: boolean;
+  dryRun?: boolean;
+  historyContext?: GenerationHistoryContextLike;
+}
+
+export interface GenerationHistoryContextLike {
+  canvasId?: string | null;
+  sourceNodeId?: string;
+  sourceNodeType?: string;
+  nodeTitle?: string;
+  prompt?: string;
+}
+
+export interface FhlTaskResult {
+  id: string;
+  status: 'queued' | 'running' | 'success' | 'failed' | 'cancelled';
+  itemIndex: number;
+  templateIndex: number;
+  templateKey: string;
+  templateLabel: string;
+  outputUrl: string;
+  workerId: string;
+  workerName: string;
+  attempts: number;
+  retries: number;
+  width: number;
+  height: number;
+  error: string;
+  errorClass: string;
+}
+
+export interface FhlJobSnapshot {
+  id: string;
+  mode: FhlJobMode;
+  status: 'queued' | 'running' | 'completed' | 'partial' | 'failed' | 'cancelled' | 'interrupted';
+  createdAt: string;
+  updatedAt: string;
+  error: string;
+  total: number;
+  success: number;
+  failed: number;
+  cancelled: number;
+  progress: number;
+  tasks: FhlTaskResult[];
+  outputUrls: string[];
+  workerStats: Array<Record<string, any>>;
+  artifactUrls: Record<string, string>;
+  dryRun?: boolean;
 }
 
 // 画布列表项(后端返回)
@@ -514,6 +600,7 @@ export interface ApiSettings {
   // 本地 Eagle API 地址(默认 http://127.0.0.1:41595)
   eagleApiBase?: string;
   advancedProviders?: AdvancedProviderConfig[];
+  fhlWorkers?: FhlWorkerSummary[];
   advancedProviderSummary?: AdvancedProviderSummary;
   cloudUploadTargets?: CloudUploadTargetConfig[];
   cloudUploadSummary?: CloudUploadSummary;

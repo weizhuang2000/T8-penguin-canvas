@@ -33,7 +33,7 @@ import { placeBatchNodes, rectOf, type Rect as PlacementRect } from '../../utils
 // 循环器自身可被批量运行调起（在外面 EXECUTABLE_NODE_TYPES 集合里注册），
 // 但循环器执行时调度的下游子图不能反过来再次包含自己——下面执行逻辑已用直接下游 BFS 限定子图。
 const EXEC_TYPES = new Set<string>([
-  'image', 'edit',
+  'image', 'edit', 'fhl-image-gen',
   'multi-angle-3d', 'panorama-720', 'penguin-portrait',
   'video', 'runninghub-video', 'seedance', 'audio', 'llm', 'remotion-animation', 'runninghub', 'runninghub-wallet',
     // v1.2.10.1: RH 工具节点 (循环器中作为 EXEC 使用)

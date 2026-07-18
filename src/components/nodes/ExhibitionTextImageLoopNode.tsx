@@ -28,7 +28,7 @@ interface ExecAcc {
 }
 
 const EXEC_TYPES = new Set<string>([
-  'image', 'edit',
+  'image', 'edit', 'fhl-image-gen',
   'multi-angle-3d', 'panorama-720', 'penguin-portrait',
   'video', 'seedance', 'audio', 'llm', 'runninghub', 'runninghub-wallet',
   'rh-tools', 'rh-toolbox', 'fal-toolbox', 'comfyui-store',

@@ -406,6 +406,7 @@ function main() {
   checkFile(path.join(RES, 'backend-enc', 'routes', 'settings.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'routes', 'proxy.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'routes', 'externalProviders.t8c'));
+  checkFile(path.join(RES, 'backend-enc', 'routes', 'fhlImage.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'routes', 'files.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'routes', 'imageOps.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'routes', 'resources.t8c'));
@@ -434,6 +435,7 @@ function main() {
   checkFile(path.join(RES, 'backend-enc', 'providers', 'mediaResolver.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'providers', 'adapters.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'providers', 'openaiCompatible.t8c'));
+  checkFile(path.join(RES, 'backend-enc', 'providers', 'fhlImages.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'providers', 'llmMedia.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'providers', 'llmClient.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'providers', 'modelscope.t8c'));

@@ -1,5 +1,5 @@
 export const COMPLETION_SOUND_THROTTLE_MS = 5000;
-export const COMPLETION_SOUND_ELIGIBLE_NODE_TYPES = ['image', 'video', 'seedance', 'audio', 'llm'] as const;
+export const COMPLETION_SOUND_ELIGIBLE_NODE_TYPES = ['image', 'fhl-image-gen', 'video', 'seedance', 'audio', 'llm'] as const;
 
 export interface CompletionSoundGateState {
   enabled: boolean;

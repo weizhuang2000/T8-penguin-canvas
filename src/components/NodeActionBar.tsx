@@ -26,7 +26,7 @@ import { getMediaItemsFromData } from '../utils/mediaCollection';
 
 // 与 Canvas.tsx 一致 (需要保持同步; 后续可考虑抽到 config/constants)
 const EXECUTABLE_NODE_TYPES = new Set<string>([
-  'image', 'edit',
+  'image', 'edit', 'fhl-image-gen',
   'multi-angle-3d', 'panorama-720', 'penguin-portrait',
   'video', 'runninghub-video', 'seedance', 'audio', 'llm', 'remotion-animation', 'runninghub', 'runninghub-wallet',
     // v1.2.10.1: RH 工具节点

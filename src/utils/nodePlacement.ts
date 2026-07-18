@@ -37,6 +37,7 @@ export const PLACEMENT_MAX_TRIES = 64;
 export const NODE_DEFAULT_SIZE: Record<string, { w: number; h: number }> = {
   text: { w: 280, h: 180 },
   image: { w: 320, h: 360 },
+  'fhl-image-gen': { w: 520, h: 760 },
   edit: { w: 320, h: 360 },
   output: { w: 320, h: 360 },
   upload: { w: 260, h: 360 },

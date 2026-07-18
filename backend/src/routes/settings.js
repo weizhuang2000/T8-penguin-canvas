@@ -22,6 +22,7 @@ const {
   normalizeOutputStorageSpaces,
   summarizeOutputStorageSpaces,
 } = require('../outputStorage/settings');
+const { maskWorkers: maskFhlWorkers, normalizeWorkers: normalizeFhlWorkers } = require('../providers/fhlImages');
 
 const router = express.Router();
 
@@ -58,6 +59,8 @@ const DEFAULT_SETTINGS = {
   eagleApiBase: config.DEFAULT_EAGLE_API_BASE,
   // v1.8.0: 扩展 API 平台（高级可选）。默认只提供禁用的配置卡片，不影响主流程。
   advancedProviders: normalizeAdvancedProviders(),
+  // FHL Images 独立 worker 池。Key 只保存在后端 settings，前端只接收脱敏摘要。
+  fhlWorkers: [],
   // v1.9.x: 云端上传目标（可选）。默认禁用，不影响资源库/自动保存主流程。
   cloudUploadTargets: normalizeCloudUploadTargets(),
   outputStorageSpaces: normalizeOutputStorageSpaces(),
@@ -378,6 +381,7 @@ function loadSettings({ persistMigrations = true } = {}) {
     };
     Object.assign(merged, syncLegacyLlmConfig(merged));
     merged.advancedProviders = normalizeAdvancedProviders(data.advancedProviders);
+    merged.fhlWorkers = normalizeFhlWorkers(data.fhlWorkers);
     merged.cloudUploadTargets = normalizeCloudUploadTargets(data.cloudUploadTargets);
     merged.outputStorageSpaces = normalizeOutputStorageSpaces(data.outputStorageSpaces, data.outputStorageSpaces, merged.cloudUploadTargets);
     merged.activeOutputStorageSpaceId = normalizeActiveOutputStorageSpaceId(
@@ -439,6 +443,7 @@ router.get('/', (_req, res) => {
     llmConfigs: maskLlmConfigs(settings.llmConfigs),
     llmApiKeys: maskLlmConfigs(settings.llmConfigs),
     advancedProviders: maskAdvancedProviders(settings.advancedProviders),
+    fhlWorkers: maskFhlWorkers(settings.fhlWorkers),
     advancedProviderSummary: summarizeAdvancedProviders(settings.advancedProviders),
     cloudUploadTargets: maskCloudUploadTargets(settings.cloudUploadTargets),
     cloudUploadSummary: summarizeCloudUploadTargets(settings.cloudUploadTargets),
@@ -602,6 +607,7 @@ router.post('/', requireAdmin, (req, res) => {
   const current = loadSettings();
   const incoming = req.body || {};
   const hasAdvancedProviders = Object.prototype.hasOwnProperty.call(incoming, 'advancedProviders');
+  const hasFhlWorkers = Object.prototype.hasOwnProperty.call(incoming, 'fhlWorkers');
   const hasCloudUploadTargets = Object.prototype.hasOwnProperty.call(incoming, 'cloudUploadTargets');
   const hasOutputStorageSpaces = Object.prototype.hasOwnProperty.call(incoming, 'outputStorageSpaces');
   const hasActiveOutputStorageSpaceId = Object.prototype.hasOwnProperty.call(incoming, 'activeOutputStorageSpaceId');
@@ -664,6 +670,9 @@ router.post('/', requireAdmin, (req, res) => {
   merged.advancedProviders = hasAdvancedProviders
     ? normalizeAdvancedProviders(incoming.advancedProviders, current.advancedProviders)
     : normalizeAdvancedProviders(current.advancedProviders);
+  merged.fhlWorkers = hasFhlWorkers
+    ? normalizeFhlWorkers(incoming.fhlWorkers, current.fhlWorkers)
+    : normalizeFhlWorkers(current.fhlWorkers);
   merged.cloudUploadTargets = hasCloudUploadTargets
     ? normalizeCloudUploadTargets(incoming.cloudUploadTargets, current.cloudUploadTargets)
     : normalizeCloudUploadTargets(current.cloudUploadTargets);

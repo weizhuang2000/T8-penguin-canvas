@@ -4,7 +4,7 @@ import * as LucideIcons from 'lucide-react';
 import { useApiKeysStore, FIXED_ZHENZHEN_BASE, RH_BASE, normalizeApiSettings } from '../stores/apiKeys';
 import { taskCompletionSound as taskCompletionSoundController } from '../stores/taskCompletionSound';
 import { useThemeStore } from '../stores/theme';
-import type { AdvancedProviderConfig, AdvancedProviderProtocol, ApiSettings, CloudUploadProvider, CloudUploadTargetConfig, LlmConfig, OutputStorageSpaceConfig } from '../types/canvas';
+import type { AdvancedProviderConfig, AdvancedProviderProtocol, ApiSettings, CloudUploadProvider, CloudUploadTargetConfig, FhlConfigSummary, LlmConfig, OutputStorageSpaceConfig } from '../types/canvas';
 import { getRawSettings, resetTaskCompletionSound, resetTaskFailureSound, testAdvancedProvider, testCloudUploadTarget, testOutputStorageSpace, reconcileOutputStorageSpace, uploadTaskCompletionSound, uploadTaskFailureSound, getNodeHelps, saveNodeHelp, deleteNodeHelp, exportNodeHelps, importNodeHelps, bulkReplaceNodeHelps, type NodeHelpMap } from '../services/api';
 import { playTaskCompletionSound, playTaskFailureSound } from '../utils/taskCompletionSound';
 import { DEFAULT_LLM_MODEL } from '../providers/models';
@@ -41,6 +41,7 @@ import {
 } from '../utils/canvasNodeMenuPreferences';
 import PromptTextarea from './PromptTextarea';
 import { LocalSettingsAddonSlot } from 'virtual:t8-local-extensions';
+import { addFhlWorker, deleteFhlWorker, getFhlConfig, importCodexFhlWorkers, updateFhlWorker } from '../services/fhlImage';
 
 interface ApiSettingsModalProps {
   open: boolean;
@@ -450,6 +451,12 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   const [taskFailureSoundMessage, setTaskFailureSoundMessage] = useState<string>('');
   const [taskFailureSoundBusy, setTaskFailureSoundBusy] = useState(false);
   const [taskFailureSoundTesting, setTaskFailureSoundTesting] = useState(false);
+  const [fhlOpen, setFhlOpen] = useState(false);
+  const [fhlConfig, setFhlConfig] = useState<FhlConfigSummary | null>(null);
+  const [fhlBusy, setFhlBusy] = useState(false);
+  const [fhlMessage, setFhlMessage] = useState('');
+  const [fhlWorkerName, setFhlWorkerName] = useState('');
+  const [fhlWorkerKey, setFhlWorkerKey] = useState('');
   // 贞贞工坊启用开关（对应 enableZhenzhenFallback）
   const [zhenzhenEnabled, setZhenzhenEnabled] = useState(true);
   const backupFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -540,6 +547,16 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setFhlMessage('');
+    getFhlConfig()
+      .then((value) => { if (!cancelled) setFhlConfig(value); })
+      .catch((error: any) => { if (!cancelled) setFhlMessage(error?.message || 'FHL 配置加载失败'); });
+    return () => { cancelled = true; };
+  }, [open]);
+
   // 节点帮助文档：切换选中节点时同步草稿
   useEffect(() => {
     if (!activeNodeHelpType) return;
@@ -551,6 +568,22 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   }, [activeNodeHelpType, nodeHelpMap]);
 
   if (!open) return null;
+
+  const runFhlAction = async (action: () => Promise<FhlConfigSummary>, successMessage: string) => {
+    setFhlBusy(true);
+    setFhlMessage('');
+    try {
+      const value = await action();
+      setFhlConfig(value);
+      window.dispatchEvent(new CustomEvent('t8:fhl-config-updated', { detail: value }));
+      setFhlMessage(successMessage);
+      setFhlWorkerKey('');
+    } catch (error: any) {
+      setFhlMessage(error?.message || 'FHL 设置操作失败');
+    } finally {
+      setFhlBusy(false);
+    }
+  };
 
   const setInputAt = (f: KeyField, v: string) => {
     setInputs((prev) => ({ ...prev, [f]: v }));
@@ -3292,6 +3325,55 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                 </div>
                 <div className="space-y-4">
                   {CLASSIFIED_KEYS.map((spec) => renderKey(spec, { fallbackHint: spec.field !== 'giteeMusicApiKey' }))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* FHL Images 独立 worker 池 */}
+          <div className="t8-api-settings-divider pt-3 border-t" data-fhl-settings>
+            <button
+              type="button"
+              onClick={() => setFhlOpen((value) => !value)}
+              aria-expanded={fhlOpen}
+              className={isPixel ? 't8-api-settings-toggle w-full flex items-center gap-2 px-3 py-2 px-btn' : 't8-api-settings-toggle w-full flex items-center gap-2 px-3 py-2 rounded-lg border transition'}
+            >
+              <LucideIcons.Images size={14} className="t8-api-settings-icon" />
+              <span className="text-xs font-bold">FHL Images</span>
+              <span className={`hidden sm:inline text-[11px] ${hintCls}`}>固定 Images API · gpt-image-2 · 最多 10 个 worker</span>
+              <span className="ml-auto flex items-center gap-2 text-[11px]">
+                <span className="t8-api-settings-badge rounded border px-1.5 py-0.5" data-tone={(fhlConfig?.enabledWorkerCount || 0) > 0 ? 'success' : 'muted'}>启用 {fhlConfig?.enabledWorkerCount || 0}/{fhlConfig?.workerCount || 0}</span>
+                {fhlOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </span>
+            </button>
+            {fhlOpen && (
+              <div className="mt-3 space-y-3 rounded-lg border p-3">
+                <div className={`text-[11px] leading-relaxed ${hintCls}`}>
+                  FHL 生图节点只走 <code>https://www.fhl.mom/v1/images/*</code>。API Key 仅保存在后端本地设置中；这里和画布都不会返回明文。
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,160px)_minmax(0,1fr)_auto]">
+                  <input className="t8-api-settings-input rounded border px-2 py-1.5 text-xs" value={fhlWorkerName} placeholder="Worker 名称" onChange={(event) => setFhlWorkerName(event.target.value)} />
+                  <input className="t8-api-settings-input rounded border px-2 py-1.5 text-xs" type="password" value={fhlWorkerKey} placeholder="FHL API Key" onChange={(event) => setFhlWorkerKey(event.target.value)} />
+                  <button type="button" className={isPixel ? 't8-api-settings-secondary-btn px-btn px-3 text-xs' : 't8-api-settings-secondary-btn rounded border px-3 text-xs'} disabled={fhlBusy || !fhlWorkerKey.trim()} onClick={() => void runFhlAction(() => addFhlWorker({ name: fhlWorkerName.trim() || `worker ${(fhlConfig?.workerCount || 0) + 1}`, apiKey: fhlWorkerKey.trim() }), 'FHL worker 已添加')}>
+                    <Plus size={12} className="mr-1 inline" />添加
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {(fhlConfig?.workers || []).map((worker) => (
+                    <div key={worker.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2 rounded border p-2 text-xs">
+                      <input type="checkbox" checked={worker.enabled} disabled={fhlBusy} onChange={(event) => void runFhlAction(() => updateFhlWorker(worker.id, { enabled: event.target.checked }), `${worker.name} 已${event.target.checked ? '启用' : '停用'}`)} />
+                      <div className="min-w-0"><div className="truncate font-bold">{worker.name}</div><div className={`truncate text-[10px] ${hintCls}`}>{worker.id} · {worker.keyPreview}</div></div>
+                      <button type="button" className="t8-api-settings-icon-btn rounded p-1" title="重命名" disabled={fhlBusy} onClick={() => { const name = window.prompt('新的 Worker 名称', worker.name); if (name?.trim()) void runFhlAction(() => updateFhlWorker(worker.id, { name: name.trim() }), 'Worker 已重命名'); }}><Edit3 size={13} /></button>
+                      <button type="button" className="t8-api-settings-icon-btn rounded p-1 text-rose-400" title="删除" disabled={fhlBusy} onClick={() => { if (window.confirm(`删除 FHL worker「${worker.name}」？`)) void runFhlAction(() => deleteFhlWorker(worker.id), 'Worker 已删除'); }}><Trash2 size={13} /></button>
+                    </div>
+                  ))}
+                  {!fhlConfig?.workers?.length && <div className={`rounded border border-dashed p-3 text-center text-xs ${hintCls}`}>尚未配置 FHL worker，可手动添加或从 Codex 插件一次性导入。</div>}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" className={isPixel ? 't8-api-settings-secondary-btn px-btn px-3 py-1 text-xs' : 't8-api-settings-secondary-btn rounded border px-3 py-1 text-xs'} disabled={fhlBusy || (fhlConfig?.workerCount || 0) >= 10} onClick={() => void runFhlAction(importCodexFhlWorkers, 'Codex FHL worker 导入完成')}>
+                    {fhlBusy ? <Loader2 size={12} className="mr-1 inline animate-spin" /> : <Download size={12} className="mr-1 inline" />}从 Codex 插件导入
+                  </button>
+                  {fhlMessage && <span className={`text-[11px] ${fhlMessage.includes('失败') || fhlMessage.includes('错误') ? 'text-rose-400' : hintCls}`}>{fhlMessage}</span>}
                 </div>
               </div>
             )}
