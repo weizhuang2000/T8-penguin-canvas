@@ -593,11 +593,16 @@ test('Codex creator node exposes simplified mode, studio mode, external skills, 
   assert.match(node, /aria-pressed=\{active\}/);
   assert.match(node, /data-codex-run-intent-summary=\{codexRunIntent\}/);
   assert.match(node, /当前：\{codexRunIntent === 'img'/);
-  assert.match(node, /IMG 生图模式 · \$\{selectedCodexModel \|\| '未配置模型'\} \+ imagegen/);
+  assert.match(node, /IMG · Agent \$\{selectedCodexModel \|\| '未配置'\}/);
   assert.match(node, /LLM 文字模式 · \$\{selectedCodexModel \|\| '未配置模型'\}/);
   assert.match(node, /label:\s*'LLM'/);
   assert.match(node, /label:\s*'IMG'/);
-  assert.match(node, /llmOnly:\s*runIntent === 'llm'/);
+  assert.match(node, /llmOnly:\s*true/);
+  assert.match(node, /data-codex-agent-image-provider/);
+  assert.match(node, /data-codex-agent-image-model="builtin"/);
+  assert.match(node, /data-codex-agent-image-model="external"/);
+  assert.match(node, /generateCodexAgentImage/);
+  assert.match(node, /Agent 模型只负责理解任务并生成最终提示词/);
   assert.match(node, /\/Skill/);
   assert.match(node, /工作台工具/);
   assert.match(node, /studioToolPanel/);
@@ -808,6 +813,28 @@ test('Codex direct IMG mode supports Responses image_generation for chat models'
   assert.deepEqual(payload.tool_choice, { type: 'image_generation' });
   assert.doesNotMatch(calls[0].init.body, /private-responses-key|frontend-model-must-be-ignored/);
   assert.deepEqual(result.imageUrls, ['data:image/png;base64,UkVTUE9OU0VfUE5H']);
+});
+
+test('Codex IMG mode separates the Agent LLM from the canvas image provider', () => {
+  const node = read('../src/components/nodes/CodexCliAgentNode.tsx');
+  const imageService = read('../src/services/codexAgentImage.ts');
+  const types = read('../src/types/canvas.ts');
+
+  assert.match(node, /codexImageProviderKind/);
+  assert.match(node, /IMG 生图平台/);
+  assert.match(node, /IMG 生图模型/);
+  assert.match(node, /Agent 模型只负责理解任务并生成最终提示词/);
+  assert.match(node, /generateCodexAgentImage/);
+  assert.match(node, /imageGeneration:\s*false/);
+  assert.match(node, /llmOnly:\s*true/);
+  assert.match(node, /只输出最终提示词正文/);
+  assert.doesNotMatch(node, /优先调用所选 LLM 平台自身支持的图片生成接口/);
+  assert.match(imageService, /generateExternalImage/);
+  assert.match(imageService, /queryExternalImageStatus/);
+  assert.match(imageService, /submitImageAsync/);
+  assert.match(imageService, /queryImageStatus/);
+  assert.match(imageService, /throwIfAborted/);
+  assert.match(types, /codexImageProviderKind\?: 'builtin' \| 'external'/);
 });
 
 test('Codex simple creator mode has explicit LLM IMG intent, configured agent model, imagegen default skill, and image-first publishing', () => {

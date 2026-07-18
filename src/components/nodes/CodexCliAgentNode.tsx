@@ -25,7 +25,9 @@ import {
 } from 'lucide-react';
 import { PORT_COLOR } from '../../config/portTypes';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
+import { IMAGE_MODELS } from '../../providers/models';
 import * as api from '../../services/api';
+import { generateCodexAgentImage } from '../../services/codexAgentImage';
 import {
   createCodexProjectSkill,
   deleteCodexProjectSkill,
@@ -40,6 +42,11 @@ import { useApiKeysStore } from '../../stores/apiKeys';
 import { logBus } from '../../stores/logs';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useThemeStore } from '../../stores/theme';
+import {
+  advancedProviderModelOptions,
+  advancedProvidersForNode,
+  resolveAdvancedProviderSelection,
+} from '../../utils/advancedProviders';
 import {
   countExcludedMaterials,
   excludeMaterialId,
@@ -131,15 +138,16 @@ const IMAGE_GENERATION_FALLBACK_PRESET: CreatorPreset = {
   command: '/image',
   icon: ImageIcon,
   hint: '按图像生成任务处理',
-  systemHint: '优先调用所选 LLM 平台自身支持的图片生成接口直接生成图片；如果该平台或模型无法生图，再输出可执行的图像提示词和参数。',
+  systemHint: '先把用户任务整理成完整、可执行的图片生成提示词，再交给节点中独立选择的 IMG 生图平台和模型生成图片。',
 };
 
 const SYSTEM_CREATOR_PRESETS: CreatorPreset[] = [];
 
 const CODEX_RUN_INTENT_OPTIONS: Array<{ id: Exclude<CodexRunIntent, 'auto'>; label: string; title: string }> = [
   { id: 'llm', label: 'LLM', title: '只做文字回答、读图分析和提示词整理，绝不生成图片。' },
-  { id: 'img', label: 'IMG', title: '允许调用 image_generation，面向直接生图。' },
+  { id: 'img', label: 'IMG', title: 'Agent 先生成提示词，再调用独立图片 Provider 直接生图。' },
 ];
+const CODEX_AGENT_IMAGE_MODELS = IMAGE_MODELS.filter((item) => item.paramKind !== 'mj');
 
 const CODEX_IMAGEGEN_PARAM_LISTS = [
   {
@@ -1119,6 +1127,8 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
   const d = (data || {}) as any;
   const { theme, style: themeStyle } = useThemeStore();
   const llmConfigs = useApiKeysStore((state) => state.settings.llmConfigs || state.settings.llmApiKeys) || [];
+  const advancedProviders = useApiKeysStore((state) => state.settings.advancedProviders || []);
+  const allowBuiltinImageProvider = useApiKeysStore((state) => state.settings.enableZhenzhenFallback !== false);
   const isDark = theme === 'dark';
   const isPixel = themeStyle === 'pixel';
 
@@ -1161,6 +1171,51 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
   const currentPreset = selectedCreatorPreset || DEFAULT_CREATOR_PRESET;
   const currentPresetLabel = hasActiveCreatorPreset ? currentPreset.label : '无模板';
   const codexRunIntent = normalizeCodexRunIntent(d.codexRunIntent);
+  const imageAdvancedProviders = useMemo(
+    () => advancedProvidersForNode(advancedProviders, 'image'),
+    [advancedProviders],
+  );
+  const savedImageProviderKind = d.codexImageProviderKind === 'external' ? 'external' : 'builtin';
+  const imageProviderKind = savedImageProviderKind === 'builtin' && !allowBuiltinImageProvider && imageAdvancedProviders.length
+    ? 'external'
+    : savedImageProviderKind === 'external' && imageAdvancedProviders.length === 0 && allowBuiltinImageProvider
+      ? 'builtin'
+      : savedImageProviderKind;
+  const savedImageProviderSelection = useMemo(
+    () => resolveAdvancedProviderSelection(advancedProviders, 'image', {
+      providerSource: d.codexImageProviderSource,
+      providerId: d.codexImageProviderId,
+      providerModel: d.codexImageProviderModel,
+    }),
+    [advancedProviders, d.codexImageProviderId, d.codexImageProviderModel, d.codexImageProviderSource],
+  );
+  const activeImageProviderSelection = useMemo(() => {
+    if (savedImageProviderSelection.available) return savedImageProviderSelection;
+    const provider = imageAdvancedProviders[0];
+    if (!provider) return savedImageProviderSelection;
+    const models = advancedProviderModelOptions(provider, 'image');
+    return {
+      providerSource: provider.protocol,
+      providerId: provider.id,
+      providerModel: models[0] || '',
+      provider,
+      available: !!models[0],
+    };
+  }, [imageAdvancedProviders, savedImageProviderSelection]);
+  const externalImageModelOptions = activeImageProviderSelection.provider
+    ? advancedProviderModelOptions(activeImageProviderSelection.provider, 'image')
+    : [];
+  const selectedExternalImageModel = activeImageProviderSelection.providerModel || externalImageModelOptions[0] || '';
+  const selectedBuiltinImageModel = CODEX_AGENT_IMAGE_MODELS.find((item) => item.id === String(d.codexImageModel || ''))
+    || CODEX_AGENT_IMAGE_MODELS[0];
+  const selectedBuiltinImageApiOptions = selectedBuiltinImageModel.apiModelOptions.filter((item) => !/-fal$/i.test(item.value));
+  const savedBuiltinApiModel = String(d.codexImageApiModel || '').trim();
+  const selectedBuiltinImageApiModel = selectedBuiltinImageApiOptions.some((item) => item.value === savedBuiltinApiModel)
+    ? savedBuiltinApiModel
+    : (selectedBuiltinImageApiOptions[0]?.value || selectedBuiltinImageModel.apiModel);
+  const imageProviderReady = imageProviderKind === 'builtin'
+    ? allowBuiltinImageProvider
+    : activeImageProviderSelection.available && !!selectedExternalImageModel;
   const agentLlmConfigs = useMemo(() => llmConfigs.filter((item) => (
     item && item.id && item.model && item.baseUrl && (item.hasApiKey || String(item.apiKey || '').trim())
   )), [llmConfigs]);
@@ -1171,7 +1226,7 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
     || null;
   const selectedLlmKeyId = activeAgentLlmConfig?.id || '';
   const selectedCodexModel = String(activeAgentLlmConfig?.model || '').trim();
-  const canRunAgent = Boolean(activeAgentLlmConfig);
+  const canRunAgent = Boolean(activeAgentLlmConfig) && (codexRunIntent !== 'img' || imageProviderReady);
   const quickPrompt = String(d.codexQuickPrompt || '');
   const quickPromptMentions = (Array.isArray(d.codexQuickPromptMentions) ? d.codexQuickPromptMentions : []) as MediaMention[];
   const selectedSkillNames = asStringArray(d.codexSelectedSkillNames);
@@ -1249,6 +1304,27 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
       update({ llmKeyId: selectedLlmKeyId });
     }
   }, [savedLlmKeyId, selectedLlmKeyId, update]);
+  useEffect(() => {
+    const patch: Record<string, any> = {};
+    if (imageProviderKind !== savedImageProviderKind) patch.codexImageProviderKind = imageProviderKind;
+    if (imageProviderKind === 'external' && activeImageProviderSelection.available) {
+      if (d.codexImageProviderSource !== activeImageProviderSelection.providerSource) patch.codexImageProviderSource = activeImageProviderSelection.providerSource;
+      if (d.codexImageProviderId !== activeImageProviderSelection.providerId) patch.codexImageProviderId = activeImageProviderSelection.providerId;
+      if (d.codexImageProviderModel !== selectedExternalImageModel) patch.codexImageProviderModel = selectedExternalImageModel;
+    }
+    if (Object.keys(patch).length) update(patch);
+  }, [
+    activeImageProviderSelection.available,
+    activeImageProviderSelection.providerId,
+    activeImageProviderSelection.providerSource,
+    d.codexImageProviderId,
+    d.codexImageProviderModel,
+    d.codexImageProviderSource,
+    imageProviderKind,
+    savedImageProviderKind,
+    selectedExternalImageModel,
+    update,
+  ]);
   const messages = useMemo(() => sanitizeMessages(d.codexMessages), [d.codexMessages]);
   const deletedArtifactKeys = useMemo(() => sanitizeDeletedArtifactKeys(d.codexDeletedArtifactKeys), [d.codexDeletedArtifactKeys]);
   const artifacts = useMemo(
@@ -2007,6 +2083,12 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
       logBus.warn(message, `codex:${id}`);
       return;
     }
+    if (codexRunIntent === 'img' && !imageProviderReady) {
+      const message = '请先为 IMG 模式选择可用的内置生图配置或扩展图片 Provider。';
+      update({ error: message, codexLastRunSummary: message });
+      logBus.warn(message, `codex:${id}`);
+      return;
+    }
     const prompt = buildPrompt(quickPrompt, orderedTexts, quickPromptMentions, mentionMaterials);
     const imagesForRun = materialUrls(orderedImages);
     const videosForRun = materialUrls(orderedVideos);
@@ -2117,33 +2199,33 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
       ]);
     };
 
+    let streamedText = '';
     try {
       const creatorBrief = buildCreatorBriefBlock(d);
-      let streamedText = '';
-      const result = await streamCodexCliAgent({
+      let result = await streamCodexCliAgent({
         nodeId: id,
         sessionId,
         turnId,
         agentProvider: 'llm-config',
         llmKeyId: selectedLlmKeyId,
-        mode: runMode,
+        mode: runIntent === 'img' ? 'prompt' : runMode,
         command: runPreset.command,
         preset: hasActiveCreatorPreset ? runPreset.label : '',
         prompt: [
           presetInstruction,
           runIntent === 'llm' ? '本轮为 LLM 文字模式：即使连接了参考图片，也只能分析、回答、整理提示词或给出创作方案；不要生成图片文件，不要调用 image_generation。' : '',
-          forceImageGeneration ? '本轮为 IMG 生图模式：优先直接生成图片产物，不要只输出提示词文本。' : '',
           studioMemoryPrompt,
           creatorBrief,
           promptForRun,
+          runIntent === 'img' ? '输出要求：你只负责把以上任务整理成一份可直接提交给图片生成模型的最终提示词。只输出最终提示词正文，不要解释，不要声称已经生成图片，也不要调用任何图片工具。' : '',
         ].filter(Boolean).join('\n\n'),
         referenceTexts: orderedTexts.map((item) => item.url).filter(Boolean),
         images: imagesForRun,
         videos: videosForRun,
         audios: audiosForRun,
         selectedSkillNames: selectedSkillNamesForRun,
-        imageGeneration: forceImageGeneration,
-        llmOnly: runIntent === 'llm',
+        imageGeneration: false,
+        llmOnly: true,
         workspaceDir: String(d.codexWorkspaceDir || '').trim(),
       }, {
         signal: controller.signal,
@@ -2159,6 +2241,62 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
           if (event.artifact) addArtifact({ ...event.artifact, turnId });
         },
       });
+
+      if (runIntent === 'img') {
+        const generatedPrompt = String(result.text || result.reply || streamedText || promptForRun).trim();
+        appendToolMessage(`Agent 提示词已完成，正在调用 ${imageProviderKind === 'builtin' ? selectedBuiltinImageApiModel : selectedExternalImageModel} 生图。`);
+        const imageUrls = await generateCodexAgentImage({
+          source: imageProviderKind,
+          prompt: generatedPrompt,
+          images: imagesForRun,
+          aspectRatio: ['自动', 'Auto'].includes(String(d.codexAspectRatio || '')) ? 'Auto' : settingsValue(d.codexAspectRatio, '1:1'),
+          sizeLevel: settingsValue(d.codexImageSize, selectedBuiltinImageModel.defaultSize || '2K'),
+          outputFormat: d.codexImageOutputFormat === 'jpg' ? 'jpg' : 'png',
+          signal: controller.signal,
+          builtin: imageProviderKind === 'builtin' ? {
+            model: selectedBuiltinImageModel.id,
+            apiModel: selectedBuiltinImageApiModel,
+            paramKind: selectedBuiltinImageModel.paramKind,
+          } : undefined,
+          external: imageProviderKind === 'external' ? {
+            providerId: activeImageProviderSelection.providerId,
+            providerModel: selectedExternalImageModel,
+            providerParams: d.codexImageProviderParams && typeof d.codexImageProviderParams === 'object'
+              ? d.codexImageProviderParams
+              : {},
+          } : undefined,
+          historyContext: {
+            sourceNodeId: id,
+            sourceNodeType: 'codex-cli-agent',
+            nodeTitle: String(d.label || 'Codex Agent'),
+            prompt: generatedPrompt,
+          },
+          onProgress: (message, progress) => update({
+            codexLastRunSummary: message,
+            codexImageProgress: progress,
+          }),
+        });
+        const imageArtifacts: CodexAgentArtifact[] = imageUrls.map((url, index) => ({
+          id: `codex-agent-image-${turnId}-${index + 1}`,
+          turnId,
+          kind: 'image',
+          title: `${runPreset.label} · 图片 ${index + 1}`,
+          url,
+          urls: [url],
+          status: 'completed',
+          progress: 100,
+          createdAt: Date.now(),
+        }));
+        result = {
+          ...result,
+          text: generatedPrompt,
+          reply: generatedPrompt,
+          imageUrl: imageUrls[0] || '',
+          imageUrls,
+          artifacts: [...(Array.isArray(result.artifacts) ? result.artifacts : []), ...imageArtifacts],
+        };
+        appendToolMessage(`图片生成完成 · ${imageUrls.length} 张`);
+      }
 
       const nextArtifacts: CodexAgentArtifact[] = [];
       if (Array.isArray(result.artifacts)) {
@@ -2220,7 +2358,10 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
     } catch (error: any) {
       const stopped = error?.name === 'AbortError' || /Codex 任务已停止|aborted/i.test(String(error?.message || ''));
       const message = stopped ? 'Codex 任务已停止' : friendlyCodexErrorMessage(error?.message || 'Codex Agent 调用 LLM 失败');
-      replaceAssistant(message, 'error');
+      const assistantError = !stopped && streamedText.trim()
+        ? `${streamedText.trim()}\n\nIMG 生图失败：${message}`
+        : message;
+      replaceAssistant(assistantError, 'error');
       update({ status: stopped ? 'idle' : 'error', error: stopped ? '' : message, codexLastRunSummary: message });
       if (stopped) logBus.warn(message, `codex:${id}`);
       else logBus.error(message, `codex:${id}`);
@@ -2241,12 +2382,17 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
     d.codexBriefLighting,
     d.codexBriefStyle,
     d.codexBriefSubject,
+    d.codexImageOutputFormat,
+    d.codexImageProviderParams,
+    d.codexImageSize,
     d.codexNegativePrompt,
     d.codexStyleLock,
     d.codexTargetPlatform,
     d.codexWorkspaceDir,
     hasActiveCreatorPreset,
     id,
+    imageProviderKind,
+    imageProviderReady,
     isBusy,
     mentionMaterials,
     orderedAudios,
@@ -2266,7 +2412,11 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
     codexContextSummary,
     selectedRunnableSkillNames,
     selectedCodexModel,
+    selectedBuiltinImageApiModel,
+    selectedBuiltinImageModel,
+    selectedExternalImageModel,
     selectedLlmKeyId,
+    activeImageProviderSelection.providerId,
     sessionId,
     setMessages,
     studioConsumedMaterialIds,
@@ -2741,6 +2891,94 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
     </div>
   );
 
+  const renderImageProviderPicker = () => {
+    if (codexRunIntent !== 'img') return null;
+    const providerValue = imageProviderKind === 'builtin' ? 'builtin' : activeImageProviderSelection.providerId;
+    return (
+      <div data-codex-agent-image-provider className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 rounded-lg border p-2" style={{ borderColor: border, background: surfaceStrong }}>
+        <label className="grid min-w-0 gap-1 text-[11px]" style={{ color: subText }}>
+          IMG 生图平台
+          <select
+            className="nodrag w-full min-w-0 rounded-lg border px-2 py-1.5 text-xs font-bold outline-none"
+            style={{ borderColor: border, background: bg, color: text }}
+            value={providerValue}
+            disabled={!allowBuiltinImageProvider && imageAdvancedProviders.length === 0}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              if (value === 'builtin') {
+                update({ codexImageProviderKind: 'builtin' });
+                return;
+              }
+              const provider = imageAdvancedProviders.find((item) => item.id === value);
+              if (!provider) return;
+              update({
+                codexImageProviderKind: 'external',
+                codexImageProviderSource: provider.protocol,
+                codexImageProviderId: provider.id,
+                codexImageProviderModel: advancedProviderModelOptions(provider, 'image')[0] || '',
+              });
+            }}
+          >
+            {allowBuiltinImageProvider && <option value="builtin">内置图片配置</option>}
+            {imageAdvancedProviders.map((provider) => (
+              <option key={provider.id} value={provider.id}>{provider.label || provider.id}</option>
+            ))}
+            {!allowBuiltinImageProvider && imageAdvancedProviders.length === 0 && <option value="">请先配置图片 Provider</option>}
+          </select>
+        </label>
+        {imageProviderKind === 'external' ? (
+          <label className="grid min-w-0 gap-1 text-[11px]" style={{ color: subText }}>
+            IMG 生图模型
+            <select
+              data-codex-agent-image-model="external"
+              className="nodrag w-full min-w-0 rounded-lg border px-2 py-1.5 text-xs font-bold outline-none"
+              style={{ borderColor: border, background: bg, color: text }}
+              value={selectedExternalImageModel}
+              disabled={!externalImageModelOptions.length}
+              onChange={(event) => update({ codexImageProviderModel: event.currentTarget.value })}
+            >
+              {externalImageModelOptions.length
+                ? externalImageModelOptions.map((model) => <option key={model} value={model}>{model}</option>)
+                : <option value="">未配置图像模型</option>}
+            </select>
+          </label>
+        ) : (
+          <label className="grid min-w-0 gap-1 text-[11px]" style={{ color: subText }}>
+            IMG 生图模型
+            <select
+              data-codex-agent-image-model="builtin"
+              className="nodrag w-full min-w-0 rounded-lg border px-2 py-1.5 text-xs font-bold outline-none"
+              style={{ borderColor: border, background: bg, color: text }}
+              value={selectedBuiltinImageModel.id}
+              onChange={(event) => {
+                const model = CODEX_AGENT_IMAGE_MODELS.find((item) => item.id === event.currentTarget.value) || CODEX_AGENT_IMAGE_MODELS[0];
+                update({ codexImageModel: model.id, codexImageApiModel: model.apiModel });
+              }}
+            >
+              {CODEX_AGENT_IMAGE_MODELS.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
+            </select>
+          </label>
+        )}
+        {imageProviderKind === 'builtin' && selectedBuiltinImageApiOptions.length > 1 && (
+          <label className="col-span-2 grid min-w-0 gap-1 text-[11px]" style={{ color: subText }}>
+            接口模型
+            <select
+              className="nodrag w-full min-w-0 rounded-lg border px-2 py-1.5 text-xs font-bold outline-none"
+              style={{ borderColor: border, background: bg, color: text }}
+              value={selectedBuiltinImageApiModel}
+              onChange={(event) => update({ codexImageApiModel: event.currentTarget.value })}
+            >
+              {selectedBuiltinImageApiOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+            </select>
+          </label>
+        )}
+        <div className="col-span-2 text-[10px] leading-relaxed" style={{ color: subText }}>
+          Agent 模型只负责理解任务并生成最终提示词；图片由这里选择的平台和模型生成。
+        </div>
+      </div>
+    );
+  };
+
   const renderPresetSelect = (label = '创作模板') => {
     const currentPresetVisible = visibleSelectableCreatorPresets.some((preset) => preset.id === currentPreset.id);
     return (
@@ -2906,6 +3144,7 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
         {renderPresetSelect()}
         {renderSkillDropdown()}
         {renderAgentModelPicker(false)}
+        {renderImageProviderPicker()}
         {renderRunPreferenceControls(!showManage, !showManage, !showManage)}
       </div>
     </section>
@@ -3849,7 +4088,9 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
             <div className="mb-1 flex min-w-0 items-center justify-between gap-2 px-0.5 text-[11px]" style={{ color: subText }}>
               <span className="shrink-0 font-black" style={{ color: text }}>运行模式</span>
               <span className="min-w-0 truncate font-bold" data-codex-run-intent-summary={codexRunIntent} style={{ color: text }}>
-                当前：{codexRunIntent === 'img' ? `IMG 生图模式 · ${selectedCodexModel || '未配置模型'} + imagegen` : `LLM 文字模式 · ${selectedCodexModel || '未配置模型'}`}
+                当前：{codexRunIntent === 'img'
+                  ? `IMG · Agent ${selectedCodexModel || '未配置'} → ${imageProviderKind === 'builtin' ? selectedBuiltinImageApiModel : selectedExternalImageModel || '未配置生图模型'}`
+                  : `LLM 文字模式 · ${selectedCodexModel || '未配置模型'}`}
               </span>
             </div>
             {renderRunIntentToggle('simple')}
@@ -4009,7 +4250,11 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
                 className="nodrag inline-flex flex-1 items-center justify-center gap-2 px-4 py-2.5 text-sm font-black"
                 style={{ ...buttonStyle, background: accent, color: studioAccentText, borderColor: accent }}
                 disabled={!canRunAgent}
-                title={!activeAgentLlmConfig ? '请先配置 LLM 独立配置' : undefined}
+                title={!activeAgentLlmConfig
+                  ? '请先配置 LLM 独立配置'
+                  : codexRunIntent === 'img' && !imageProviderReady
+                    ? '请先选择可用的 IMG 生图平台和模型'
+                    : undefined}
                 onClick={() => void handleQuickRun()}
               >
                 <Play size={17} />

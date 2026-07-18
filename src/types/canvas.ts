@@ -316,6 +316,12 @@ export interface CanvasNodeData {
   providerId?: string;
   providerModel?: string;
   llmKeyId?: string;
+  codexImageProviderKind?: 'builtin' | 'external';
+  codexImageProviderSource?: CanvasProviderSource;
+  codexImageProviderId?: string;
+  codexImageProviderModel?: string;
+  codexImageModel?: string;
+  codexImageApiModel?: string;
   providerParams?: Record<string, any>;
   status?: 'idle' | 'generating' | 'success' | 'error';
   error?: string;

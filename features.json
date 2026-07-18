@@ -877,16 +877,17 @@
     "capabilities": [
       "简约生成模式保留一个 Prompt 输入、创作预设、Skill 选择和一键运行，适合快速生成提示词、脚本或素材方案。",
       "Codex 创作台模式提供流式消息、运行事件、产物库、版本树、质量检查和项目 Skill 抽屉，适合连续创作与多轮修改。",
-      "Agent 平台从 LLM 独立配置中选择，模型严格跟随所选配置；文字模式直连 Chat Completions，IMG 模式优先调用同配置的 Images API，不把 API Key 写入画布、日志或 SSE。",
+      "Agent 平台从 LLM 独立配置中选择，模型严格跟随所选配置且只负责理解任务、文字回答和生成最终生图提示词；API Key 不写入画布、日志或 SSE。",
       "后端 /api/codex-cli 的 agent/stream 使用 SSE 返回 turn.started、message.delta、tool.progress、artifact.completed 等事件；status 路由仅保留给仍使用 CLI 的 Codex 生图工作台。",
       "选中的 Skill 会把 SKILL.md 规范注入 Agent 提示词，不再作为本地 Codex 工具执行；文字和多模态输入由所选 LLM 接口直接处理。",
-      "IMG 模式依次尝试 /v1/images/generations（有参考图时 /v1/images/edits）、/v1/responses 的 image_generation 工具和多模态 Chat Completions；生图等待期间持续发送 SSE 心跳，Base64/远程图片先保存到本地 output 再返回短 URL，避免生产反向代理超时或大响应 502。",
+      "IMG 模式独立选择内置图片配置或已启用的扩展图片 Provider 及其图像模型；Agent 先输出纯生图提示词，再提交现有异步生图任务并轮询、停止、收集本地图片产物，不再要求文字 Agent 模型自身支持 Images 或 Responses 生图接口。",
       "Electron 后置检查锁住 routes/codexCli.t8c 与 utils/codexCliRunner.t8c，避免桌面包漏路由后出现 /api/codex-cli 404。",
       "Skill 扫描覆盖 CODEX_HOME 全局 Skills、用户 .agents/skills、项目 .agents/skills 和节点工作区项目 Skills；节点内可创建当前项目专用 Skill。",
       "产物解析覆盖文本、图片、视频、音频和 3D 模型 URL；发布后写回节点标准输出字段，也可保存到资源库。"
     ],
     "sourceFiles": [
       "src/components/nodes/CodexCliAgentNode.tsx",
+      "src/services/codexAgentImage.ts",
       "src/services/codexCli.ts",
       "backend/src/routes/codexCli.js",
       "backend/src/utils/codexCliRunner.js",
