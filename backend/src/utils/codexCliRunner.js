@@ -16,6 +16,7 @@ const IMAGE_EXT_RE = /\.(png|jpe?g|webp|gif|bmp|avif|tiff?)(?:[?#].*)?$/i;
 const VIDEO_EXT_RE = /\.(mp4|webm|mov|m4v|mkv)(?:[?#].*)?$/i;
 const AUDIO_EXT_RE = /\.(mp3|wav|ogg|m4a|flac|aac|opus)(?:[?#].*)?$/i;
 const MODEL3D_EXT_RE = /\.(glb|gltf|obj|stl|fbx|usdz|zip)(?:[?#].*)?$/i;
+const FILE_EXT_RE = /\.(pptx?|psd|pdf|docx?|xlsx?|csv|txt|md|json)(?:[?#].*)?$/i;
 
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -589,6 +590,7 @@ function kindFromUrl(url) {
   if (VIDEO_EXT_RE.test(text) || /^data:video\//i.test(text)) return 'video';
   if (AUDIO_EXT_RE.test(text) || /^data:audio\//i.test(text)) return 'audio';
   if (MODEL3D_EXT_RE.test(text)) return 'model3d';
+  if (FILE_EXT_RE.test(text)) return 'file';
   return '';
 }
 

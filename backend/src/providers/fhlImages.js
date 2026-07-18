@@ -222,20 +222,49 @@ async function parseError(response) {
   return `HTTP ${response.status}${message ? ` ${String(message).slice(0, 500)}` : ''}`;
 }
 
-async function saveRawPng(base64, outputPath, resizeSize = '') {
+function normalizeOutputFormat(value, outputPath = '') {
+  const format = String(value || '').trim().toLowerCase();
+  if (format === 'jpg' || format === 'jpeg') return 'jpg';
+  if (format === 'png') return 'png';
+  return /\.jpe?g$/i.test(String(outputPath || '')) ? 'jpg' : 'png';
+}
+
+function rawPngPath(outputPath, outputFormat) {
+  if (outputFormat === 'png') return outputPath;
+  const extension = path.extname(outputPath);
+  return path.join(path.dirname(outputPath), `${path.basename(outputPath, extension)}__raw.png`);
+}
+
+async function writeFormattedImage(buffer, outputPath, outputFormat, resizeSize = '') {
+  let pipeline = sharp(buffer, { limitInputPixels: false });
+  const match = /^(\d+)x(\d+)$/.exec(resizeSize);
+  if (match) pipeline = pipeline.resize(Number(match[1]), Number(match[2]), { fit: 'fill' });
+  if (outputFormat === 'jpg') {
+    pipeline = pipeline.flatten({ background: '#ffffff' }).jpeg({ quality: 100, chromaSubsampling: '4:4:4', mozjpeg: true });
+  } else {
+    pipeline = pipeline.png();
+  }
+  await pipeline.toFile(outputPath);
+}
+
+async function saveRawPng(base64, outputPath, resizeSize = '', requestedFormat = '') {
   const clean = String(base64 || '').replace(/^data:image\/[^;]+;base64,/i, '').trim();
   if (!clean) throw new Error('FHL Images API 未返回 b64_json。');
   const buffer = Buffer.from(clean, 'base64');
   const meta = await sharp(buffer, { limitInputPixels: false }).metadata();
   if (meta.format !== 'png') throw new Error(`FHL Images API 返回了非 PNG 栅格：${meta.format || 'unknown'}`);
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-  fs.writeFileSync(outputPath, buffer);
-  const result = { outputPath, size: buffer.length, width: meta.width || 0, height: meta.height || 0 };
+  const outputFormat = normalizeOutputFormat(requestedFormat, outputPath);
+  const sourcePath = rawPngPath(outputPath, outputFormat);
+  fs.writeFileSync(sourcePath, buffer);
+  if (outputFormat === 'jpg') await writeFormattedImage(buffer, outputPath, outputFormat);
+  const result = { outputPath, rawOutputPath: sourcePath, outputFormat, size: fs.statSync(outputPath).size, width: meta.width || 0, height: meta.height || 0 };
   if (resizeSize) {
     const match = /^(\d+)x(\d+)$/.exec(resizeSize);
     if (match) {
-      const resizedPath = outputPath.replace(/\.png$/i, `__resized_${match[1]}x${match[2]}.png`);
-      await sharp(buffer, { limitInputPixels: false }).resize(Number(match[1]), Number(match[2]), { fit: 'fill' }).png().toFile(resizedPath);
+      const extension = outputFormat === 'jpg' ? 'jpg' : 'png';
+      const resizedPath = outputPath.replace(/\.(?:png|jpe?g)$/i, `__resized_${match[1]}x${match[2]}.${extension}`);
+      await writeFormattedImage(buffer, resizedPath, outputFormat, resizeSize);
       result.resizedPath = resizedPath;
     }
   }
@@ -259,7 +288,7 @@ async function requestImage(worker, task, options = {}) {
   const json = await response.json().catch(() => null);
   const base64 = extractBase64(json);
   if (!base64) return { ok: false, status: response.status, error: 'FHL Images API 未返回 b64_json。' };
-  const saved = await saveRawPng(base64, task.outputPath, task.resize ? size : '');
+  const saved = await saveRawPng(base64, task.outputPath, task.resize ? size : '', task.outputFormat);
   return { ok: true, ...saved, sizeName: size };
 }
 
@@ -403,6 +432,6 @@ async function runWorkerQueue(workers, tasks, options = {}) {
 module.exports = {
   API_ROOT, GENERATIONS_URL, EDITS_URL, MODEL, MAX_WORKERS, MAX_RETRIES, REQUEST_TIMEOUT_MS,
   RATIO_SUPPORT, SIZE_MATRIX, normalizeWorkers, maskWorkers, previewKey, resolveSize,
-  aspectPromptSuffix, buildGenerationBody, buildEditForm, loadReference, saveRawPng,
+  aspectPromptSuffix, buildGenerationBody, buildEditForm, loadReference, normalizeOutputFormat, saveRawPng,
   requestImage, runWorkerQueue, isRetryableError, isAuthError, errorClass,
 };

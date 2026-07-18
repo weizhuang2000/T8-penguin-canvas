@@ -11,6 +11,7 @@ const DEV_NODE_REGISTRY: NodeMeta[] = import.meta.env?.DEV ? [
  * 图标使用 lucide-react 名称(运行时由 Sidebar 动态查找)
  */
 export const NODE_REGISTRY: NodeMeta[] = [
+  { type: 'image-to-editable-document', label: '图片转可编辑文件', category: 'codex', description: '调用 image-to-editable-ppt Skill，把上游图片重建为对象级可编辑 PPTX 或真实分层 PSD 文件', icon: 'Layers3', color: 'sky' },
   { type: 'runninghub-video', label: 'Running 视频', category: 'rh', description: 'RunningHub 全能视频X · 图生视频低价渠道版 v1.5', icon: 'Video', color: 'cyan' },
   // ========== Input 素材资源 ==========
   { type: 'upload', label: '上传素材', category: 'input', description: '图像 / 视频 / 音频 三合一上传(自适应输出端口)', icon: 'Upload', color: 'emerald' },

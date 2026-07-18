@@ -99,6 +99,7 @@ export const NODE_PORTS: Record<string, NodePorts> = {
   // ========== Codex CLI ==========
   // 创作者 Codex Agent：通过本机 Codex CLI + Skill 调用生成文本、提示词、图像等产物。
   'codex-cli-agent': { inputs: ['text', 'image', 'video', 'audio'], outputs: ['text', 'image', 'video', 'audio', 'model3d'] },
+  'image-to-editable-document': { inputs: ['image'], outputs: [] },
 
   // ========== Inspiration ==========
   // 艺术风格大师：可接收上游文本作为检索/创作语境，也可接收原始图像进行所选艺术风格重绘。

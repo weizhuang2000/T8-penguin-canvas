@@ -68,6 +68,32 @@ test('FHL request writes the raw upstream PNG and never needs Responses API', as
   }
 });
 
+test('FHL saves highest-quality JPG by default while preserving the raw upstream PNG', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 't8-fhl-jpg-'));
+  const outputPath = join(dir, 'result.jpg');
+  const rawOutputPath = join(dir, 'result__raw.png');
+  const sharp = require('sharp');
+  const sourcePng = await sharp({ create: { width: 2, height: 2, channels: 4, background: '#36cfc9' } }).png().toBuffer();
+  try {
+    const result = await fhl.requestImage({ id: 'w1', name: 'one', apiKey: 'sk-test', enabled: true }, {
+      operation: 'generate', prompt: 'penguin', quality: '2K', aspect: '1:1', images: [], outputPath, outputFormat: 'jpg',
+    }, {
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        async json() { return { data: [{ b64_json: sourcePng.toString('base64') }] }; },
+      }),
+    });
+    const metadata = await sharp(outputPath).metadata();
+    assert.equal(result.ok, true);
+    assert.equal(result.outputFormat, 'jpg');
+    assert.equal(metadata.format, 'jpeg');
+    assert.deepEqual(readFileSync(rawOutputPath), sourcePng);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('FHL worker pool distributes independent tasks and disables an auth-failed worker for the run', async () => {
   const workers = [
     { id: 'worker-1', name: 'one', apiKey: 'sk-one', enabled: true },
@@ -125,6 +151,8 @@ test('FHL job manager expands workflow tasks and writes resumable artifacts', ()
     };
     job.tasks = route._test.buildTasks(job);
     assert.equal(job.tasks.length, 2);
+    assert.equal(request.outputFormat, 'jpg');
+    assert.match(job.tasks[0].outputPath, /\.jpg$/);
     assert.deepEqual(job.tasks[0].images, ['/files/input/person.png', '/files/input/item-1.png']);
     assert.equal(job.tasks[0].groupKey, 'item-1');
     route._test.writeArtifacts(job);
@@ -133,6 +161,11 @@ test('FHL job manager expands workflow tasks and writes resumable artifacts', ()
     assert.equal(existsSync(join(root, 'summary.csv')), true);
     assert.equal(existsSync(join(root, 'failures.json')), true);
     assert.equal(existsSync(join(root, 'sessions.json')), true);
+
+    const pngRequest = route._test.normalizeRequest({ mode: 'generate', prompt: 'PNG please', outputFormat: 'png' });
+    const pngTasks = route._test.buildTasks({ id: 'fhl-png-job', request: pngRequest });
+    assert.equal(pngRequest.outputFormat, 'png');
+    assert.match(pngTasks[0].outputPath, /\.png$/);
   } finally {
     backendConfig.DATA_DIR = previousDataDir;
     backendConfig.OUTPUT_DIR = previousOutputDir;
@@ -153,12 +186,13 @@ test('FHL canvas node and routes expose all planned modes and ports', () => {
   assert.match(registry, /type:\s*'fhl-image-gen'[\s\S]*label:\s*'FHL 生图'[\s\S]*category:\s*'core'/);
   assert.match(ports, /'fhl-image-gen':\s*\{\s*inputs:\s*\['text', 'image'\],\s*outputs:\s*\['image', 'text'\]/);
   assert.match(canvas, /'fhl-image-gen': FhlImageGenNode/);
-  assert.match(canvas, /'fhl-image-gen':\s*\{[\s\S]*fhlQuality:\s*'2K'/);
+  assert.match(canvas, /'fhl-image-gen':\s*\{[\s\S]*fhlQuality:\s*'2K'[\s\S]*fhlOutputFormat:\s*'jpg'/);
   assert.match(node, /id="text"/);
   assert.match(node, /id="fixed"/);
   assert.match(node, /id="items"/);
   assert.match(node, /data-fhl-job-status/);
   assert.match(node, /nail-tryon/);
+  assert.match(node, /fhlOutputFormat/);
   assert.match(route, /router\.post\('\/jobs'/);
   assert.match(route, /router\.post\('\/jobs\/:id\/cancel'/);
   assert.match(route, /router\.post\('\/jobs\/:id\/resume'/);

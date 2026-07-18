@@ -9,6 +9,7 @@ import type { FhlConfigSummary, FhlJobMode, FhlJobRequest, FhlJobSnapshot } from
 import { logBus } from '../../stores/logs';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useThemeStore } from '../../stores/theme';
+import PromptTextarea from '../PromptTextarea';
 import SmartImage from '../SmartImage';
 import { useCanvasRuntime } from './canvasRuntimeContext';
 import { useUpdateNodeData } from './useUpdateNodeData';
@@ -94,6 +95,7 @@ const FhlImageGenNode = ({ id, data, selected }: NodeProps) => {
 
   const panel: Panel = ['batch', 'batch-edit', 'workflow'].includes(d.fhlPanel) ? d.fhlPanel : 'quick';
   const quality: '2K' | '4K' = d.fhlQuality === '4K' ? '4K' : '2K';
+  const outputFormat: 'jpg' | 'png' = d.fhlOutputFormat === 'png' ? 'png' : 'jpg';
   const quickKind = d.fhlQuickKind === 'repeat' ? 'repeat' : 'count';
   const localFixed: string[] = Array.isArray(d.fhlFixedImages) ? d.fhlFixedImages : [];
   const localItems: string[] = Array.isArray(d.fhlItemImages) ? d.fhlItemImages : [];
@@ -172,6 +174,7 @@ const FhlImageGenNode = ({ id, data, selected }: NodeProps) => {
       templates: splitTemplates(String(d.fhlTemplatesText || '')),
       preset,
       quality,
+      outputFormat,
       aspect: preset ? '9:16' : aspect,
       count: mode === 'edit' ? Math.max(1, Math.min(4, Number(d.fhlCount) || 1)) : Math.max(1, Math.min(9, Number(d.fhlCount) || 1)),
       repeat: panel === 'quick' && mode === 'generate' && quickKind === 'repeat' ? Math.max(1, Math.min(50, Number(d.fhlRepeat) || 10)) : undefined,
@@ -183,7 +186,7 @@ const FhlImageGenNode = ({ id, data, selected }: NodeProps) => {
       dryRun: Boolean(d.fhlDryRun),
       historyContext: { canvasId: loadedCanvasId, sourceNodeId: id, sourceNodeType: 'fhl-image-gen', nodeTitle: String(d.label || 'FHL 生图'), prompt },
     };
-  }, [aspect, batchPrompts, d.fhlAdaptive, d.fhlConcurrency, d.fhlCount, d.fhlDryRun, d.fhlLimit, d.fhlPreset, d.fhlRepeat, d.fhlRepairPasses, d.fhlResize, d.fhlTemplatesText, d.label, fixedImages, id, itemImages, loadedCanvasId, panel, prompt, quality, quickKind]);
+  }, [aspect, batchPrompts, d.fhlAdaptive, d.fhlConcurrency, d.fhlCount, d.fhlDryRun, d.fhlLimit, d.fhlPreset, d.fhlRepeat, d.fhlRepairPasses, d.fhlResize, d.fhlTemplatesText, d.label, fixedImages, id, itemImages, loadedCanvasId, outputFormat, panel, prompt, quality, quickKind]);
 
   const handleRun = useCallback(async () => {
     if (busy) return;
@@ -266,10 +269,24 @@ const FhlImageGenNode = ({ id, data, selected }: NodeProps) => {
         </div>
 
         {(panel === 'quick' || panel === 'batch-edit') && (
-          <textarea className="nodrag nowheel h-28 w-full resize-none p-2 text-xs outline-none" style={fieldStyle} value={String(d.fhlPrompt || '')} placeholder={upstream.texts.length ? `已接入 ${upstream.texts.length} 段上游文本；留空时自动使用` : '输入生图或编辑提示词'} onChange={(event) => update({ fhlPrompt: event.target.value })} />
+          <PromptTextarea
+            title="FHL 提示词"
+            className="nodrag nowheel h-28 w-full resize-none p-2 text-xs outline-none"
+            style={fieldStyle}
+            value={String(d.fhlPrompt || '')}
+            placeholder={upstream.texts.length ? `已接入 ${upstream.texts.length} 段上游文本；留空时自动使用` : '输入生图或编辑提示词'}
+            onValueChange={(value) => update({ fhlPrompt: value })}
+          />
         )}
         {panel === 'batch' && (
-          <textarea className="nodrag nowheel h-32 w-full resize-none p-2 text-xs outline-none" style={fieldStyle} value={String(d.fhlBatchPrompts || '')} placeholder="每行一条提示词，最多 20 条；连接上游文本时优先使用上游" onChange={(event) => update({ fhlBatchPrompts: event.target.value })} />
+          <PromptTextarea
+            title="FHL 批量提示词"
+            className="nodrag nowheel h-32 w-full resize-none p-2 text-xs outline-none"
+            style={fieldStyle}
+            value={String(d.fhlBatchPrompts || '')}
+            placeholder="每行一条提示词，最多 20 条；连接上游文本时优先使用上游"
+            onValueChange={(value) => update({ fhlBatchPrompts: value })}
+          />
         )}
         {panel === 'workflow' && (
           <>
@@ -278,7 +295,16 @@ const FhlImageGenNode = ({ id, data, selected }: NodeProps) => {
                 <option value="">通用模板</option><option value="nail-tryon">nail-tryon 美甲试戴</option>
               </select>
             </label>
-            {d.fhlPreset !== 'nail-tryon' && <textarea className="nodrag nowheel h-36 w-full resize-none p-2 text-xs outline-none" style={fieldStyle} value={String(d.fhlTemplatesText || '')} placeholder={'输入场景模板；多个模板用单独一行 --- 分隔'} onChange={(event) => update({ fhlTemplatesText: event.target.value })} />}
+            {d.fhlPreset !== 'nail-tryon' && (
+              <PromptTextarea
+                title="FHL 工作流场景模板"
+                className="nodrag nowheel h-36 w-full resize-none p-2 text-xs outline-none"
+                style={fieldStyle}
+                value={String(d.fhlTemplatesText || '')}
+                placeholder="输入场景模板；多个模板用单独一行 --- 分隔"
+                onValueChange={(value) => update({ fhlTemplatesText: value })}
+              />
+            )}
           </>
         )}
 
@@ -299,9 +325,10 @@ const FhlImageGenNode = ({ id, data, selected }: NodeProps) => {
 
         {panel === 'quick' && fixedImages.length > 5 && <div className="flex gap-2 rounded-lg bg-amber-500/10 p-2 text-[11px] text-amber-400"><AlertTriangle size={14} />6–10 张组合参考属于实验性重负载范围，将强制串行。</div>}
 
-        <section className="grid grid-cols-4 gap-2">
+        <section className="grid grid-cols-5 gap-2">
           <label className="grid gap-1 text-[10px]" style={{ color: hint }}>规格<select className="nodrag p-1.5 text-xs" style={fieldStyle} value={quality} onChange={(event) => update({ fhlQuality: event.target.value })}><option>2K</option><option>4K</option></select></label>
           <label className="grid gap-1 text-[10px]" style={{ color: hint }}>比例<select className="nodrag p-1.5 text-xs" style={fieldStyle} value={aspect} disabled={d.fhlPreset === 'nail-tryon'} onChange={(event) => update({ fhlAspect: event.target.value })}>{aspectOptions.map((value) => <option key={value}>{value}</option>)}</select></label>
+          <label className="grid gap-1 text-[10px]" style={{ color: hint }}>保存格式<select className="nodrag p-1.5 text-xs" style={fieldStyle} value={outputFormat} onChange={(event) => update({ fhlOutputFormat: event.target.value })}><option value="jpg">JPG</option><option value="png">PNG</option></select></label>
           <label className="grid gap-1 text-[10px]" style={{ color: hint }}>并发<input className="nodrag min-w-0 p-1.5 text-xs" style={fieldStyle} type="number" min={1} max={10} value={Number(d.fhlConcurrency) || 1} onChange={(event) => update({ fhlConcurrency: Number(event.target.value) })} /></label>
           {panel === 'quick' ? <label className="grid gap-1 text-[10px]" style={{ color: hint }}>{isEdit ? '变体' : quickKind === 'repeat' ? '连续' : '张数'}<input className="nodrag min-w-0 p-1.5 text-xs" style={fieldStyle} type="number" min={1} max={isEdit ? 4 : quickKind === 'repeat' ? 50 : 9} value={isEdit ? (Number(d.fhlCount) || 1) : quickKind === 'repeat' ? (Number(d.fhlRepeat) || 10) : (Number(d.fhlCount) || 1)} onChange={(event) => update(!isEdit && quickKind === 'repeat' ? { fhlRepeat: Number(event.target.value) } : { fhlCount: Number(event.target.value) })} /></label> : <label className="grid gap-1 text-[10px]" style={{ color: hint }}>{panel === 'workflow' ? '修复轮数' : '任务数'}<input className="nodrag min-w-0 p-1.5 text-xs" style={fieldStyle} type="number" min={panel === 'workflow' ? 0 : 1} max={panel === 'workflow' ? 5 : 20} disabled={panel !== 'workflow'} value={panel === 'workflow' ? (Number(d.fhlRepairPasses) || 2) : (panel === 'batch' ? batchPrompts.length : Math.min(10, itemImages.length))} onChange={(event) => panel === 'workflow' && update({ fhlRepairPasses: Number(event.target.value) })} /></label>}
         </section>

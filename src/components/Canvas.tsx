@@ -171,6 +171,7 @@ import OutputNode from './nodes/OutputNode';
 import GroupBoxNode from './nodes/GroupBoxNode';
 import CodexCliAgentNode from './nodes/CodexCliAgentNode';
 import CodexImageConjureNode from './nodes/CodexImageConjureNode';
+import ImageToEditableDocumentNode from './nodes/ImageToEditableDocumentNode';
 import GrokOAuthAgentNode from './nodes/GrokOAuthAgentNode';
 import DeletableEdge from './edges/DeletableEdge';
 import { NODE_REGISTRY } from '../config/nodeRegistry';
@@ -276,6 +277,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   // Agent (3) - AI Agent 工作台节点
   'codex-cli-agent': CodexCliAgentNode,
   'codex-image-conjure': CodexImageConjureNode,
+  'image-to-editable-document': ImageToEditableDocumentNode,
   'grok-oauth-agent': GrokOAuthAgentNode,
 };
 
@@ -613,6 +615,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
   'fhl-image-gen': {
     fhlPanel: 'quick',
     fhlQuality: '2K',
+    fhlOutputFormat: 'jpg',
     fhlAspect: '1:1',
     fhlQuickKind: 'count',
     fhlCount: 1,
@@ -1406,6 +1409,14 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     batchProcessorExpandCanvas: false,
     batchProcessorUpscale: false,
     batchProcessorUploadNotice: '',
+    status: 'idle',
+    error: '',
+  },
+  'image-to-editable-document': {
+    editableOutputFormat: 'ppt',
+    editableExtraInstructions: '',
+    editableFiles: [],
+    editableProgress: '',
     status: 'idle',
     error: '',
   },

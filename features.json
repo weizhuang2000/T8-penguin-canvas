@@ -1,9 +1,26 @@
 {
+  "imageToEditableDocument": {
+    "status": "implemented",
+    "nodeType": "image-to-editable-document",
+    "label": "图片转可编辑文件",
+    "capabilities": [
+      "固定调用 image-to-editable-ppt Skill，将一张或多张上游图片按顺序重建",
+      "PPT 模式执行 editppt 的逐页对象化重建、record、finalize 和结构校验，输出 PPTX",
+      "PSD 模式复用背景、前景对象、文字和结构拆分规则，输出真实分层 PSD，禁止扁平图层降级",
+      "节点内检查 Codex CLI 与 Skill 状态，显示流式进度、错误信息和最终文件下载",
+      "支持批量运行触发、任务停止和自定义补充重建要求"
+    ],
+    "verification": [
+      "node --test tests\\imageToEditableDocument.test.ts tests\\codexCliAgent.test.ts",
+      "npm run type-check"
+    ]
+  },
   "fhlImageGen": {
     "status": "implemented",
     "nodeType": "fhl-image-gen",
     "label": "FHL 生图",
     "capabilities": [
+      "支持 JPG 与 PNG 保存格式；默认 JPG 使用质量 100、4:4:4 色度的最高质量压缩，同时保留上游原始 PNG",
       "固定使用 FHL Images API 与 gpt-image-2，默认 2K，4K 仅显式选择并按实测比例矩阵校验",
       "支持文生图、组合多参考图编辑、同提示词 1-9 张、连续 1-50 张、20 条批量提示词和 10 张逐图批改",
       "工作流批改使用 fixed 固定参考图、items 变量素材集和自定义模板，内置 nail-tryon 预设",

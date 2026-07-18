@@ -14,6 +14,10 @@ export interface CodexCliStatus {
   featureNames?: string[];
   features?: Array<{ name: string; stage?: string; enabled?: boolean }>;
   message?: string;
+  editppt?: {
+    available: boolean;
+    message?: string;
+  };
 }
 
 export interface CodexSkill {
@@ -190,11 +194,12 @@ function mergeResult(target: CodexCliResult, patch?: CodexCliResult) {
 
 export async function getCodexCliStatus(
   executablePath?: string,
-  options: { runtimeOnly?: boolean } = {},
+  options: { runtimeOnly?: boolean; includeEditppt?: boolean } = {},
 ): Promise<CodexCliStatus> {
   const sp = new URLSearchParams();
   if (executablePath) sp.set('executablePath', executablePath);
   if (options.runtimeOnly) sp.set('runtimeOnly', '1');
+  if (options.includeEditppt) sp.set('includeEditppt', '1');
   const qs = sp.toString();
   return requestJson<CodexCliStatus>(`${BASE}/status${qs ? `?${qs}` : ''}`);
 }

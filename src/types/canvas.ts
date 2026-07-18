@@ -30,6 +30,7 @@ export type NodeType =
   | 'grok-oauth-agent'
   | 'codex-cli-agent'
   | 'codex-image-conjure'
+  | 'image-to-editable-document'
   | 'artist-style-master'
   | 'anime-tag-master'
   | 'comfyui-store'
@@ -342,12 +343,13 @@ export interface FhlConfigSummary {
   workerCount: number;
   enabledWorkerCount: number;
   workers: FhlWorkerSummary[];
-  defaults: { quality: '2K'; aspect: string; concurrency: number; repairPasses: number };
+  defaults: { quality: '2K'; outputFormat: FhlOutputFormat; aspect: string; concurrency: number; repairPasses: number };
   ratioSupport: Record<'generate' | 'edit', Record<'2K' | '4K', string[]>>;
   importedCount?: number;
 }
 
 export type FhlJobMode = 'generate' | 'edit' | 'batch-generate' | 'batch-edit' | 'workflow-batch-edit';
+export type FhlOutputFormat = 'jpg' | 'png';
 
 export interface FhlJobRequest {
   mode: FhlJobMode;
@@ -358,6 +360,7 @@ export interface FhlJobRequest {
   templates?: Array<{ key?: string; label?: string; prompt: string }>;
   preset?: '' | 'nail-tryon';
   quality?: '2K' | '4K';
+  outputFormat?: FhlOutputFormat;
   aspect?: string;
   count?: number;
   repeat?: number;

@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const { spawn } = require('child_process');
 const { runLocalHooks } = require('../extensions/runtimeHooks');
 const { generateConfiguredImage, generateConfiguredLlm, generateConfiguredResponseImage } = require('../providers/llmClient');
 const settingsRouter = require('./settings');
@@ -18,6 +19,49 @@ const {
 } = require('../utils/codexCliRunner');
 
 const router = express.Router();
+
+function probeEditPptRuntime(timeoutMs = 8000) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let stdout = '';
+    let stderr = '';
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+    let child;
+    try {
+      child = spawn('editppt', ['--help'], {
+        windowsHide: true,
+        shell: process.platform === 'win32',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } catch (error) {
+      finish({ available: false, message: error?.message || String(error) });
+      return;
+    }
+    const timer = setTimeout(() => {
+      try { child.kill(); } catch { /* ignore */ }
+      finish({ available: false, message: 'editppt --help 检查超时' });
+    }, timeoutMs);
+    timer.unref?.();
+    child.stdout?.on('data', (chunk) => { stdout += chunk.toString('utf8'); });
+    child.stderr?.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      finish({ available: false, message: error?.message || String(error) });
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      const text = (stdout || stderr).trim();
+      finish({
+        available: code === 0,
+        message: code === 0 ? 'editppt CLI 可用' : (text || `editppt --help 退出码 ${code}`),
+      });
+    });
+  });
+}
 
 function beginSse(res) {
   if (res.headersSent) return;
@@ -50,6 +94,7 @@ function artifactPatch(artifact = {}) {
   if (kind === 'video') return { videoUrl: urls[0] || '', videoUrls: urls };
   if (kind === 'audio') return { audioUrl: urls[0] || '', audioUrls: urls };
   if (kind === 'model3d') return { modelUrl: urls[0] || '', modelUrls: urls };
+  if (kind === 'file') return { fileUrl: urls[0] || '', fileUrls: urls };
   return {};
 }
 
@@ -269,6 +314,9 @@ router.get('/status', async (req, res) => {
       executablePath: req.query.executablePath,
       runtimeOnly: req.query.runtimeOnly === '1' || req.query.runtimeOnly === 'true',
     });
+    if (req.query.includeEditppt === '1' || req.query.includeEditppt === 'true') {
+      data.editppt = await probeEditPptRuntime();
+    }
     return res.json({ success: true, data });
   } catch (error) {
     return res.status(500).json({

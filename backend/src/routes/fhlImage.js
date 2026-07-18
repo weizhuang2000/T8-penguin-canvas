@@ -119,7 +119,7 @@ function workerSummary() {
     workerCount: workers.length,
     enabledWorkerCount: workers.filter((item) => item.enabled !== false).length,
     workers: maskWorkers(workers),
-    defaults: { quality: '2K', aspect: '1:1', concurrency: Math.min(3, Math.max(1, workers.length)), repairPasses: 2 },
+    defaults: { quality: '2K', outputFormat: 'jpg', aspect: '1:1', concurrency: Math.min(3, Math.max(1, workers.length)), repairPasses: 2 },
     ratioSupport: RATIO_SUPPORT,
   };
 }
@@ -159,6 +159,7 @@ function workflowPrompt(template, fixedCount) {
 function normalizeRequest(body) {
   const mode = JOB_MODES.has(body?.mode) ? body.mode : 'generate';
   const quality = String(body?.quality || '2K').toUpperCase() === '4K' ? '4K' : '2K';
+  const outputFormat = String(body?.outputFormat || '').toLowerCase() === 'png' ? 'png' : 'jpg';
   const aspect = cleanText(body?.aspect || '1:1', 12);
   const fixedImages = uniqueStrings(body?.fixedImages || body?.images, 10);
   const itemImages = uniqueStrings(body?.itemImages, 10_000);
@@ -166,7 +167,7 @@ function normalizeRequest(body) {
   const prompt = cleanText(body?.prompt, 20_000);
   const preset = body?.preset === 'nail-tryon' ? 'nail-tryon' : '';
   const request = {
-    mode, prompt, prompts, fixedImages, itemImages, preset, quality,
+    mode, prompt, prompts, fixedImages, itemImages, preset, quality, outputFormat,
     aspect: preset ? '9:16' : aspect,
     count: clampInt(body?.count, 1, mode === 'edit' ? 4 : 9, 1),
     repeat: body?.repeat == null ? 0 : clampInt(body.repeat, 1, 50, 1),
@@ -196,18 +197,23 @@ function normalizeRequest(body) {
 function buildTasks(job) {
   const req = job.request;
   const root = path.join(OUTPUT_ROOT, job.id);
+  const extension = req.outputFormat === 'png' ? 'png' : 'jpg';
+  const formattedName = (value, fallback) => {
+    const safeName = path.basename(value || fallback);
+    return `${safeName.replace(/\.(?:png|jpe?g)$/i, '')}.${extension}`;
+  };
   fs.mkdirSync(root, { recursive: true });
   const tasks = [];
   const push = (task) => tasks.push({ id: `task-${tasks.length + 1}`, status: 'queued', ...task });
   if (req.mode === 'generate') {
     const total = req.repeat || req.count;
-    for (let index = 0; index < total; index += 1) push({ operation: 'generate', prompt: req.prompt, images: [], outputPath: path.join(root, `${String(index + 1).padStart(3, '0')}.png`) });
+    for (let index = 0; index < total; index += 1) push({ operation: 'generate', prompt: req.prompt, images: [], outputPath: path.join(root, `${String(index + 1).padStart(3, '0')}.${extension}`) });
   } else if (req.mode === 'edit') {
-    for (let index = 0; index < req.count; index += 1) push({ operation: 'edit', prompt: req.prompt, images: req.fixedImages, outputPath: path.join(root, `${String(index + 1).padStart(3, '0')}.png`) });
+    for (let index = 0; index < req.count; index += 1) push({ operation: 'edit', prompt: req.prompt, images: req.fixedImages, outputPath: path.join(root, `${String(index + 1).padStart(3, '0')}.${extension}`) });
   } else if (req.mode === 'batch-generate') {
-    req.prompts.forEach((prompt, index) => push({ operation: 'generate', prompt, images: [], outputPath: path.join(root, `${String(index + 1).padStart(3, '0')}.png`) }));
+    req.prompts.forEach((prompt, index) => push({ operation: 'generate', prompt, images: [], outputPath: path.join(root, `${String(index + 1).padStart(3, '0')}.${extension}`) }));
   } else if (req.mode === 'batch-edit') {
-    req.itemImages.slice(0, 10).forEach((image, index) => push({ operation: 'edit', prompt: req.prompt, images: [image], itemIndex: index + 1, outputPath: path.join(root, `${String(index + 1).padStart(3, '0')}.png`) }));
+    req.itemImages.slice(0, 10).forEach((image, index) => push({ operation: 'edit', prompt: req.prompt, images: [image], itemIndex: index + 1, outputPath: path.join(root, `${String(index + 1).padStart(3, '0')}.${extension}`) }));
   } else {
     req.itemImages.slice(0, req.limit).forEach((image, itemIndex) => {
       const itemDir = path.join(root, `${String(itemIndex + 1).padStart(3, '0')}_item`);
@@ -220,11 +226,11 @@ function buildTasks(job) {
         templateKey: template.key,
         templateLabel: template.label,
         groupKey: `item-${itemIndex + 1}`,
-        outputPath: path.join(itemDir, template.filename || `${String(templateIndex + 1).padStart(2, '0')}_${template.key}.png`),
+        outputPath: path.join(itemDir, formattedName(template.filename, `${String(templateIndex + 1).padStart(2, '0')}_${template.key}`)),
       }));
     });
   }
-  return tasks.map((task) => ({ ...task, quality: req.quality, aspect: req.aspect, resize: req.resize, outputUrl: outputUrl(task.outputPath) }));
+  return tasks.map((task) => ({ ...task, quality: req.quality, outputFormat: req.outputFormat, aspect: req.aspect, resize: req.resize, outputUrl: outputUrl(task.outputPath) }));
 }
 
 function taskPublic(task) {
@@ -281,12 +287,13 @@ function applyReport(job, queue, report) {
   job.workerStats = report.workerStats;
 }
 
-async function isUsablePng(filePath) {
+async function isUsableImage(filePath) {
   try {
     if (!fs.existsSync(filePath) || fs.statSync(filePath).size <= 0) return false;
     const sharp = require('sharp');
     const metadata = await sharp(filePath, { limitInputPixels: false }).metadata();
-    return metadata.format === 'png' && Number(metadata.width) > 0 && Number(metadata.height) > 0;
+    const expected = /\.jpe?g$/i.test(filePath) ? 'jpeg' : 'png';
+    return metadata.format === expected && Number(metadata.width) > 0 && Number(metadata.height) > 0;
   } catch {
     return false;
   }
@@ -295,8 +302,8 @@ async function isUsablePng(filePath) {
 async function incompleteTasks(tasks) {
   const out = [];
   for (const task of tasks) {
-    if (task.status === 'success' && await isUsablePng(task.outputPath)) continue;
-    if (await isUsablePng(task.outputPath)) {
+    if (task.status === 'success' && await isUsableImage(task.outputPath)) continue;
+    if (await isUsableImage(task.outputPath)) {
       task.status = 'success';
       task.outputUrl = outputUrl(task.outputPath);
       continue;
