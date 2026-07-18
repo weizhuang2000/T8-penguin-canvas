@@ -2,7 +2,7 @@
 
 const express = require('express');
 const { runLocalHooks } = require('../extensions/runtimeHooks');
-const { generateConfiguredLlm } = require('../providers/llmClient');
+const { generateConfiguredImage, generateConfiguredLlm } = require('../providers/llmClient');
 const settingsRouter = require('./settings');
 const {
   CODEX_DISABLED_MESSAGE,
@@ -130,19 +130,64 @@ function directAgentMessages(body = {}) {
 }
 
 async function runDirectLlmAgent(body = {}, provider = {}, handlers = {}) {
-  handlers.onProgress?.(`正在调用 ${provider.label || 'LLM 独立配置'} · ${provider.model}...`, { type: 'llm.request' });
+  const wantsImage = body.imageGeneration === true && body.llmOnly !== true;
+  handlers.onProgress?.(`正在调用 ${provider.label || 'LLM 独立配置'} · ${provider.model}...`, { type: wantsImage ? 'image.request' : 'llm.request' });
   const startedAt = Date.now();
-  const response = await generateConfiguredLlm({
-    llmKeyId: provider.id,
-    model: provider.model,
-    messages: directAgentMessages(body),
-    temperature: body.temperature ?? 0.4,
-    maxTokens: body.maxTokens ?? 16384,
-    llmVideoMode: body.llmVideoMode || 'frames',
-    videoFrameCount: body.videoFrameCount || 8,
-    timeoutMs: body.timeoutMs,
-    signal: handlers.signal,
-  });
+  let response;
+  let imageApiError = null;
+  if (wantsImage) {
+    try {
+      response = await generateConfiguredImage({
+        llmKeyId: provider.id,
+        prompt: makeCreatorPrompt({
+          ...body,
+          directLlm: true,
+          skillInstructions: selectedSkillInstructions(body),
+        }),
+        images: body.images,
+        n: body.n ?? 1,
+        size: body.size,
+        quality: body.quality,
+        responseFormat: body.responseFormat,
+        seed: body.seed,
+        timeoutMs: body.timeoutMs,
+        signal: handlers.signal,
+      });
+    } catch (error) {
+      imageApiError = error;
+      if (/unauthorized|forbidden|\b401\b|\b403\b/i.test(String(error?.message || '')) || [401, 403].includes(Number(error?.status))) throw error;
+      handlers.onProgress?.('所选平台的 Images API 未完成生图，正在尝试该模型的多模态对话接口...', {
+        type: 'image.fallback',
+        status: Number(error?.status) || undefined,
+      });
+    }
+  }
+  if (!response) {
+    try {
+      response = await generateConfiguredLlm({
+        llmKeyId: provider.id,
+        model: provider.model,
+        messages: directAgentMessages(body),
+        temperature: body.temperature ?? 0.4,
+        maxTokens: body.maxTokens ?? (wantsImage ? 4096 : 16384),
+        llmVideoMode: body.llmVideoMode || 'frames',
+        videoFrameCount: body.videoFrameCount || 8,
+        timeoutMs: body.timeoutMs,
+        signal: handlers.signal,
+      });
+    } catch (chatError) {
+      if (!wantsImage || !imageApiError) throw chatError;
+      const status = Number(imageApiError?.status || chatError?.status) || 0;
+      response = {
+        content: [
+          `所选配置“${provider.label || provider.id}”的模型 ${provider.model} 未能通过图片接口返回图片${status ? `（HTTP ${status}）` : ''}。`,
+          '请确认该模型支持 OpenAI 兼容的 /v1/images/generations 或 /v1/images/edits；本次已保留以下完整生图提示词：',
+          String(body.prompt || '').trim(),
+        ].filter(Boolean).join('\n\n'),
+        imageUrls: [],
+      };
+    }
+  }
   const text = String(response.content || '').trim();
   if (text) handlers.onDelta?.(text, { type: 'llm.completed' });
   const imageUrls = Array.isArray(response.imageUrls) ? response.imageUrls.filter(Boolean) : [];

@@ -11,13 +11,24 @@ function normalizeLlmBaseUrl(value, fallback = '') {
   }
 }
 
-function resolveLlmChatCompletionsUrl(value, fallback) {
+function resolveLlmApiRoot(value, fallback) {
   const base = normalizeLlmBaseUrl(value, fallback) || fallback;
   const parsed = new URL(base);
-  const normalizedBase = parsed.toString().replace(/\/+$/, '');
-  return /\/v1$/i.test(parsed.pathname.replace(/\/+$/, ''))
-    ? `${normalizedBase}/chat/completions`
-    : `${normalizedBase}/v1/chat/completions`;
+  let pathname = parsed.pathname.replace(/\/+$/, '');
+  pathname = pathname.replace(/\/(?:chat\/completions|responses|images\/(?:generations|edits))$/i, '');
+  if (!/\/v1$/i.test(pathname)) pathname = `${pathname}/v1`;
+  parsed.pathname = pathname.replace(/\/{2,}/g, '/');
+  parsed.search = '';
+  parsed.hash = '';
+  return parsed.toString().replace(/\/+$/, '');
+}
+
+function resolveLlmChatCompletionsUrl(value, fallback) {
+  return `${resolveLlmApiRoot(value, fallback)}/chat/completions`;
+}
+
+function resolveLlmImageGenerationsUrl(value, fallback) {
+  return `${resolveLlmApiRoot(value, fallback)}/images/generations`;
 }
 
 function normalizeLlmModelName(value, fallback = '') {
@@ -30,5 +41,7 @@ function normalizeLlmModelName(value, fallback = '') {
 module.exports = {
   normalizeLlmBaseUrl,
   normalizeLlmModelName,
+  resolveLlmApiRoot,
   resolveLlmChatCompletionsUrl,
+  resolveLlmImageGenerationsUrl,
 };

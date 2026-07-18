@@ -6,7 +6,9 @@ const require = createRequire(import.meta.url);
 const {
   normalizeLlmBaseUrl,
   normalizeLlmModelName,
+  resolveLlmApiRoot,
   resolveLlmChatCompletionsUrl,
+  resolveLlmImageGenerationsUrl,
 } = require('../backend/src/utils/llmBaseUrl.js');
 
 const fallback = 'https://ai.t8star.org';
@@ -31,6 +33,18 @@ test('builds the OpenAI-compatible chat completions endpoint', () => {
   assert.equal(
     resolveLlmChatCompletionsUrl('', fallback),
     'https://ai.t8star.org/v1/chat/completions',
+  );
+  assert.equal(
+    resolveLlmChatCompletionsUrl('https://llm.example.com/openai/v1/chat/completions', fallback),
+    'https://llm.example.com/openai/v1/chat/completions',
+  );
+});
+
+test('builds the OpenAI-compatible image generations endpoint from the same API root', () => {
+  assert.equal(resolveLlmApiRoot('https://llm.example.com', fallback), 'https://llm.example.com/v1');
+  assert.equal(
+    resolveLlmImageGenerationsUrl('https://llm.example.com/openai/v1/responses', fallback),
+    'https://llm.example.com/openai/v1/images/generations',
   );
 });
 

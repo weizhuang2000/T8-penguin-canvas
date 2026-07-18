@@ -727,6 +727,43 @@ test('Codex direct LLM prompt injects selected Skill guidance without claiming C
   assert.doesNotMatch(prompt, /当前 Codex CLI 提供 image_generation/);
 });
 
+test('Codex direct IMG mode calls the selected LLM config image endpoint without model or key overrides', async () => {
+  const { generateConfiguredImage } = require('../backend/src/providers/llmClient.js');
+  const calls: any[] = [];
+  const settings = {
+    llmConfigs: [{
+      id: 'image-platform',
+      label: 'Image Platform',
+      apiKey: 'private-image-key',
+      baseUrl: 'https://llm.example.com/openai/v1',
+      model: 'configured-image-model',
+      isDefault: true,
+    }],
+    llmApiKey: '',
+    llmBaseUrl: '',
+    llmModel: '',
+  };
+  const result = await generateConfiguredImage({
+    settings,
+    llmKeyId: 'image-platform',
+    model: 'frontend-model-must-be-ignored',
+    prompt: '生成一张海报',
+    fetchImpl: async (url: string, init: any) => {
+      calls.push({ url, init });
+      return new Response(JSON.stringify({ data: [{ b64_json: 'UE5H' }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    },
+  });
+
+  assert.equal(calls[0].url, 'https://llm.example.com/openai/v1/images/generations');
+  const payload = JSON.parse(calls[0].init.body);
+  assert.equal(payload.model, 'configured-image-model');
+  assert.doesNotMatch(calls[0].init.body, /private-image-key|frontend-model-must-be-ignored/);
+  assert.deepEqual(result.imageUrls, ['data:image/png;base64,UE5H']);
+});
+
 test('Codex simple creator mode has explicit LLM IMG intent, configured agent model, imagegen default skill, and image-first publishing', () => {
   const node = read('../src/components/nodes/CodexCliAgentNode.tsx');
 

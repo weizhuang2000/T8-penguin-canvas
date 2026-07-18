@@ -16,11 +16,16 @@ async function fetchWithTimeout(url, options = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs || DEFAULT_TIMEOUT_MS);
   const fetchImpl = options.fetchImpl || fetch;
-  const { timeoutMs, fetchImpl: _fetchImpl, ...fetchOptions } = options;
+  const externalSignal = options.signal;
+  const abortFromExternal = () => controller.abort(externalSignal?.reason);
+  if (externalSignal?.aborted) abortFromExternal();
+  else externalSignal?.addEventListener?.('abort', abortFromExternal, { once: true });
+  const { timeoutMs, fetchImpl: _fetchImpl, signal: _signal, ...fetchOptions } = options;
   try {
     return await fetchImpl(url, { ...fetchOptions, signal: controller.signal });
   } finally {
     clearTimeout(timeout);
+    externalSignal?.removeEventListener?.('abort', abortFromExternal);
   }
 }
 
@@ -476,6 +481,7 @@ async function generateImage(provider, input = {}, options = {}) {
           body: form,
           timeoutMs: options.timeoutMs || DEFAULT_IMAGE_TIMEOUT_MS,
           fetchImpl: options.fetchImpl,
+          signal: options.signal,
         });
         const raw = await responseJson(res);
         if (!res.ok) {
@@ -509,6 +515,7 @@ async function generateImage(provider, input = {}, options = {}) {
       body: JSON.stringify(body),
       timeoutMs: options.timeoutMs || DEFAULT_IMAGE_TIMEOUT_MS,
       fetchImpl: options.fetchImpl,
+      signal: options.signal,
     });
     const raw = await responseJson(res);
     if (!res.ok) {

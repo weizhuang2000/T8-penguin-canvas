@@ -877,10 +877,10 @@
     "capabilities": [
       "简约生成模式保留一个 Prompt 输入、创作预设、Skill 选择和一键运行，适合快速生成提示词、脚本或素材方案。",
       "Codex 创作台模式提供流式消息、运行事件、产物库、版本树、质量检查和项目 Skill 抽屉，适合连续创作与多轮修改。",
-      "Agent 平台从 LLM 独立配置中选择，模型严格跟随所选配置；后端从本地设置读取密钥并直连 OpenAI 兼容 Chat Completions，不把 API Key 写入画布、日志或 SSE。",
+      "Agent 平台从 LLM 独立配置中选择，模型严格跟随所选配置；文字模式直连 Chat Completions，IMG 模式优先调用同配置的 Images API，不把 API Key 写入画布、日志或 SSE。",
       "后端 /api/codex-cli 的 agent/stream 使用 SSE 返回 turn.started、message.delta、tool.progress、artifact.completed 等事件；status 路由仅保留给仍使用 CLI 的 Codex 生图工作台。",
       "选中的 Skill 会把 SKILL.md 规范注入 Agent 提示词，不再作为本地 Codex 工具执行；文字和多模态输入由所选 LLM 接口直接处理。",
-      "IMG 模式仅收集所选 LLM 接口自身返回的图片；模型未返回图片时明确退回完整生图提示词，不伪造本地文件产物。",
+      "IMG 模式优先调用 /v1/images/generations，有参考图时调用 /v1/images/edits；平台不支持 Images API 时回退多模态 Chat Completions，两条链路都不可用时保留完整生图提示词并给出兼容性说明。",
       "Electron 后置检查锁住 routes/codexCli.t8c 与 utils/codexCliRunner.t8c，避免桌面包漏路由后出现 /api/codex-cli 404。",
       "Skill 扫描覆盖 CODEX_HOME 全局 Skills、用户 .agents/skills、项目 .agents/skills 和节点工作区项目 Skills；节点内可创建当前项目专用 Skill。",
       "产物解析覆盖文本、图片、视频、音频和 3D 模型 URL；发布后写回节点标准输出字段，也可保存到资源库。"

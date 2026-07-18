@@ -2,8 +2,9 @@
 
 const config = require('../config');
 const settingsRouter = require('../routes/settings');
-const { resolveLlmChatCompletionsUrl } = require('../utils/llmBaseUrl');
+const { resolveLlmApiRoot, resolveLlmChatCompletionsUrl } = require('../utils/llmBaseUrl');
 const { normalizeLlmMessageMedia } = require('./llmMedia');
+const { generateImage } = require('./openaiCompatible');
 
 const DEFAULT_TIMEOUT_MS = 180 * 1000;
 const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
@@ -170,10 +171,61 @@ async function generateConfiguredLlm(options = {}) {
   throw lastError || new Error('LLM 请求失败');
 }
 
+async function generateConfiguredImage(options = {}) {
+  const settings = options.settings || loadRawSettings();
+  const selected = resolveLlmConfig(settings, options.llmKeyId);
+  if (!selected || selected.error) throw new Error(selected?.error || '未配置 LLM 独立 API Key');
+  const model = String(selected.model || '').trim();
+  if (!model) throw new Error('LLM 独立配置缺少模型名称');
+  const prompt = String(options.prompt || '').trim();
+  if (!prompt) throw new Error('生图提示词不能为空');
+
+  const provider = {
+    id: `llm-config-${selected.keyId}`,
+    label: selected.label,
+    protocol: 'openai-compatible',
+    enabled: true,
+    apiKey: selected.apiKey,
+    baseUrl: resolveLlmApiRoot(selected.baseUrl, zhenzhenBaseUrl(settings)),
+    imageModels: [model],
+    defaults: { imageModel: model },
+  };
+  const result = await generateImage(provider, {
+    prompt,
+    model,
+    images: Array.isArray(options.images) ? options.images : [],
+    n: options.n ?? 1,
+    size: options.size,
+    quality: options.quality,
+    response_format: options.responseFormat || options.response_format,
+    seed: options.seed,
+  }, {
+    baseUrl: `http://127.0.0.1:${config.PORT}`,
+    timeoutMs: options.timeoutMs,
+    fetchImpl: options.fetchImpl,
+    signal: options.signal,
+  });
+  if (!result?.ok) {
+    const error = new Error(result?.error || '所选 LLM 独立配置的图片接口调用失败');
+    error.status = Number(result?.statusCode) || undefined;
+    error.code = result?.code || 'llm_image_failed';
+    throw error;
+  }
+  return {
+    content: '',
+    imageUrls: Array.isArray(result.imageUrls) ? result.imageUrls.filter(Boolean) : [],
+    raw: result.raw,
+    model,
+    llmKeyId: selected.keyId,
+    llmLabel: selected.label,
+  };
+}
+
 module.exports = {
   DEFAULT_TIMEOUT_MS,
   RETRYABLE_STATUSES,
   extractResponse,
+  generateConfiguredImage,
   generateConfiguredLlm,
   loadRawSettings,
   resolveLlmConfig,
