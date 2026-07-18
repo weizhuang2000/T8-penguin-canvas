@@ -184,6 +184,38 @@ test('tool permissions migrate FHL image generation into saved default visibilit
   assert.equal(permissions.canUseNode({ id: 'u2', role: 'designer' }, 'fhl-image-gen', db), true);
 }));
 
+test('tool permissions keep image-to-editable-document grants saved from user management', () => withTempData(() => {
+  permissions.writeDb({
+    defaultVisibleNodeTypes: ['text'],
+    roleRules: {
+      designer: { mode: 'custom', allowedNodeTypes: ['image-to-editable-document'], deniedNodeTypes: [] },
+    },
+    userRules: {
+      u1: { mode: 'custom', allowedNodeTypes: ['image-to-editable-document'], deniedNodeTypes: [] },
+    },
+  });
+
+  const db = permissions.readDb();
+  const resolved = permissions.resolveToolPermissions({ id: 'u1', role: 'designer' }, db);
+  assert.equal(permissions.ALL_NODE_TYPES.includes('image-to-editable-document'), true);
+  assert.equal(permissions.DEFAULT_VISIBLE_NODE_TYPES.includes('image-to-editable-document'), true);
+  assert.deepEqual(db.roleRules.designer.allowedNodeTypes, ['image-to-editable-document']);
+  assert.deepEqual(db.userRules.u1.allowedNodeTypes, ['image-to-editable-document']);
+  assert.equal(resolved.allowedNodeTypes.includes('image-to-editable-document'), true);
+  assert.equal(permissions.canUseNode({ id: 'u1', role: 'designer' }, 'image-to-editable-document', db), true);
+}));
+
+test('tool permissions migrate image-to-editable-document into saved default visibility', () => withTempData(() => {
+  const oldDefaults = permissions.DEFAULT_VISIBLE_NODE_TYPES.filter((type) => type !== 'image-to-editable-document');
+  permissions.writeDb({ defaultVisibleNodeTypes: oldDefaults, roleRules: {}, userRules: {} });
+
+  const db = permissions.readDb();
+  const resolved = permissions.resolveToolPermissions({ id: 'u2', role: 'designer' }, db);
+  assert.equal(db.defaultVisibleNodeTypes.includes('image-to-editable-document'), true);
+  assert.equal(resolved.visibleNodeTypes.includes('image-to-editable-document'), true);
+  assert.equal(permissions.canUseNode({ id: 'u2', role: 'designer' }, 'image-to-editable-document', db), true);
+}));
+
 test('tool permissions default exhibition compact form for old configs', () => withTempData(() => {
   permissions.writeDb({
     defaultVisibleNodeTypes: ['text'],
