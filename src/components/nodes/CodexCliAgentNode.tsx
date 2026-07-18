@@ -31,7 +31,6 @@ import {
   deleteCodexProjectSkill,
   getCodexCliSkills,
   getCodexCliStatus,
-  startCodexCliLogin,
   streamCodexCliAgent,
   type CodexAgentArtifact,
   type CodexCliStatus,
@@ -39,6 +38,7 @@ import {
   type CodexStreamEvent,
   updateCodexProjectSkill,
 } from '../../services/codexCli';
+import { useApiKeysStore } from '../../stores/apiKeys';
 import { logBus } from '../../stores/logs';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useThemeStore } from '../../stores/theme';
@@ -137,17 +137,6 @@ const IMAGE_GENERATION_FALLBACK_PRESET: CreatorPreset = {
 };
 
 const SYSTEM_CREATOR_PRESETS: CreatorPreset[] = [];
-
-const CODEX_MODEL_OPTIONS = [
-  { value: 'default', label: '默认模型', hint: '跟随本机 Codex CLI / profile 配置' },
-  { value: 'gpt-5.5', label: 'GPT-5.5（推荐）', hint: '官方推荐：复杂编码、电脑使用、知识工作和研究流程优先。' },
-  { value: 'gpt-5.4', label: 'GPT-5.4', hint: '适合高质量创作规划、复杂推理和较长任务。' },
-  { value: 'gpt-5.4-mini', label: 'GPT-5.4 mini（快速）', hint: '官方建议用于更快、成本更低的轻量任务或子 Agent。' },
-  { value: 'gpt-5.3-codex-spark', label: 'GPT-5.3 Codex Spark（预览）', hint: '研究预览模型，适合近实时迭代；通常需要 Pro 权限。' },
-  { value: 'gpt-5.3-codex', label: 'GPT-5.3 Codex（旧版）', hint: 'Codex 旧模型；官方已提示 ChatGPT 登录下不推荐继续使用。' },
-  { value: 'gpt-5.2', label: 'GPT-5.2（旧版）', hint: 'Codex 旧模型；保留给已有 API/脚本兼容。' },
-  { value: 'custom', label: '自定义模型', hint: '手动填写任意 Codex CLI 支持的模型 ID' },
-];
 
 const CODEX_RUN_INTENT_OPTIONS: Array<{ id: Exclude<CodexRunIntent, 'auto'>; label: string; title: string }> = [
   { id: 'llm', label: 'LLM', title: '只做文字回答、读图分析和提示词整理，绝不生成图片。' },
@@ -291,8 +280,6 @@ const CODEX_STUDIO_CONTEXT_MAX_LIMIT = 80;
 const CODEX_STUDIO_CONTEXT_SUMMARY_MAX_CHARS = 3600;
 const DEFAULT_CREATOR_CATEGORY = '未分类';
 const NO_CREATOR_PRESET_ID = '__none__';
-const LLM_DEFAULT_CODEX_MODEL = 'gpt-5.4-mini';
-const IMG_DEFAULT_CODEX_MODEL = 'gpt-5.5';
 
 const handleStyle: CSSProperties = {
   width: 15,
@@ -532,15 +519,6 @@ function findDefaultImageGenerationSkill(skills: CodexSkill[]) {
 
 function normalizeCodexRunIntent(value: any): Exclude<CodexRunIntent, 'auto'> {
   return value === 'img' ? 'img' : 'llm';
-}
-
-function autoCodexModelForRunIntent(intent: Exclude<CodexRunIntent, 'auto'>) {
-  return intent === 'llm' ? LLM_DEFAULT_CODEX_MODEL : IMG_DEFAULT_CODEX_MODEL;
-}
-
-function codexModelAutoPatchForRunIntent(intent: Exclude<CodexRunIntent, 'auto'>) {
-  const model = autoCodexModelForRunIntent(intent);
-  return { codexModelMode: model, codexModel: model };
 }
 
 function shouldForceImageGeneration(_prompt: string, preset: CreatorPreset, skillNames: string[], runIntent: CodexRunIntent = 'auto') {
@@ -1024,7 +1002,6 @@ function clampInteger(value: any, fallback: number, min: number, max: number) {
   return Math.min(max, Math.max(min, Math.round(numeric)));
 }
 
-const codexLoginCommand = 'codex login';
 const codexInstallCommand = 'npm install -g @openai/codex';
 
 function isRouteMissingMessage(message: string) {
@@ -1043,7 +1020,7 @@ function clearRecoverableCodexError(message: any) {
   if (!text) return false;
   return (
     isRouteMissingMessage(text) ||
-    /Codex CLI 不可用|没有登录|需要登录|Unknown feature flag:\s*(?:plan_tool|web_search)/i.test(text)
+    /Codex CLI (?:运行时)?不可用|Unknown feature flag:\s*(?:plan_tool|web_search)/i.test(text)
   );
 }
 
@@ -1152,6 +1129,7 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
   const update = useUpdateNodeData(id);
   const d = (data || {}) as any;
   const { theme, style: themeStyle } = useThemeStore();
+  const llmConfigs = useApiKeysStore((state) => state.settings.llmConfigs || state.settings.llmApiKeys) || [];
   const isDark = theme === 'dark';
   const isPixel = themeStyle === 'pixel';
 
@@ -1169,7 +1147,6 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
   const [selectedArtifactIds, setSelectedArtifactIds] = useState<string[]>([]);
   const [hoverZoomArtifact, setHoverZoomArtifact] = useState<CodexAgentArtifact | null>(null);
   const [codexStudioTool, setCodexStudioTool] = useState<CodexStudioTool>(null);
-  const [loginBusy, setLoginBusy] = useState(false);
   const [editingPresetId, setEditingPresetId] = useState('');
   const [codexTemplateCategoryFilter, setCodexTemplateCategoryFilter] = useState('全部');
   const [skillDraftName, setSkillDraftName] = useState('creator-note');
@@ -1196,6 +1173,17 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
   const currentPreset = selectedCreatorPreset || DEFAULT_CREATOR_PRESET;
   const currentPresetLabel = hasActiveCreatorPreset ? currentPreset.label : '无模板';
   const codexRunIntent = normalizeCodexRunIntent(d.codexRunIntent);
+  const agentLlmConfigs = useMemo(() => llmConfigs.filter((item) => (
+    item && item.id && item.model && item.baseUrl && (item.hasApiKey || String(item.apiKey || '').trim())
+  )), [llmConfigs]);
+  const savedLlmKeyId = String(d.llmKeyId || '').trim();
+  const activeAgentLlmConfig = agentLlmConfigs.find((item) => item.id === savedLlmKeyId)
+    || agentLlmConfigs.find((item) => item.isDefault)
+    || agentLlmConfigs[0]
+    || null;
+  const selectedLlmKeyId = activeAgentLlmConfig?.id || '';
+  const selectedCodexModel = String(activeAgentLlmConfig?.model || '').trim();
+  const canRunAgent = Boolean(activeAgentLlmConfig) && status?.available !== false;
   const quickPrompt = String(d.codexQuickPrompt || '');
   const quickPromptMentions = (Array.isArray(d.codexQuickPromptMentions) ? d.codexQuickPromptMentions : []) as MediaMention[];
   const selectedSkillNames = asStringArray(d.codexSelectedSkillNames);
@@ -1252,17 +1240,6 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
   );
   const defaultImageGenerationSkill = useMemo(() => findDefaultImageGenerationSkill(creatorSkills), [creatorSkills]);
   const codexAutoImagegenSkillName = String(d.codexAutoImagegenSkillName || '').trim();
-  const hasLegacyCustomCodexModel = settingsValue(d.codexModelMode, '') === 'custom' && Boolean(String(d.codexModel || '').trim());
-  const codexModelManual = d.codexModelManual === true || hasLegacyCustomCodexModel;
-  const autoCodexModelMode = autoCodexModelForRunIntent(codexRunIntent);
-  const codexModelMode = codexModelManual
-    ? settingsValue(d.codexModelMode, d.codexModel ? 'custom' : autoCodexModelMode)
-    : autoCodexModelMode;
-  const selectedCodexModel = codexModelMode === 'default'
-    ? ''
-    : codexModelMode === 'custom'
-      ? String(d.codexModel || '').trim()
-      : codexModelMode;
   const materialOrder = Array.isArray(d.materialOrder) ? d.materialOrder : [];
   const persistPrompt = d.codexPersistPrompt === true;
   const studioAutoPublishOutput = d.codexAutoPublishOutput === true;
@@ -1278,6 +1255,12 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
   const codexContextSummary = codexStudioMemorySettings.contextSummary;
   const codexContextCompressedCount = codexStudioMemorySettings.contextCompressedCount;
   const codexContextLimit = codexStudioMemorySettings.contextLimit;
+
+  useEffect(() => {
+    if (selectedLlmKeyId && selectedLlmKeyId !== savedLlmKeyId) {
+      update({ llmKeyId: selectedLlmKeyId });
+    }
+  }, [savedLlmKeyId, selectedLlmKeyId, update]);
   const messages = useMemo(() => sanitizeMessages(d.codexMessages), [d.codexMessages]);
   const deletedArtifactKeys = useMemo(() => sanitizeDeletedArtifactKeys(d.codexDeletedArtifactKeys), [d.codexDeletedArtifactKeys]);
   const artifacts = useMemo(
@@ -1677,7 +1660,7 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
   const refreshStatusAndSkills = useCallback(async () => {
     try {
       const [nextStatus, skillData] = await Promise.all([
-        getCodexCliStatus(String(d.codexExecutablePath || '').trim() || undefined).catch((error) => ({
+        getCodexCliStatus(String(d.codexExecutablePath || '').trim() || undefined, { runtimeOnly: true }).catch((error) => ({
           available: false,
           message: error?.message || 'Codex CLI 状态检查失败',
         })),
@@ -1698,25 +1681,6 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
   useEffect(() => {
     void refreshStatusAndSkills();
   }, [refreshStatusAndSkills]);
-
-  const openCodexLogin = useCallback(async () => {
-    if (loginBusy) return;
-    setLoginBusy(true);
-    try {
-      const result = await startCodexCliLogin({
-        executablePath: String(d.codexExecutablePath || '').trim() || undefined,
-      });
-      logBus.info(result.message || '已打开 Codex CLI 登录流程', `codex:${id}`);
-      setTimeout(() => void refreshStatusAndSkills(), 1600);
-    } catch (error: any) {
-      const message = friendlyCodexErrorMessage(error?.message || '打开 Codex 登录失败');
-      setStatus({ available: false, message });
-      update({ error: message });
-      logBus.error(message, `codex:${id}`);
-    } finally {
-      setLoginBusy(false);
-    }
-  }, [d.codexExecutablePath, id, loginBusy, refreshStatusAndSkills, update]);
 
   const toggleSkill = useCallback((name: string) => {
     const next = selectedRunnableSkillNames.includes(name)
@@ -2058,6 +2022,18 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
 
   const handleQuickRun = useCallback(async () => {
     if (isBusy) return;
+    if (!selectedLlmKeyId || !selectedCodexModel) {
+      const message = '请先在 API 设置的“LLM 独立配置”中配置平台、API Key 和模型。';
+      update({ error: message, codexLastRunSummary: message });
+      logBus.warn(message, `codex:${id}`);
+      return;
+    }
+    if (status?.available === false) {
+      const message = status.message || 'Codex CLI 运行时不可用，请安装 Codex CLI 或检查可执行文件路径。';
+      update({ error: message, codexLastRunSummary: message });
+      logBus.warn(message, `codex:${id}`);
+      return;
+    }
     const prompt = buildPrompt(quickPrompt, orderedTexts, quickPromptMentions, mentionMaterials);
     const imagesForRun = materialUrls(orderedImages);
     const videosForRun = materialUrls(orderedVideos);
@@ -2175,6 +2151,8 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
         nodeId: id,
         sessionId,
         turnId,
+        agentProvider: 'llm-config',
+        llmKeyId: selectedLlmKeyId,
         mode: runMode,
         command: runPreset.command,
         preset: hasActiveCreatorPreset ? runPreset.label : '',
@@ -2194,7 +2172,6 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
         imageGeneration: forceImageGeneration,
         llmOnly: runIntent === 'llm',
         workspaceDir: String(d.codexWorkspaceDir || '').trim(),
-        model: selectedCodexModel,
         profile: String(d.codexProfile || '').trim(),
         sandbox: settingsValue(d.codexSandbox, 'workspace-write'),
         approvalPolicy: settingsValue(d.codexApprovalPolicy, 'never'),
@@ -2303,8 +2280,6 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
     d.codexExecutablePath,
     d.codexExtraArgs,
     d.codexIncludePlanTool,
-    d.codexModel,
-    d.codexModelMode,
     d.codexNegativePrompt,
     d.codexProfile,
     d.codexReasoningEffort,
@@ -2316,7 +2291,6 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
     hasActiveCreatorPreset,
     id,
     isBusy,
-    loginBusy,
     mentionMaterials,
     orderedAudios,
     orderedImages,
@@ -2335,10 +2309,13 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
     codexContextSummary,
     selectedRunnableSkillNames,
     selectedCodexModel,
+    selectedLlmKeyId,
     sessionId,
     setMessages,
     studioConsumedMaterialIds,
     studioOpen,
+    status?.available,
+    status?.message,
     materialOrder,
     update,
   ]);
@@ -2347,14 +2324,14 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
 
   const latestArtifact = artifacts.find((item) => item.id === d.lastArtifactId) || artifacts[artifacts.length - 1] || null;
   const rawStatusMessage = status?.available
-    ? (status.version ? `Codex ${status.version}` : 'Codex CLI 可用')
+    ? (status.version ? `Codex ${status.version}` : 'Codex CLI 运行时可用')
     : (status?.message || '正在检查 Codex CLI');
   const routeMissing = isRouteMissingMessage(rawStatusMessage);
   const statusLineMessage = status?.available
-    ? rawStatusMessage
+    ? (activeAgentLlmConfig ? `${activeAgentLlmConfig.label} · ${selectedCodexModel}` : '未配置 Agent 模型')
     : routeMissing
       ? '后端路由未加载'
-      : '需要登录或填写 Codex CLI 路径';
+      : '需要安装或填写 Codex CLI 路径';
   const statusDetailMessage = !status?.available && !routeMissing && status?.message
     ? status.message
     : '';
@@ -2474,11 +2451,11 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
   }, [customPresets, id, update]);
 
   const codexStatusPanel = (
-    <div className="rounded-xl border p-3" style={{ borderColor: routeMissing ? danger : border, background: surface }}>
+    <div className="rounded-xl border p-3" style={{ borderColor: routeMissing || !activeAgentLlmConfig ? danger : border, background: surface }}>
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-xs font-black">
-          {status?.available ? <CheckCircle2 size={15} color="#22c55e" /> : <AlertCircle size={15} color={routeMissing ? danger : accent} />}
-          <span>{status?.available ? 'Codex 已就绪' : routeMissing ? '后端路由未加载' : '登录 Codex CLI'}</span>
+          {status?.available && activeAgentLlmConfig ? <CheckCircle2 size={15} color="#22c55e" /> : <AlertCircle size={15} color={routeMissing || !activeAgentLlmConfig ? danger : accent} />}
+          <span>{status?.available ? 'Codex Agent 运行时' : routeMissing ? '后端路由未加载' : 'Codex CLI 未就绪'}</span>
         </div>
         <button type="button" className="nodrag rounded-md px-2 py-1 text-[11px] font-bold" style={buttonStyle} onClick={() => void refreshStatusAndSkills()}>
           刷新
@@ -2488,8 +2465,10 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
         {routeMissing
           ? '当前前端已经加载 Codex 节点，但运行中的后端还没有 /api/codex-cli 路由。请重启后端服务或桌面应用后再刷新。'
           : status?.available
-            ? '可以直接发送创作任务。若生成时提示未登录，请在终端执行登录命令后点刷新。'
-            : '首次使用需要先在本机终端登录 Codex CLI。登录完成后回到节点点刷新。'}
+            ? activeAgentLlmConfig
+              ? `Agent 将使用“${activeAgentLlmConfig.label}”的 ${selectedCodexModel}；该平台必须支持 /v1/responses。`
+              : '没有可用的 LLM 独立配置，请先在 API 设置中填写平台、API Key、Base URL 和模型。'
+            : '请先安装 Codex CLI，或在节点高级设置中填写可执行文件路径；无需执行 codex login。'}
       </div>
       {statusDetailMessage && (
         <div className="mt-2 rounded-lg border px-2 py-1.5 text-[10px] leading-relaxed" style={{ borderColor: border, background: bg, color: subText }}>
@@ -2498,22 +2477,6 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
       )}
       {!status?.available && (
         <div className="mt-2 grid gap-2">
-          <button
-            type="button"
-            className="nodrag inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-black"
-            style={{ ...buttonStyle, background: accent, color: studioAccentText, borderColor: accent }}
-            disabled={loginBusy}
-            onClick={() => void openCodexLogin()}
-          >
-            {loginBusy ? <Loader2 size={14} className="animate-spin" /> : <TerminalSquare size={14} />}
-            打开登录
-          </button>
-          <div className="flex items-center justify-between gap-2 rounded-lg border px-2 py-1.5" style={{ borderColor: border, background: bg }}>
-            <code className="truncate text-[11px]">{codexLoginCommand}</code>
-            <button type="button" className="nodrag rounded-md px-2 py-1 text-[11px] font-bold" style={buttonStyle} onClick={() => void navigator.clipboard?.writeText?.(codexLoginCommand)}>
-              复制登录命令
-            </button>
-          </div>
           <div className="flex items-center justify-between gap-2 rounded-lg border px-2 py-1.5" style={{ borderColor: border, background: bg }}>
             <code className="truncate text-[11px]">{codexInstallCommand}</code>
             <button type="button" className="nodrag rounded-md px-2 py-1 text-[11px] font-bold" style={buttonStyle} onClick={() => void navigator.clipboard?.writeText?.(codexInstallCommand)}>
@@ -2744,7 +2707,6 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
   const updateCodexRunIntent = useCallback((nextIntent: Exclude<CodexRunIntent, 'auto'>) => {
     const patch: Record<string, any> = {
       codexRunIntent: nextIntent,
-      ...(codexModelManual ? {} : codexModelAutoPatchForRunIntent(nextIntent)),
     };
     if (
       nextIntent === 'img' &&
@@ -2759,7 +2721,7 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
       patch.codexAutoImagegenSkillName = '';
     }
     update(patch);
-  }, [codexAutoImagegenSkillName, codexModelManual, defaultImageGenerationSkill, selectedRunnableSkillNames, update]);
+  }, [codexAutoImagegenSkillName, defaultImageGenerationSkill, selectedRunnableSkillNames, update]);
 
   const renderRunIntentToggle = (placement: 'simple' | 'studio') => (
     <div
@@ -2819,88 +2781,38 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
     </div>
   );
 
-  const renderModelPicker = (compact = false) => (
+  const renderAgentModelPicker = (compact = false) => (
     <div className={compact ? 'grid min-w-0 gap-1.5' : 'grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2'}>
       <label className="grid min-w-0 gap-1 text-[11px]" style={{ color: subText }}>
-        模型选择
+        Agent 平台
         <select
+          data-codex-agent-provider="llm-config"
           className="nodrag w-full min-w-0 rounded-lg border px-2 py-1.5 text-xs font-bold outline-none"
           style={{ borderColor: border, background: bg, color: text }}
-          value={codexModelMode}
-          onChange={(event) => {
-            const value = event.currentTarget.value;
-            update({
-              codexModelMode: value,
-              codexModel: value === 'default' ? '' : value === 'custom' ? String(d.codexModel || '') : value,
-              codexModelManual: true,
-            });
-          }}
+          value={selectedLlmKeyId}
+          disabled={agentLlmConfigs.length === 0}
+          onChange={(event) => update({ llmKeyId: event.currentTarget.value })}
         >
-          {CODEX_MODEL_OPTIONS.map((item) => (
-            <option key={item.value} value={item.value}>{item.label}</option>
+          {agentLlmConfigs.length === 0 && <option value="">请先配置 LLM 独立配置</option>}
+          {agentLlmConfigs.map((item) => (
+            <option key={item.id} value={item.id}>{item.label || item.id}</option>
           ))}
         </select>
       </label>
       <label className="grid min-w-0 gap-1 text-[11px]" style={{ color: subText }}>
-        {codexModelMode === 'custom' ? '自定义模型 ID' : '说明'}
-        {codexModelMode === 'custom' ? (
-          <input
-            className="nodrag w-full min-w-0 rounded-lg border px-2 py-1.5 text-xs outline-none"
-            style={{ borderColor: border, background: bg, color: text }}
-            value={String(d.codexModel || '')}
-            placeholder="例如：gpt-5.2"
-            onChange={(event) => update({ codexModel: event.currentTarget.value, codexModelMode: 'custom', codexModelManual: true })}
-          />
-        ) : (
-          <div className="w-full min-w-0 truncate rounded-lg border px-2 py-1.5 text-[11px] leading-snug" style={{ borderColor: border, background: surface, color: subText }}>
-            {CODEX_MODEL_OPTIONS.find((item) => item.value === codexModelMode)?.hint || '跟随 Codex CLI 配置'}
-          </div>
-        )}
+        Agent 模型
+        <select
+          data-codex-agent-model="llm-config"
+          className="nodrag w-full min-w-0 rounded-lg border px-2 py-1.5 text-xs font-bold outline-none"
+          style={{ borderColor: border, background: surface, color: text }}
+          value={selectedCodexModel}
+          disabled
+        >
+          <option value={selectedCodexModel}>{selectedCodexModel || '未配置模型'}</option>
+        </select>
       </label>
     </div>
   );
-
-  const renderModelSelect = (showHint = true) => {
-    const currentModelOption = CODEX_MODEL_OPTIONS.find((item) => item.value === codexModelMode) || CODEX_MODEL_OPTIONS[0];
-    return (
-      <div className="grid min-w-0 gap-1">
-        <label className="grid min-w-0 gap-1 text-[11px] font-bold" style={{ color: subText }}>
-          模型
-          <select
-            className="nodrag w-full min-w-0 rounded-lg border px-2 py-2 text-xs font-black outline-none"
-            style={{ borderColor: border, background: bg, color: text }}
-            value={codexModelMode}
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              update({
-                codexModelMode: value,
-                codexModel: value === 'custom' ? String(d.codexModel || '') : value === 'default' ? '' : value,
-                codexModelManual: true,
-              });
-            }}
-          >
-            {CODEX_MODEL_OPTIONS.map((item) => (
-              <option key={item.value} value={item.value}>{item.label}</option>
-            ))}
-          </select>
-        </label>
-        {codexModelMode === 'custom' && (
-          <input
-            className="nodrag w-full min-w-0 rounded-lg border px-2 py-1.5 text-xs outline-none"
-            style={{ borderColor: border, background: bg, color: text }}
-            value={String(d.codexModel || '')}
-            placeholder="例如：gpt-5.5"
-            onChange={(event) => update({ codexModel: event.currentTarget.value, codexModelMode: 'custom', codexModelManual: true })}
-          />
-        )}
-        {showHint && (
-          <div className="w-full min-w-0 truncate rounded-lg border px-2 py-1.5 text-[11px]" style={{ borderColor: border, background: bg, color: subText }} title={currentModelOption.hint}>
-            {currentModelOption.hint}
-          </div>
-        )}
-      </div>
-    );
-  };
 
   const renderPresetSelect = (label = '创作模板') => {
     const currentPresetVisible = visibleSelectableCreatorPresets.some((preset) => preset.id === currentPreset.id);
@@ -3066,7 +2978,7 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
       <div className="grid min-w-0 gap-2">
         {renderPresetSelect()}
         {renderSkillDropdown()}
-        {renderModelSelect(false)}
+        {renderAgentModelPicker(false)}
         {renderRunPreferenceControls(!showManage, !showManage, !showManage)}
       </div>
     </section>
@@ -3552,7 +3464,7 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
                 </div>
                 <div className="flex items-center justify-between gap-2">
                   <span>当前模型</span>
-                  <span className="truncate text-right">{selectedCodexModel || '默认'}</span>
+                  <span className="truncate text-right">{activeAgentLlmConfig ? `${activeAgentLlmConfig.label} · ${selectedCodexModel}` : '未配置'}</span>
                 </div>
                 <div className="flex items-center justify-between gap-2">
                   <span>已选 Skill</span>
@@ -3679,7 +3591,7 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
                 <div className="min-w-0">
                   <div className="truncate text-sm font-black">流式对话</div>
                   <div className="truncate text-[11px]" style={{ color: subText }}>
-                    {currentPresetLabel} · {selectedCodexModel || '默认模型'} · {selectedRunnableSkillNames.length} 个 Skill · @ {artifactMaterials.length} 个产物
+                    {currentPresetLabel} · {selectedCodexModel || '未配置模型'} · {selectedRunnableSkillNames.length} 个 Skill · @ {artifactMaterials.length} 个产物
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -3855,7 +3767,7 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
                     type="button"
                     className="nodrag inline-flex items-center gap-1 px-4 py-2 text-sm font-black"
                     style={{ ...buttonStyle, background: accent, color: studioAccentText, borderColor: accent }}
-                    disabled={isBusy}
+                    disabled={isBusy || !canRunAgent}
                     onClick={() => void handleQuickRun()}
                   >
                     {isBusy ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
@@ -3982,7 +3894,7 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
             </div>
           </div>
           <div className="flex items-center gap-1">
-            {status?.available ? <CheckCircle2 size={18} color="#22c55e" /> : <AlertCircle size={18} color={danger} />}
+            {status?.available && activeAgentLlmConfig ? <CheckCircle2 size={18} color="#22c55e" /> : <AlertCircle size={18} color={danger} />}
             <button type="button" className="nodrag rounded-lg p-2" style={buttonStyle} onClick={() => setStudioOpen(true)} title="打开 Codex 创作台">
               <PanelRightOpen size={17} />
             </button>
@@ -4010,7 +3922,7 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
             <div className="mb-1 flex min-w-0 items-center justify-between gap-2 px-0.5 text-[11px]" style={{ color: subText }}>
               <span className="shrink-0 font-black" style={{ color: text }}>运行模式</span>
               <span className="min-w-0 truncate font-bold" data-codex-run-intent-summary={codexRunIntent} style={{ color: text }}>
-                当前：{codexRunIntent === 'img' ? 'IMG 生图模式 · 默认 gpt-5.5 + imagegen' : 'LLM 文字模式 · 默认 gpt-5.4 mini'}
+                当前：{codexRunIntent === 'img' ? `IMG 生图模式 · ${selectedCodexModel || '未配置模型'} + imagegen` : `LLM 文字模式 · ${selectedCodexModel || '未配置模型'}`}
               </span>
             </div>
             {renderRunIntentToggle('simple')}
@@ -4020,7 +3932,6 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
 
           {settingsOpen && (
             <div className="grid grid-cols-2 gap-2 rounded-xl border p-3" style={{ borderColor: border, background: surface }}>
-              <div className="col-span-2">{renderModelPicker(false)}</div>
               <label className="grid gap-1 text-[11px]" style={{ color: subText }}>
                 Profile
                 <input className="nodrag rounded-lg border px-2 py-1.5 text-xs outline-none" style={{ borderColor: border, background: bg, color: text }} value={String(d.codexProfile || '')} placeholder="creator" onChange={(e) => update({ codexProfile: e.currentTarget.value })} />
@@ -4207,6 +4118,8 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
                 type="button"
                 className="nodrag inline-flex flex-1 items-center justify-center gap-2 px-4 py-2.5 text-sm font-black"
                 style={{ ...buttonStyle, background: accent, color: studioAccentText, borderColor: accent }}
+                disabled={!canRunAgent}
+                title={!activeAgentLlmConfig ? '请先配置 LLM 独立配置' : status?.available === false ? 'Codex CLI 运行时不可用' : undefined}
                 onClick={() => void handleQuickRun()}
               >
                 <Play size={17} />

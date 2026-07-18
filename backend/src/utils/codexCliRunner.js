@@ -6,9 +6,12 @@ const os = require('os');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 const config = require('../config');
+const { normalizeLlmBaseUrl, normalizeLlmModelName } = require('./llmBaseUrl');
 
-const CODEX_DISABLED_MESSAGE = 'Codex CLI 不可用：请确认已安装并登录 Codex CLI，或在节点高级设置中填写可执行文件路径。';
+const CODEX_DISABLED_MESSAGE = 'Codex CLI 运行时不可用：请确认已安装 Codex CLI，或在节点高级设置中填写可执行文件路径。';
 const CODEX_WINDOWS_APPS_MESSAGE = '检测到 WindowsApps Codex 入口不可直接 spawn，请清空节点里的 Codex 路径，让 T8 自动使用 npm 的 codex.cmd，或填写 C:\\Users\\<用户名>\\AppData\\Roaming\\npm\\codex.cmd。';
+const CODEX_LLM_PROVIDER_ID = 't8_canvas_llm';
+const CODEX_LLM_API_KEY_ENV = 'T8_CODEX_LLM_API_KEY';
 const IMAGE_EXT_RE = /\.(png|jpe?g|webp|gif|bmp|avif|tiff?)(?:[?#].*)?$/i;
 const VIDEO_EXT_RE = /\.(mp4|webm|mov|m4v|mkv)(?:[?#].*)?$/i;
 const AUDIO_EXT_RE = /\.(mp3|wav|ogg|m4a|flac|aac|opus)(?:[?#].*)?$/i;
@@ -283,36 +286,40 @@ async function listCodexFeatures(options = {}) {
   return parseCodexFeatureList(result.stdout);
 }
 
-function buildCodexLoginStartInvocation(options = {}) {
-  const resolved = resolveCodexExecutable(options);
-  return {
-    ...resolved,
-    args: options.deviceAuth ? ['login', '--device-auth'] : ['login'],
-  };
+function normalizeCodexResponsesBaseUrl(value) {
+  const normalized = normalizeLlmBaseUrl(value, '');
+  if (!normalized) throw new Error('所选 LLM 独立配置的 Base URL 无效。');
+  const parsed = new URL(normalized);
+  let pathname = parsed.pathname.replace(/\/+$/, '');
+  pathname = pathname.replace(/\/(?:chat\/completions|responses)$/i, '');
+  if (!/\/v1$/i.test(pathname)) pathname = `${pathname}/v1`;
+  parsed.pathname = pathname.replace(/\/{2,}/g, '/');
+  return parsed.toString().replace(/\/+$/, '');
 }
 
-function startCodexLogin(options = {}) {
-  const invocation = buildCodexLoginStartInvocation(options);
-  try {
-    const child = spawnCodexProcess(invocation.args, {
-      executablePath: options.executablePath,
-      cwd: config.BASE_DIR,
-      detached: true,
-      stdio: 'ignore',
-    });
-    child.unref();
-    return {
-      started: true,
-      executable: child.__codexResolved?.executable || invocation.executable,
-      message: '已打开 Codex CLI 登录流程；完成浏览器登录后回到节点点刷新。',
-    };
-  } catch (error) {
-    return {
-      started: false,
-      executable: invocation.executable,
-      message: `${CODEX_DISABLED_MESSAGE} ${error?.message || error}`,
-    };
-  }
+function buildCodexLlmProviderInvocation(provider = {}) {
+  const apiKey = String(provider.apiKey || '').trim();
+  const model = normalizeLlmModelName(provider.model, '');
+  if (!apiKey) throw new Error('所选 LLM 独立配置缺少 API Key。');
+  if (!model) throw new Error('所选 LLM 独立配置缺少有效模型。');
+  const baseUrl = normalizeCodexResponsesBaseUrl(provider.baseUrl);
+  const prefix = `model_providers.${CODEX_LLM_PROVIDER_ID}`;
+  return {
+    model,
+    baseUrl,
+    args: [
+      '-c', `model_provider="${CODEX_LLM_PROVIDER_ID}"`,
+      '-c', `${prefix}.name="T8 LLM Config"`,
+      '-c', `${prefix}.base_url=${JSON.stringify(baseUrl)}`,
+      '-c', `${prefix}.wire_api="responses"`,
+      '-c', `${prefix}.env_key="${CODEX_LLM_API_KEY_ENV}"`,
+      '-c', `${prefix}.requires_openai_auth=false`,
+      '-c', 'disable_response_storage=true',
+    ],
+    env: {
+      [CODEX_LLM_API_KEY_ENV]: apiKey,
+    },
+  };
 }
 
 function normalizeAvailableFeatureNames(value) {
@@ -375,7 +382,10 @@ function isUnknownFeatureFlagError(message) {
 
 function buildCodexExecArgs(options = {}) {
   const args = ['exec', '--json'];
-  const model = String(options.model || '').trim();
+  const providerInvocation = options.llmProvider
+    ? buildCodexLlmProviderInvocation(options.llmProvider)
+    : null;
+  const model = providerInvocation?.model || String(options.model || '').trim();
   const profile = String(options.profile || '').trim();
   const sandbox = String(options.sandbox || 'workspace-write').trim();
   const approvalPolicy = String(options.approvalPolicy || options.askForApproval || 'never').trim();
@@ -385,7 +395,7 @@ function buildCodexExecArgs(options = {}) {
   );
   const extraArgs = stripUnsupportedCodexEnableArgs(normalizeCliArgs(options.extraArgs), availableFeatureNames);
 
-  if (model) args.push('--model', model);
+  if (model && !providerInvocation) args.push('--model', model);
   if (profile) args.push('--profile', profile);
   if (sandbox) args.push('--sandbox', sandbox);
   if (approvalPolicy) args.push('-c', `approval_policy="${approvalPolicy.replace(/"/g, '\\"')}"`);
@@ -405,6 +415,10 @@ function buildCodexExecArgs(options = {}) {
 
   for (const item of extraArgs) {
     args.push(item);
+  }
+
+  if (providerInvocation) {
+    args.push('--model', providerInvocation.model, ...providerInvocation.args);
   }
 
   args.push(options.useStdinPrompt === false ? String(options.prompt || '') : '-');
@@ -937,6 +951,9 @@ function sendSse(res, event, payload = {}) {
 }
 
 async function runCodexExecStream(body = {}, handlers = {}) {
+  const providerInvocation = body.llmProvider
+    ? buildCodexLlmProviderInvocation(body.llmProvider)
+    : null;
   const workspace = createCodexWorkspace(body);
   const images = resolveCodexInputImages(body.images, workspace);
   const prompt = makeCreatorPrompt({ ...body, images });
@@ -992,6 +1009,7 @@ async function runCodexExecStream(body = {}, handlers = {}) {
         env: {
           T8_CODEX_WORKSPACE: workspace.dir,
           T8_CODEX_OUTPUT_DIR: workspace.outputDir,
+          ...(providerInvocation?.env || {}),
         },
       });
     } catch (error) {
@@ -1107,6 +1125,24 @@ async function probeCodexStatus(options = {}) {
     };
   }
 
+  if (options.runtimeOnly === true) {
+    const features = await listCodexFeatures({
+      executablePath: options.executablePath,
+      env: options.env,
+      platform: options.platform,
+      timeoutMs: 12000,
+    }).catch(() => []);
+    return {
+      available: true,
+      executable: version.executable,
+      resolved: version.resolved,
+      version: version.stdout.trim(),
+      features,
+      featureNames: features.map((feature) => feature.name),
+      message: 'Codex CLI 运行时可用',
+    };
+  }
+
   const login = await runCodexCommand(['login', 'status'], {
     executablePath: options.executablePath,
     env: options.env,
@@ -1121,7 +1157,7 @@ async function probeCodexStatus(options = {}) {
       resolved: version.resolved,
       version: version.stdout.trim(),
       authStatus: loginText,
-      message: loginText || 'Codex CLI 已安装，但还没有登录。请点击“打开登录”或在终端运行 codex login。',
+      message: loginText || 'Codex CLI 已安装，但还没有登录。请在终端运行 codex login。',
     };
   }
 
@@ -1158,8 +1194,8 @@ module.exports = {
   normalizeArtifactUrlForTests: normalizeArtifactUrl,
   resolveCodexInputImagesForTests: resolveCodexInputImages,
   resolveCodexExecutable,
-  buildCodexLoginStartInvocation,
-  startCodexLogin,
+  normalizeCodexResponsesBaseUrl,
+  buildCodexLlmProviderInvocation,
   listCodexSkills,
   createProjectSkill,
   updateProjectSkill,

@@ -83,6 +83,7 @@ interface Props {
   onDraftSave?: (draft: ImageEditDraft) => void;
   enableModifyGeneration?: boolean;
   availableModes?: EditMode[];
+  entryKind?: 'material' | 'image-edit-node';
 }
 
 export type EditMode = 'crop' | 'mask' | 'brush' | 'grid' | 'compose';
@@ -514,6 +515,7 @@ const ImageEditModal = ({
   onDraftSave,
   enableModifyGeneration = false,
   availableModes,
+  entryKind = 'material',
 }: Props) => {
   const { theme, style } = useThemeStore();
   const isDark = theme === 'dark';
@@ -556,7 +558,9 @@ const ImageEditModal = ({
   const [imageModifySizeLevel, setImageModifySizeLevel] = useState(
     initialDraft?.generation?.sizeLevel || ANNOTATION_MODIFY_IMAGE_SIZE,
   );
-  const canModifyGenerate = enableModifyGeneration === true;
+  const isImageEditNodeEntry = entryKind === 'image-edit-node';
+  const showMaterialApplyActions = !isImageEditNodeEntry;
+  const canModifyGenerate = enableModifyGeneration === true && isImageEditNodeEntry;
   const enabledModes = (availableModes?.length ? availableModes : ALL_EDIT_MODES).filter((item) =>
     ALL_EDIT_MODES.includes(item),
   );
@@ -595,8 +599,8 @@ const ImageEditModal = ({
   const [maskBrushSize, setMaskBrushSize] = useState(initialDraft?.mask?.maskBrushSize || 42); // 0..1 不使用 —— 存 px @ natural
   const [maskErasing, setMaskErasing] = useState(initialDraft?.mask?.maskErasing || false);
   const [maskModifyInstruction, setMaskModifyInstruction] = useState(initialDraft?.mask?.maskModifyInstruction || '');
-  const [brushTool, setBrushTool] = useState<BrushTool>(initialDraft?.brush?.brushTool || (enableModifyGeneration ? 'rect' : 'free'));
-  const [brushColor, setBrushColor] = useState(initialDraft?.brush?.brushColor || (enableModifyGeneration ? IMAGE_EDIT_FRAME_COLORS[0] : '#ff2d55'));
+  const [brushTool, setBrushTool] = useState<BrushTool>(initialDraft?.brush?.brushTool || (canModifyGenerate ? 'rect' : 'free'));
+  const [brushColor, setBrushColor] = useState(initialDraft?.brush?.brushColor || (canModifyGenerate ? IMAGE_EDIT_FRAME_COLORS[0] : '#ff2d55'));
   const [brushSize, setBrushSize] = useState(initialDraft?.brush?.brushSize || 14);
   const [brushFillMode, setBrushFillMode] = useState<BrushFillMode>(initialDraft?.brush?.brushFillMode || 'stroke');
   const [annotationInstruction, setAnnotationInstruction] = useState(initialDraft?.brush?.annotationInstruction || '');
@@ -2147,7 +2151,26 @@ const ImageEditModal = ({
     return { originDataUrl, maskDataUrl, strokeCount: maskStrokes.length };
   }
 
-  // ---- 应用 brush: 原图 + 涵盖所有画笔 → 上传 → produce 1 张 ----
+  // ---- 素材双击入口的应用操作 ----
+  async function applyMask() {
+    if (!showMaterialApplyActions) return;
+    if (!naturalSize || maskStrokes.length === 0) return;
+    setBusy(true);
+    setErrMsg(null);
+    try {
+      const payload = await buildMaskEditImages();
+      if (!payload) return;
+      const originUrl = await uploadDataUrl(payload.originDataUrl, 'mask-src');
+      const maskUrl = await uploadDataUrl(payload.maskDataUrl, 'mask');
+      await onProduce([originUrl, maskUrl], { type: 'mask', strokeCount: payload.strokeCount });
+      closeWithDraft();
+    } catch (e: any) {
+      setErrMsg(e?.message || '应用遮罩失败');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function applyMaskModify() {
     if (!canModifyGenerate) return;
     if (!naturalSize || maskStrokes.length === 0) return;
@@ -2184,6 +2207,7 @@ const ImageEditModal = ({
         aspect_ratio: imageModifyAspectRatio,
         image_size: imageModifySizeLevel,
         images: [payload.originDataUrl, payload.maskDataUrl],
+        outputFormat: 'jpg',
         n: 1,
         historyContext,
         async: true,
@@ -2198,6 +2222,7 @@ const ImageEditModal = ({
             providerId: selectedImageAdvancedProvider.id,
             providerModel: selectedImageProviderModel,
             taskId,
+            outputFormat: 'jpg',
             historyContext,
           });
           taskId = result.taskId || taskId;
@@ -2275,6 +2300,55 @@ const ImageEditModal = ({
     };
   }
 
+  async function applyBrush() {
+    if (!showMaterialApplyActions) return;
+    if (!naturalSize || brushStrokes.length === 0) return;
+    setBusy(true);
+    setErrMsg(null);
+    try {
+      const img = await loadImage(srcUrl);
+      const cv = document.createElement('canvas');
+      cv.width = naturalSize.w;
+      cv.height = naturalSize.h;
+      const ctx = cv.getContext('2d');
+      if (!ctx) throw new Error('canvas unavailable');
+      ctx.drawImage(img, 0, 0, cv.width, cv.height);
+      for (const s of brushStrokes) drawStrokeOnCtx(ctx, s, cv.width, cv.height);
+      const url = await uploadDataUrl(cv.toDataURL('image/png'), 'brush');
+      await onProduce([url], { type: 'brush', strokeCount: brushStrokes.length });
+      closeWithDraft();
+    } catch (e: any) {
+      setErrMsg(e?.message || '应用画板失败');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyAnnotationEdit() {
+    if (!showMaterialApplyActions) return;
+    if (!naturalSize || brushStrokes.length === 0) return;
+    setBusy(true);
+    setErrMsg(null);
+    try {
+      const payload = await buildAnnotationEditImages();
+      if (!payload) return;
+      const originUrl = await uploadDataUrl(payload.originDataUrl, 'annotation-source');
+      const annotatedUrl = await uploadDataUrl(payload.annotatedDataUrl, 'annotation-reference');
+      await onProduce([originUrl, annotatedUrl], {
+        type: 'annotation-edit',
+        instruction: annotationInstruction.trim() || '按标注参考图修改原图',
+        strokeCount: payload.strokeCount,
+        annotationTextCount: payload.annotationTextCount,
+        annotationShapeCount: payload.annotationShapeCount,
+      });
+      closeWithDraft();
+    } catch (e: any) {
+      setErrMsg(e?.message || '标注编辑失败');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function applyAnnotationModify() {
     if (!canModifyGenerate) return;
     if (!naturalSize || brushStrokes.length === 0) return;
@@ -2314,6 +2388,7 @@ const ImageEditModal = ({
         aspect_ratio: imageModifyAspectRatio,
         image_size: imageModifySizeLevel,
         images: [payload.originDataUrl, payload.annotationOverlayDataUrl],
+        outputFormat: 'jpg',
         n: 1,
         historyContext,
         async: true,
@@ -2328,6 +2403,7 @@ const ImageEditModal = ({
             providerId: selectedImageAdvancedProvider.id,
             providerModel: selectedImageProviderModel,
             taskId,
+            outputFormat: 'jpg',
             historyContext,
           });
           taskId = result.taskId || taskId;
@@ -3840,6 +3916,24 @@ const ImageEditModal = ({
                   </button>
                 </>
               )}
+              {showMaterialApplyActions && (
+                <button
+                  style={btnPrimary}
+                  onClick={applyMask}
+                  disabled={busy || !naturalSize || maskStrokes.length === 0}
+                  title={maskStrokes.length === 0 ? '请先绘制遮罩区域' : ''}
+                >
+                  {busy ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" /> 处理中…
+                    </>
+                  ) : (
+                    <>
+                      <Check size={14} /> 应用遮罩
+                    </>
+                  )}
+                </button>
+              )}
             </>
           ) : mode === 'brush' ? (
             <>
@@ -3899,7 +3993,7 @@ const ImageEditModal = ({
                   title="文字标注"
                 />
               )}
-              {!canModifyGenerate && (
+              {showMaterialApplyActions && (
                 <button
                   style={btnBase}
                   onClick={confirmAnnotationTextDraft}
@@ -3932,6 +4026,42 @@ const ImageEditModal = ({
                     </>
                   )}
                 </button>
+              )}
+              {showMaterialApplyActions && (
+                <>
+                  <button
+                    style={btnPrimary}
+                    onClick={applyBrush}
+                    disabled={busy || !naturalSize || brushStrokes.length === 0}
+                    title={brushStrokes.length === 0 ? '请先在画板上绘制内容' : ''}
+                  >
+                    {busy ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" /> 处理中…
+                      </>
+                    ) : (
+                      <>
+                        <Check size={14} /> 应用画板
+                      </>
+                    )}
+                  </button>
+                  <button
+                    style={btnBase}
+                    onClick={applyAnnotationEdit}
+                    disabled={busy || !naturalSize || brushStrokes.length === 0}
+                    title={brushStrokes.length === 0 ? '请先用箭头、框选、标号或文字标出编辑目标' : ''}
+                  >
+                    {busy ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" /> 处理中…
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={14} /> 标注编辑
+                      </>
+                    )}
+                  </button>
+                </>
               )}
             </>
           ) : mode === 'compose' ? (

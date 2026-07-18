@@ -2,6 +2,7 @@
 
 const express = require('express');
 const { runLocalHooks } = require('../extensions/runtimeHooks');
+const settingsRouter = require('./settings');
 const {
   CODEX_DISABLED_MESSAGE,
   createCodexWorkspace,
@@ -11,7 +12,6 @@ const {
   probeCodexStatus,
   runCodexExecStream,
   sendSse,
-  startCodexLogin,
   updateProjectSkill,
 } = require('../utils/codexCliRunner');
 
@@ -54,6 +54,53 @@ function resultWithArtifacts(result = {}) {
   return out;
 }
 
+function codexRequestError(message, code, statusCode = 400) {
+  const error = new Error(message);
+  error.code = code;
+  error.statusCode = statusCode;
+  return error;
+}
+
+function resolveAgentLlmProvider(body = {}) {
+  if (body.agentProvider !== 'llm-config') return null;
+  const llmKeyId = String(body.llmKeyId || '').trim();
+  if (!llmKeyId) {
+    throw codexRequestError('请选择用于 Codex Agent 的 LLM 独立配置。', 'codex_llm_config_required');
+  }
+  const settings = settingsRouter.loadSettings({ persistMigrations: false });
+  const configs = settingsRouter.normalizeLlmConfigs(
+    settings.llmConfigs || settings.llmApiKeys,
+    settings.llmConfigs || settings.llmApiKeys,
+    { apiKey: settings.llmApiKey, baseUrl: settings.llmBaseUrl, model: settings.llmModel },
+  );
+  const selected = configs.find((item) => item.id === llmKeyId);
+  if (!selected) {
+    throw codexRequestError('所选 LLM 独立配置不存在或已被删除，请重新选择。', 'codex_llm_config_missing');
+  }
+  if (!String(selected.apiKey || '').trim()) {
+    throw codexRequestError('所选 LLM 独立配置缺少 API Key。', 'codex_llm_api_key_missing');
+  }
+  return {
+    id: selected.id,
+    label: selected.label,
+    apiKey: selected.apiKey,
+    baseUrl: selected.baseUrl,
+    model: selected.model,
+  };
+}
+
+function friendlyAgentStreamError(error, body = {}) {
+  const message = error?.message || CODEX_DISABLED_MESSAGE;
+  if (body.agentProvider !== 'llm-config') return message;
+  if (/\/responses[^\n]*(?:404|not found)|(?:404|not found)[^\n]*\/responses/i.test(message)) {
+    return '所选 LLM 独立配置不支持 Responses API（/v1/responses），无法作为 Codex Agent 模型。';
+  }
+  if (/not logged in|codex login|OPENAI_API_KEY|unauthorized|forbidden|\b401\b|\b403\b/i.test(message)) {
+    return '所选 LLM 独立配置认证失败，请检查该配置的 API Key、Base URL 和 Responses API 权限。';
+  }
+  return message;
+}
+
 router.get('/status', async (req, res) => {
   try {
     const hookResult = await runLocalHooks('codexCli.status', { req, handled: false });
@@ -62,37 +109,13 @@ router.get('/status', async (req, res) => {
     }
     const data = await probeCodexStatus({
       executablePath: req.query.executablePath,
+      runtimeOnly: req.query.runtimeOnly === '1' || req.query.runtimeOnly === 'true',
     });
     return res.json({ success: true, data });
   } catch (error) {
     return res.status(500).json({
       success: false,
       code: 'codex_cli_status_failed',
-      error: error?.message || String(error),
-    });
-  }
-});
-
-router.post('/login/start', async (req, res) => {
-  try {
-    const body = req.body || {};
-    const hookResult = await runLocalHooks('codexCli.loginStart', { req, body, handled: false });
-    if (hookResult?.handled) {
-      return res.json({ success: true, data: cleanHookData(hookResult) });
-    }
-    const data = startCodexLogin({
-      executablePath: body.executablePath,
-      deviceAuth: Boolean(body.deviceAuth),
-    });
-    return res.status(data.started ? 200 : 500).json({
-      success: data.started,
-      data,
-      error: data.started ? undefined : data.message,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      code: 'codex_cli_login_start_failed',
       error: error?.message || String(error),
     });
   }
@@ -236,6 +259,11 @@ router.post('/agent/stream', async (req, res) => {
     });
     if (hookResult?.handled) return undefined;
 
+    const llmProvider = resolveAgentLlmProvider(body);
+    const runBody = llmProvider
+      ? { ...body, model: llmProvider.model, llmProvider }
+      : body;
+
     beginSse(res);
     sendSse(res, 'turn.started', {
       ...meta,
@@ -248,7 +276,7 @@ router.post('/agent/stream', async (req, res) => {
       progress: 5,
     });
 
-    const result = await runCodexExecStream(body, {
+    const result = await runCodexExecStream(runBody, {
       signal: abortController.signal,
       onDelta(delta, event) {
         sendSse(res, 'message.delta', {
@@ -299,13 +327,13 @@ router.post('/agent/stream', async (req, res) => {
     res.end();
     return undefined;
   } catch (error) {
-    const message = error?.message || CODEX_DISABLED_MESSAGE;
+    const message = friendlyAgentStreamError(error, body);
     const errorArtifacts = Array.isArray(error?.artifacts) ? error.artifacts : [];
     if (abortController.signal.aborted && res.writableEnded) return undefined;
     if (!res.headersSent) {
-      return res.status(500).json({
+      return res.status(Number(error?.statusCode) || 500).json({
         success: false,
-        code: 'codex_cli_agent_stream_failed',
+        code: error?.code || 'codex_cli_agent_stream_failed',
         error: message,
       });
     }

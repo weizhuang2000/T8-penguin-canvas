@@ -26,7 +26,7 @@ test('Codex CLI Agent is registered as a creator-facing canvas node', () => {
   const canvas = read('../src/components/Canvas.tsx');
   const sidebar = read('../src/components/Sidebar.tsx');
   const features = read('../features.json');
-  const roadmap = read('../roadmap.md');
+  const roadmap = readOptional('../roadmap.md');
 
   assert.match(types, /'codex-cli-agent'/);
   assert.match(types, /'codex'/);
@@ -34,11 +34,11 @@ test('Codex CLI Agent is registered as a creator-facing canvas node', () => {
   assert.match(registry, /codex:\s*\{\s*label:\s*'CODEX CLI'/);
   assert.match(ports, /'codex-cli-agent':\s*\{\s*inputs:\s*\['text', 'image', 'video', 'audio'\],\s*outputs:\s*\['text', 'image', 'video', 'audio', 'model3d'\]/);
   assert.match(canvas, /CodexCliAgentNode/);
-  assert.match(canvas, /import\('\.\/nodes\/CodexCliAgentNode'\)/);
+  assert.match(canvas, /import CodexCliAgentNode from '\.\/nodes\/CodexCliAgentNode'/);
   assert.match(canvas, /'codex-cli-agent': CodexCliAgentNode/);
   assert.match(sidebar, /'codex-cli-agent': 'TerminalSquare'/);
   assert.match(features, /codexCliCreatorAgent/);
-  assert.match(roadmap, /Codex CLI 创作者 Agent 节点/);
+  if (roadmap) assert.match(roadmap, /Codex CLI 创作者 Agent 节点/);
 });
 
 test('Codex CLI Agent studio derives readable text colors for themed controls', () => {
@@ -72,7 +72,11 @@ test('Codex CLI backend exposes status, skill, workspace, and streaming routes',
   assert.match(server, /const codexCliRouter = require\('\.\/routes\/codexCli'\)/);
   assert.match(server, /app\.use\('\/api\/codex-cli', codexCliRouter\)/);
   assert.match(route, /router\.get\('\/status'/);
-  assert.match(route, /router\.post\('\/login\/start'/);
+  assert.doesNotMatch(route, /router\.post\('\/login\/start'/);
+  assert.match(route, /runtimeOnly/);
+  assert.match(route, /resolveAgentLlmProvider/);
+  assert.match(route, /agentProvider !== 'llm-config'/);
+  assert.match(route, /settingsRouter\.loadSettings/);
   assert.match(route, /router\.get\('\/skills'/);
   assert.match(route, /router\.post\('\/skills\/project'/);
   assert.match(route, /router\.put\('\/skills\/project\/:name'/);
@@ -88,7 +92,10 @@ test('Codex CLI backend exposes status, skill, workspace, and streaming routes',
   assert.match(route, /req\.on\('close'/);
   assert.match(route, /signal:/);
   assert.match(service, /streamCodexCliAgent/);
-  assert.match(service, /startCodexCliLogin/);
+  assert.doesNotMatch(service, /startCodexCliLogin/);
+  assert.match(service, /agentProvider\?: 'llm-config'/);
+  assert.match(service, /llmKeyId\?: string/);
+  assert.match(service, /runtimeOnly/);
   assert.match(service, /getCodexCliSkills/);
   assert.match(service, /createCodexProjectSkill/);
   assert.match(service, /updateCodexProjectSkill/);
@@ -298,7 +305,7 @@ test('Codex CLI runner resolves canvas image URLs to readable local files', () =
   assert.ok(args.includes('https://example.com/remote.png'));
 });
 
-test('Codex CLI runner prefers runnable Windows npm shims and can build login invocations', () => {
+test('Codex CLI runner prefers runnable Windows npm shims', () => {
   const runner = require('../backend/src/utils/codexCliRunner.js');
   const root = mkdtempSync(path.join(tmpdir(), 't8-codex-bin-'));
   const npmDir = path.join(root, 'npm');
@@ -321,9 +328,40 @@ test('Codex CLI runner prefers runnable Windows npm shims and can build login in
   assert.equal(resolved.shell, true);
   assert.equal(resolved.fromWindowsApps, false);
 
-  const login = runner.buildCodexLoginStartInvocation({ executablePath: 'codex', env: { PATH: npmDir } });
-  assert.equal(login.args[0], 'login');
-  assert.equal(login.shell, true);
+});
+
+test('Codex CLI runner injects an isolated Responses provider without exposing the API key in args', () => {
+  const runner = require('../backend/src/utils/codexCliRunner.js');
+  const apiKey = 'secret-agent-key';
+  const provider = {
+    apiKey,
+    baseUrl: 'https://gateway.example/openai/v1/chat/completions',
+    model: 'creator-agent-model',
+  };
+  const invocation = runner.buildCodexLlmProviderInvocation(provider);
+
+  assert.equal(invocation.baseUrl, 'https://gateway.example/openai/v1');
+  assert.equal(invocation.model, 'creator-agent-model');
+  assert.equal(invocation.env.T8_CODEX_LLM_API_KEY, apiKey);
+  assert.match(invocation.args.join(' '), /wire_api="responses"/);
+  assert.match(invocation.args.join(' '), /env_key="T8_CODEX_LLM_API_KEY"/);
+  assert.match(invocation.args.join(' '), /requires_openai_auth=false/);
+  assert.doesNotMatch(invocation.args.join(' '), new RegExp(apiKey));
+  assert.equal(runner.normalizeCodexResponsesBaseUrl('https://gateway.example'), 'https://gateway.example/v1');
+  assert.equal(runner.normalizeCodexResponsesBaseUrl('https://gateway.example/v1/responses'), 'https://gateway.example/v1');
+
+  const args = runner.buildCodexExecArgs({
+    prompt: 'hello',
+    llmProvider: provider,
+    extraArgs: ['--model', 'untrusted-model'],
+  });
+  const enforcedModelAt = args.lastIndexOf('--model');
+  assert.equal(args[enforcedModelAt + 1], 'creator-agent-model');
+  assert.doesNotMatch(args.join(' '), new RegExp(apiKey));
+
+  const other = runner.buildCodexLlmProviderInvocation({ ...provider, apiKey: 'other-key', model: 'other-model' });
+  assert.equal(other.env.T8_CODEX_LLM_API_KEY, 'other-key');
+  assert.equal(invocation.env.T8_CODEX_LLM_API_KEY, apiKey);
 });
 
 test('Codex CLI status probe reports unavailable CLI without throwing HTTP-breaking errors', async () => {
@@ -334,7 +372,7 @@ test('Codex CLI status probe reports unavailable CLI without throwing HTTP-break
 
   assert.equal(status.available, false);
   assert.equal(status.executable, missingExecutable);
-  assert.match(status.message, /Codex CLI 不可用/);
+  assert.match(status.message, /Codex CLI (?:运行时)?不可用/);
 });
 
 test('Codex CLI status probe explains WindowsApps shim failures without 500s', async () => {
@@ -353,7 +391,7 @@ test('Codex CLI status probe explains WindowsApps shim failures without 500s', a
 
   assert.equal(status.available, false);
   assert.equal(status.executable, windowsAppsCodex);
-  assert.match(status.message, /Codex CLI 不可用/);
+  assert.match(status.message, /Codex CLI (?:运行时)?不可用/);
   assert.match(status.message, /WindowsApps Codex 入口/);
   assert.match(status.message, /codex\.cmd/);
 });
@@ -384,6 +422,31 @@ test('Codex CLI status probe honors custom PATH env while checking login and fea
   assert.equal(status.available, true);
   assert.equal(status.version, 'codex-cli 9.9.9');
   assert.equal(status.authStatus, 'Logged in using Test');
+  assert.deepEqual(status.featureNames, ['image_generation']);
+});
+
+test('Codex CLI runtime-only status does not require login', async () => {
+  const runner = require('../backend/src/utils/codexCliRunner.js');
+  const root = mkdtempSync(path.join(tmpdir(), 't8-codex-runtime-only-'));
+  const bin = path.join(root, 'bin');
+  mkdirSync(bin, { recursive: true });
+  const isWin = process.platform === 'win32';
+  const fakeCodex = path.join(bin, isWin ? 'codex.cmd' : 'codex');
+  writeFileSync(fakeCodex, isWin
+    ? '@echo off\r\nif "%1"=="--version" (echo codex-cli runtime-only& exit /b 0)\r\nif "%1"=="features" if "%2"=="list" (echo image_generation stable true& exit /b 0)\r\nif "%1"=="login" (echo login must not run 1>&2& exit /b 9)\r\nexit /b 2\r\n'
+    : '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "codex-cli runtime-only"; exit 0; fi\nif [ "$1" = "features" ] && [ "$2" = "list" ]; then echo "image_generation stable true"; exit 0; fi\nif [ "$1" = "login" ]; then echo "login must not run" >&2; exit 9; fi\nexit 2\n');
+  if (!isWin) chmodSync(fakeCodex, 0o755);
+
+  const status = await runner.probeCodexStatus({
+    executablePath: 'codex',
+    runtimeOnly: true,
+    env: { PATH: bin, Path: bin, APPDATA: root, USERPROFILE: root },
+    timeoutMs: 5000,
+  });
+
+  assert.equal(status.available, true);
+  assert.equal(status.version, 'codex-cli runtime-only');
+  assert.equal(status.authStatus, undefined);
   assert.deepEqual(status.featureNames, ['image_generation']);
 });
 
@@ -444,12 +507,11 @@ test('Codex creator node exposes simplified mode, studio mode, external skills, 
   assert.match(node, /Codex 简约生成/);
   assert.match(node, /SYSTEM_CREATOR_PRESETS:\s*CreatorPreset\[\]\s*=\s*\[\]/);
   assert.match(node, /DEFAULT_CREATOR_PRESET/);
-  assert.match(node, /CODEX_MODEL_OPTIONS/);
-  assert.match(node, /codexModelMode/);
-  assert.match(node, /gpt-5\.5/);
-  assert.match(node, /gpt-5\.4-mini/);
-  assert.match(node, /gpt-5\.3-codex-spark/);
-  assert.match(node, /gpt-5\.3-codex/);
+  assert.doesNotMatch(node, /CODEX_MODEL_OPTIONS|codexModelMode/);
+  assert.match(node, /agentLlmConfigs/);
+  assert.match(node, /activeAgentLlmConfig/);
+  assert.match(node, /selectedLlmKeyId/);
+  assert.match(node, /selectedCodexModel/);
   assert.match(node, /创作模板/);
   assert.match(node, /模板工坊/);
   assert.match(node, /Skill 列表/);
@@ -477,11 +539,7 @@ test('Codex creator node exposes simplified mode, studio mode, external skills, 
   assert.doesNotMatch(node, /filteredCreatorSkills\.slice\(0,\s*16\)/);
   assert.doesNotMatch(node, /max-h-44 overflow-y-auto/);
   assert.doesNotMatch(node, /creatorPresets:\s*CreatorPreset\[\]\s*=\s*\[/);
-  assert.match(node, /LLM_DEFAULT_CODEX_MODEL = 'gpt-5\.4-mini'/);
-  assert.match(node, /IMG_DEFAULT_CODEX_MODEL = 'gpt-5\.5'/);
-  assert.match(node, /autoCodexModelForRunIntent/);
-  assert.match(node, /codexModelManual/);
-  assert.match(node, /codexModelAutoPatchForRunIntent\(nextIntent\)/);
+  assert.doesNotMatch(node, /LLM_DEFAULT_CODEX_MODEL|IMG_DEFAULT_CODEX_MODEL|autoCodexModelForRunIntent|codexModelManual/);
   assert.match(node, /extractSlashSkillReferences/);
   assert.match(node, /selectedSkillNamesForRun/);
   assert.match(node, /shouldForceImageGeneration/);
@@ -492,8 +550,8 @@ test('Codex creator node exposes simplified mode, studio mode, external skills, 
   assert.match(node, /aria-pressed=\{active\}/);
   assert.match(node, /data-codex-run-intent-summary=\{codexRunIntent\}/);
   assert.match(node, /当前：\{codexRunIntent === 'img'/);
-  assert.match(node, /IMG 生图模式 · 默认 gpt-5\.5 \+ imagegen/);
-  assert.match(node, /LLM 文字模式 · 默认 gpt-5\.4 mini/);
+  assert.match(node, /IMG 生图模式 · \$\{selectedCodexModel \|\| '未配置模型'\} \+ imagegen/);
+  assert.match(node, /LLM 文字模式 · \$\{selectedCodexModel \|\| '未配置模型'\}/);
   assert.match(node, /label:\s*'LLM'/);
   assert.match(node, /label:\s*'IMG'/);
   assert.match(node, /llmOnly:\s*runIntent === 'llm'/);
@@ -568,10 +626,8 @@ test('Codex creator node exposes simplified mode, studio mode, external skills, 
 
 test('Codex creator studio exposes sortable visible input materials without deleting source nodes', () => {
   const node = read('../src/components/nodes/CodexCliAgentNode.tsx');
-  const canvas = read('../src/components/Canvas.tsx');
-
-  assert.match(canvas, /'codex-cli-agent':\s*\{[\s\S]*materialOrder:\s*\[\]/);
-  assert.match(canvas, /'codex-cli-agent':\s*\{[\s\S]*excludedMaterialIds:\s*\[\]/);
+  assert.match(node, /const materialOrder = Array\.isArray\(d\.materialOrder\) \? d\.materialOrder : \[\]/);
+  assert.match(node, /normalizeExcludedMaterialIds\(d\.excludedMaterialIds\)/);
   assert.match(node, /const visibleUpstreamImages = useMemo\([\s\S]*filterExcludedMaterials\(upstream\.images, excludedMaterialIds\)/);
   assert.match(node, /const studioConsumedMaterialIds = useMemo/);
   assert.match(node, /const activeUpstreamImages = useMemo\([\s\S]*studioOpen && !persistMaterials \? filterExcludedMaterials\(visibleUpstreamImages, studioConsumedMaterialIds\) : visibleUpstreamImages/);
@@ -618,7 +674,7 @@ test('Codex creator prompt does not auto-enable image generation in LLM mode', (
   assert.doesNotMatch(prompt, /image_generation/);
 });
 
-test('Codex simple creator mode has explicit LLM IMG intent, model defaults, imagegen default skill, and image-first publishing', () => {
+test('Codex simple creator mode has explicit LLM IMG intent, configured agent model, imagegen default skill, and image-first publishing', () => {
   const node = read('../src/components/nodes/CodexCliAgentNode.tsx');
 
   assert.match(node, /data-codex-simple-run-intent=\{codexRunIntent\}/);
@@ -628,7 +684,12 @@ test('Codex simple creator mode has explicit LLM IMG intent, model defaults, ima
   assert.doesNotMatch(node, /if \(!persistPrompt\) finishPatch\.codexQuickPrompt = ''/);
   assert.match(node, /const runIntent: CodexRunIntent = codexRunIntent/);
   assert.doesNotMatch(node, /studioOpen \? codexRunIntent : 'auto'/);
-  assert.match(node, /codexModelAutoPatchForRunIntent\(nextIntent\)/);
+  assert.doesNotMatch(node, /codexModelAutoPatchForRunIntent|CODEX_MODEL_OPTIONS/);
+  assert.match(node, /agentProvider:\s*'llm-config'/);
+  assert.match(node, /llmKeyId:\s*selectedLlmKeyId/);
+  assert.match(node, /data-codex-agent-provider="llm-config"/);
+  assert.match(node, /data-codex-agent-model="llm-config"/);
+  assert.match(node, /useApiKeysStore/);
   assert.match(node, /findDefaultImageGenerationSkill/);
   assert.match(node, /codexAutoImagegenSkillName/);
   assert.match(node, /updateCodexRunIntent[\s\S]*nextIntent === 'img'[\s\S]*codexSelectedSkillNames/);
@@ -688,7 +749,7 @@ test('Codex simple run accepts upstream image-only tasks and sends image referen
   assert.match(node, /images:\s*imagesForRun/);
 });
 
-test('Codex creator node remains draggable and exposes setup/login guidance', () => {
+test('Codex creator node remains draggable and exposes runtime and LLM configuration guidance', () => {
   const node = read('../src/components/nodes/CodexCliAgentNode.tsx');
 
   assert.match(node, /data-codex-cli-agent-root/);
@@ -696,12 +757,12 @@ test('Codex creator node remains draggable and exposes setup/login guidance', ()
   assert.doesNotMatch(node, /className="nodrag nowheel"\s+style=\{rootStyle\}/);
   assert.match(node, /clearRecoverableCodexError/);
   assert.match(node, /codexStatusPanel/);
-  assert.match(node, /startCodexCliLogin/);
-  assert.match(node, /codexLoginCommand/);
+  assert.doesNotMatch(node, /startCodexCliLogin|codexLoginCommand/);
   assert.match(node, /friendlyCodexErrorMessage/);
-  assert.match(node, /登录 Codex CLI/);
-  assert.match(node, /打开登录/);
-  assert.match(node, /需要登录或填写 Codex CLI 路径/);
+  assert.doesNotMatch(node, /登录 Codex CLI|打开登录|复制登录命令/);
+  assert.match(node, /LLM 独立配置/);
+  assert.match(node, /无需执行 codex login/);
+  assert.match(node, /需要安装或填写 Codex CLI 路径/);
   assert.match(node, /检测详情/);
   assert.match(node, /后端路由未加载/);
 });

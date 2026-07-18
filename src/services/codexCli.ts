@@ -45,6 +45,8 @@ export interface CodexCliPayload {
   nodeId?: string;
   sessionId?: string;
   turnId?: string;
+  agentProvider?: 'llm-config';
+  llmKeyId?: string;
   mode?: string;
   command?: string;
   preset?: string;
@@ -186,16 +188,15 @@ function mergeResult(target: CodexCliResult, patch?: CodexCliResult) {
   }
 }
 
-export async function getCodexCliStatus(executablePath?: string): Promise<CodexCliStatus> {
-  const q = executablePath ? `?executablePath=${encodeURIComponent(executablePath)}` : '';
-  return requestJson<CodexCliStatus>(`${BASE}/status${q}`);
-}
-
-export async function startCodexCliLogin(payload: { executablePath?: string; deviceAuth?: boolean } = {}): Promise<{ started: boolean; executable?: string; message?: string }> {
-  return requestJson<{ started: boolean; executable?: string; message?: string }>(`${BASE}/login/start`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+export async function getCodexCliStatus(
+  executablePath?: string,
+  options: { runtimeOnly?: boolean } = {},
+): Promise<CodexCliStatus> {
+  const sp = new URLSearchParams();
+  if (executablePath) sp.set('executablePath', executablePath);
+  if (options.runtimeOnly) sp.set('runtimeOnly', '1');
+  const qs = sp.toString();
+  return requestJson<CodexCliStatus>(`${BASE}/status${qs ? `?${qs}` : ''}`);
 }
 
 export async function getCodexCliSkills(payload: { nodeId?: string; sessionId?: string; workspaceDir?: string } = {}): Promise<{ workspaceDir: string; skills: CodexSkill[] }> {

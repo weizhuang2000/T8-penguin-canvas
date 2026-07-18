@@ -1527,6 +1527,7 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
       {editingUrl && (
         <ImageEditModal
           srcUrl={editingUrl}
+          entryKind="material"
           onClose={() => setEditingUrl(null)}
           onProduce={handleProduce}
           onModifyRunningChange={(running, error) => {

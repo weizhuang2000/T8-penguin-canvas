@@ -1048,6 +1048,7 @@ const UploadNode = ({ id, data, selected, type }: NodeProps) => {
       {editingUrl && (
         <ImageEditModal
           srcUrl={editingUrl}
+          entryKind="material"
           onClose={() => setEditingUrl(null)}
           onProduce={handleProduce}
           onModifyRunningChange={(running, error) => {

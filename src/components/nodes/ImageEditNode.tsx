@@ -214,6 +214,7 @@ const ImageEditNode = ({ id, data, selected }: NodeProps) => {
         aspect_ratio: aspectRatio,
         image_size: DENOISE_IMAGE_SIZE,
         images: [sourceImage],
+        outputFormat: 'jpg',
         n: 1,
         historyContext,
         async: true,
@@ -229,6 +230,7 @@ const ImageEditNode = ({ id, data, selected }: NodeProps) => {
             providerId: firstImageAdvancedProvider.id,
             providerModel: firstImageProviderModel,
             taskId,
+            outputFormat: 'jpg',
             historyContext,
           });
           taskId = result.taskId || taskId;
@@ -499,6 +501,7 @@ const ImageEditNode = ({ id, data, selected }: NodeProps) => {
       {editingMode && sourceImage && (
         <ImageEditModal
           srcUrl={sourceImage}
+          entryKind="image-edit-node"
           initialMode={editingMode}
           initialDraft={activeDraft}
           enableModifyGeneration
