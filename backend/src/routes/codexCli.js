@@ -2,7 +2,7 @@
 
 const express = require('express');
 const { runLocalHooks } = require('../extensions/runtimeHooks');
-const { generateConfiguredImage, generateConfiguredLlm } = require('../providers/llmClient');
+const { generateConfiguredImage, generateConfiguredLlm, generateConfiguredResponseImage } = require('../providers/llmClient');
 const settingsRouter = require('./settings');
 const {
   CODEX_DISABLED_MESSAGE,
@@ -139,6 +139,7 @@ async function runDirectLlmAgent(body = {}, provider = {}, handlers = {}) {
   const startedAt = Date.now();
   let response;
   let imageApiError = null;
+  let responsesApiError = null;
   if (wantsImage) {
     try {
       response = await generateConfiguredImage({
@@ -166,6 +167,29 @@ async function runDirectLlmAgent(body = {}, provider = {}, handlers = {}) {
       });
     }
   }
+  if (wantsImage && !response) {
+    try {
+      response = await generateConfiguredResponseImage({
+        llmKeyId: provider.id,
+        prompt: makeCreatorPrompt({
+          ...body,
+          directLlm: true,
+          skillInstructions: selectedSkillInstructions(body),
+        }),
+        images: body.images,
+        outputFormat: body.outputFormat,
+        timeoutMs: body.timeoutMs,
+        signal: handlers.signal,
+      });
+    } catch (error) {
+      responsesApiError = error;
+      if (/unauthorized|forbidden|\b401\b|\b403\b/i.test(String(error?.message || '')) || [401, 403].includes(Number(error?.status))) throw error;
+      handlers.onProgress?.('所选平台的 Responses image_generation 未返回图片，正在尝试多模态对话接口...', {
+        type: 'image.responses-fallback',
+        status: Number(error?.status) || undefined,
+      });
+    }
+  }
   if (!response) {
     try {
       response = await generateConfiguredLlm({
@@ -180,12 +204,17 @@ async function runDirectLlmAgent(body = {}, provider = {}, handlers = {}) {
         signal: handlers.signal,
       });
     } catch (chatError) {
-      if (!wantsImage || !imageApiError) throw chatError;
-      const status = Number(imageApiError?.status || chatError?.status) || 0;
+      if (!wantsImage || (!imageApiError && !responsesApiError)) throw chatError;
+      const endpointStatuses = [
+        imageApiError ? `Images API: HTTP ${Number(imageApiError.status) || '失败'}` : '',
+        responsesApiError ? `Responses API: HTTP ${Number(responsesApiError.status) || '失败'}` : '',
+        chatError ? `Chat Completions: HTTP ${Number(chatError.status) || '失败'}` : '',
+      ].filter(Boolean).join('；');
       response = {
         content: [
-          `所选配置“${provider.label || provider.id}”的模型 ${provider.model} 未能通过图片接口返回图片${status ? `（HTTP ${status}）` : ''}。`,
-          '请确认该模型支持 OpenAI 兼容的 /v1/images/generations 或 /v1/images/edits；本次已保留以下完整生图提示词：',
+          `所选配置“${provider.label || provider.id}”的模型 ${provider.model} 未能通过 Images API 或 Responses image_generation 返回图片。`,
+          endpointStatuses,
+          '请确认该平台开放 /v1/images/generations、/v1/images/edits 或 /v1/responses 的 image_generation 工具；本次已保留以下完整生图提示词：',
           String(body.prompt || '').trim(),
         ].filter(Boolean).join('\n\n'),
         imageUrls: [],

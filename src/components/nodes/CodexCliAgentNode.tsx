@@ -131,7 +131,7 @@ const IMAGE_GENERATION_FALLBACK_PRESET: CreatorPreset = {
   command: '/image',
   icon: ImageIcon,
   hint: '按图像生成任务处理',
-  systemHint: '优先直接调用 Codex 的 image_generation 能力生成图片；如果当前 CLI 无法生图，再输出可执行的图像提示词和参数。',
+  systemHint: '优先调用所选 LLM 平台自身支持的图片生成接口直接生成图片；如果该平台或模型无法生图，再输出可执行的图像提示词和参数。',
 };
 
 const SYSTEM_CREATOR_PRESETS: CreatorPreset[] = [];

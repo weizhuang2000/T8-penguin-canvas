@@ -31,6 +31,10 @@ function resolveLlmImageGenerationsUrl(value, fallback) {
   return `${resolveLlmApiRoot(value, fallback)}/images/generations`;
 }
 
+function resolveLlmResponsesUrl(value, fallback) {
+  return `${resolveLlmApiRoot(value, fallback)}/responses`;
+}
+
 function normalizeLlmModelName(value, fallback = '') {
   const text = String(value || '').trim();
   if (!text) return fallback;
@@ -44,4 +48,5 @@ module.exports = {
   resolveLlmApiRoot,
   resolveLlmChatCompletionsUrl,
   resolveLlmImageGenerationsUrl,
+  resolveLlmResponsesUrl,
 };

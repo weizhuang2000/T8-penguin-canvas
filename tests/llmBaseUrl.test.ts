@@ -9,6 +9,7 @@ const {
   resolveLlmApiRoot,
   resolveLlmChatCompletionsUrl,
   resolveLlmImageGenerationsUrl,
+  resolveLlmResponsesUrl,
 } = require('../backend/src/utils/llmBaseUrl.js');
 
 const fallback = 'https://ai.t8star.org';
@@ -45,6 +46,10 @@ test('builds the OpenAI-compatible image generations endpoint from the same API 
   assert.equal(
     resolveLlmImageGenerationsUrl('https://llm.example.com/openai/v1/responses', fallback),
     'https://llm.example.com/openai/v1/images/generations',
+  );
+  assert.equal(
+    resolveLlmResponsesUrl('https://llm.example.com/openai/v1/images/generations', fallback),
+    'https://llm.example.com/openai/v1/responses',
   );
 });
 

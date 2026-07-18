@@ -2,7 +2,7 @@
 
 const config = require('../config');
 const settingsRouter = require('../routes/settings');
-const { resolveLlmApiRoot, resolveLlmChatCompletionsUrl } = require('../utils/llmBaseUrl');
+const { resolveLlmApiRoot, resolveLlmChatCompletionsUrl, resolveLlmResponsesUrl } = require('../utils/llmBaseUrl');
 const { normalizeLlmMessageMedia } = require('./llmMedia');
 const { generateImage } = require('./openaiCompatible');
 const { writeImageOutput } = require('../utils/imageOutput');
@@ -264,12 +264,136 @@ async function persistConfiguredImageUrls(values, outputFormat) {
   return out;
 }
 
+function extractResponsesImageResult(data) {
+  const imageUrls = [];
+  const textParts = [];
+  const seen = new Set();
+  const addImage = (value, mime = 'image/png') => {
+    const raw = String(value || '').trim();
+    if (!raw) return;
+    const url = /^(?:data:image\/|https?:\/\/|\/files\/)/i.test(raw)
+      ? raw
+      : `data:${mime || 'image/png'};base64,${raw}`;
+    if (!seen.has(url)) {
+      seen.add(url);
+      imageUrls.push(url);
+    }
+  };
+  const visit = (value) => {
+    if (!value) return;
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (typeof value !== 'object') return;
+    const type = String(value.type || '').toLowerCase();
+    if (type === 'output_text' && value.text) textParts.push(String(value.text));
+    if (type === 'image_generation_call') {
+      if (typeof value.result === 'string') addImage(value.result, value.mime_type || value.mimeType);
+      else visit(value.result);
+    }
+    if (value.b64_json || value.base64 || value.image_base64) {
+      addImage(value.b64_json || value.base64 || value.image_base64, value.mime_type || value.mimeType);
+    }
+    const imageUrl = typeof value.image_url === 'string' ? value.image_url : value.image_url?.url;
+    if (imageUrl) addImage(imageUrl, value.mime_type || value.mimeType);
+    if (type === 'output_image' && value.url) addImage(value.url, value.mime_type || value.mimeType);
+    for (const key of ['output', 'content', 'data', 'images', 'results']) visit(value[key]);
+  };
+  visit(data);
+  if (typeof data?.output_text === 'string' && data.output_text.trim()) textParts.unshift(data.output_text.trim());
+  return { content: textParts.filter(Boolean).join('\n').trim(), imageUrls };
+}
+
+async function generateConfiguredResponseImage(options = {}) {
+  const settings = options.settings || loadRawSettings();
+  const selected = resolveLlmConfig(settings, options.llmKeyId);
+  if (!selected || selected.error) throw new Error(selected?.error || '未配置 LLM 独立 API Key');
+  const model = String(selected.model || '').trim();
+  if (!model) throw new Error('LLM 独立配置缺少模型名称');
+  const prompt = String(options.prompt || '').trim();
+  if (!prompt) throw new Error('生图提示词不能为空');
+
+  const normalized = await normalizeLlmMessageMedia([{
+    role: 'user',
+    content: [
+      { type: 'text', text: prompt },
+      ...(Array.isArray(options.images) ? options.images : []).filter(Boolean)
+        .map((url) => ({ type: 'image_url', image_url: { url } })),
+    ],
+  }], {}, { baseUrl: `http://127.0.0.1:${config.PORT}` });
+  const inputContent = (normalized[0]?.content || []).map((part) => {
+    if (part?.type === 'text') return { type: 'input_text', text: part.text || '' };
+    if (part?.type === 'image_url' && part.image_url?.url) return { type: 'input_image', image_url: part.image_url.url };
+    return null;
+  }).filter(Boolean);
+  const payload = {
+    model,
+    input: [{ role: 'user', content: inputContent }],
+    tools: [{ type: 'image_generation' }],
+    tool_choice: { type: 'image_generation' },
+  };
+  const timeoutMs = Math.max(10_000, Math.min(10 * 60_000, Number(options.timeoutMs) || DEFAULT_TIMEOUT_MS));
+  const active = combinedSignal(options.signal, timeoutMs);
+  try {
+    const fetchImpl = options.fetchImpl || fetch;
+    const response = await fetchImpl(resolveLlmResponsesUrl(selected.baseUrl, zhenzhenBaseUrl(settings)), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${selected.apiKey}` },
+      body: JSON.stringify(payload),
+      signal: active.signal,
+    });
+    const responseText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      const error = new Error(`Responses 生图接口返回非 JSON：HTTP ${response.status}。响应片段：${safePreview(responseText)}`);
+      error.status = response.status;
+      throw error;
+    }
+    if (!response.ok) {
+      const error = new Error(data?.error?.message || data?.message || `Responses 生图接口 HTTP ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
+    const extracted = extractResponsesImageResult(data);
+    if (!extracted.imageUrls.length) {
+      const error = new Error('Responses API 已响应，但 image_generation 工具没有返回图片。');
+      error.status = 422;
+      throw error;
+    }
+    const imageUrls = options.persistOutputs === false
+      ? extracted.imageUrls
+      : await persistConfiguredImageUrls(extracted.imageUrls, options.outputFormat);
+    return {
+      content: extracted.content,
+      imageUrls,
+      raw: data,
+      model,
+      llmKeyId: selected.keyId,
+      llmLabel: selected.label,
+    };
+  } catch (error) {
+    if (options.signal?.aborted || (error?.name === 'AbortError' && !active.didTimeout())) {
+      throw Object.assign(new Error('请求已取消'), { name: 'AbortError' });
+    }
+    throw active.didTimeout()
+      ? Object.assign(new Error(`Responses 生图请求超过 ${Math.round(timeoutMs / 1000)} 秒`), { status: 408 })
+      : error;
+  } finally {
+    active.dispose();
+  }
+}
+
 module.exports = {
   DEFAULT_TIMEOUT_MS,
   RETRYABLE_STATUSES,
   extractResponse,
+  extractResponsesImageResult,
   generateConfiguredImage,
   generateConfiguredLlm,
+  generateConfiguredResponseImage,
   loadRawSettings,
   persistConfiguredImageUrls,
   resolveLlmConfig,
