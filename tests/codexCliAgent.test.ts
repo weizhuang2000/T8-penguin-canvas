@@ -330,6 +330,37 @@ test('Codex CLI runner prefers runnable Windows npm shims', () => {
 
 });
 
+test('Codex CLI runner auto-discovers the newest Codex desktop bundled executable', () => {
+  const runner = require('../backend/src/utils/codexCliRunner.js');
+  const root = mkdtempSync(path.join(tmpdir(), 't8-codex-desktop-'));
+  const localAppData = path.join(root, 'Local');
+  const oldDir = path.join(localAppData, 'OpenAI', 'Codex', 'bin', 'old-build');
+  const newDir = path.join(localAppData, 'OpenAI', 'Codex', 'bin', 'new-build');
+  mkdirSync(oldDir, { recursive: true });
+  mkdirSync(newDir, { recursive: true });
+  const oldCli = path.join(oldDir, 'codex.exe');
+  const newCli = path.join(newDir, 'codex.exe');
+  writeFileSync(oldCli, 'old');
+  writeFileSync(newCli, 'new');
+  const oldTime = new Date(Date.now() - 60_000);
+  const newTime = new Date();
+  utimesSync(oldCli, oldTime, oldTime);
+  utimesSync(newCli, newTime, newTime);
+
+  const candidates = runner.windowsDesktopCodexCandidatesForTests({ LOCALAPPDATA: localAppData });
+  assert.deepEqual(candidates, [newCli, oldCli]);
+
+  const resolved = runner.resolveCodexExecutable({
+    executablePath: 'codex',
+    platform: 'win32',
+    env: { LOCALAPPDATA: localAppData, PATH: '', Path: '', APPDATA: '', USERPROFILE: root },
+  });
+  assert.equal(resolved.command, newCli);
+  assert.equal(resolved.shell, false);
+  assert.equal(resolved.resolved, true);
+  assert.equal(resolved.fromWindowsApps, false);
+});
+
 test('Codex CLI runner injects an isolated Responses provider without exposing the API key in args', () => {
   const runner = require('../backend/src/utils/codexCliRunner.js');
   const apiKey = 'secret-agent-key';
@@ -414,6 +445,7 @@ test('Codex CLI status probe honors custom PATH env while checking login and fea
       PATH: bin,
       Path: bin,
       APPDATA: root,
+      LOCALAPPDATA: root,
       USERPROFILE: root,
     },
     timeoutMs: 5000,
@@ -440,7 +472,7 @@ test('Codex CLI runtime-only status does not require login', async () => {
   const status = await runner.probeCodexStatus({
     executablePath: 'codex',
     runtimeOnly: true,
-    env: { PATH: bin, Path: bin, APPDATA: root, USERPROFILE: root },
+    env: { PATH: bin, Path: bin, APPDATA: root, LOCALAPPDATA: root, USERPROFILE: root },
     timeoutMs: 5000,
   });
 

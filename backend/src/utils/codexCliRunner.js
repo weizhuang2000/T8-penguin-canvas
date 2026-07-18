@@ -86,6 +86,41 @@ function winNeedsShell(command) {
   return /\.(cmd|bat)$/i.test(String(command || ''));
 }
 
+function windowsDesktopCodexCandidates(env = process.env) {
+  const localAppData = String(env.LOCALAPPDATA || '').trim()
+    || (env.USERPROFILE ? path.join(String(env.USERPROFILE), 'AppData', 'Local') : '');
+  if (!localAppData) return [];
+  const candidates = [];
+  const binRoot = path.join(localAppData, 'OpenAI', 'Codex', 'bin');
+  const addIfFile = (file) => {
+    try {
+      if (fs.statSync(file).isFile()) candidates.push(file);
+    } catch {
+      // optional install location
+    }
+  };
+  addIfFile(path.join(binRoot, 'codex.exe'));
+  try {
+    for (const entry of fs.readdirSync(binRoot, { withFileTypes: true })) {
+      if (entry.isDirectory()) addIfFile(path.join(binRoot, entry.name, 'codex.exe'));
+    }
+  } catch {
+    // Codex desktop is not installed in this user profile.
+  }
+  [
+    path.join(localAppData, 'OpenAI', 'Codex', 'codex.exe'),
+    path.join(localAppData, 'Programs', 'OpenAI Codex', 'codex.exe'),
+    path.join(localAppData, 'Programs', 'Codex', 'codex.exe'),
+  ].forEach(addIfFile);
+  return candidates.sort((a, b) => {
+    try {
+      return fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs;
+    } catch {
+      return 0;
+    }
+  });
+}
+
 function codexCandidateScore(file) {
   const text = String(file || '');
   const ext = path.extname(text).toLowerCase();
@@ -96,7 +131,8 @@ function codexCandidateScore(file) {
   else if (ext === '.bat') score += 8;
   else if (ext === '.ps1') score += 70;
   else score += 50;
-  if (/[\\/]npm[\\/]codex\.cmd$/i.test(text)) score -= 10;
+  if (/[\\/]npm[\\/]codex\.cmd$/i.test(text)) score -= 30;
+  if (/[\\/]OpenAI[\\/]Codex[\\/]bin[\\/][^\\/]+[\\/]codex\.exe$/i.test(text)) score -= 20;
   return score;
 }
 
@@ -119,6 +155,9 @@ function findCodexCandidates(command, options = {}) {
     const userProfile = String(env.USERPROFILE || '').trim();
     if (appData) uniquePush(dirs, path.join(appData, 'npm'));
     if (userProfile) uniquePush(dirs, path.join(userProfile, 'AppData', 'Roaming', 'npm'));
+    if (/^codex(?:\.(?:cmd|exe|bat|ps1))?$/i.test(raw)) {
+      windowsDesktopCodexCandidates(env).forEach((file) => uniquePush(candidates, file));
+    }
   }
   pathEnvValue(env).split(path.delimiter).forEach((dir) => uniquePush(dirs, dir));
 
@@ -1194,6 +1233,7 @@ module.exports = {
   normalizeArtifactUrlForTests: normalizeArtifactUrl,
   resolveCodexInputImagesForTests: resolveCodexInputImages,
   resolveCodexExecutable,
+  windowsDesktopCodexCandidatesForTests: windowsDesktopCodexCandidates,
   normalizeCodexResponsesBaseUrl,
   buildCodexLlmProviderInvocation,
   listCodexSkills,

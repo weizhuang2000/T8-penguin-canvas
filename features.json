@@ -881,6 +881,7 @@
       "后端 /api/codex-cli 封装 Codex CLI status、skills、skills/project 和 agent/stream 路由，使用 SSE 返回 turn.started、message.delta、tool.progress、artifact.completed 等事件。",
       "运行前读取 codex features list，只有当前 CLI 明确支持的 feature 才发送 --enable，避免 plan_tool / web_search 等未知开关导致任务失败。",
       "Agent 状态使用 runtimeOnly 探测 CLI 安装、版本和 Feature，不执行 codex login status；节点标题区提供明确拖动面，输入和按钮继续保留 nodrag。",
+      "Windows 自动发现 npm codex.cmd 与 Codex 桌面版 %LOCALAPPDATA%/OpenAI/Codex/bin/<build>/codex.exe，并优先使用可直接 spawn 的最新入口。",
       "Electron 后置检查锁住 routes/codexCli.t8c 与 utils/codexCliRunner.t8c，避免桌面包漏路由后出现 /api/codex-cli 404。",
       "Skill 扫描覆盖 CODEX_HOME 全局 Skills、用户 .agents/skills、项目 .agents/skills 和节点工作区项目 Skills；节点内可创建当前项目专用 Skill。",
       "产物解析覆盖文本、图片、视频、音频和 3D 模型 URL；发布后写回节点标准输出字段，也可保存到资源库。"
