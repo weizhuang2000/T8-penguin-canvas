@@ -21,10 +21,14 @@ const router = express.Router();
 
 function beginSse(res) {
   if (res.headersSent) return;
+  res.setTimeout?.(0);
+  res.socket?.setTimeout?.(0);
+  res.socket?.setKeepAlive?.(true);
   res.writeHead(200, {
     'Content-Type': 'text/event-stream; charset=utf-8',
     'Cache-Control': 'no-cache, no-transform',
     Connection: 'keep-alive',
+    'Content-Encoding': 'identity',
     'X-Accel-Buffering': 'no',
   });
   if (typeof res.flushHeaders === 'function') res.flushHeaders();
@@ -360,12 +364,15 @@ router.post('/agent/stream', async (req, res) => {
   const mode = String(body.mode || 'chat');
   const turnId = String(body.turnId || '');
   const abortController = new AbortController();
+  let heartbeatTimer = null;
   const meta = {
     mode,
     turnId,
     command: String(body.command || body.preset || mode),
   };
   const abortStream = () => {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
     if (!res.writableEnded && !abortController.signal.aborted) {
       abortController.abort();
     }
@@ -388,6 +395,14 @@ router.post('/agent/stream', async (req, res) => {
     const directLlm = body.agentProvider === 'llm-config';
 
     beginSse(res);
+    res.write(`: connected ${' '.repeat(2048)}\n\n`);
+    res.flush?.();
+    heartbeatTimer = setInterval(() => {
+      if (res.writableEnded || res.destroyed) return;
+      res.write(`: keep-alive ${Date.now()}\n\n`);
+      res.flush?.();
+    }, 10_000);
+    heartbeatTimer.unref?.();
     sendSse(res, 'turn.started', {
       ...meta,
       message: directLlm ? 'Codex Agent 直连 LLM 任务已开始' : 'Codex CLI 创作任务已开始',
@@ -503,6 +518,9 @@ router.post('/agent/stream', async (req, res) => {
     });
     if (!res.writableEnded) res.end();
     return undefined;
+  } finally {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
   }
 });
 

@@ -67,6 +67,7 @@ test('Codex CLI Agent studio derives readable text colors for themed controls', 
 test('Codex CLI backend exposes status, skill, workspace, and streaming routes', () => {
   const server = read('../backend/src/server.js');
   const route = read('../backend/src/routes/codexCli.js');
+  const llmClient = read('../backend/src/providers/llmClient.js');
   const service = read('../src/services/codexCli.ts');
 
   assert.match(server, /const codexCliRouter = require\('\.\/routes\/codexCli'\)/);
@@ -90,12 +91,17 @@ test('Codex CLI backend exposes status, skill, workspace, and streaming routes',
   assert.match(route, /text\/event-stream/);
   assert.match(route, /turn\.started/);
   assert.match(route, /message\.delta/);
+  assert.match(route, /keep-alive/);
+  assert.match(route, /heartbeatTimer/);
   assert.match(route, /artifact\.completed/);
   assert.match(route, /tool\.progress/);
   assert.match(route, /turn\.failed/);
   assert.match(route, /event:\s*'done'|sendSse\(res,\s*'done'/);
   assert.match(route, /req\.on\('close'/);
   assert.match(route, /signal:/);
+  assert.match(llmClient, /persistConfiguredImageUrls/);
+  assert.match(llmClient, /\/files\/output\//);
+  assert.match(llmClient, /MAX_AGENT_IMAGE_BYTES/);
   assert.match(service, /streamCodexCliAgent/);
   assert.doesNotMatch(service, /startCodexCliLogin/);
   assert.match(service, /agentProvider\?: 'llm-config'/);
@@ -748,6 +754,7 @@ test('Codex direct IMG mode calls the selected LLM config image endpoint without
     llmKeyId: 'image-platform',
     model: 'frontend-model-must-be-ignored',
     prompt: '生成一张海报',
+    persistOutputs: false,
     fetchImpl: async (url: string, init: any) => {
       calls.push({ url, init });
       return new Response(JSON.stringify({ data: [{ b64_json: 'UE5H' }] }), {

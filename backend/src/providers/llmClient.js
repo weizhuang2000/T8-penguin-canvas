@@ -5,9 +5,11 @@ const settingsRouter = require('../routes/settings');
 const { resolveLlmApiRoot, resolveLlmChatCompletionsUrl } = require('../utils/llmBaseUrl');
 const { normalizeLlmMessageMedia } = require('./llmMedia');
 const { generateImage } = require('./openaiCompatible');
+const { writeImageOutput } = require('../utils/imageOutput');
 
 const DEFAULT_TIMEOUT_MS = 180 * 1000;
 const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+const MAX_AGENT_IMAGE_BYTES = 50 * 1024 * 1024;
 
 function loadRawSettings() {
   try {
@@ -211,14 +213,55 @@ async function generateConfiguredImage(options = {}) {
     error.code = result?.code || 'llm_image_failed';
     throw error;
   }
+  const imageUrls = options.persistOutputs === false
+    ? (Array.isArray(result.imageUrls) ? result.imageUrls.filter(Boolean) : [])
+    : await persistConfiguredImageUrls(result.imageUrls, options.outputFormat);
   return {
     content: '',
-    imageUrls: Array.isArray(result.imageUrls) ? result.imageUrls.filter(Boolean) : [],
+    imageUrls,
     raw: result.raw,
     model,
     llmKeyId: selected.keyId,
     llmLabel: selected.label,
   };
+}
+
+async function persistConfiguredImageUrl(value, outputFormat) {
+  const url = String(value || '').trim();
+  if (!url || url.startsWith('/files/output/')) return url;
+  let buffer;
+  const dataMatch = url.match(/^data:image\/[^;,]+;base64,(.+)$/i);
+  if (dataMatch) {
+    buffer = Buffer.from(dataMatch[1], 'base64');
+  } else if (/^https?:\/\//i.test(url)) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 120_000);
+    timer.unref?.();
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) return url;
+      const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+      if (contentType && !contentType.startsWith('image/')) return url;
+      const contentLength = Number(response.headers.get('content-length')) || 0;
+      if (contentLength > MAX_AGENT_IMAGE_BYTES) throw new Error('模型返回的图片超过 50MB，已停止写入画布。');
+      buffer = Buffer.from(await response.arrayBuffer());
+    } finally {
+      clearTimeout(timer);
+    }
+  } else {
+    return url;
+  }
+  if (!buffer?.length) return url;
+  if (buffer.length > MAX_AGENT_IMAGE_BYTES) throw new Error('模型返回的图片超过 50MB，已停止写入画布。');
+  const output = await writeImageOutput(config.OUTPUT_DIR, 'codex-agent', buffer, outputFormat || 'png');
+  return output.url;
+}
+
+async function persistConfiguredImageUrls(values, outputFormat) {
+  const urls = Array.isArray(values) ? values.filter(Boolean) : [];
+  const out = [];
+  for (const value of urls) out.push(await persistConfiguredImageUrl(value, outputFormat));
+  return out;
 }
 
 module.exports = {
@@ -228,5 +271,6 @@ module.exports = {
   generateConfiguredImage,
   generateConfiguredLlm,
   loadRawSettings,
+  persistConfiguredImageUrls,
   resolveLlmConfig,
 };
