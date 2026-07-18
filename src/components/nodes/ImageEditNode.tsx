@@ -46,6 +46,8 @@ function buildDenoisePrompt(thresholdPx: number) {
   return `重绘画面。主题、构图层次和细节保持不变，按照物理光线进行重绘，色调保持不变。要求边缘自然，阴影和透视合理。画面方法：去掉噪点、细小杂物、污点、破损，降噪阈值控制在${thresholdPx}像素以下。保持真实阴影和纹理，保留原图的光影特效产生的细小光斑。质量标准：主体清楚、构图高级、空间层次明确、材质和光线可信，适合直接用于节点生成或作为参考图。`;
 }
 
+const REDRAW_PROMPT = '你是一位顶级展陈设计师，现在要对参考图进行重新建模渲染，要充分理解分析参考图主体的物理材质和主题内容后重新建模并渲染，使画面比原图更加整洁、色调不杂乱、更加美观。主题、主体、建筑空间和构图层次保持不变，将相连的近似材质合并为占比较大的材质，主色调保持不变，文字保持原字体重绘，按照材质纹理的物理光线特性进行重绘。要求边缘自然，阴影和透视合理。画面方法：不要噪点、细小杂物、污点、破损，保持真实阴影和纹理，保留原图的光影特效。质量标准：主体清楚、构图高级、空间层次明确、材质和光线可信。';
+
 function readImageSize(url: string): Promise<{ w: number; h: number }> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -111,7 +113,7 @@ const ImageEditNode = ({ id, data, selected }: NodeProps) => {
   const isRunning = d.status === 'generating';
   const hasSource = Boolean(sourceImage);
   const denoiseThresholdPx = sanitizeDenoiseThreshold(d.denoiseThresholdPx ?? DENOISE_DEFAULT_THRESHOLD_PX);
-  const canDenoise = hasSource && !isRunning && Boolean(firstImageAdvancedProvider && firstImageProviderModel);
+  const canRunImageToImage = hasSource && !isRunning && Boolean(firstImageAdvancedProvider && firstImageProviderModel);
 
   const saveDraft = (draft: ImageEditDraft) => {
     if (!sourceKey) return;
@@ -161,7 +163,21 @@ const ImageEditNode = ({ id, data, selected }: NodeProps) => {
     setEditingMode(mode);
   };
 
-  const runDenoise = async () => {
+  const runImageToImageEdit = async ({
+    prompt,
+    outputTitle,
+    runningLabel,
+    resultLabel,
+    meta,
+    patch,
+  }: {
+    prompt: string;
+    outputTitle: string;
+    runningLabel: string;
+    resultLabel: string;
+    meta: Record<string, unknown>;
+    patch?: Record<string, unknown>;
+  }) => {
     if (!sourceImage || isRunning) return;
     if (!firstImageAdvancedProvider) {
       update({ status: 'error', error: '未配置可用的图像扩展平台' });
@@ -172,22 +188,19 @@ const ImageEditNode = ({ id, data, selected }: NodeProps) => {
       return;
     }
 
-    const prompt = buildDenoisePrompt(denoiseThresholdPx);
     const historyContext = {
       canvasId: loadedCanvasId,
       sourceNodeId: id,
       sourceNodeType: 'image-edit',
       nodeTitle: String(d.label || '编辑图片'),
-      outputTitle: '降噪结果',
+      outputTitle,
     };
 
     update({
       status: 'generating',
       error: null,
-      imageEditRunningLabel: '降噪生成中...',
-      denoisePrompt: prompt,
-      denoiseProviderId: firstImageAdvancedProvider.id,
-      denoiseProviderModel: firstImageProviderModel,
+      imageEditRunningLabel: runningLabel,
+      ...patch,
     });
 
     try {
@@ -238,29 +251,56 @@ const ImageEditNode = ({ id, data, selected }: NodeProps) => {
         error: null,
         imageEditRunningLabel: null,
         imageEditLastMeta: {
-          type: 'denoise',
+          ...meta,
           prompt,
-          thresholdPx: denoiseThresholdPx,
           providerId: firstImageAdvancedProvider.id,
           providerModel: firstImageProviderModel,
         },
         imageEditLastSourceUrl: sourceImage,
         imageEditLastSourceKey: sourceKey,
         prompt,
-        directOutputText: '降噪结果',
-        denoisePrompt: prompt,
-        denoiseThresholdPx,
-        denoiseProviderId: firstImageAdvancedProvider.id,
-        denoiseProviderModel: firstImageProviderModel,
+        directOutputText: resultLabel,
+        ...patch,
       });
     } catch (e: any) {
       update({
         status: 'error',
-        error: e?.message || '降噪失败',
+        error: e?.message || `${resultLabel}失败`,
         imageEditRunningLabel: null,
       });
     }
   };
+
+  const runDenoise = () => {
+    const prompt = buildDenoisePrompt(denoiseThresholdPx);
+    return runImageToImageEdit({
+      prompt,
+      outputTitle: '降噪结果',
+      runningLabel: '降噪生成中...',
+      resultLabel: '降噪结果',
+      meta: { type: 'denoise', thresholdPx: denoiseThresholdPx },
+      patch: {
+        denoisePrompt: prompt,
+        denoiseThresholdPx,
+        denoiseProviderId: firstImageAdvancedProvider?.id || '',
+        denoiseProviderModel: firstImageProviderModel,
+      },
+    });
+  };
+
+  const runRedraw = () =>
+    runImageToImageEdit({
+      prompt: REDRAW_PROMPT,
+      outputTitle: '重绘结果',
+      runningLabel: '重绘生成中...',
+      resultLabel: '重绘结果',
+      meta: { type: 'redraw' },
+      patch: {
+        redrawPrompt: REDRAW_PROMPT,
+        redrawProviderId: firstImageAdvancedProvider?.id || '',
+        redrawProviderModel: firstImageProviderModel,
+      },
+    });
 
   return (
     <div
@@ -393,7 +433,7 @@ const ImageEditNode = ({ id, data, selected }: NodeProps) => {
               background: 'rgba(251,146,60,.15)',
               color: 'var(--t8-text-main)',
             }}
-            disabled={!canDenoise}
+            disabled={!canRunImageToImage}
             onClick={runDenoise}
             title={
               !hasSource
@@ -411,6 +451,33 @@ const ImageEditNode = ({ id, data, selected }: NodeProps) => {
               <Sparkles size={13} />
             )}
             降噪
+          </button>
+          <button
+            type="button"
+            className="nodrag flex h-8 min-w-[76px] items-center justify-center gap-1.5 rounded-md border px-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-45"
+            style={{
+              borderColor: 'rgba(251,146,60,.45)',
+              background: 'rgba(251,146,60,.15)',
+              color: 'var(--t8-text-main)',
+            }}
+            disabled={!canRunImageToImage}
+            onClick={runRedraw}
+            title={
+              !hasSource
+                ? '请先接入图像'
+                : !firstImageAdvancedProvider
+                ? '未配置可用的图像扩展平台'
+                : !firstImageProviderModel
+                ? '扩展平台未配置可用图像模型'
+                : '使用当前原图进行图出图重绘'
+            }
+          >
+            {isRunning && d.imageEditRunningLabel === '重绘生成中...' ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              <Sparkles size={13} />
+            )}
+            重绘
           </button>
         </div>
       </div>
