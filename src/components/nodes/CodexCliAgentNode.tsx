@@ -1178,9 +1178,7 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
   const savedImageProviderKind = d.codexImageProviderKind === 'external' ? 'external' : 'builtin';
   const imageProviderKind = savedImageProviderKind === 'builtin' && !allowBuiltinImageProvider && imageAdvancedProviders.length
     ? 'external'
-    : savedImageProviderKind === 'external' && imageAdvancedProviders.length === 0 && allowBuiltinImageProvider
-      ? 'builtin'
-      : savedImageProviderKind;
+    : savedImageProviderKind;
   const savedImageProviderSelection = useMemo(
     () => resolveAdvancedProviderSelection(advancedProviders, 'image', {
       providerSource: d.codexImageProviderSource,
@@ -1208,11 +1206,10 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
   const selectedExternalImageModel = activeImageProviderSelection.providerModel || externalImageModelOptions[0] || '';
   const selectedBuiltinImageModel = CODEX_AGENT_IMAGE_MODELS.find((item) => item.id === String(d.codexImageModel || ''))
     || CODEX_AGENT_IMAGE_MODELS[0];
-  const selectedBuiltinImageApiOptions = selectedBuiltinImageModel.apiModelOptions.filter((item) => !/-fal$/i.test(item.value));
   const savedBuiltinApiModel = String(d.codexImageApiModel || '').trim();
-  const selectedBuiltinImageApiModel = selectedBuiltinImageApiOptions.some((item) => item.value === savedBuiltinApiModel)
+  const selectedBuiltinImageApiModel = selectedBuiltinImageModel.apiModelOptions.some((item) => item.value === savedBuiltinApiModel)
     ? savedBuiltinApiModel
-    : (selectedBuiltinImageApiOptions[0]?.value || selectedBuiltinImageModel.apiModel);
+    : selectedBuiltinImageModel.apiModel;
   const imageProviderReady = imageProviderKind === 'builtin'
     ? allowBuiltinImageProvider
     : activeImageProviderSelection.available && !!selectedExternalImageModel;
@@ -2199,9 +2196,9 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
       ]);
     };
 
-    let streamedText = '';
     try {
       const creatorBrief = buildCreatorBriefBlock(d);
+      let streamedText = '';
       let result = await streamCodexCliAgent({
         nodeId: id,
         sessionId,
@@ -2358,10 +2355,7 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
     } catch (error: any) {
       const stopped = error?.name === 'AbortError' || /Codex 任务已停止|aborted/i.test(String(error?.message || ''));
       const message = stopped ? 'Codex 任务已停止' : friendlyCodexErrorMessage(error?.message || 'Codex Agent 调用 LLM 失败');
-      const assistantError = !stopped && streamedText.trim()
-        ? `${streamedText.trim()}\n\nIMG 生图失败：${message}`
-        : message;
-      replaceAssistant(assistantError, 'error');
+      replaceAssistant(message, 'error');
       update({ status: stopped ? 'idle' : 'error', error: stopped ? '' : message, codexLastRunSummary: message });
       if (stopped) logBus.warn(message, `codex:${id}`);
       else logBus.error(message, `codex:${id}`);
@@ -2959,7 +2953,7 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
             </select>
           </label>
         )}
-        {imageProviderKind === 'builtin' && selectedBuiltinImageApiOptions.length > 1 && (
+        {imageProviderKind === 'builtin' && selectedBuiltinImageModel.apiModelOptions.length > 1 && (
           <label className="col-span-2 grid min-w-0 gap-1 text-[11px]" style={{ color: subText }}>
             接口模型
             <select
@@ -2968,7 +2962,7 @@ const CodexCliAgentNode = ({ id, data, selected }: NodeProps) => {
               value={selectedBuiltinImageApiModel}
               onChange={(event) => update({ codexImageApiModel: event.currentTarget.value })}
             >
-              {selectedBuiltinImageApiOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              {selectedBuiltinImageModel.apiModelOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
           </label>
         )}
