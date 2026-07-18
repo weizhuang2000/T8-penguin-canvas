@@ -47,8 +47,8 @@ export const NODE_REGISTRY: NodeMeta[] = [
   // ========== GROK OAuth Agent ==========
   { type: 'grok-oauth-agent', label: 'Grok OAuth Agent', category: 'grok', description: '独立 Grok / xAI OAuth Agent 工作台：流式聊天、图像、视频、TTS、STT，多模态输入并输出四类素材', icon: 'Bot', color: 'emerald' },
 
-  // ========== Codex CLI Agent ==========
-  { type: 'codex-cli-agent', label: 'Codex CLI Agent', category: 'codex', description: '面向创作者的 Codex CLI 工作台：流式对话、图像生成提示词、Skill 调用、产物库和版本树', icon: 'TerminalSquare', color: 'sky' },
+  // ========== Codex Agent ==========
+  { type: 'codex-cli-agent', label: 'Codex Agent', category: 'codex', description: '直连 LLM 独立配置的创作者 Agent：多轮对话、图像生成提示词、Skill 规范、产物库和版本树', icon: 'TerminalSquare', color: 'sky' },
   { type: 'codex-image-conjure', label: 'Codex 生图工作台', category: 'codex', description: '基于 Codex CLI imagegen 的专用生图工作台：提示词模板、片段、参考图和公共图库', icon: 'ImagePlus', color: 'sky' },
 
   // ========== Inspiration 灵感之源 ==========

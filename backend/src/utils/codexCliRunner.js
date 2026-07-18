@@ -947,7 +947,12 @@ function makeCreatorPrompt(body = {}) {
   instructions.push('你是 T8 画布中的 Codex 创作者 Agent，优先服务图像、视频、文案、分镜、提示词和创作质检。');
   instructions.push('除非用户明确要求写代码，否则输出面向创作交付：清晰的提示词、分镜、改稿建议、可执行步骤和素材使用说明。');
   if (selectedSkillNames.length > 0) {
-    instructions.push(`请优先调用这些 Skill：${selectedSkillNames.map((name) => `$${name}`).join(' ')}。`);
+    instructions.push(body.directLlm
+      ? `请遵循这些 Skill 的创作规范：${selectedSkillNames.map((name) => `$${name}`).join(' ')}。`
+      : `请优先调用这些 Skill：${selectedSkillNames.map((name) => `$${name}`).join(' ')}。`);
+  }
+  if (body.directLlm && String(body.skillInstructions || '').trim()) {
+    instructions.push(`已选 Skill 说明：\n${String(body.skillInstructions).trim()}`);
   }
   if (preset) instructions.push(`当前创作预设：${preset}。`);
   if (Array.isArray(body.referenceTexts) && body.referenceTexts.length > 0) {
@@ -977,7 +982,9 @@ function makeCreatorPrompt(body = {}) {
   }
   const presetHint = `${preset} ${body.mode || ''} ${body.command || ''}`;
   if (imageGenerationIntent || (/图像|image|商品图|product/i.test(presetHint) && body.llmOnly !== true)) {
-    instructions.push('图像生成模式：如果当前 Codex CLI 提供 image_generation 工具，必须直接生成图片文件，并在最终回复中给出 Markdown 图片链接或本地文件路径；不要只输出提示词文本。只有在工具确实不可用时，才明确说明工具不可用并退回输出可投喂 Midjourney / Seedream / GPT Image 的完整提示词。');
+    instructions.push(body.directLlm
+      ? '图像生成模式：如果当前 LLM 接口自身支持图片输出，请直接返回图片；否则明确说明该模型未返回图片，并输出可投喂 Midjourney / Seedream / GPT Image 的完整提示词，不要声称已经生成不存在的文件。'
+      : '图像生成模式：如果当前 Codex CLI 提供 image_generation 工具，必须直接生成图片文件，并在最终回复中给出 Markdown 图片链接或本地文件路径；不要只输出提示词文本。只有在工具确实不可用时，才明确说明工具不可用并退回输出可投喂 Midjourney / Seedream / GPT Image 的完整提示词。');
   }
   instructions.push('如果生成了图片、视频、音频或文件，请在最终回复中用 Markdown 链接列出产物路径，方便画布自动收集。');
   instructions.push(`用户任务：\n${prompt || '请根据上游素材给出创作方案。'}`);

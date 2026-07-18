@@ -2,6 +2,7 @@
 
 const express = require('express');
 const { runLocalHooks } = require('../extensions/runtimeHooks');
+const { generateConfiguredLlm } = require('../providers/llmClient');
 const settingsRouter = require('./settings');
 const {
   CODEX_DISABLED_MESSAGE,
@@ -9,6 +10,7 @@ const {
   createProjectSkill,
   deleteProjectSkill,
   listCodexSkills,
+  makeCreatorPrompt,
   probeCodexStatus,
   runCodexExecStream,
   sendSse,
@@ -83,20 +85,98 @@ function resolveAgentLlmProvider(body = {}) {
   return {
     id: selected.id,
     label: selected.label,
-    apiKey: selected.apiKey,
     baseUrl: selected.baseUrl,
     model: selected.model,
+  };
+}
+
+function selectedSkillInstructions(body = {}) {
+  const selectedNames = Array.isArray(body.selectedSkillNames)
+    ? body.selectedSkillNames.map((item) => String(item || '').trim()).filter(Boolean)
+    : [];
+  if (!selectedNames.length) return '';
+  const selected = new Set(selectedNames);
+  const skills = listCodexSkills({ workspaceDir: String(body.workspaceDir || '').trim() });
+  let size = 0;
+  const blocks = [];
+  for (const skill of skills) {
+    if (!selected.has(skill.name)) continue;
+    const content = String(skill.body || skill.description || '').trim();
+    if (!content) continue;
+    const block = `## $${skill.name}\n${content}`;
+    if (size + block.length > 24_000) break;
+    blocks.push(block);
+    size += block.length;
+  }
+  return blocks.join('\n\n');
+}
+
+function directAgentMessages(body = {}) {
+  const prompt = makeCreatorPrompt({
+    ...body,
+    directLlm: true,
+    skillInstructions: selectedSkillInstructions(body),
+  });
+  const content = [{ type: 'text', text: prompt }];
+  for (const url of Array.isArray(body.images) ? body.images : []) {
+    const value = String(url || '').trim();
+    if (value) content.push({ type: 'image_url', image_url: { url: value } });
+  }
+  for (const url of Array.isArray(body.videos) ? body.videos : []) {
+    const value = String(url || '').trim();
+    if (value) content.push({ type: 'video_url', video_url: { url: value } });
+  }
+  return [{ role: 'user', content }];
+}
+
+async function runDirectLlmAgent(body = {}, provider = {}, handlers = {}) {
+  handlers.onProgress?.(`正在调用 ${provider.label || 'LLM 独立配置'} · ${provider.model}...`, { type: 'llm.request' });
+  const startedAt = Date.now();
+  const response = await generateConfiguredLlm({
+    llmKeyId: provider.id,
+    model: provider.model,
+    messages: directAgentMessages(body),
+    temperature: body.temperature ?? 0.4,
+    maxTokens: body.maxTokens ?? 16384,
+    llmVideoMode: body.llmVideoMode || 'frames',
+    videoFrameCount: body.videoFrameCount || 8,
+    timeoutMs: body.timeoutMs,
+    signal: handlers.signal,
+  });
+  const text = String(response.content || '').trim();
+  if (text) handlers.onDelta?.(text, { type: 'llm.completed' });
+  const imageUrls = Array.isArray(response.imageUrls) ? response.imageUrls.filter(Boolean) : [];
+  const artifacts = imageUrls.map((url, index) => ({
+    id: `direct-llm-image-${String(body.turnId || Date.now())}-${index + 1}`,
+    turnId: String(body.turnId || ''),
+    kind: 'image',
+    title: `LLM 图片 ${index + 1}`,
+    url,
+    urls: [url],
+    status: 'completed',
+    progress: 100,
+    createdAt: Date.now(),
+  }));
+  return {
+    text,
+    reply: text,
+    imageUrl: imageUrls[0] || '',
+    imageUrls,
+    artifacts,
+    model: provider.model,
+    providerId: provider.id,
+    providerLabel: provider.label,
+    elapsedMs: Date.now() - startedAt,
+    status: 'completed',
+    progress: 100,
   };
 }
 
 function friendlyAgentStreamError(error, body = {}) {
   const message = error?.message || CODEX_DISABLED_MESSAGE;
   if (body.agentProvider !== 'llm-config') return message;
-  if (/\/responses[^\n]*(?:404|not found)|(?:404|not found)[^\n]*\/responses/i.test(message)) {
-    return '所选 LLM 独立配置不支持 Responses API（/v1/responses），无法作为 Codex Agent 模型。';
-  }
-  if (/not logged in|codex login|OPENAI_API_KEY|unauthorized|forbidden|\b401\b|\b403\b/i.test(message)) {
-    return '所选 LLM 独立配置认证失败，请检查该配置的 API Key、Base URL 和 Responses API 权限。';
+  if (/unauthorized|forbidden|\b401\b|\b403\b/i.test(message)) {
+    return '所选 LLM 独立配置认证失败，请检查该配置的 API Key 和 Base URL。';
   }
   return message;
 }
@@ -260,23 +340,23 @@ router.post('/agent/stream', async (req, res) => {
     if (hookResult?.handled) return undefined;
 
     const llmProvider = resolveAgentLlmProvider(body);
-    const runBody = llmProvider
-      ? { ...body, model: llmProvider.model, llmProvider }
-      : body;
+    const directLlm = body.agentProvider === 'llm-config';
 
     beginSse(res);
     sendSse(res, 'turn.started', {
       ...meta,
-      message: 'Codex CLI 创作任务已开始',
+      message: directLlm ? 'Codex Agent 直连 LLM 任务已开始' : 'Codex CLI 创作任务已开始',
       progress: 1,
     });
     sendSse(res, 'tool.progress', {
       ...meta,
-      message: body.workspaceDir ? '正在使用已设置的 Codex 创作工作区...' : '正在打开 Codex 创作工作区...',
+      message: directLlm
+        ? `正在准备 ${llmProvider?.label || 'LLM 独立配置'}...`
+        : body.workspaceDir ? '正在使用已设置的 Codex 创作工作区...' : '正在打开 Codex 创作工作区...',
       progress: 5,
     });
 
-    const result = await runCodexExecStream(runBody, {
+    const handlers = {
       signal: abortController.signal,
       onDelta(delta, event) {
         sendSse(res, 'message.delta', {
@@ -302,7 +382,10 @@ router.post('/agent/stream', async (req, res) => {
           });
         }
       },
-    });
+    };
+    const result = directLlm
+      ? await runDirectLlmAgent(body, llmProvider, handlers)
+      : await runCodexExecStream(body, handlers);
 
     const finalResult = resultWithArtifacts(result);
     for (const artifact of result.artifacts || []) {
@@ -315,7 +398,7 @@ router.post('/agent/stream', async (req, res) => {
     }
     sendSse(res, 'turn.completed', {
       ...meta,
-      message: 'Codex CLI 创作任务完成',
+      message: directLlm ? 'Codex Agent 直连 LLM 任务完成' : 'Codex CLI 创作任务完成',
       result: finalResult,
       progress: 100,
     });

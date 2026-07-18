@@ -19,7 +19,7 @@ function readOptional(rel: string) {
   }
 }
 
-test('Codex CLI Agent is registered as a creator-facing canvas node', () => {
+test('Codex Agent is registered as a creator-facing canvas node', () => {
   const types = read('../src/types/canvas.ts');
   const registry = read('../src/config/nodeRegistry.ts');
   const ports = read('../src/config/portTypes.ts');
@@ -30,7 +30,7 @@ test('Codex CLI Agent is registered as a creator-facing canvas node', () => {
 
   assert.match(types, /'codex-cli-agent'/);
   assert.match(types, /'codex'/);
-  assert.match(registry, /type:\s*'codex-cli-agent'[\s\S]*label:\s*'Codex CLI Agent'[\s\S]*category:\s*'codex'/);
+  assert.match(registry, /type:\s*'codex-cli-agent'[\s\S]*label:\s*'Codex Agent'[\s\S]*category:\s*'codex'/);
   assert.match(registry, /codex:\s*\{\s*label:\s*'CODEX CLI'/);
   assert.match(ports, /'codex-cli-agent':\s*\{\s*inputs:\s*\['text', 'image', 'video', 'audio'\],\s*outputs:\s*\['text', 'image', 'video', 'audio', 'model3d'\]/);
   assert.match(canvas, /CodexCliAgentNode/);
@@ -77,6 +77,11 @@ test('Codex CLI backend exposes status, skill, workspace, and streaming routes',
   assert.match(route, /resolveAgentLlmProvider/);
   assert.match(route, /agentProvider !== 'llm-config'/);
   assert.match(route, /settingsRouter\.loadSettings/);
+  assert.match(route, /generateConfiguredLlm/);
+  assert.match(route, /runDirectLlmAgent/);
+  assert.match(route, /directLlm\s*\?\s*await runDirectLlmAgent/);
+  assert.match(route, /model:\s*provider\.model/);
+  assert.doesNotMatch(route, /apiKey:\s*selected\.apiKey/);
   assert.match(route, /router\.get\('\/skills'/);
   assert.match(route, /router\.post\('\/skills\/project'/);
   assert.match(route, /router\.put\('\/skills\/project\/:name'/);
@@ -706,6 +711,22 @@ test('Codex creator prompt does not auto-enable image generation in LLM mode', (
   assert.doesNotMatch(prompt, /image_generation/);
 });
 
+test('Codex direct LLM prompt injects selected Skill guidance without claiming CLI tools', () => {
+  const runner = require('../backend/src/utils/codexCliRunner.js');
+  const prompt = runner.makeCreatorPrompt({
+    directLlm: true,
+    mode: 'image',
+    prompt: '生成活动海报',
+    selectedSkillNames: ['imagegen'],
+    skillInstructions: '## $imagegen\n遵循品牌色并输出清晰构图。',
+  });
+
+  assert.match(prompt, /请遵循这些 Skill 的创作规范/);
+  assert.match(prompt, /遵循品牌色并输出清晰构图/);
+  assert.match(prompt, /当前 LLM 接口自身支持图片输出/);
+  assert.doesNotMatch(prompt, /当前 Codex CLI 提供 image_generation/);
+});
+
 test('Codex simple creator mode has explicit LLM IMG intent, configured agent model, imagegen default skill, and image-first publishing', () => {
   const node = read('../src/components/nodes/CodexCliAgentNode.tsx');
 
@@ -719,6 +740,7 @@ test('Codex simple creator mode has explicit LLM IMG intent, configured agent mo
   assert.doesNotMatch(node, /codexModelAutoPatchForRunIntent|CODEX_MODEL_OPTIONS/);
   assert.match(node, /agentProvider:\s*'llm-config'/);
   assert.match(node, /llmKeyId:\s*selectedLlmKeyId/);
+  assert.doesNotMatch(node, /model:\s*selectedCodexModel/);
   assert.match(node, /data-codex-agent-provider="llm-config"/);
   assert.match(node, /data-codex-agent-model="llm-config"/);
   assert.match(node, /useApiKeysStore/);
@@ -781,22 +803,22 @@ test('Codex simple run accepts upstream image-only tasks and sends image referen
   assert.match(node, /images:\s*imagesForRun/);
 });
 
-test('Codex creator node remains draggable and exposes runtime and LLM configuration guidance', () => {
+test('Codex creator node remains draggable and uses direct LLM configuration without local CLI setup', () => {
   const node = read('../src/components/nodes/CodexCliAgentNode.tsx');
 
   assert.match(node, /data-codex-cli-agent-root/);
   assert.match(node, /data-codex-drag-surface/);
   assert.doesNotMatch(node, /className="nodrag nowheel"\s+style=\{rootStyle\}/);
   assert.match(node, /clearRecoverableCodexError/);
-  assert.match(node, /codexStatusPanel/);
+  assert.match(node, /agentStatusPanel/);
   assert.doesNotMatch(node, /startCodexCliLogin|codexLoginCommand/);
+  assert.doesNotMatch(node, /getCodexCliStatus|codexExecutablePath|codexExtraArgs|codexProfile|codexSandbox|codexApprovalPolicy/);
   assert.match(node, /friendlyCodexErrorMessage/);
-  assert.doesNotMatch(node, /登录 Codex CLI|打开登录|复制登录命令/);
+  assert.doesNotMatch(node, /登录 Codex CLI|打开登录|复制登录命令|复制安装命令|npm install -g @openai\/codex/);
   assert.match(node, /LLM 独立配置/);
-  assert.match(node, /无需执行 codex login/);
-  assert.match(node, /需要安装或填写 Codex CLI 路径/);
-  assert.match(node, /检测详情/);
-  assert.match(node, /后端路由未加载/);
+  assert.match(node, /Agent 直连 LLM 已就绪/);
+  assert.match(node, /不安装、不探测也不启动本地 Codex CLI/);
+  assert.match(node, />Codex Agent</);
 });
 
 test('Codex creator node implements roadmap creator workflow extras', () => {
