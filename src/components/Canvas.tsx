@@ -104,6 +104,7 @@ import TextNode from './nodes/TextNode';
 import ImageNode from './nodes/ImageNode';
 import FhlImageGenNode from './nodes/FhlImageGenNode';
 import LLMNode from './nodes/LLMNode';
+import PromptReverseNode from './nodes/PromptReverseNode';
 import RemotionAnimationNode from './nodes/RemotionAnimationNode';
 import VideoNode from './nodes/VideoNode';
 import SeedanceNode from './nodes/SeedanceNode';
@@ -200,6 +201,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   audio: AudioNode,
   'gitee-music': GiteeMusicNode,
   llm: LLMNode,
+  'prompt-reverse': PromptReverseNode,
   'remotion-animation': RemotionAnimationNode,
   runninghub: RunningHubNode,
   // RH 钱包应用：复用 RunningHubNode。v1.2.9.16 起与普通 RunningHub 节点统一使用 settings.rhApiKey
@@ -1538,6 +1540,19 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     stream: true,
     history: [],
   },
+  'prompt-reverse': {
+    llmKeyId: '',
+    llmModel: '',
+    detailStrength: 'standard',
+    outputLanguage: 'zh',
+    instruction: '',
+    materialOrder: [],
+    prompt: '',
+    outputText: '',
+    text: '',
+    status: 'idle',
+    error: '',
+  },
   'remotion-animation': {
     llmKeyId: '',
     remotionReviewLlmKeyId: '',
@@ -1768,7 +1783,7 @@ function filterExclusiveTargetEdges(
 const EXECUTABLE_NODE_TYPES = new Set<string>([
   'image', 'edit', 'fhl-image-gen',
   'multi-angle-3d', 'panorama-720', 'penguin-portrait',
-  'video', 'runninghub-video', 'seedance', 'audio', 'llm', 'remotion-animation', 'runninghub', 'runninghub-wallet',
+  'video', 'runninghub-video', 'seedance', 'audio', 'llm', 'prompt-reverse', 'remotion-animation', 'runninghub', 'runninghub-wallet',
   // v1.2.10.1: rh-tools 与 RunningHub 同质，同样可被批量运行调起
   'rh-tools', 'rh-toolbox',
   'resize', 'upscale', 'grid-crop', 'mark', 'remove-bg', 'combine', 'image-compare', 'drawing-board',

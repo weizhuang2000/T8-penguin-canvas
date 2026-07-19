@@ -552,6 +552,8 @@ export interface GenerateLlmRequest {
   model: string;
   messages: LlmMessage[];
   llmKeyId?: string;
+  /** 权限与生成历史使用的实际调用节点类型；省略时按通用 LLM 节点处理。 */
+  sourceNodeType?: string;
   temperature?: number;
   max_tokens?: number;
   /** 瑙嗛浼犲叆鏂瑰紡锛歠rames 榛樿鐢ㄥ唴缃?ffmpeg 鎶藉叧閿抚锛沶ative-base64 鍙戦€佸帇缂╁師瑙嗛锛泆rl 杞粷瀵?URL銆?*/

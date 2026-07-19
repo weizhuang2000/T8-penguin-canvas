@@ -52,6 +52,7 @@ export const NODE_DEFAULT_SIZE: Record<string, { w: number; h: number }> = {
   audio: { w: 320, h: 380 },
   'gitee-music': { w: 360, h: 660 },
   llm: { w: 320, h: 360 },
+  'prompt-reverse': { w: 380, h: 680 },
   'remotion-animation': { w: 520, h: 820 },
   runninghub: { w: 360, h: 460 },
   'runninghub-wallet': { w: 360, h: 460 },

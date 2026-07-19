@@ -16,6 +16,7 @@ export type NodeType =
   | 'director-storyboard'
   | 'audio'
   | 'llm'
+  | 'prompt-reverse'
   | 'remotion-animation'
   | 'runninghub'
   | 'runninghub-wallet'
