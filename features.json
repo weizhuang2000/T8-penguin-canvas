@@ -8,6 +8,7 @@
       "PPT 模式执行 editppt 的逐页对象化重建、record、finalize 和结构校验，输出 PPTX",
       "PSD 模式复用背景、前景对象、文字和结构拆分规则，输出真实分层 PSD，禁止扁平图层降级",
       "节点内检查 Codex CLI 与 Skill 状态，显示流式进度、错误信息和最终文件下载",
+      "Codex CLI 默认自动探测 Windows npm 与桌面安装路径，并可在节点高级设置中手动指定 codex.cmd 或 codex.exe",
       "支持批量运行触发、任务停止和自定义补充重建要求"
     ],
     "verification": [

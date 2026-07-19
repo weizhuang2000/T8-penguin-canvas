@@ -67,9 +67,9 @@ export function buildImageToEditablePrompt(options: {
   ].join('\n\n');
 }
 
-export async function inspectImageToEditableRuntime(payload: { nodeId: string }) {
+export async function inspectImageToEditableRuntime(payload: { nodeId: string; executablePath?: string }) {
   const [status, skillResult] = await Promise.all([
-    getCodexCliStatus(undefined, { runtimeOnly: false, includeEditppt: true }),
+    getCodexCliStatus(payload.executablePath || undefined, { runtimeOnly: false, includeEditppt: true }),
     getCodexCliSkills({ nodeId: payload.nodeId, sessionId: 'image-to-editable-skill-check' }),
   ]);
   return {
@@ -85,6 +85,7 @@ export async function runImageToEditableDocument(
     images: string[];
     format: EditableOutputFormat;
     extraInstructions?: string;
+    executablePath?: string;
   },
   options: {
     signal?: AbortSignal;
@@ -110,6 +111,7 @@ export async function runImageToEditableDocument(
     approvalPolicy: 'never',
     reasoningEffort: 'high',
     includePlanTool: true,
+    executablePath: payload.executablePath || undefined,
   }, {
     signal: options.signal,
     onEvent(event) {

@@ -1415,6 +1415,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
   'image-to-editable-document': {
     editableOutputFormat: 'ppt',
     editableExtraInstructions: '',
+    editableCodexExecutablePath: '',
     editableFiles: [],
     editableProgress: '',
     status: 'idle',

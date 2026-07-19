@@ -27,12 +27,16 @@ test('图片转可编辑文件节点完成类型、注册、端口和运行总�
   assert.match(canvas, /'image-to-editable-document': ImageToEditableDocumentNode/);
   assert.match(node, /useRunTrigger\(id, handleRun, 'image-to-editable-document'\)/);
   assert.match(node, /editableOutputFormat/);
+  assert.match(node, /editableCodexExecutablePath/);
+  assert.match(node, /高级设置 · Codex CLI/);
+  assert.match(node, /executablePath/);
   assert.match(node, /PPTX/);
   assert.match(node, /PSD/);
   assert.match(node, /editpptAvailable/);
   assert.match(codexRoute, /probeEditPptRuntime/);
   assert.match(codexRoute, /includeEditppt/);
   assert.match(codexService, /includeEditppt\?: boolean/);
+  assert.match(canvas, /editableCodexExecutablePath:\s*''/);
   assert.match(features, /"nodeType": "image-to-editable-document"/);
 });
 

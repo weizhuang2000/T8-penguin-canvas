@@ -30,6 +30,7 @@ function ImageToEditableDocumentNode({ id, data, selected }: NodeProps) {
   const { images } = useUpstreamMaterials(id);
   const d = (data as any) || {};
   const format: EditableOutputFormat = d.editableOutputFormat === 'psd' ? 'psd' : 'ppt';
+  const executablePath = String(d.editableCodexExecutablePath || '').trim();
   const files: EditableDocumentFile[] = Array.isArray(d.editableFiles) ? d.editableFiles : [];
   const running = d.status === 'running';
   const [runtimeState, setRuntimeState] = useState<RuntimeState>('checking');
@@ -40,21 +41,21 @@ function ImageToEditableDocumentNode({ id, data, selected }: NodeProps) {
     setRuntimeState('checking');
     setRuntimeMessage('正在检查 Codex CLI 与 Skill…');
     try {
-      const result = await inspectImageToEditableRuntime({ nodeId: id });
+      const result = await inspectImageToEditableRuntime({ nodeId: id, executablePath });
       if (!result.status.available) throw new Error(result.status.message || 'Codex CLI 尚不可用或未登录。');
       if (!result.skillAvailable) throw new Error('未发现 image-to-editable-ppt Skill，请先安装该 Skill。');
       if (!result.editpptAvailable) {
         throw new Error('未发现 editppt CLI。请按 image-to-editable-ppt Skill 的 Pre-Run Check 安装后再运行。');
       }
       setRuntimeState('ready');
-      setRuntimeMessage('Codex CLI 与 image-to-editable-ppt Skill 已就绪');
+      setRuntimeMessage(`Codex CLI 与 image-to-editable-ppt Skill 已就绪${result.status.executable ? ` · ${result.status.executable}` : ''}`);
       return true;
     } catch (error: any) {
       setRuntimeState('error');
       setRuntimeMessage(error?.message || '运行环境检查失败');
       return false;
     }
-  }, [id]);
+  }, [executablePath, id]);
 
   useEffect(() => {
     void checkRuntime();
@@ -89,6 +90,7 @@ function ImageToEditableDocumentNode({ id, data, selected }: NodeProps) {
         images: images.map((item) => item.url),
         format,
         extraInstructions: String(d.editableExtraInstructions || ''),
+        executablePath,
       }, {
         signal: controller.signal,
         onProgress(message) {
@@ -113,7 +115,7 @@ function ImageToEditableDocumentNode({ id, data, selected }: NodeProps) {
     } finally {
       if (controllerRef.current === controller) controllerRef.current = null;
     }
-  }, [checkRuntime, d.editableExtraInstructions, format, id, images, runtimeState, update]);
+  }, [checkRuntime, d.editableExtraInstructions, executablePath, format, id, images, runtimeState, update]);
 
   useRunTrigger(id, handleRun, 'image-to-editable-document');
 
@@ -155,6 +157,30 @@ function ImageToEditableDocumentNode({ id, data, selected }: NodeProps) {
             <RefreshCw size={12} className={runtimeState === 'checking' ? 'animate-spin' : ''} />
           </button>
         </div>
+
+        <details className="rounded-md border px-2 py-1.5 text-[10px]" style={{ borderColor: 'var(--t8-border)' }}>
+          <summary className="cursor-pointer font-semibold" style={{ color: 'var(--t8-text-muted)' }}>高级设置 · Codex CLI</summary>
+          <label className="mt-2 grid gap-1" style={{ color: 'var(--t8-text-muted)' }}>
+            可执行文件路径
+            <input
+              key={String(d.editableCodexExecutablePath || '')}
+              className="t8-input nodrag w-full px-2 py-1.5 text-[10px]"
+              defaultValue={String(d.editableCodexExecutablePath || '')}
+              placeholder="留空自动探测；例如 C:\\Users\\用户名\\AppData\\Roaming\\npm\\codex.cmd"
+              onBlur={(event) => {
+                const value = event.currentTarget.value.trim();
+                if (value !== String(d.editableCodexExecutablePath || '').trim()) update({ editableCodexExecutablePath: value });
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.currentTarget.blur();
+              }}
+              disabled={running}
+            />
+          </label>
+          <div className="mt-1 leading-relaxed" style={{ color: 'var(--t8-text-dim)' }}>
+            通常保持为空即可自动发现。若桌面打包环境提示 spawn codex ENOENT，可填写 codex.cmd 或 codex.exe 的完整路径。
+          </div>
+        </details>
 
         <div>
           <div className="mb-1 text-[10px] font-semibold" style={{ color: 'var(--t8-text-muted)' }}>输出格式</div>
