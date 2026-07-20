@@ -12,6 +12,7 @@ import { useThemeStore } from '../../stores/theme';
 import {
   buildPromptReverseContentSwapMessages,
   buildPromptReverseMessages,
+  cleanPromptReverseContentSwapOutput,
   cleanPromptReverseOutput,
   normalizePromptReverseLanguage,
   normalizePromptReverseStrength,
@@ -101,7 +102,7 @@ const PromptReverseNode = ({ id, data, selected }: NodeProps) => {
         language,
       }),
     });
-    const swappedPrompt = cleanPromptReverseOutput(response.content);
+    const swappedPrompt = cleanPromptReverseContentSwapOutput(response.content);
     if (!swappedPrompt) throw new Error('LLM 未返回有效的换内容提示词。');
     return swappedPrompt;
   };

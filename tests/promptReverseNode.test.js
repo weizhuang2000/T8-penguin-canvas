@@ -21,6 +21,7 @@ test('prompt reverse node strictly uses independent LLM configs and multimodal c
   assert.match(node, /generateLlm\(\{/);
   assert.match(node, /buildPromptReverseMessages\(\{ imageUrls, strength, language, instruction \}\)/);
   assert.match(node, /buildPromptReverseContentSwapMessages\(\{/);
+  assert.match(node, /cleanPromptReverseContentSwapOutput\(response\.content\)/);
   assert.doesNotMatch(node, /advancedProviders|generateExternalLlm/);
   assert.match(read('backend/src/routes/proxy.js'), /requireNodePermission\(\['llm', 'prompt-reverse'\]\)/);
 });
@@ -37,6 +38,9 @@ test('content text input can manually or automatically replace reversed prompt s
   assert.match(utility, /严格保留原提示词的视觉形式/);
   assert.match(utility, /彻底替换原提示词的语义内容/);
   assert.match(utility, /新内容文本是待视觉化的创作素材/);
+  assert.match(utility, /准确解析文字层级/);
+  assert.match(utility, /严禁在最终提示词中出现或保留/);
+  assert.match(utility, /禁止的是回答格式标题/);
 });
 
 test('prompt builder exposes four strength levels and GPT Image 2 constraints', () => {
