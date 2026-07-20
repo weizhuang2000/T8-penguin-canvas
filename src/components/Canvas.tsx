@@ -73,6 +73,7 @@ import {
   parseNodeSerialInput,
 } from '../utils/nodeSerialIds';
 import { resolveConnectionByNodeSerialId } from '../utils/connectByNodeSerialId';
+import { getNodePortTypesForHandle, resolveConnectionPickerHandleId } from '../utils/connectionHandles';
 import { advancedProviderModelOptions, advancedProvidersForNode } from '../utils/advancedProviders';
 import { formatShortcutList, matchesAnyShortcut } from '../utils/keyboardShortcuts';
 import { applyNodeAlignment, type NodeAlignAction } from '../utils/nodeAlign';
@@ -2522,12 +2523,14 @@ function CanvasInner({
   const [picker, setPicker] = useState<{
     fromNodeId: string;
     fromHandleType: 'source' | 'target';
+    fromHandleId: string | null;
     flowPos: { x: number; y: number };
     screenPos: { x: number; y: number };
   } | null>(null);
   const connectingFromRef = useRef<{
     nodeId: string;
     handleType: 'source' | 'target';
+    handleId: string | null;
   } | null>(null);
   const isConnectionDraggingRef = useRef(false);
   const connectionPanModeRef = useRef(false);
@@ -4611,6 +4614,10 @@ function CanvasInner({
       const src = curNodes.find((n) => n.id === params.source);
       let tgt = curNodes.find((n) => n.id === params.target);
       if (!isConnectionValid(src, tgt)) return;
+      if (!arePortsCompatible(
+        getNodePortTypesForHandle(src, 'source', params.sourceHandle),
+        getNodePortTypesForHandle(tgt, 'target', params.targetHandle),
+      )) return;
 
       // ⚡ 组容器连出去重: 如果 source 是 groupBox, 并且组内成员已经独立连到同一个下游 target,
       // 则自动断开那些「成员→target」的重复边, 只保留 group→target
@@ -4656,8 +4663,8 @@ function CanvasInner({
       }
 
       // 根据上游输出类型染色连线
-      const outs = src ? getNodeOutputs(src) : [];
-      const ins = tgt ? getNodeInputs(tgt) : [];
+      const outs = getNodePortTypesForHandle(src, 'source', params.sourceHandle);
+      const ins = getNodePortTypesForHandle(tgt, 'target', params.targetHandle);
       const matched = outs.find((o) => ins.includes(o) || o === 'any' || ins.includes('any'));
       const color = matched && matched !== 'any' ? PORT_COLOR[matched] : undefined;
       const exclusiveTargetHandles = exclusiveTargetHandlesForConnection(
@@ -4684,17 +4691,25 @@ function CanvasInner({
       const curNodes = nodesRef.current;
       const src = curNodes.find((n) => n.id === (params as Connection).source);
       const tgt = curNodes.find((n) => n.id === (params as Connection).target);
-      return isConnectionValid(src, tgt);
+      if (!isConnectionValid(src, tgt)) return false;
+      return arePortsCompatible(
+        getNodePortTypesForHandle(src, 'source', (params as Connection).sourceHandle),
+        getNodePortTypesForHandle(tgt, 'target', (params as Connection).targetHandle),
+      );
     },
     []
   );
 
   // ===== 拖线到空白处 → 弹出候选节点菜单 =====
   const onConnectStart = useCallback(
-    (_e: any, params: { nodeId: string | null; handleType: 'source' | 'target' | null }) => {
+    (_e: any, params: { nodeId: string | null; handleType: 'source' | 'target' | null; handleId: string | null }) => {
       if (!canEditActiveCanvas) return;
       if (!params.nodeId || !params.handleType) return;
-      connectingFromRef.current = { nodeId: params.nodeId, handleType: params.handleType };
+      connectingFromRef.current = {
+        nodeId: params.nodeId,
+        handleType: params.handleType,
+        handleId: params.handleId,
+      };
       isConnectionDraggingRef.current = true;
       setConnectionPanMode(false);
 
@@ -4840,6 +4855,7 @@ function CanvasInner({
       setPicker({
         fromNodeId: from.nodeId,
         fromHandleType: from.handleType,
+        fromHandleId: from.handleId,
         flowPos,
         screenPos: { x: clientX, y: clientY },
       });
@@ -4863,7 +4879,7 @@ function CanvasInner({
         from.handleType === 'source'
           ? {
               source: from.nodeId,
-              sourceHandle: null,
+              sourceHandle: from.handleId,
               target: handle.nodeId,
               targetHandle: handle.handleId,
             }
@@ -4871,7 +4887,7 @@ function CanvasInner({
               source: handle.nodeId,
               sourceHandle: handle.handleId,
               target: from.nodeId,
-              targetHandle: null,
+              targetHandle: from.handleId,
             };
       connectingFromRef.current = null;
       onConnect(params);
@@ -5410,8 +5426,12 @@ function CanvasInner({
     // 从 source handle 拉出: 源节点输出 → 候选节点需要有能收这些输出的输入
     // 从 target handle 拉出: 源节点输入 → 候选节点需要有能被其接受的输出
     const isFromSource = picker.fromHandleType === 'source';
-    const fromOuts = isFromSource ? getNodeOutputs(fromNode) : [];
-    const fromIns = !isFromSource ? getNodeInputs(fromNode) : [];
+    const fromOuts = isFromSource
+      ? getNodePortTypesForHandle(fromNode, 'source', picker.fromHandleId)
+      : [];
+    const fromIns = !isFromSource
+      ? getNodePortTypesForHandle(fromNode, 'target', picker.fromHandleId)
+      : [];
 
     const candidates = NODE_REGISTRY.flatMap((meta) => {
       // 隐藏节点不作为候选项出现(仅从主动添加入口中移除,不影响已存在节点连边)
@@ -5457,20 +5477,33 @@ function CanvasInner({
       const [nodeWithSerial] = assignActiveNodeSerials([newNode], nodes);
       setNodes((prev) => [...prev, nodeWithSerial]);
 
-      // 创建连线:根据 source/target 方向
       const isFromSource = picker.fromHandleType === 'source';
-      const params: Connection = isFromSource
-        ? { source: picker.fromNodeId, target: id, sourceHandle: null, targetHandle: null }
-        : { source: id, target: picker.fromNodeId, sourceHandle: null, targetHandle: null };
-
-      // 染色(使用 nodes + 新节点计算)
       const fromNode = nodes.find((n) => n.id === picker.fromNodeId);
       const tempNewNode = nodeWithSerial || newNode;
       const src = isFromSource ? fromNode : tempNewNode;
       const tgt = isFromSource ? tempNewNode : fromNode;
-      const outs = src ? getNodeOutputs(src) : [];
-      const ins = tgt ? getNodeInputs(tgt) : [];
+      const outs = isFromSource
+        ? getNodePortTypesForHandle(fromNode, 'source', picker.fromHandleId)
+        : meta.type === 'upload'
+          ? (['image', 'video', 'audio'] as PortType[])
+          : getNodeOutputs(tempNewNode);
+      const ins = isFromSource
+        ? getNodeInputs(tempNewNode)
+        : getNodePortTypesForHandle(fromNode, 'target', picker.fromHandleId);
       const matched = outs.find((o) => ins.includes(o) || o === 'any' || ins.includes('any'));
+      const params: Connection = isFromSource
+        ? {
+            source: picker.fromNodeId,
+            target: id,
+            sourceHandle: picker.fromHandleId,
+            targetHandle: resolveConnectionPickerHandleId(meta.type, 'target', matched),
+          }
+        : {
+            source: id,
+            target: picker.fromNodeId,
+            sourceHandle: resolveConnectionPickerHandleId(meta.type, 'source', matched),
+            targetHandle: picker.fromHandleId,
+          };
       const color = matched && matched !== 'any' ? PORT_COLOR[matched] : undefined;
       const exclusiveTargetHandles = exclusiveTargetHandlesForConnection(
         tgt?.type,
@@ -5505,6 +5538,7 @@ function CanvasInner({
       edges: edgesRef.current,
       fromNodeId: picker.fromNodeId,
       fromHandleType: picker.fromHandleType,
+      fromHandleId: picker.fromHandleId,
       nodeSerialInput: raw,
     });
     if (!result.ok) {

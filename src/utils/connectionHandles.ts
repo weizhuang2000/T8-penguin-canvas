@@ -1,0 +1,43 @@
+import type { Node } from '@xyflow/react';
+import { getNodeInputs, getNodeOutputs, type PortType } from '../config/portTypes.ts';
+
+export type ConnectionHandleType = 'source' | 'target';
+
+type HandlePortMap = Partial<Record<ConnectionHandleType, Record<string, PortType>>>;
+type DefaultHandleMap = Partial<Record<ConnectionHandleType, Partial<Record<PortType, string>>>>;
+
+const HANDLE_PORT_TYPES: Record<string, HandlePortMap> = {
+  'fhl-image-gen': {
+    source: { image: 'image', text: 'text' },
+    target: { text: 'text', fixed: 'image', items: 'image' },
+  },
+};
+
+const DEFAULT_HANDLE_IDS: Record<string, DefaultHandleMap> = {
+  'fhl-image-gen': {
+    source: { image: 'image', text: 'text' },
+    target: { text: 'text', image: 'fixed' },
+  },
+};
+
+export function getNodePortTypesForHandle(
+  node: Node | null | undefined,
+  handleType: ConnectionHandleType,
+  handleId: string | null | undefined,
+): PortType[] {
+  const ports = handleType === 'source' ? getNodeOutputs(node) : getNodeInputs(node);
+  if (!node?.type || !handleId) return ports;
+
+  const configuredPort = HANDLE_PORT_TYPES[node.type]?.[handleType]?.[handleId];
+  if (configuredPort && ports.includes(configuredPort)) return [configuredPort];
+  return ports;
+}
+
+export function resolveConnectionPickerHandleId(
+  nodeType: string | null | undefined,
+  handleType: ConnectionHandleType,
+  portType: PortType | null | undefined,
+): string | null {
+  if (!nodeType || !portType) return null;
+  return DEFAULT_HANDLE_IDS[nodeType]?.[handleType]?.[portType] || null;
+}

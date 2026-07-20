@@ -1,5 +1,6 @@
 import type { Connection, Edge, Node } from '@xyflow/react';
-import { isConnectionValid } from '../config/portTypes.ts';
+import { arePortsCompatible, isConnectionValid } from '../config/portTypes.ts';
+import { getNodePortTypesForHandle, resolveConnectionPickerHandleId } from './connectionHandles.ts';
 import { findNodeBySerialId, parseNodeSerialInput } from './nodeSerialIds.ts';
 
 export type ConnectByNodeSerialFailureReason =
@@ -29,6 +30,7 @@ export interface ResolveConnectionByNodeSerialIdOptions {
   edges: Edge[];
   fromNodeId: string;
   fromHandleType: 'source' | 'target';
+  fromHandleId?: string | null;
   nodeSerialInput: unknown;
 }
 
@@ -65,11 +67,28 @@ export function resolveConnectionByNodeSerialId(
     return fail('incompatible', `ID ${serialId} 与当前端口类型不兼容`);
   }
 
+  const sourcePorts = options.fromHandleType === 'source'
+    ? getNodePortTypesForHandle(sourceNode, 'source', options.fromHandleId)
+    : getNodePortTypesForHandle(sourceNode, 'source', null);
+  const targetPorts = options.fromHandleType === 'target'
+    ? getNodePortTypesForHandle(finalTargetNode, 'target', options.fromHandleId)
+    : getNodePortTypesForHandle(finalTargetNode, 'target', null);
+  const matched = sourcePorts.find((port) => (
+    targetPorts.includes(port) || port === 'any' || targetPorts.includes('any')
+  ));
+  if (!matched || !arePortsCompatible(sourcePorts, targetPorts)) {
+    return fail('incompatible', `ID ${serialId} 与当前端口类型不兼容`);
+  }
+
   const connection: Connection = {
     source: sourceNode.id,
-    sourceHandle: null,
+    sourceHandle: options.fromHandleType === 'source'
+      ? (options.fromHandleId ?? null)
+      : resolveConnectionPickerHandleId(sourceNode.type, 'source', matched),
     target: finalTargetNode.id,
-    targetHandle: null,
+    targetHandle: options.fromHandleType === 'target'
+      ? (options.fromHandleId ?? null)
+      : resolveConnectionPickerHandleId(finalTargetNode.type, 'target', matched),
   };
   if (hasDuplicateEdge(options.edges, connection)) {
     return fail('duplicate', `已经存在到 ID ${serialId} 的连接`);
