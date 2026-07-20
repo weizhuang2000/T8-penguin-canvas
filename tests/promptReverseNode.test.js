@@ -41,3 +41,15 @@ test('generated prompt is published through standard downstream text fields', ()
   assert.match(node, /promptTemplateKind="image"/);
   assert.match(node, /useRunTrigger\(id, \(\) => runReverse\(true\), 'llm'\)/);
 });
+
+test('node exposes the standard help icon with detailed control documentation', () => {
+  const node = read('src/components/nodes/PromptReverseNode.tsx');
+  const help = read('src/config/nodeHelpDefaults.ts');
+  assert.match(node, /<NodeHelpButton nodeType="prompt-reverse" \/>/);
+  for (const section of ['标题栏与端口', '识图素材区', '识图 LLM（来自独立配置）', '细节强度', '输出语言', '补充要求', '运行按钮', '反推结果区', '常见问题']) {
+    assert.match(help, new RegExp(section));
+  }
+  for (const control of ['右上角问号图标', '拖动缩略图排序', '复制', '清空图标', '扩大编辑', '提示词模板入口']) {
+    assert.match(help, new RegExp(control));
+  }
+});
