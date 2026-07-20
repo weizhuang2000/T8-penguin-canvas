@@ -147,7 +147,12 @@ const PromptReverseNode = ({ id, data, selected }: NodeProps) => {
           <div className="text-sm font-semibold text-emerald-100">提示词反推</div>
           <div className="truncate text-[10px] text-white/45">LLM 识图 · GPT Image 2 专用提示词</div>
         </div>
-        <NodeHelpButton nodeType="prompt-reverse" />
+        <NodeHelpButton
+          nodeType="prompt-reverse"
+          title="查看提示词反推节点帮助"
+          size={16}
+          className="relative z-[70] !h-6 !w-6 shrink-0 !border-emerald-300/70 !bg-emerald-400/15 !text-emerald-100 hover:!bg-emerald-400/30"
+        />
       </header>
 
       <div className="nodrag space-y-2.5 p-3" onMouseDown={(event) => event.stopPropagation()}>

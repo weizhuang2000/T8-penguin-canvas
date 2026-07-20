@@ -45,7 +45,7 @@ test('generated prompt is published through standard downstream text fields', ()
 test('node exposes the standard help icon with detailed control documentation', () => {
   const node = read('src/components/nodes/PromptReverseNode.tsx');
   const help = read('src/config/nodeHelpDefaults.ts');
-  assert.match(node, /<NodeHelpButton nodeType="prompt-reverse" \/>/);
+  assert.match(node, /<NodeHelpButton[\s\S]*nodeType="prompt-reverse"[\s\S]*title="查看提示词反推节点帮助"[\s\S]*size=\{16\}[\s\S]*z-\[70\][\s\S]*shrink-0/);
   for (const section of ['标题栏与端口', '识图素材区', '识图 LLM（来自独立配置）', '细节强度', '输出语言', '补充要求', '运行按钮', '反推结果区', '常见问题']) {
     assert.match(help, new RegExp(section));
   }
