@@ -6,6 +6,8 @@
     "capabilities": [
       "仅使用 LLM 独立配置中的模型作为识图模型，不在画布中保存 API Key",
       "接收一张或多张图片，图 1 作为主体、其余图片作为补充参考并支持排序",
+      "提供独立内容文本输入端口，可保留反推图像的视觉形式并替换主体、场景、叙事、图案与可见文字内容",
+      "支持结果区手动换内容，以及开启换内容开关后一次运行自动完成反推与内容替换",
       "提供简洁、标准、详细、极致四档细节强度和中英文输出",
       "输出适合 GPT Image 2 的自然语言提示词，自动排除 Midjourney 参数、Stable Diffusion 权重、JSON 与解释文字",
       "结果写入 prompt/outputText/text 标准字段，可编辑、复制、保存提示词模板并供下游图像节点消费",
@@ -13,6 +15,7 @@
     ],
     "verification": [
       "node --test tests/promptReverseNode.test.js",
+      "node --experimental-strip-types --test tests/promptReverseContentSwap.test.ts tests/connectionHandles.test.ts",
       "npm run type-check",
       "npm run build"
     ]

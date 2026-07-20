@@ -7,6 +7,9 @@ type HandlePortMap = Partial<Record<ConnectionHandleType, Record<string, PortTyp
 type DefaultHandleMap = Partial<Record<ConnectionHandleType, Partial<Record<PortType, string>>>>;
 
 const HANDLE_PORT_TYPES: Record<string, HandlePortMap> = {
+  'prompt-reverse': {
+    target: { 'content-text': 'text' },
+  },
   'fhl-image-gen': {
     source: { image: 'image', text: 'text' },
     target: { text: 'text', fixed: 'image', items: 'image' },
@@ -14,6 +17,9 @@ const HANDLE_PORT_TYPES: Record<string, HandlePortMap> = {
 };
 
 const DEFAULT_HANDLE_IDS: Record<string, DefaultHandleMap> = {
+  'prompt-reverse': {
+    target: { text: 'content-text' },
+  },
   'fhl-image-gen': {
     source: { image: 'image', text: 'text' },
     target: { text: 'text', image: 'fixed' },
@@ -26,7 +32,11 @@ export function getNodePortTypesForHandle(
   handleId: string | null | undefined,
 ): PortType[] {
   const ports = handleType === 'source' ? getNodeOutputs(node) : getNodeInputs(node);
-  if (!node?.type || !handleId) return ports;
+  if (!node?.type) return ports;
+  if (!handleId) {
+    if (node.type === 'prompt-reverse' && handleType === 'target' && ports.includes('image')) return ['image'];
+    return ports;
+  }
 
   const configuredPort = HANDLE_PORT_TYPES[node.type]?.[handleType]?.[handleId];
   if (configuredPort && ports.includes(configuredPort)) return [configuredPort];

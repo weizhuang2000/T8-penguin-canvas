@@ -1562,6 +1562,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     detailStrength: 'standard',
     outputLanguage: 'zh',
     instruction: '',
+    contentSwapEnabled: false,
     materialOrder: [],
     prompt: '',
     outputText: '',
@@ -1727,6 +1728,9 @@ function exclusiveTargetHandlesForConnection(
 ): string[] {
   const handle = targetHandle || '';
   if (targetType === 'image-compare' && (handle === 'a' || handle === 'b')) {
+    return [handle];
+  }
+  if (targetType === 'prompt-reverse' && handle === 'content-text') {
     return [handle];
   }
   if (targetType === 'exhibition-img2img') {

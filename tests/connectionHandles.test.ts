@@ -26,6 +26,13 @@ test('FHL handle ids resolve to their actual port types', () => {
   assert.deepEqual(getNodePortTypesForHandle(fhl, 'source', 'text'), ['text']);
 });
 
+test('prompt reverse keeps the legacy image handle and exposes a text-only content handle', () => {
+  assert.deepEqual(getNodePortTypesForHandle(promptReverse, 'target', null), ['image']);
+  assert.deepEqual(getNodePortTypesForHandle(promptReverse, 'target', 'content-text'), ['text']);
+  assert.equal(resolveConnectionPickerHandleId('prompt-reverse', 'target', 'image'), null);
+  assert.equal(resolveConnectionPickerHandleId('prompt-reverse', 'target', 'text'), 'content-text');
+});
+
 test('connection picker chooses concrete FHL handles', () => {
   assert.equal(resolveConnectionPickerHandleId('fhl-image-gen', 'target', 'text'), 'text');
   assert.equal(resolveConnectionPickerHandleId('fhl-image-gen', 'target', 'image'), 'fixed');
