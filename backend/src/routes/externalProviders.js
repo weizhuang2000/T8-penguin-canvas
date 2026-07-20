@@ -255,6 +255,82 @@ function clonePlain(value) {
   }
 }
 
+async function generateExternalImageInternal(body = {}, options = {}) {
+  const settings = settingsRouter.loadSettings({ persistMigrations: false });
+  const currentProviders = normalizeAdvancedProviders(settings.advancedProviders);
+  const resolved = resolveRunnableProvider(body, currentProviders);
+  if (!resolved.ok) {
+    const error = new Error(resolved.error || '扩展平台不可用。');
+    error.code = resolved.code || 'provider_unavailable';
+    throw error;
+  }
+  const requestedSource = String(body.providerSource || '').trim();
+  if (requestedSource && requestedSource !== String(resolved.provider.protocol || '').trim()) {
+    const error = new Error('扩展平台协议与当前节点选择不一致。');
+    error.code = 'provider_source_mismatch';
+    throw error;
+  }
+
+  const timeoutMs = generationTimeoutMs(body.timeoutMs);
+  const startedAt = Date.now();
+  const baseUrl = `http://127.0.0.1:${config.PORT}`;
+  let result = await generateImageWithProvider(resolved.provider, body, { timeoutMs, baseUrl, signal: options.signal });
+  let taskId = result?.taskId || '';
+  const shouldPoll = (value) => Boolean(
+    value?.taskId
+    && (!Array.isArray(value.imageUrls) || !value.imageUrls.length)
+    && (
+      canContinueImageTask(value)
+      || ['running', 'pending', 'queued', 'processing', 'submitted'].includes(String(value.code || value.status || '').toLowerCase())
+    )
+  );
+
+  while (shouldPoll(result)) {
+    if (options.signal?.aborted) {
+      const error = new Error('Qoder 生图任务已取消。');
+      error.name = 'AbortError';
+      throw error;
+    }
+    if (Date.now() - startedAt >= timeoutMs) {
+      const error = new Error('扩展平台生图任务超时。');
+      error.code = 'timeout';
+      throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    result = await queryImageTaskWithProvider(resolved.provider, taskId, {
+      timeoutMs: Math.max(1000, timeoutMs - (Date.now() - startedAt)),
+      baseUrl,
+      signal: options.signal,
+    });
+    taskId = result?.taskId || taskId;
+  }
+
+  if (!result?.ok || !Array.isArray(result.imageUrls) || !result.imageUrls.length) {
+    const error = new Error(result?.error || '扩展平台完成任务但没有返回图片。');
+    error.code = result?.code || 'empty_image';
+    error.result = result;
+    throw error;
+  }
+
+  const remoteImageUrls = result.imageUrls;
+  const imageUrls = await saveImageOutputs(remoteImageUrls, { outputFormat: body.outputFormat });
+  rememberExternalOutputs(
+    { body, user: options.user || null },
+    imageUrls,
+    'image',
+    resolved.provider,
+    { taskId: taskId || result.taskId },
+  );
+  return {
+    ...result,
+    provider: safeProviderForResponse(resolved.provider),
+    taskId: taskId || result.taskId,
+    remoteImageUrls,
+    imageUrls,
+    imageUrl: imageUrls[0] || '',
+  };
+}
+
 function pruneExternalImageJobs() {
   const now = Date.now();
   for (const [id, job] of externalImageJobs.entries()) {
@@ -635,3 +711,4 @@ router.post('/music', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.generateExternalImageInternal = generateExternalImageInternal;

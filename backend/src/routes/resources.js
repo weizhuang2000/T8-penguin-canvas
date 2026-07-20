@@ -1241,3 +1241,9 @@ router.get('/thumb/:id', (req, res) => {
 });
 
 module.exports = router;
+module.exports.resolveResourceFilePath = function resolveResourceFilePath(value) {
+  const { root, db } = readDb();
+  const local = resolveLocalSource(value, root, db);
+  if (!local?.filePath || !fs.existsSync(local.filePath)) return '';
+  return local.filePath;
+};

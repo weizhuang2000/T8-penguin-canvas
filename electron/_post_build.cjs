@@ -415,6 +415,7 @@ function main() {
   checkFile(path.join(RES, 'backend-enc', 'routes', 'figma.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'routes', 'grokOAuth.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'routes', 'codexCli.t8c'));
+  checkFile(path.join(RES, 'backend-enc', 'routes', 'qoderCli.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'routes', 'remotion.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'routes', 'aiWatermark.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'routes', 'cloudUploads.t8c'));
@@ -453,6 +454,7 @@ function main() {
   checkFile(path.join(RES, 'backend-enc', 'tools', 'remotion', 'mediaProbe.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'utils', 'duckPayload.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'utils', 'codexCliRunner.t8c'));
+  checkFile(path.join(RES, 'backend-enc', 'utils', 'qoderCliRunner.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'utils', 'figmaBridge.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'utils', 'parseHubBridge.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'utils', 'runtimeArchive.t8c'));

@@ -22,6 +22,8 @@ import {
 import * as api from '../../services/api';
 import { getCodexCliStatus, type CodexCliStatus } from '../../services/codexCli';
 import { publishCodexImageConjureResult, streamCodexImageConjure, type CodexImageConjureResult } from '../../services/codexImageConjure';
+import { getQoderCliStatus } from '../../services/qoderCli';
+import { publishQoderImageResult, streamQoderImageConjure } from '../../services/qoderImageConjure';
 import { generateExternalImage, queryExternalImageStatus } from '../../services/generation';
 import { PORT_COLOR } from '../../config/portTypes';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
@@ -66,6 +68,7 @@ import {
 } from '../../utils/advancedProviders';
 
 const STORAGE_KEY = 't8.codexImageConjure.prompts.v1';
+const QODER_STORAGE_KEY = 't8.qoderImageConjure.prompts.v1';
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
 const EXTERNAL_IMAGE_POLL_TIMEOUT_SECONDS = 3600;
 
@@ -103,12 +106,12 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number)
   return Math.max(min, Math.min(max, Math.round(numberValue)));
 }
 
-function initialPromptState(): CodexImagePromptState {
+function initialPromptState(storageKey = STORAGE_KEY): CodexImagePromptState {
   if (typeof window === 'undefined') {
     return normalizeCodexImagePromptState({ templates: DEFAULT_CODEX_IMAGE_TEMPLATES });
   }
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey);
     if (raw) return normalizeCodexImagePromptState(JSON.parse(raw));
   } catch {
     // ignore corrupted local prompt pack
@@ -116,9 +119,12 @@ function initialPromptState(): CodexImagePromptState {
   return normalizeCodexImagePromptState({ templates: DEFAULT_CODEX_IMAGE_TEMPLATES });
 }
 
-function savePromptState(state: CodexImagePromptState) {
+function savePromptState(state: CodexImagePromptState, storageKey = STORAGE_KEY) {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(exportCodexImagePromptPack(state)));
+  const pack = exportCodexImagePromptPack(state);
+  window.localStorage.setItem(storageKey, JSON.stringify(storageKey === QODER_STORAGE_KEY
+    ? { ...pack, schema: 't8-qoder-image-conjure-prompts' }
+    : pack));
 }
 
 function downloadJsonFile(filename: string, payload: unknown) {
@@ -169,9 +175,29 @@ function compactText(value: string, max = 72) {
   return cleaned.length > max ? `${cleaned.slice(0, max)}...` : cleaned;
 }
 
-const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
-  const d = data as any;
-  const update = useUpdateNodeData(id);
+export type ImageConjureRuntime = 'codex' | 'qoder';
+
+function runtimeKey(key: string, runtime: ImageConjureRuntime) {
+  if (runtime !== 'qoder') return key;
+  if (key === 'codexExecutablePath') return 'qoderExecutablePath';
+  if (key === 'codexConjureModel') return 'qoderModel';
+  if (key.startsWith('codexConjure')) return `qoderConjure${key.slice('codexConjure'.length)}`;
+  return key;
+}
+
+export const CodexImageConjureNode = ({ id, data, selected, runtime = 'codex' }: NodeProps & { runtime?: ImageConjureRuntime }) => {
+  const isQoder = runtime === 'qoder';
+  const sourceData = data as any;
+  const d = useMemo(() => new Proxy(sourceData, {
+    get(target, property) {
+      return typeof property === 'string' ? target[runtimeKey(property, runtime)] : target[property as any];
+    },
+  }), [runtime, sourceData]);
+  const rawUpdate = useUpdateNodeData(id);
+  const update = useCallback((patch: Record<string, any>) => {
+    if (!isQoder) return rawUpdate(patch);
+    return rawUpdate(Object.fromEntries(Object.entries(patch).map(([key, value]) => [runtimeKey(key, runtime), value])));
+  }, [isQoder, rawUpdate, runtime]);
   const { theme, style } = useThemeStore();
   const advancedProviders = useApiKeysStore((s) => s.settings.advancedProviders);
   const isDark = theme === 'dark';
@@ -181,7 +207,7 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
   const controllersRef = useRef<Map<string, AbortController>>(new Map());
   const tasksRef = useRef<CodexImageConjureTask[]>([]);
   const [status, setStatus] = useState<CodexCliStatus | null>(null);
-  const [promptState, setPromptState] = useState<CodexImagePromptState>(() => initialPromptState());
+  const [promptState, setPromptState] = useState<CodexImagePromptState>(() => initialPromptState(isQoder ? QODER_STORAGE_KEY : STORAGE_KEY));
   const [galleryItems, setGalleryItems] = useState<api.ResourceItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [streamText, setStreamText] = useState('');
@@ -215,7 +241,7 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
   const autoPublish = d.codexConjureAutoPublish !== false;
   const persistPrompt = Boolean(d.codexConjurePersistPrompt);
   const persistRefs = d.codexConjurePersistRefs !== false;
-  const conjureSource: CodexConjureSource = d.codexConjureSource === 'external-image' ? 'external-image' : 'codex-cli';
+  const conjureSource: CodexConjureSource = !isQoder && d.codexConjureSource === 'external-image' ? 'external-image' : 'codex-cli';
   const isExternalSource = conjureSource === 'external-image';
   const imageAdvancedProviders = useMemo(
     () => advancedProvidersForNode(advancedProviders, 'image'),
@@ -242,11 +268,25 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
       available: !!models[0],
     };
   }, [imageAdvancedProviders, providerSelection]);
-  const isExternalReady = isExternalSource && activeExternalSelection.available && !!activeExternalSelection.provider;
+  const isExternalReady = (isExternalSource || isQoder) && activeExternalSelection.available && !!activeExternalSelection.provider;
   const externalModelOptions = activeExternalSelection.provider
     ? advancedProviderModelOptions(activeExternalSelection.provider, 'image')
     : [];
   const externalProviderModel = activeExternalSelection.providerModel || externalModelOptions[0] || '';
+
+  useEffect(() => {
+    if (!isQoder || !activeExternalSelection.available || !activeExternalSelection.provider) return;
+    if (
+      d.providerSource === activeExternalSelection.providerSource
+      && d.providerId === activeExternalSelection.providerId
+      && d.providerModel === externalProviderModel
+    ) return;
+    update({
+      providerSource: activeExternalSelection.providerSource,
+      providerId: activeExternalSelection.providerId,
+      providerModel: externalProviderModel,
+    });
+  }, [activeExternalSelection.available, activeExternalSelection.provider, activeExternalSelection.providerId, activeExternalSelection.providerSource, d.providerId, d.providerModel, d.providerSource, externalProviderModel, isQoder, update]);
   const materialOrder: string[] = Array.isArray(d.codexConjureMaterialOrder) ? d.codexConjureMaterialOrder : [];
   const excludedMaterialIds = useMemo(
     () => normalizeExcludedMaterialIds(d.codexConjureExcludedMaterialIds),
@@ -376,17 +416,22 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
   }, [setTasks]);
 
   const refreshStatus = useCallback(async () => {
-    if (isExternalSource) {
+    if (isExternalSource && !isQoder) {
       setStatus(null);
       return;
     }
     try {
-      const next = await getCodexCliStatus(String(d.codexExecutablePath || ''));
-      setStatus(next);
+      if (isQoder) {
+        const next = await getQoderCliStatus(String(d.codexExecutablePath || ''));
+        setStatus(next);
+      } else {
+        const next = await getCodexCliStatus(String(d.codexExecutablePath || ''));
+        setStatus(next);
+      }
     } catch (error: any) {
-      setStatus({ available: false, message: error?.message || 'Codex CLI 状态检查失败' });
+      setStatus({ available: false, message: error?.message || `${isQoder ? 'Qoder' : 'Codex'} CLI 状态检查失败` });
     }
-  }, [d.codexExecutablePath, isExternalSource]);
+  }, [d.codexExecutablePath, isExternalSource, isQoder]);
 
   useEffect(() => {
     void refreshStatus();
@@ -408,8 +453,8 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
 
   const applyPromptState = useCallback((next: CodexImagePromptState) => {
     setPromptState(next);
-    savePromptState(next);
-  }, []);
+    savePromptState(next, isQoder ? QODER_STORAGE_KEY : STORAGE_KEY);
+  }, [isQoder]);
 
   const importPromptPack = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0];
@@ -427,7 +472,10 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
   }, [applyPromptState, promptState, update]);
 
   const exportPromptPack = useCallback(() => {
-    downloadJsonFile('codex-image-conjure-prompts.json', exportCodexImagePromptPack(promptState));
+    const pack = exportCodexImagePromptPack(promptState);
+    downloadJsonFile(isQoder ? 'qoder-image-conjure-prompts.json' : 'codex-image-conjure-prompts.json', isQoder
+      ? { ...pack, schema: 't8-qoder-image-conjure-prompts' }
+      : pack);
   }, [promptState]);
 
   const applyTemplate = useCallback((templateId: string) => {
@@ -532,7 +580,7 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
       snippets: promptState.snippets,
       negativePrompt: String(d.codexConjureNegativePrompt || ''),
       outputSettings: {
-        model: String(d.codexConjureModel || 'gpt-5.5'),
+        model: String(d.codexConjureModel || (isQoder ? '' : 'gpt-5.5')),
         size: String(d.codexConjureSize || '2K'),
         aspectRatio: String(d.codexConjureAspectRatio || '9:16'),
         quality: String(d.codexConjureQuality || '高'),
@@ -549,19 +597,19 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
       prompt: [referenceInstruction, promptBody].filter(Boolean).join('\n\n').trim(),
       images: imageRefs,
       source: conjureSource,
-      model: String(d.codexConjureModel || 'gpt-5.5'),
+      model: String(d.codexConjureModel || (isQoder ? '' : 'gpt-5.5')),
       size: String(d.codexConjureSize || '2K'),
       aspectRatio: String(d.codexConjureAspectRatio || '9:16'),
       quality: String(d.codexConjureQuality || '高'),
       count,
-      providerSource: isExternalSource ? activeExternalSelection.providerSource : undefined,
-      providerId: isExternalSource ? activeExternalSelection.providerId : undefined,
-      providerModel: isExternalSource ? externalProviderModel : undefined,
-      providerParams: isExternalSource && d.providerParams && typeof d.providerParams === 'object' && !Array.isArray(d.providerParams)
+      providerSource: (isExternalSource || isQoder) ? activeExternalSelection.providerSource : undefined,
+      providerId: (isExternalSource || isQoder) ? activeExternalSelection.providerId : undefined,
+      providerModel: (isExternalSource || isQoder) ? externalProviderModel : undefined,
+      providerParams: (isExternalSource || isQoder) && d.providerParams && typeof d.providerParams === 'object' && !Array.isArray(d.providerParams)
         ? { ...d.providerParams }
         : undefined,
     };
-  }, [activeExternalSelection.providerId, activeExternalSelection.providerSource, conjureSource, count, d.codexConjureAspectRatio, d.codexConjureBackground, d.codexConjureFormat, d.codexConjureModel, d.codexConjureNegativePrompt, d.codexConjurePromptMode, d.codexConjureQuality, d.codexConjureSize, d.providerParams, externalProviderModel, isExternalSource, mentionMaterials, mentions, orderedInputImages, orderedInputTexts, prompt, promptState.snippets, selectedTemplate?.notes]);
+  }, [activeExternalSelection.providerId, activeExternalSelection.providerSource, conjureSource, count, d.codexConjureAspectRatio, d.codexConjureBackground, d.codexConjureFormat, d.codexConjureModel, d.codexConjureNegativePrompt, d.codexConjurePromptMode, d.codexConjureQuality, d.codexConjureSize, d.providerParams, externalProviderModel, isExternalSource, isQoder, mentionMaterials, mentions, orderedInputImages, orderedInputTexts, prompt, promptState.snippets, selectedTemplate?.notes]);
 
   const addLatestToLibrary = useCallback(async () => {
     const url = latestUrls[0];
@@ -571,7 +619,7 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
         url,
         kind: 'image',
         title: fileNameFromUrl(url),
-        tags: ['codex', 'conjure'],
+        tags: [isQoder ? 'qoder' : 'codex', 'conjure'],
         sourceNodeId: id,
       });
       if (!added.success) throw new Error(added.error || '入库失败');
@@ -580,18 +628,48 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
     } catch (error: any) {
       update({ error: error?.message || '入库失败' });
     }
-  }, [d.codexConjureGalleryQuery, id, latestUrls, update]);
+  }, [d.codexConjureGalleryQuery, id, isQoder, latestUrls, update]);
 
   const runTask = useCallback(async (task: CodexImageConjureTask) => {
     const controller = new AbortController();
     controllersRef.current.set(task.id, controller);
     let reply = '';
     const taskSource = task.source === 'external-image' ? 'external-image' : 'codex-cli';
-    patchTask(task.id, { status: 'running', progressText: taskSource === 'external-image' ? '扩展 API 正在生成...' : 'Codex 正在生成...', startedAt: new Date().toISOString(), error: '' });
+    patchTask(task.id, { status: 'running', progressText: isQoder ? 'Qoder 正在调用扩展平台…' : (taskSource === 'external-image' ? '扩展 API 正在生成...' : 'Codex 正在生成...'), startedAt: new Date().toISOString(), error: '' });
     setStreamText('');
     try {
       let result: CodexImageConjureResult;
-      if (taskSource === 'external-image') {
+      if (isQoder) {
+        if (!task.providerId || !task.providerModel) {
+          throw new Error('请先在 API 设置中启用支持图像生成的扩展平台，并选择平台与模型。');
+        }
+        const outputFormat = String(d.codexConjureFormat || 'png').toLowerCase() === 'jpg' ? 'jpg' : 'png';
+        result = await streamQoderImageConjure({
+          nodeId: id,
+          nodeTitle: String(d.label || 'Qoder 生图工作台'),
+          prompt: task.prompt,
+          images: task.images,
+          model: String(d.codexConjureModel || ''),
+          executablePath: String(d.codexExecutablePath || ''),
+          providerSource: task.providerSource || '',
+          providerId: task.providerId,
+          providerModel: task.providerModel,
+          providerParams: task.providerParams,
+          negativePrompt: String(d.codexConjureNegativePrompt || '').trim() || undefined,
+          size: externalImageSizeFor(task.aspectRatio, task.size),
+          imageSize: task.size,
+          aspectRatio: task.aspectRatio,
+          quality: task.quality,
+          count: task.count,
+          outputFormat,
+        }, {
+          signal: controller.signal,
+          onDelta: (delta) => {
+            reply += delta;
+            setStreamText((prev) => `${prev}${delta}`);
+          },
+        }) as CodexImageConjureResult;
+      } else if (taskSource === 'external-image') {
         if (!task.providerId || !task.providerModel) {
           throw new Error('请先在 API 设置中启用支持图像生成的扩展平台，并在节点中选择平台与模型。');
         }
@@ -687,8 +765,12 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
           },
         );
       }
-      const published = publishCodexImageConjureResult(result, { maxImages: task.count }) as CodexImageConjureResult;
-      const canvasPublished = publishCodexImageConjureResult(result, { maxImages: task.count, includeText: false }) as CodexImageConjureResult;
+      const published = (isQoder
+        ? publishQoderImageResult(result as any, { maxImages: task.count })
+        : publishCodexImageConjureResult(result, { maxImages: task.count })) as CodexImageConjureResult;
+      const canvasPublished = (isQoder
+        ? publishQoderImageResult(result as any, { maxImages: task.count, includeText: false })
+        : publishCodexImageConjureResult(result, { maxImages: task.count, includeText: false })) as CodexImageConjureResult;
       patchTask(task.id, {
         status: 'completed',
         progressText: `完成 ${published.imageUrls.length} 张`,
@@ -725,7 +807,7 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
     } finally {
       controllersRef.current.delete(task.id);
     }
-  }, [autoPublish, d.codexConjureFormat, d.codexConjureNegativePrompt, d.codexExecutablePath, d.label, id, patchTask, persistPrompt, persistRefs, update]);
+  }, [autoPublish, d.codexConjureFormat, d.codexConjureModel, d.codexConjureNegativePrompt, d.codexExecutablePath, d.label, id, isQoder, patchTask, persistPrompt, persistRefs, update]);
 
   const handleGenerate = useCallback(async () => {
     if (busy) return;
@@ -734,20 +816,20 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
       update({ error: '请填写提示词，或连接上游文本节点。' });
       return;
     }
-    if (input.source === 'external-image' && (!input.providerId || !input.providerModel)) {
+    if ((input.source === 'external-image' || isQoder) && (!input.providerId || !input.providerModel)) {
       update({ status: 'error', error: '请先在 API 设置中启用支持图像生成的扩展平台，并在节点设置中选择平台与模型。' });
       return;
     }
     const task = createCodexImageConjureTask(input);
     setTasks([...tasksRef.current, task]);
     setBusy(true);
-    update({ status: 'running', error: '', codexConjureLastRunSummary: input.source === 'external-image' ? '扩展 API 正在生成图像...' : 'Codex 正在生成图像...' });
+    update({ status: 'running', error: '', codexConjureLastRunSummary: isQoder ? 'Qoder 正在调用扩展平台生成图像...' : (input.source === 'external-image' ? '扩展 API 正在生成图像...' : 'Codex 正在生成图像...') });
     try {
       await runTask(task);
     } finally {
       setBusy(false);
     }
-  }, [buildCurrentTaskInput, busy, runTask, setTasks, update]);
+  }, [buildCurrentTaskInput, busy, isQoder, runTask, setTasks, update]);
 
   const addToQueue = useCallback(() => {
     const input = buildCurrentTaskInput();
@@ -755,7 +837,7 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
       update({ error: '请填写提示词，或连接上游文本节点。' });
       return;
     }
-    if (input.source === 'external-image' && (!input.providerId || !input.providerModel)) {
+    if ((input.source === 'external-image' || isQoder) && (!input.providerId || !input.providerModel)) {
       update({ status: 'error', error: '请先在 API 设置中启用支持图像生成的扩展平台，并在节点设置中选择平台与模型。' });
       return;
     }
@@ -763,7 +845,7 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
     setTasks(next);
     setPanel('queue');
     update({ codexConjureLastRunSummary: `已加入 ${batchCount} 个任务到队列。` });
-  }, [batchCount, buildCurrentTaskInput, setTasks, update]);
+  }, [batchCount, buildCurrentTaskInput, isQoder, setTasks, update]);
 
   const runQueue = useCallback(async () => {
     if (busy) return;
@@ -774,7 +856,7 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
         update({ error: '请填写提示词，或连接上游文本节点。' });
         return;
       }
-      if (input.source === 'external-image' && (!input.providerId || !input.providerModel)) {
+      if ((input.source === 'external-image' || isQoder) && (!input.providerId || !input.providerModel)) {
         update({ status: 'error', error: '请先在 API 设置中启用支持图像生成的扩展平台，并在节点设置中选择平台与模型。' });
         return;
       }
@@ -795,7 +877,7 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
     } finally {
       setBusy(false);
     }
-  }, [batchCount, buildCurrentTaskInput, busy, concurrency, runTask, setTasks, update]);
+  }, [batchCount, buildCurrentTaskInput, busy, concurrency, isQoder, runTask, setTasks, update]);
 
   const handleStop = useCallback(() => {
     controllersRef.current.forEach((controller) => controller.abort());
@@ -823,16 +905,26 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
 
   useRunTrigger(id, async () => {
     if (!busy) await handleGenerate();
-  }, 'codex-image-conjure');
+  }, isQoder ? 'qoder-image-conjure' : 'codex-image-conjure');
 
-  const statusText = isExternalSource
+  const statusText = isQoder
+    ? (!status?.available
+      ? (status?.message || '正在检查 Qoder CLI')
+      : (isExternalReady && activeExternalSelection.provider
+        ? `Qoder ${status.version || ''} · ${activeExternalSelection.provider.label || activeExternalSelection.provider.id} · ${externalProviderModel}`.trim()
+        : 'Qoder CLI 可用；请在 API 设置中启用支持图像生成的扩展平台'))
+    : isExternalSource
     ? (isExternalReady && activeExternalSelection.provider
       ? `扩展 API 已就绪：${activeExternalSelection.provider.label || activeExternalSelection.provider.id} · ${externalProviderModel || '默认模型'}`
       : '请先在 API 设置中启用支持图像生成的扩展平台')
     : (status?.available ? (status.version ? `Codex ${status.version}` : 'Codex 已就绪') : (status?.message || '正在检查 Codex CLI'));
-  const statusReady = isExternalSource ? isExternalReady : !!status?.available;
-  const statusTitle = isExternalSource ? (isExternalReady ? '扩展 API 已就绪' : '扩展 API 未配置') : (status?.available ? 'Codex 已就绪' : '登录 / 路径检查');
-  const headerSubtitle = isExternalSource
+  const statusReady = isQoder ? (!!status?.available && isExternalReady) : (isExternalSource ? isExternalReady : !!status?.available);
+  const statusTitle = isQoder
+    ? (statusReady ? 'Qoder 与扩展平台已就绪' : 'Qoder / 扩展平台检查')
+    : (isExternalSource ? (isExternalReady ? '扩展 API 已就绪' : '扩展 API 未配置') : (status?.available ? 'Codex 已就绪' : '登录 / 路径检查'));
+  const headerSubtitle = isQoder
+    ? 'Qoder CLI · 扩展平台生图 · 队列/模板/图库'
+    : isExternalSource
     ? '扩展 API · 图像模型 · 队列/模板/片段/公共图库'
     : 'Codex CLI · imagegen · 队列/模板/片段/公共图库';
   const queuedCount = tasks.filter((task) => task.status === 'queued').length;
@@ -945,7 +1037,7 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
         <section className="space-y-2 p-3" style={cardStyle}>
           <div className="font-bold">工作台设置</div>
           <div className="grid grid-cols-2 gap-2">
-            <label className="col-span-2 space-y-1 text-[11px] font-bold">
+            {!isQoder && <label className="col-span-2 space-y-1 text-[11px] font-bold">
               <span>生成来源</span>
               <select
                 data-codex-conjure-source
@@ -967,9 +1059,9 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
                 <option value="codex-cli">Codex CLI / imagegen</option>
                 <option value="external-image">扩展 API 生图</option>
               </select>
-            </label>
-            {isExternalSource && (
-              <div data-codex-conjure-external-provider className="col-span-2 grid grid-cols-2 gap-2">
+            </label>}
+            {(isExternalSource || isQoder) && (
+              <div data-codex-conjure-external-provider data-qoder-conjure-external-provider={isQoder || undefined} className="col-span-2 grid grid-cols-2 gap-2">
                 {imageAdvancedProviders.length > 0 ? (
                   <>
                     <label className="space-y-1 text-[11px] font-bold">
@@ -995,7 +1087,7 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
                       </select>
                     </label>
                     <label className="space-y-1 text-[11px] font-bold">
-                      <span>外部模型</span>
+                      <span>{isQoder ? '生图模型' : '外部模型'}</span>
                       <select
                         className="nodrag w-full px-2 py-2 text-xs font-bold outline-none"
                         style={inputStyle}
@@ -1012,6 +1104,18 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
                   </div>
                 )}
               </div>
+            )}
+            {isQoder && (
+              <label className="col-span-2 space-y-1 text-[11px] font-bold">
+                <span>Qoder CLI 路径（留空自动探测）</span>
+                <input
+                  className="nodrag w-full px-2 py-2 text-xs outline-none"
+                  style={inputStyle}
+                  value={String(d.codexExecutablePath || '')}
+                  onChange={(event) => update({ codexExecutablePath: event.currentTarget.value })}
+                  placeholder="C:\\Users\\...\\.qoder\\bin\\qodercli\\qodercli.exe"
+                />
+              </label>
             )}
             <label className="flex items-center gap-2 rounded-lg px-2 py-2 text-xs font-bold" style={inputStyle}>
               <input type="checkbox" checked={autoPublish} onChange={(event) => update({ codexConjureAutoPublish: event.currentTarget.checked })} /> 自动发布
@@ -1064,21 +1168,21 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
   };
 
   return (
-    <div data-codex-image-conjure-root className="relative p-4 text-sm" style={rootStyle}>
+    <div data-codex-image-conjure-root={!isQoder || undefined} data-qoder-image-conjure-root={isQoder || undefined} className="relative p-4 text-sm" style={rootStyle}>
       <Handle type="target" id="text" position={Position.Left} style={{ top: 180, background: PORT_COLOR.text }} />
       <Handle type="target" id="image" position={Position.Left} style={{ top: 220, background: PORT_COLOR.image }} />
       <Handle type="source" id="image" position={Position.Right} style={{ top: 196, background: PORT_COLOR.image }} />
       <Handle type="source" id="text" position={Position.Right} style={{ top: 236, background: PORT_COLOR.text }} />
 
-      <header data-codex-image-conjure-drag-surface="true" className="flex cursor-grab items-center gap-3 pb-3 active:cursor-grabbing">
+      <header data-codex-image-conjure-drag-surface={!isQoder || undefined} data-qoder-image-conjure-drag-surface={isQoder || undefined} className="flex cursor-grab items-center gap-3 pb-3 active:cursor-grabbing">
         <div className="flex h-11 w-11 items-center justify-center rounded-xl" style={{ background: accent, color: isDark ? '#00111a' : '#fff' }}>
           <ImagePlus size={22} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-lg font-black leading-tight">Codex 生图工作台</div>
+          <div className="text-lg font-black leading-tight">{isQoder ? 'Qoder 生图工作台' : 'Codex 生图工作台'}</div>
           <div className="truncate text-xs" style={{ color: subText }}>{headerSubtitle}</div>
         </div>
-        {!isExternalSource && (
+        {(!isExternalSource || isQoder) && (
           <button type="button" className="nodrag inline-flex items-center gap-1 px-2 py-1 text-xs font-bold" style={buttonStyle} onClick={() => void refreshStatus()}>
             <RefreshCw size={13} /> 刷新
           </button>
@@ -1086,7 +1190,8 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
       </header>
 
       <div
-        data-codex-image-conjure-body
+        data-codex-image-conjure-body={!isQoder || undefined}
+        data-qoder-image-conjure-body={isQoder || undefined}
         className="nowheel space-y-3 overflow-y-auto pr-1"
         style={{ maxHeight: 760 }}
         onWheelCapture={(event) => event.stopPropagation()}
@@ -1114,14 +1219,21 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
               <option key={template.id} value={template.id}>{template.category} · {template.shortTitle || template.title}</option>
             ))}
           </select>
-          <select
-            className="nodrag px-2 py-2 text-sm font-bold outline-none"
-            style={inputStyle}
-            value={String(d.codexConjureModel || 'gpt-5.5')}
-            onChange={(event) => update({ codexConjureModel: event.currentTarget.value })}
-          >
-            {CODEX_CONJURE_MODELS.map((model) => <option key={model.value || 'default'} value={model.value}>{model.label}</option>)}
-          </select>
+          {isQoder ? (
+            <label className="space-y-1 text-[11px] font-bold">
+              <span>Qoder Agent 模型</span>
+              <input className="nodrag w-full px-2 py-2 text-sm outline-none" style={inputStyle} value={String(d.codexConjureModel || '')} onChange={(event) => update({ codexConjureModel: event.currentTarget.value })} placeholder="留空使用默认模型" />
+            </label>
+          ) : (
+            <select
+              className="nodrag px-2 py-2 text-sm font-bold outline-none"
+              style={inputStyle}
+              value={String(d.codexConjureModel || 'gpt-5.5')}
+              onChange={(event) => update({ codexConjureModel: event.currentTarget.value })}
+            >
+              {CODEX_CONJURE_MODELS.map((model) => <option key={model.value || 'default'} value={model.value}>{model.label}</option>)}
+            </select>
+          )}
           <select
             className="nodrag px-2 py-2 text-sm font-bold outline-none"
             style={inputStyle}
@@ -1153,7 +1265,7 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
         </section>
 
         {(orderedInputImages.length > 0 || excludedUpstreamCount > 0) && (
-          <section data-codex-image-conjure-input-materials="true">
+          <section data-codex-image-conjure-input-materials="true" data-qoder-image-conjure-input-materials={isQoder || undefined}>
             <MaterialPreviewSection
               texts={[]}
               images={orderedInputImages}
@@ -1231,7 +1343,7 @@ const CodexImageConjureNode = ({ id, data, selected }: NodeProps) => {
 
       <footer className="mt-3 flex items-center gap-2">
         {!busy ? (
-          <button type="button" className="nodrag flex flex-1 items-center justify-center gap-2 px-4 py-3 text-base font-black" style={{ ...buttonStyle, background: `linear-gradient(180deg, ${surfaceStrong}, ${accent})`, color: isDark ? '#ecfeff' : '#ffffff' }} onClick={() => void handleGenerate()}>
+          <button type="button" className="nodrag flex flex-1 items-center justify-center gap-2 px-4 py-3 text-base font-black" style={{ ...buttonStyle, background: `linear-gradient(180deg, ${surfaceStrong}, ${accent})`, color: isDark ? '#ecfeff' : '#ffffff' }} onClick={() => void handleGenerate()} disabled={isQoder && !statusReady}>
             <Play size={18} /> 开始生成
           </button>
         ) : (

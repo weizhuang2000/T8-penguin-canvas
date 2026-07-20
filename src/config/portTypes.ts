@@ -208,6 +208,7 @@ export const NODE_PORTS: Record<string, NodePorts> = {
   groupBox: { inputs: [], outputs: ['any'] },
   // Codex 专用生图工作台：只接文本/图像参考，只输出图像和最终文本。
   'codex-image-conjure': { inputs: ['text', 'image'], outputs: ['image', 'text'] },
+  'qoder-image-conjure': { inputs: ['text', 'image'], outputs: ['image', 'text'] },
 };
 
 /**

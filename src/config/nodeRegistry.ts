@@ -53,6 +53,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
   // ========== Codex Agent ==========
   { type: 'codex-cli-agent', label: 'Codex Agent', category: 'codex', description: '直连 LLM 独立配置的创作者 Agent：多轮对话、图像生成提示词、Skill 规范、产物库和版本树', icon: 'TerminalSquare', color: 'sky' },
   { type: 'codex-image-conjure', label: 'Codex 生图工作台', category: 'codex', description: '基于 Codex CLI imagegen 的专用生图工作台：提示词模板、片段、参考图和公共图库', icon: 'ImagePlus', color: 'sky' },
+  { type: 'qoder-image-conjure', label: 'Qoder 生图工作台', category: 'qoder', description: 'Qoder CLI 编排扩展平台生图：提示词模板、片段、参考图、公共图库和任务队列', icon: 'ImagePlus', color: 'cyan' },
 
   // ========== Inspiration 灵感之源 ==========
   { type: 'artist-style-master', label: '艺术风格大师', category: 'exhibition', description: '移植 qiaomu 艺术家风格库：按画家、中文名、流派和标签检索，输出风格提示词、参考图或原图风格重绘', icon: 'Palette', color: 'cyan' },
@@ -145,6 +146,7 @@ export const NODE_GROUPS: Record<string, { label: string; nodes: NodeMeta[] }> =
   fal: { label: 'FAL工具箱', nodes: NODE_REGISTRY.filter((n) => n.category === 'fal' && !n.hidden) },
   grok: { label: 'GROK OAuth', nodes: NODE_REGISTRY.filter((n) => n.category === 'grok' && !n.hidden) },
   codex: { label: 'CODEX CLI', nodes: NODE_REGISTRY.filter((n) => n.category === 'codex' && !n.hidden) },
+  qoder: { label: 'QODER CLI', nodes: NODE_REGISTRY.filter((n) => n.category === 'qoder' && !n.hidden) },
   inspiration: { label: '灵感之源', nodes: NODE_REGISTRY.filter((n) => n.category === 'inspiration' && !n.hidden) },
   comfyui: { label: 'ComfyUI', nodes: NODE_REGISTRY.filter((n) => n.category === 'comfyui' && !n.hidden) },
   special: { label: '特殊节点', nodes: NODE_REGISTRY.filter((n) => n.category === 'special' && !n.hidden) },

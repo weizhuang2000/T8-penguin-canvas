@@ -26,6 +26,7 @@ const CATEGORY_LABELS: Record<NodeCategory, string> = {
   fal: 'FAL',
   grok: 'GROK',
   codex: 'CODEX CLI',
+  qoder: 'QODER CLI',
   inspiration: '灵感',
   comfyui: 'ComfyUI',
   special: '特殊',

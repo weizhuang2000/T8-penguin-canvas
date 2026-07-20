@@ -104,6 +104,7 @@ const figmaRouter = require('./routes/figma');
 const externalProvidersRouter = require('./routes/externalProviders');
 const grokOAuthRouter = require('./routes/grokOAuth');
 const codexCliRouter = require('./routes/codexCli');
+const qoderCliRouter = require('./routes/qoderCli');
 const aiWatermarkRouter = require('./routes/aiWatermark');
 const generationHistoryRouter = require('./routes/generationHistory');
 const promptLibraryRouter = require('./routes/promptLibrary');
@@ -123,6 +124,7 @@ const { registerLocalExtensions } = require('./extensions/localExtensions');
 const localHooks = require('./extensions/runtimeHooks');
 
 app.use('/api/auth', authRouter);
+app.use('/internal/qoder-cli', qoderCliRouter.internalRouter);
 app.use('/api', (req, res, next) => {
   if (req.path === '/status' || req.path.startsWith('/auth/')) return next();
   return requireAuth(req, res, next);
@@ -141,6 +143,7 @@ app.use('/api/eagle', eagleRouter);
 app.use('/api/figma', figmaRouter);
 app.use('/api/grok-oauth', grokOAuthRouter);
 app.use('/api/codex-cli', codexCliRouter);
+app.use('/api/qoder-cli', qoderCliRouter);
 app.use('/api/ai-watermark', aiWatermarkRouter);
 app.use('/api/generation-history', generationHistoryRouter);
 app.use('/api/prompt-library', promptLibraryRouter);

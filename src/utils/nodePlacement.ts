@@ -61,6 +61,7 @@ export const NODE_DEFAULT_SIZE: Record<string, { w: number; h: number }> = {
   'fal-toolbox': { w: 380, h: 500 },
   'codex-cli-agent': { w: 420, h: 520 },
   'codex-image-conjure': { w: 520, h: 680 },
+  'qoder-image-conjure': { w: 520, h: 680 },
   'artist-style-master': { w: 480, h: 780 },
   'anime-tag-master': { w: 500, h: 660 },
   'model-3d-preview': { w: 520, h: 440 },

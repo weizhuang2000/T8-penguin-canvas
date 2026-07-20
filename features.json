@@ -1005,6 +1005,38 @@
       "npm run build"
     ]
   },
+  "qoderImageConjureNode": {
+    "status": "implemented",
+    "date": "2026-07-20",
+    "nodeType": "qoder-image-conjure",
+    "category": "qoder",
+    "description": "新增 Qoder 生图工作台：由本机 qodercli 处理提示词和参考图，并通过一次性 MCP 工具调用用户选定的扩展平台生图模型。",
+    "ports": {
+      "inputs": ["text", "image"],
+      "outputs": ["image", "text"]
+    },
+    "capabilities": [
+      "保留模板、片段、公共图库、任务队列、并发、停止、资源库入库和标准画布输出。",
+      "扩展平台和生图模型可选择；默认使用第一个已启用且支持生图的平台及其第一个模型。",
+      "自动探测 Windows 用户目录中的 qodercli.exe，并允许在节点设置中手动覆盖路径。",
+      "Qoder CLI 使用 stream-json、附件和一次性本机 MCP token，不能自行切换到未选择的平台或模型。"
+    ],
+    "sourceFiles": [
+      "src/components/nodes/QoderImageConjureNode.tsx",
+      "src/services/qoderCli.ts",
+      "src/services/qoderImageConjure.ts",
+      "src/utils/qoderImageConjure.ts",
+      "backend/src/routes/qoderCli.js",
+      "backend/src/utils/qoderCliRunner.js",
+      "tests/qoderImageConjure.test.ts"
+    ],
+    "verification": [
+      "node --test tests\\qoderImageConjure.test.ts",
+      "node --test tests\\qoderCli.test.ts",
+      "npm run type-check",
+      "npm run build"
+    ]
+  },
   "artistStyleMasterNode": {
     "status": "implemented",
     "date": "2026-06-13",

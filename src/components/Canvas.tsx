@@ -172,6 +172,7 @@ import OutputNode from './nodes/OutputNode';
 import GroupBoxNode from './nodes/GroupBoxNode';
 import CodexCliAgentNode from './nodes/CodexCliAgentNode';
 import CodexImageConjureNode from './nodes/CodexImageConjureNode';
+import QoderImageConjureNode from './nodes/QoderImageConjureNode';
 import ImageToEditableDocumentNode from './nodes/ImageToEditableDocumentNode';
 import GrokOAuthAgentNode from './nodes/GrokOAuthAgentNode';
 import DeletableEdge from './edges/DeletableEdge';
@@ -279,6 +280,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   // Agent (3) - AI Agent 工作台节点
   'codex-cli-agent': CodexCliAgentNode,
   'codex-image-conjure': CodexImageConjureNode,
+  'qoder-image-conjure': QoderImageConjureNode,
   'image-to-editable-document': ImageToEditableDocumentNode,
   'grok-oauth-agent': GrokOAuthAgentNode,
 };
@@ -634,6 +636,19 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     codexConjureSource: 'codex-cli',
     codexConjureMaterialOrder: [],
     codexConjureExcludedMaterialIds: [],
+    providerSource: 'zhenzhen',
+    providerId: '',
+    providerModel: '',
+    providerParams: {},
+  },
+  'qoder-image-conjure': {
+    qoderModel: '',
+    qoderConjureMaterialOrder: [],
+    qoderConjureExcludedMaterialIds: [],
+    qoderConjureTasks: [],
+    qoderConjureGalleryRefs: [],
+    qoderConjureAutoPublish: true,
+    qoderConjureConcurrency: 1,
     providerSource: 'zhenzhen',
     providerId: '',
     providerModel: '',
