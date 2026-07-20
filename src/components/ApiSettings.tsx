@@ -104,8 +104,8 @@ const PATH_FIELDS = [
 const SETTINGS_BACKUP_SCHEMA = 't8-penguin-canvas-settings';
 const SETTINGS_BACKUP_VERSION = 1;
 
-// 节点帮助文档管理的节点列表（与 nodeRegistry.ts 中 exhibition 分类同步）
-const EXHIBITION_HELP_NODES = NODE_REGISTRY.filter((n) => n.category === 'exhibition' && !n.hidden);
+// 节点帮助文档管理列表：展陈节点加其它已接入 NodeHelpButton 的节点。
+const NODE_HELP_NODES = NODE_REGISTRY.filter((n) => (n.category === 'exhibition' || n.type === 'fhl-image-gen') && !n.hidden);
 const NODE_HELP_STORAGE_KEY = 't8-node-helps';
 
 const ADVANCED_PROVIDER_LABELS: Record<AdvancedProviderProtocol, string> = {
@@ -528,13 +528,13 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       .then((map) => {
         if (cancelled) return;
         const merged: NodeHelpMap = {};
-        for (const node of EXHIBITION_HELP_NODES) {
+        for (const node of NODE_HELP_NODES) {
           const custom = map[node.type];
           merged[node.type] = custom && custom.trim() ? custom : (DEFAULT_NODE_HELPS[node.type] || '');
         }
         setNodeHelpMap(merged);
-        if (!activeNodeHelpType && EXHIBITION_HELP_NODES.length > 0) {
-          setActiveNodeHelpType(EXHIBITION_HELP_NODES[0].type);
+        if (!activeNodeHelpType && NODE_HELP_NODES.length > 0) {
+          setActiveNodeHelpType(NODE_HELP_NODES[0].type);
         }
       })
       .catch((e: any) => {
@@ -1137,7 +1137,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       await importNodeHelps(helps, 'merge');
       const map = await getNodeHelps();
       const merged: NodeHelpMap = {};
-      for (const node of EXHIBITION_HELP_NODES) {
+      for (const node of NODE_HELP_NODES) {
         const custom = map[node.type];
         merged[node.type] = custom && custom.trim() ? custom : (DEFAULT_NODE_HELPS[node.type] || '');
       }
@@ -1160,7 +1160,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     try {
       await bulkReplaceNodeHelps({});
       const merged: NodeHelpMap = {};
-      for (const node of EXHIBITION_HELP_NODES) {
+      for (const node of NODE_HELP_NODES) {
         merged[node.type] = DEFAULT_NODE_HELPS[node.type] || '';
       }
       setNodeHelpMap(merged);
@@ -3647,11 +3647,11 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
             >
               <HelpCircle size={14} className="t8-api-settings-icon" />
               <span className="text-xs font-bold shrink-0">节点帮助文档</span>
-              <span className={`hidden sm:inline text-[11px] ${hintCls}`}>编辑展陈节点标题栏 ? 按钮弹出的 Markdown 帮助内容</span>
+              <span className={`hidden sm:inline text-[11px] ${hintCls}`}>编辑节点标题栏 ? 按钮弹出的 Markdown 帮助内容</span>
               <span className="ml-auto flex items-center gap-1.5">
                 {(() => {
                   let customCount = 0;
-                  for (const node of EXHIBITION_HELP_NODES) {
+                  for (const node of NODE_HELP_NODES) {
                     const cur = nodeHelpMap[node.type];
                     if (cur && cur !== (DEFAULT_NODE_HELPS[node.type] || '')) customCount += 1;
                   }
@@ -3660,7 +3660,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                       className="t8-api-settings-badge px-1.5 py-0.5 text-[10px] rounded border"
                       data-tone={customCount > 0 ? 'success' : 'muted'}
                     >
-                      {customCount}/{EXHIBITION_HELP_NODES.length}
+                      {customCount}/{NODE_HELP_NODES.length}
                     </span>
                   );
                 })()}
@@ -3672,7 +3672,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
             </button>
             {!nodeHelpOpen && (
               <div className={`text-[11px] mt-2 ${hintCls}`}>
-                用于编辑画布上展陈节点标题栏 ? 按钮弹出的帮助内容，支持 Markdown 格式，可导出/导入备份。
+                用于编辑画布节点标题栏 ? 按钮弹出的帮助内容，支持 Markdown 格式，可导出/导入备份。
               </div>
             )}
             {nodeHelpOpen && (
@@ -3731,7 +3731,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                 <div className="flex gap-3 flex-col md:flex-row">
                   {/* 左侧节点列表 */}
                   <div className={`md:w-52 shrink-0 ${isPixel ? 'border p-2' : 'rounded-lg border p-2'} max-h-[420px] overflow-y-auto`}>
-                    {EXHIBITION_HELP_NODES.map((node) => {
+                    {NODE_HELP_NODES.map((node) => {
                       const cur = nodeHelpMap[node.type];
                       const isCustom = !!cur && cur !== (DEFAULT_NODE_HELPS[node.type] || '');
                       const isActive = activeNodeHelpType === node.type;
@@ -3759,7 +3759,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                   {/* 右侧编辑/预览区 */}
                   <div className="flex-1 min-w-0 space-y-2">
                     {(() => {
-                      const activeHelpNode = EXHIBITION_HELP_NODES.find((n) => n.type === activeNodeHelpType);
+                      const activeHelpNode = NODE_HELP_NODES.find((n) => n.type === activeNodeHelpType);
                       const activeHelpIsCustom = !!activeNodeHelpType
                         && !!nodeHelpMap[activeNodeHelpType]
                         && nodeHelpMap[activeNodeHelpType] !== (DEFAULT_NODE_HELPS[activeNodeHelpType] || '');

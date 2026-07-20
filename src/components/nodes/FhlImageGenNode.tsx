@@ -12,6 +12,7 @@ import { useThemeStore } from '../../stores/theme';
 import PromptTextarea from '../PromptTextarea';
 import SmartImage from '../SmartImage';
 import { useCanvasRuntime } from './canvasRuntimeContext';
+import NodeHelpButton from './NodeHelpButton';
 import { useUpdateNodeData } from './useUpdateNodeData';
 
 const GENERATE_2K = ['1:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16', '2:1', '1:2', '7:4', '4:7'];
@@ -258,6 +259,7 @@ const FhlImageGenNode = ({ id, data, selected }: NodeProps) => {
       <header className="flex cursor-grab items-center gap-3 pb-3 active:cursor-grabbing">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500 text-slate-950"><Images size={21} /></div>
         <div className="min-w-0 flex-1"><div className="font-black">FHL 生图</div><div className="text-[11px]" style={{ color: hint }}>Images API · gpt-image-2 · worker {config?.enabledWorkerCount || 0}/{config?.workerCount || 0}</div></div>
+        <NodeHelpButton nodeType="fhl-image-gen" title="查看 FHL 生图节点帮助" size={16} />
         {busy ? <Loader2 size={18} className="animate-spin text-cyan-400" /> : null}
       </header>
 

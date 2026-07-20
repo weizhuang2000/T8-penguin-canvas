@@ -1,6 +1,6 @@
 // 节点帮助文档路由
 // 帮助内容按 nodeType 索引，存放在 data/node_helps.json，独立于 settings.json。
-// 范围：仅展陈工具分类的 19 个节点 type（与前端 nodeRegistry.ts 同步）。
+// 范围：已接入 NodeHelpButton 的节点 type（与前端 nodeRegistry.ts / nodeHelpDefaults.ts 同步）。
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
@@ -9,8 +9,9 @@ const { requireAdmin } = require('../auth/middleware');
 
 const router = express.Router();
 
-// 展陈节点 type 白名单（与 src/config/nodeRegistry.ts 中 category === 'exhibition' 一致）
-const EXHIBITION_NODE_TYPES = new Set([
+// 支持帮助文档后端自定义覆盖的节点 type 白名单。
+const HELP_NODE_TYPES = new Set([
+  'fhl-image-gen',
   'import-cam-project',
   'elevation-prompt',
   'exhibition-img2img',
@@ -57,7 +58,7 @@ function loadHelps() {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
   const result = {};
   for (const key of Object.keys(raw)) {
-    if (!EXHIBITION_NODE_TYPES.has(key)) continue;
+    if (!HELP_NODE_TYPES.has(key)) continue;
     const value = raw[key];
     if (typeof value === 'string' && value.length <= MAX_CONTENT_LENGTH) {
       result[key] = value;
@@ -72,7 +73,7 @@ function saveHelps(helps) {
 
 function normalizeNodeType(value) {
   const raw = String(value || '').trim();
-  return EXHIBITION_NODE_TYPES.has(raw) ? raw : '';
+  return HELP_NODE_TYPES.has(raw) ? raw : '';
 }
 
 function normalizeContent(value) {
@@ -185,4 +186,5 @@ router.post('/import', requireAdmin, (req, res) => {
 });
 
 module.exports = router;
-module.exports.EXHIBITION_NODE_TYPES = EXHIBITION_NODE_TYPES;
+module.exports.HELP_NODE_TYPES = HELP_NODE_TYPES;
+module.exports.EXHIBITION_NODE_TYPES = HELP_NODE_TYPES;

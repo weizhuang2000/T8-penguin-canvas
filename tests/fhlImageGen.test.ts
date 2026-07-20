@@ -180,6 +180,8 @@ test('FHL canvas node and routes expose all planned modes and ports', () => {
   const canvas = read('../src/components/Canvas.tsx');
   const node = read('../src/components/nodes/FhlImageGenNode.tsx');
   const route = read('../backend/src/routes/fhlImage.js');
+  const helpRoute = read('../backend/src/routes/nodeHelp.js');
+  const helpDefaults = read('../src/config/nodeHelpDefaults.ts');
   const settings = read('../src/components/ApiSettings.tsx');
 
   assert.match(types, /'fhl-image-gen'/);
@@ -193,6 +195,10 @@ test('FHL canvas node and routes expose all planned modes and ports', () => {
   assert.match(node, /data-fhl-job-status/);
   assert.match(node, /nail-tryon/);
   assert.match(node, /fhlOutputFormat/);
+  assert.match(node, /<NodeHelpButton[\s\S]*nodeType="fhl-image-gen"/);
+  assert.match(helpRoute, /HELP_NODE_TYPES = new Set\(\[[\s\S]*'fhl-image-gen'/);
+  assert.match(helpDefaults, /'fhl-image-gen': `# FHL 生图[\s\S]*## 顶部四种模式[\s\S]*## 保存格式[\s\S]*## 状态与任务队列[\s\S]*## 常见问题/);
+  assert.match(settings, /NODE_HELP_NODES[\s\S]*n\.type === 'fhl-image-gen'/);
   assert.match(route, /router\.post\('\/jobs'/);
   assert.match(route, /router\.post\('\/jobs\/:id\/cancel'/);
   assert.match(route, /router\.post\('\/jobs\/:id\/resume'/);
