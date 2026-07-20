@@ -181,6 +181,31 @@ async function fetchWithTimeout(url, init, timeoutMs = REQUEST_TIMEOUT_MS, fetch
   }
 }
 
+function normalizeT8LocalReference(value) {
+  const text = String(value || '').trim();
+  if (/^\/(?:files|api\/resources|api\/files|input|output)\//.test(text)) return text;
+  if (!/^https?:\/\//i.test(text)) return '';
+  try {
+    const parsed = new URL(text);
+    const hostname = parsed.hostname.toLowerCase();
+    if (!['127.0.0.1', 'localhost', '[::1]', '::1'].includes(hostname)) return '';
+    const localRef = `${parsed.pathname}${parsed.search}`;
+    return /^\/(?:files|api\/resources|api\/files|input|output)\//.test(localRef) ? localRef : '';
+  } catch {
+    return '';
+  }
+}
+
+function readLocalReference(resolved) {
+  const stat = fs.statSync(resolved.path);
+  if (!stat.isFile() || stat.size > 20 * 1024 * 1024) throw new Error('参考图不存在或超过 20MB。');
+  return {
+    buffer: fs.readFileSync(resolved.path),
+    mime: resolved.mime || mimeFromPath(resolved.path),
+    name: path.basename(resolved.path),
+  };
+}
+
 async function loadReference(value, options = {}) {
   const text = String(value || '').trim();
   if (!text) throw new Error('参考图为空。');
@@ -189,6 +214,11 @@ async function loadReference(value, options = {}) {
     const buffer = Buffer.from(dataMatch[2], 'base64');
     if (!buffer.length || buffer.length > 20 * 1024 * 1024) throw new Error('参考图为空或超过 20MB。');
     return { buffer, mime: dataMatch[1], name: `reference.${dataMatch[1].split('/')[1] || 'png'}` };
+  }
+  const localRef = normalizeT8LocalReference(text);
+  if (localRef) {
+    const resolved = await resolveMediaRef(localRef, { target: 'local-path', baseUrl: options.baseUrl });
+    return readLocalReference(resolved);
   }
   if (/^https?:\/\//i.test(text)) {
     const url = await validatePublicHttpsUrl(text);
@@ -202,9 +232,7 @@ async function loadReference(value, options = {}) {
   }
   if (path.isAbsolute(text) || /^file:\/\//i.test(text)) throw new Error('不允许通过 FHL 节点读取任意本地绝对路径，请先上传到画布。');
   const resolved = await resolveMediaRef(text, { target: 'local-path', baseUrl: options.baseUrl });
-  const stat = fs.statSync(resolved.path);
-  if (!stat.isFile() || stat.size > 20 * 1024 * 1024) throw new Error('参考图不存在或超过 20MB。');
-  return { buffer: fs.readFileSync(resolved.path), mime: resolved.mime || mimeFromPath(resolved.path), name: path.basename(resolved.path) };
+  return readLocalReference(resolved);
 }
 
 function extractBase64(json) {
@@ -432,6 +460,6 @@ async function runWorkerQueue(workers, tasks, options = {}) {
 module.exports = {
   API_ROOT, GENERATIONS_URL, EDITS_URL, MODEL, MAX_WORKERS, MAX_RETRIES, REQUEST_TIMEOUT_MS,
   RATIO_SUPPORT, SIZE_MATRIX, normalizeWorkers, maskWorkers, previewKey, resolveSize,
-  aspectPromptSuffix, buildGenerationBody, buildEditForm, loadReference, normalizeOutputFormat, saveRawPng,
+  aspectPromptSuffix, buildGenerationBody, buildEditForm, loadReference, normalizeT8LocalReference, normalizeOutputFormat, saveRawPng,
   requestImage, runWorkerQueue, isRetryableError, isAuthError, errorClass,
 };

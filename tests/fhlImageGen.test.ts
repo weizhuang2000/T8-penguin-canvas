@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
@@ -40,6 +40,33 @@ test('FHL edit multipart preserves mixed image then image[] ordering', () => {
   assert.deepEqual(Array.from(form.keys()).slice(0, 3), ['image', 'image[]', 'image[]']);
   assert.equal(form.get('model'), 'gpt-image-2');
   assert.equal(form.get('response_format'), 'b64_json');
+});
+
+test('FHL resolves trusted canvas media URLs before rejecting absolute filesystem paths', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 't8-fhl-local-ref-'));
+  const config = require('../backend/src/config.js');
+  const previousInputDir = config.INPUT_DIR;
+  const source = Buffer.from(ONE_PIXEL_PNG, 'base64');
+  try {
+    config.INPUT_DIR = dir;
+    writeFileSync(join(dir, 'reference.png'), source);
+
+    assert.equal(fhl.normalizeT8LocalReference('/files/input/reference.png'), '/files/input/reference.png');
+    assert.equal(
+      fhl.normalizeT8LocalReference('http://127.0.0.1:11422/files/input/reference.png'),
+      '/files/input/reference.png',
+    );
+    assert.equal(fhl.normalizeT8LocalReference('https://example.com/reference.png'), '');
+
+    const relative = await fhl.loadReference('/files/input/reference.png');
+    const loopback = await fhl.loadReference('http://localhost:18766/files/input/reference.png');
+    assert.deepEqual(relative.buffer, source);
+    assert.deepEqual(loopback.buffer, source);
+    assert.equal(relative.mime, 'image/png');
+  } finally {
+    config.INPUT_DIR = previousInputDir;
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('FHL request writes the raw upstream PNG and never needs Responses API', async () => {
