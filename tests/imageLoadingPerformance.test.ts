@@ -26,8 +26,27 @@ test('local canvas image previews use cached backend thumbnails', () => {
   assert.match(filesRoute, /sharp\(sourcePath/);
   assert.match(filesRoute, /thumbnailInflight/);
   assert.match(filesRoute, /MAX_THUMBNAIL_JOBS/);
-  assert.match(filesRoute, /Cache-Control', 'public, max-age=31536000, immutable'/);
+  assert.match(filesRoute, /T8PC_THUMBNAIL_CONCURRENCY \|\| '4'/);
+  assert.match(filesRoute, /effort:\s*2/);
+  assert.match(filesRoute, /Cache-Control', 'private, max-age=31536000, immutable'/);
   assert.match(filesRoute, /THUMBNAILS_DIR/);
+});
+
+test('historical canvases restore their viewport before online refresh and reuse immutable media', () => {
+  const canvas = read('../src/components/Canvas.tsx');
+  const server = read('../backend/src/server.js');
+  const outputManager = read('../backend/src/outputStorage/manager.js');
+  const storageClient = read('../backend/src/outputStorage/client.js');
+  const webdav = read('../backend/src/outputStorage/webdav.js');
+
+  assert.match(canvas, /normalizeRememberedViewport\(cachedData\.viewport\)/);
+  assert.match(canvas, /setViewport\(cachedViewport, \{ duration: 0 \}\)/);
+  assert.match(server, /IMMUTABLE_PRIVATE_MEDIA_CACHE = 'private, max-age=31536000, immutable'/);
+  assert.match(outputManager, /IMMUTABLE_PRIVATE_OUTPUT_CACHE = 'private, max-age=31536000, immutable'/);
+  assert.match(storageClient, /response\.status === 200 \|\| response\.status === 206/);
+  assert.match(storageClient, /'private, max-age=31536000, immutable'/);
+  assert.match(webdav, /response\.status === 200 \|\| response\.status === 206/);
+  assert.match(webdav, /'private, max-age=31536000, immutable'/);
 });
 
 test('local file uploads allow generated PNGs up to 20MB and report oversize as JSON', () => {

@@ -138,6 +138,12 @@ async function proxyFile(cfg, remotePath, req, res) {
     const value = response.headers.get(name);
     if (value) res.setHeader(name, value);
   }
+  res.setHeader(
+    'Cache-Control',
+    response.status === 200 || response.status === 206
+      ? 'private, max-age=31536000, immutable'
+      : 'no-store',
+  );
   res.setHeader('X-Content-Type-Options', 'nosniff');
   if (!response.body || req.method === 'HEAD') return res.end();
   return Readable.fromWeb(response.body).pipe(res);

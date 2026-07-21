@@ -2733,6 +2733,15 @@ function CanvasInner({
       setEdges(cached.edges);
       setLoadedCanvasId(requestedCanvasId);
       histReset({ nodes: cached.nodes, edges: cached.edges });
+      const cachedViewport =
+        pendingSendFocusRef.current?.canvasId === requestedCanvasId
+          ? null
+          : readUserCanvasViewport(currentUserId, requestedCanvasId) || normalizeRememberedViewport(cachedData.viewport);
+      if (cachedViewport) {
+        // Restore the target viewport before the online refresh finishes so nearby SmartImage
+        // observers start loading the target canvas instead of waiting on the previous canvas view.
+        void setViewport(cachedViewport, { duration: 0 });
+      }
       finishHydration(cached.nodes.length);
     } else {
       nextNodeSerialIdRef.current = 1;

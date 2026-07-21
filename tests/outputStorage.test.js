@@ -188,6 +188,7 @@ test('storage node and manager upload, proxy metadata, reconcile and delete remo
     headers: { Range: 'bytes=0-2' },
   });
   assert.equal(proxied.status, 206);
+  assert.equal(proxied.headers.get('cache-control'), 'private, max-age=31536000, immutable');
   assert.equal(await proxied.text(), 'png');
 
   const listed = await fetch(`${baseUrl}/v1/files?limit=10`, { headers: auth }).then((res) => res.json());
@@ -257,6 +258,7 @@ test('Baidu WebDAV works as active output storage and reconciles the whole T8 di
   t.after(() => new Promise((resolve) => proxyServer.close(resolve)));
   const proxied = await fetch(`http://127.0.0.1:${proxyServer.address().port}/files/output/${key}`, { headers: { Range: 'bytes=0-3' } });
   assert.equal(proxied.status, 206);
+  assert.equal(proxied.headers.get('cache-control'), 'private, max-age=31536000, immutable');
   assert.equal(await proxied.text(), 'baid');
 
   const materialized = await manager.materializeOutputUrl('/files/output/image/baidu-generated.png');

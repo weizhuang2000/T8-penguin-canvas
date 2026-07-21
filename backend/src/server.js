@@ -9,6 +9,16 @@ const { serveOutputFile, startOutputStorageManager } = require('./outputStorage/
 
 const app = express();
 const CAM_OUTPUT_IMAGE_RE = /\.(png|jpe?g|webp|gif|bmp|avif|tiff?)$/i;
+const IMMUTABLE_PRIVATE_MEDIA_CACHE = 'private, max-age=31536000, immutable';
+const immutableMediaStaticOptions = {
+  maxAge: '1y',
+  immutable: true,
+  setHeaders(res) {
+    // Uploaded/generated filenames are unique. Let an authenticated browser reuse them without
+    // opening a new HTTP/2 stream every time a historical canvas is revisited.
+    res.setHeader('Cache-Control', IMMUTABLE_PRIVATE_MEDIA_CACHE);
+  },
+};
 
 // ========== 中间件 ==========
 const LOCAL_ORIGIN_RE = /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?$/;
@@ -72,11 +82,11 @@ app.get('/files/cam-output/:project/:filename', requireAuth, (req, res) => {
 
 app.get('/files/output/*', requireAuth, serveOutputFile);
 app.head('/files/output/*', requireAuth, serveOutputFile);
-app.use('/files/input', requireAuth, express.static(config.INPUT_DIR));
-app.use('/files/thumbnails', requireAuth, express.static(config.THUMBNAILS_DIR));
+app.use('/files/input', requireAuth, express.static(config.INPUT_DIR, immutableMediaStaticOptions));
+app.use('/files/thumbnails', requireAuth, express.static(config.THUMBNAILS_DIR, immutableMediaStaticOptions));
 app.get('/output/*', requireAuth, serveOutputFile);
 app.head('/output/*', requireAuth, serveOutputFile);
-app.use('/input', requireAuth, express.static(config.INPUT_DIR));
+app.use('/input', requireAuth, express.static(config.INPUT_DIR, immutableMediaStaticOptions));
 
 // ========== 健康检查 ==========
 app.get('/api/status', (_req, res) => {

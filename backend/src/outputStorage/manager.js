@@ -29,6 +29,7 @@ const {
 
 const INDEX_FILE = path.join(config.DATA_DIR, 'output_storage_index.json');
 const SCAN_INTERVAL_MS = Math.max(1000, Number(process.env.T8_OUTPUT_STORAGE_SCAN_MS) || 2500);
+const IMMUTABLE_PRIVATE_OUTPUT_CACHE = 'private, max-age=31536000, immutable';
 const stableFiles = new Map();
 let indexCache = null;
 let indexMtime = 0;
@@ -308,7 +309,10 @@ async function serveOutputFile(req, res) {
   const key = safeKey(req.params?.[0] || req.path || '');
   if (!key) return res.status(400).json({ success: false, error: 'Invalid output path' });
   const localPath = pathForLocalKey(key);
-  if (localPath && fs.existsSync(localPath)) return res.sendFile(localPath);
+  if (localPath && fs.existsSync(localPath)) {
+    res.setHeader('Cache-Control', IMMUTABLE_PRIVATE_OUTPUT_CACHE);
+    return res.sendFile(localPath);
+  }
   const entry = storageEntryForKey(key);
   if (!entry) return res.status(404).json({ success: false, error: 'Output file not found' });
   if (entry.storageSpaceId === 'primary') return res.status(404).json({ success: false, error: 'Output file not found' });

@@ -16,7 +16,7 @@ const { tryDecodeDuckPayload } = require('../utils/duckPayload');
 const router = express.Router();
 const THUMBNAIL_IMAGE_RE = /\.(png|jpe?g|webp|gif|bmp|avif|tiff?)(?:$|\?)/i;
 const CAM_OUTPUT_IMAGE_RE = /\.(png|jpe?g|webp|gif|bmp|avif|tiff?)$/i;
-const MAX_THUMBNAIL_JOBS = Math.max(1, Math.min(4, Number.parseInt(process.env.T8PC_THUMBNAIL_CONCURRENCY || '2', 10) || 2));
+const MAX_THUMBNAIL_JOBS = Math.max(1, Math.min(4, Number.parseInt(process.env.T8PC_THUMBNAIL_CONCURRENCY || '4', 10) || 4));
 const thumbnailInflight = new Map();
 const thumbnailQueue = [];
 let activeThumbnailJobs = 0;
@@ -367,7 +367,9 @@ async function ensureThumbnailFile(sourcePath, target, size) {
         fit: 'inside',
         withoutEnlargement: true,
       })
-      .webp({ quality: config.THUMBNAIL_QUALITY || 78, effort: 4 })
+      // Canvas previews favor low first-paint latency. The generated file is cached permanently,
+      // while effort 2 is substantially faster than the former effort 4 on large historical PNGs.
+      .webp({ quality: config.THUMBNAIL_QUALITY || 78, effort: 2 })
       .toFile(target);
     return target;
   }).finally(() => {
@@ -402,7 +404,7 @@ router.get('/thumbnail', async (req, res) => {
       fs.mkdirSync(config.THUMBNAILS_DIR, { recursive: true });
     }
     await ensureThumbnailFile(sourcePath, target, size);
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
     res.type('image/webp');
     return res.sendFile(target);
   } catch (e) {
