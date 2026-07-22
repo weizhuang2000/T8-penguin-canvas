@@ -8,6 +8,7 @@ import {
   derivedStoryboardCellRatio,
   legacyFramesToStoryboard,
   parseStoryboardScript,
+  resolveStoryboardVideoStyle,
   storyboardTextSegments,
 } from '../src/utils/storyboardScript.ts';
 import { getNodePortTypesForHandle, resolveConnectionPickerHandleId } from '../src/utils/connectionHandles.ts';
@@ -68,6 +69,20 @@ test('storyboard prompts specify row-major layout and prohibit visible text', ()
   assert.ok(prompt.indexOf('cinematic shot 1') < prompt.indexOf('cinematic shot 4'));
 });
 
+test('storyboard video style is applied to both script and image prompts', () => {
+  const style = resolveStoryboardVideoStyle('anime-2d');
+  assert.equal(style.label, '2D 日系动画');
+  assert.equal(resolveStoryboardVideoStyle('unknown').id, 'auto');
+
+  const messages = buildStoryboardScriptMessages('测试大纲', 2, 2, { videoStyle: style });
+  assert.match(String(messages[0].content), /2D 日系动画/);
+  assert.match(String(messages[0].content), /所有 imagePrompt 必须遵循该风格/);
+
+  const prompt = buildStoryboardImagePrompt(parseStoryboardScript(validScriptJson(4), 4), 2, 2, { videoStyle: style });
+  assert.match(prompt, /视频动画风格：2D 日系动画/);
+  assert.match(prompt, /完全一致的媒介、渲染方式和美术语言/);
+});
+
 test('storyboard derives cell aspect ratio from the whole sheet', () => {
   assert.equal(derivedStoryboardCellRatio('3:2', 2, 3), '1:1');
   assert.equal(derivedStoryboardCellRatio('16:9', 2, 3), '32:27');
@@ -111,6 +126,8 @@ test('storyboard node is visible, executable, permissioned and uses shared gener
   assert.match(node, /Handle id="references"/);
   assert.match(node, /images:\s*referenceImages/);
   assert.match(node, /uniformTiles:\s*true/);
+  assert.match(node, /detectGridLines:\s*true/);
+  assert.match(node, /STORYBOARD_VIDEO_STYLES/);
   assert.match(node, /mode:\s*referenceImages\.length > 0 \? 'edit' : 'gen'/);
   assert.match(node, /storyboardSheetUrl/);
   assert.match(node, /storyboardExportFormat/);
@@ -120,6 +137,7 @@ test('storyboard node is visible, executable, permissioned and uses shared gener
   assert.match(canvas, /storyboardExportFormat:\s*'docx'/);
   assert.match(canvas, /storyboardExportLayout:\s*'production-table'/);
   assert.match(canvas, /storyboardPptShotsPerSlide:\s*2/);
+  assert.match(canvas, /storyboardVideoStyle:\s*'auto'/);
   assert.match(canvas, /referenceImages:\s*\[\]/);
   assert.match(imageNode, /runConfiguredImageGeneration/);
   assert.match(permissions, /DEFAULT_VISIBLE_NODE_TYPES[\s\S]*'storyboard-grid'/);

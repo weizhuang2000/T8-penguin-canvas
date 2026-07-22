@@ -157,6 +157,86 @@ function chooseEncoder(meta) {
   };
 }
 
+function median(values) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function detectAxisBoundaries(raw, width, height, channels, sections, axis) {
+  const axisLength = axis === 'y' ? height : width;
+  const crossLength = axis === 'y' ? width : height;
+  if (sections <= 1 || axisLength < sections * 4) return { boundaries: [0, axisLength], detected: 0 };
+
+  const pixelOffset = (x, y) => (y * width + x) * channels;
+  const gradientAt = (position) => {
+    let total = 0;
+    let samples = 0;
+    const sampleStep = Math.max(1, Math.floor(crossLength / 480));
+    for (let cross = 0; cross < crossLength; cross += sampleStep) {
+      const before = axis === 'y' ? pixelOffset(cross, position - 1) : pixelOffset(position - 1, cross);
+      const after = axis === 'y' ? pixelOffset(cross, position) : pixelOffset(position, cross);
+      total += Math.abs(raw[before] - raw[after]);
+      total += Math.abs(raw[before + 1] - raw[after + 1]);
+      total += Math.abs(raw[before + 2] - raw[after + 2]);
+      samples += 3;
+    }
+    return samples ? total / samples : 0;
+  };
+
+  const nominalSize = axisLength / sections;
+  const radius = Math.max(2, Math.floor(nominalSize * 0.3));
+  const boundaries = [0];
+  let detected = 0;
+  for (let index = 1; index < sections; index++) {
+    const expected = Math.round((axisLength * index) / sections);
+    const start = Math.max(boundaries[boundaries.length - 1] + 2, expected - radius);
+    const end = Math.min(axisLength - 2, expected + radius);
+    const candidates = [];
+    for (let position = start; position <= end; position++) {
+      candidates.push({ position, score: gradientAt(position) });
+    }
+    const typical = median(candidates.map((item) => item.score));
+    const best = candidates.reduce((winner, item) => (
+      !winner
+      || item.score > winner.score
+      || (item.score === winner.score && Math.abs(item.position - expected) < Math.abs(winner.position - expected))
+        ? item
+        : winner
+    ), null);
+    const confident = best && best.score >= Math.max(8, typical * 1.5);
+    boundaries.push(confident ? best.position : expected);
+    if (confident) detected += 1;
+  }
+  boundaries.push(axisLength);
+  return { boundaries, detected };
+}
+
+async function detectGridBoundaries(buf, width, height, rows, cols) {
+  const scale = Math.min(1, 1200 / Math.max(width, height));
+  const analysisWidth = Math.max(cols * 4, Math.round(width * scale));
+  const analysisHeight = Math.max(rows * 4, Math.round(height * scale));
+  const { data, info } = await sharp(buf)
+    .resize(analysisWidth, analysisHeight, { fit: 'fill' })
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const horizontal = detectAxisBoundaries(data, info.width, info.height, info.channels, rows, 'y');
+  const vertical = detectAxisBoundaries(data, info.width, info.height, info.channels, cols, 'x');
+  const toSource = (values, analysisLength, sourceLength) => values.map((value, index) => {
+    if (index === 0) return 0;
+    if (index === values.length - 1) return sourceLength;
+    return Math.max(1, Math.min(sourceLength - 1, Math.round((value / analysisLength) * sourceLength)));
+  });
+  return {
+    rowBoundaries: toSource(horizontal.boundaries, info.height, height),
+    colBoundaries: toSource(vertical.boundaries, info.width, width),
+    detectedRows: horizontal.detected,
+    detectedCols: vertical.detected,
+  };
+}
+
 function clampNumber(v, min, max, fallback) {
   const n = Number(v);
   if (!Number.isFinite(n)) return fallback;
@@ -1206,8 +1286,9 @@ router.post('/convert', async (req, res) => {
 //   自定义矩形模式: { imageUrl, rectsPx: [{x,y,w,h,row?,col?}], orderMode?, exportIndexes? } 优先
 router.post('/grid-crop', async (req, res) => {
   try {
-    const { imageUrl, rows, cols, gap, rectsPx, orderMode, exportIndexes, uniformTiles } = req.body || {};
+    const { imageUrl, rows, cols, gap, rectsPx, orderMode, exportIndexes, uniformTiles, detectGridLines } = req.body || {};
     const shouldUniformTiles = uniformTiles === true || uniformTiles === 1 || uniformTiles === 'true';
+    const shouldDetectGridLines = detectGridLines === true || detectGridLines === 1 || detectGridLines === 'true';
     if (!imageUrl) return res.status(400).json({ success: false, error: 'imageUrl 必填' });
     const buf = await fetchImageBuffer(imageUrl);
     const meta = await sharp(buf).metadata();
@@ -1219,6 +1300,7 @@ router.post('/grid-crop', async (req, res) => {
     let layoutRows = 1;
     let layoutCols = 1;
     let layoutGap = 0;
+    let detectedGrid = null;
 
     // ---- 分支 A: 使用外部计算好的矩形 (自定义切线场景) ----
     if (Array.isArray(rectsPx) && rectsPx.length > 0) {
@@ -1241,16 +1323,21 @@ router.post('/grid-crop', async (req, res) => {
       const c = Math.max(1, Math.min(20, parseInt(cols) || 3));
       const G = Math.max(0, Math.min(240, parseInt(gap) || 0));
       const halfGap = G / 2;
+      detectedGrid = shouldDetectGridLines
+        ? await detectGridBoundaries(buf, W, H, r, c)
+        : null;
+      const rowBoundaries = detectedGrid?.rowBoundaries || Array.from({ length: r + 1 }, (_, index) => Math.round((index * H) / r));
+      const colBoundaries = detectedGrid?.colBoundaries || Array.from({ length: c + 1 }, (_, index) => Math.round((index * W) / c));
       for (let row = 0; row < r; row++) {
-        const topLine = (row * H) / r;
-        const bottomLine = ((row + 1) * H) / r;
-        const y1 = Math.round(shouldUniformTiles ? topLine + halfGap : (row === 0 ? 0 : topLine + halfGap));
-        const y2 = Math.round(shouldUniformTiles ? bottomLine - halfGap : (row === r - 1 ? H : bottomLine - halfGap));
+        const topLine = rowBoundaries[row];
+        const bottomLine = rowBoundaries[row + 1];
+        const y1 = Math.round(row === 0 ? topLine : topLine + halfGap);
+        const y2 = Math.round(row === r - 1 ? bottomLine : bottomLine - halfGap);
         for (let col = 0; col < c; col++) {
-          const leftLine = (col * W) / c;
-          const rightLine = ((col + 1) * W) / c;
-          const x1 = Math.round(shouldUniformTiles ? leftLine + halfGap : (col === 0 ? 0 : leftLine + halfGap));
-          const x2 = Math.round(shouldUniformTiles ? rightLine - halfGap : (col === c - 1 ? W : rightLine - halfGap));
+          const leftLine = colBoundaries[col];
+          const rightLine = colBoundaries[col + 1];
+          const x1 = Math.round(col === 0 ? leftLine : leftLine + halfGap);
+          const x2 = Math.round(col === c - 1 ? rightLine : rightLine - halfGap);
           if (x2 > x1 && y2 > y1) {
             outRects.push({ row, col, x: x1, y: y1, w: x2 - x1, h: y2 - y1 });
           }
@@ -1283,27 +1370,20 @@ router.post('/grid-crop', async (req, res) => {
     let tileWidth;
     let tileHeight;
     if (shouldUniformTiles && !(Array.isArray(rectsPx) && rectsPx.length > 0)) {
-      tileWidth = Math.min(...selectedRects.map((rect) => rect.w));
-      tileHeight = Math.min(...selectedRects.map((rect) => rect.h));
-      extractionRects = selectedRects.map((rect) => ({
-        ...rect,
-        x: rect.x + Math.floor((rect.w - tileWidth) / 2),
-        y: rect.y + Math.floor((rect.h - tileHeight) / 2),
-        w: tileWidth,
-        h: tileHeight,
-      }));
+      tileWidth = Math.max(1, Math.floor((W - layoutGap * Math.max(0, layoutCols - 1)) / layoutCols));
+      tileHeight = Math.max(1, Math.floor((H - layoutGap * Math.max(0, layoutRows - 1)) / layoutRows));
     }
 
     const enc = chooseEncoder(meta);
     // 并发切割 + 并发保存, 显著提速 (N=9 时以往 ~9x 串行)
     const tiles = await Promise.all(
-      extractionRects.map((rect) =>
-        enc
-          .encode(
-            sharp(buf).extract({ left: rect.x, top: rect.y, width: rect.w, height: rect.h }),
-          )
-          .toBuffer(),
-      ),
+      extractionRects.map((rect) => {
+        let pipeline = sharp(buf).extract({ left: rect.x, top: rect.y, width: rect.w, height: rect.h });
+        if (tileWidth && tileHeight) pipeline = pipeline.resize(tileWidth, tileHeight, { fit: 'fill' });
+        return enc
+          .encode(pipeline)
+          .toBuffer();
+      }),
     );
     const urls = await Promise.all(tiles.map((t) => saveBufferAsync(t, enc.ext)));
     res.json({
@@ -1322,6 +1402,13 @@ router.post('/grid-crop', async (req, res) => {
           gap: layoutGap,
           orderMode: normalizedOrderMode,
           uniformTiles: shouldUniformTiles,
+          detectGridLines: shouldDetectGridLines,
+          ...(detectedGrid ? {
+            rowBoundaries: detectedGrid.rowBoundaries,
+            colBoundaries: detectedGrid.colBoundaries,
+            detectedRows: detectedGrid.detectedRows,
+            detectedCols: detectedGrid.detectedCols,
+          } : {}),
           ...(tileWidth ? { tileWidth } : {}),
           ...(tileHeight ? { tileHeight } : {}),
         },

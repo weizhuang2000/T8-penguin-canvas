@@ -18,6 +18,33 @@ export interface StoryboardScript {
   shots: StoryboardShot[];
 }
 
+export interface StoryboardVideoStyle {
+  id: string;
+  label: string;
+  prompt: string;
+}
+
+export const STORYBOARD_VIDEO_STYLES: StoryboardVideoStyle[] = [
+  { id: 'auto', label: '自动匹配', prompt: '' },
+  { id: 'cinematic-realism', label: '电影写实', prompt: '电影级写实影像，真实材质与自然表演，电影灯光和克制调色' },
+  { id: 'commercial-tvc', label: '商业广告 / TVC', prompt: '高端商业广告TVC，精致布光，清晰产品质感，流畅有冲击力的镜头语言' },
+  { id: 'documentary', label: '纪录片', prompt: '纪实纪录片风格，自然光，真实环境与抓拍感，克制可信的镜头表达' },
+  { id: 'anime-2d', label: '2D 日系动画', prompt: '高质量2D日系动画，手绘赛璐璐质感，清晰线稿，富有表现力的角色动作' },
+  { id: 'cg-3d', label: '3D CG 动画', prompt: '高质量3D CG动画，精细角色与环境建模，电影级渲染、灯光和体积效果' },
+  { id: 'western-cartoon', label: '美式卡通', prompt: '现代美式卡通动画，夸张而自然的形体与表演，鲜明色彩和清晰轮廓' },
+  { id: 'ink-animation', label: '国风水墨动画', prompt: '中国水墨动画，写意笔触、宣纸肌理、留白与东方色彩，流动墨韵' },
+  { id: 'clay-stop-motion', label: '黏土定格动画', prompt: '黏土定格动画，手工模型与可见材质纹理，微缩布景，逐帧动画质感' },
+  { id: 'motion-comic', label: '动态漫画', prompt: '动态漫画风格，强轮廓与网点质感，戏剧化构图，适合视差和分层运动' },
+  { id: 'pixel-art', label: '像素动画', prompt: '精致像素艺术动画，统一像素颗粒与有限色板，清晰剪影和游戏动画节奏' },
+  { id: 'cyberpunk', label: '赛博朋克', prompt: '赛博朋克影像，霓虹夜景、高科技低生活、潮湿反射与高对比氛围光' },
+  { id: 'retro-film', label: '复古胶片', prompt: '复古电影胶片风格，柔和反差、自然颗粒、轻微色偏与年代感镜头' },
+  { id: 'music-video', label: '音乐 MV', prompt: '音乐MV风格，节奏化视觉设计，大胆灯光与色彩，富有情绪的镜头表达' },
+];
+
+export function resolveStoryboardVideoStyle(value: unknown): StoryboardVideoStyle {
+  return STORYBOARD_VIDEO_STYLES.find((item) => item.id === String(value || 'auto')) || STORYBOARD_VIDEO_STYLES[0];
+}
+
 const REQUIRED_SHOT_KEYS: Array<keyof StoryboardShot> = [
   'index',
   'title',
@@ -96,8 +123,14 @@ export function parseStoryboardScript(input: string, expectedCount: number): Sto
   };
 }
 
-export function buildStoryboardScriptMessages(outline: string, rows: number, cols: number) {
+export function buildStoryboardScriptMessages(
+  outline: string,
+  rows: number,
+  cols: number,
+  options: { videoStyle?: StoryboardVideoStyle } = {},
+) {
   const count = rows * cols;
+  const style = options.videoStyle?.prompt ? `${options.videoStyle.label}：${options.videoStyle.prompt}` : '';
   return [
     {
       role: 'system' as const,
@@ -111,18 +144,26 @@ export function buildStoryboardScriptMessages(outline: string, rows: number, col
         'dialogue 或 voiceOver 没有内容时使用空字符串；其它字段不得为空。',
         'imagePrompt 必须是可直接用于图像模型的精炼画面描述，不包含镜头编号、字幕、对白文字或界面文字。',
         'visualContinuity 要总结角色外观、服装、场景、时代、色彩、光线和美术风格，保证所有镜头视觉一致。',
-      ].join('\n'),
+        style ? `指定的视频动画风格为“${style}”。visualContinuity 和所有 imagePrompt 必须遵循该风格。` : '',
+      ].filter(Boolean).join('\n'),
     },
     { role: 'user' as const, content: outline.trim() },
   ];
 }
 
-export function buildStoryboardRepairMessages(rawResponse: string, outline: string, rows: number, cols: number) {
+export function buildStoryboardRepairMessages(
+  rawResponse: string,
+  outline: string,
+  rows: number,
+  cols: number,
+  options: { videoStyle?: StoryboardVideoStyle } = {},
+) {
   const count = rows * cols;
+  const style = options.videoStyle?.prompt ? `，并统一遵循“${options.videoStyle.label}：${options.videoStyle.prompt}”` : '';
   return [
     {
       role: 'system' as const,
-      content: `你负责修复分镜 JSON。严格返回一个合法 JSON 对象，shots 必须恰好 ${count} 项，字段完整，不要 Markdown 或解释。`,
+      content: `你负责修复分镜 JSON。严格返回一个合法 JSON 对象，shots 必须恰好 ${count} 项，字段完整${style}，不要 Markdown 或解释。`,
     },
     {
       role: 'user' as const,
@@ -157,6 +198,7 @@ export interface StoryboardImagePromptOptions {
   sheetAspectRatio?: string;
   cellAspectRatio?: string;
   referenceImageCount?: number;
+  videoStyle?: StoryboardVideoStyle;
 }
 
 export function buildStoryboardImagePrompt(
@@ -177,6 +219,7 @@ export function buildStoryboardImagePrompt(
     '禁止不等高行、可变高度面板、大小格、跨格画面、漫画式分栏、瀑布流、拼贴、错位边界、倾斜边界、圆角卡片或任何不规则布局。不得让任何镜头比其他镜头更大或更小。',
     options.sheetAspectRatio ? `整张接触表比例：${options.sheetAspectRatio}。` : '',
     options.cellAspectRatio ? `每个单格使用相同构图比例，约为 ${options.cellAspectRatio}。` : '',
+    options.videoStyle?.prompt ? `视频动画风格：${options.videoStyle.label}。${options.videoStyle.prompt}。所有镜头必须使用完全一致的媒介、渲染方式和美术语言。` : '',
     '画面顺序必须从左到右、从上到下，与下面的分格描述一一对应。',
     '每一格只表现一个独立镜头，主体和动作不得跨越格子边界。',
     '不要生成镜头编号、标题、字幕、对白、旁白、水印、Logo 或任何可见文字。',

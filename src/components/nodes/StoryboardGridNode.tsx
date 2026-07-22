@@ -47,6 +47,8 @@ import {
   normalizeStoryboardDimension,
   parseStoryboardScript,
   storyboardTextSegments,
+  STORYBOARD_VIDEO_STYLES,
+  resolveStoryboardVideoStyle,
   type StoryboardScript,
   type StoryboardShot,
 } from '../../utils/storyboardScript';
@@ -95,6 +97,7 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
   const cols = normalizeStoryboardDimension(d.storyboardCols ?? d.cols, 3);
   const expectedCount = rows * cols;
   const cropGap = Math.max(0, Math.min(240, Number.parseInt(String(d.storyboardCropGap ?? d.gap ?? 0), 10) || 0));
+  const videoStyle = resolveStoryboardVideoStyle(d.storyboardVideoStyle);
   const outline = useMemo(() => upstream.texts.map((item) => item.url.trim()).filter(Boolean).join('\n\n'), [upstream.texts]);
   const referenceMaterials = useMemo(() => upstream.images.slice(0, MAX_REFERENCE_IMAGES), [upstream.images]);
   const referenceImages = useMemo(() => referenceMaterials.map((item) => item.url), [referenceMaterials]);
@@ -104,6 +107,7 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
     || script.shots.length !== expectedCount
     || Number(d.storyboardScriptRows) !== rows
     || Number(d.storyboardScriptCols) !== cols
+    || String(d.storyboardScriptVideoStyle || 'auto') !== videoStyle.id
     || String(d.storyboardSourceText || '') !== outline;
 
   const settings = useApiKeysStore((state) => state.settings);
@@ -227,7 +231,7 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
       temperature: 0.3,
       max_tokens: Math.min(32000, 1800 + expectedCount * 720),
     };
-    const first = await generateLlm({ ...request, messages: buildStoryboardScriptMessages(outline, rows, cols) });
+    const first = await generateLlm({ ...request, messages: buildStoryboardScriptMessages(outline, rows, cols, { videoStyle }) });
     if (controller.signal.aborted) throw new DOMException('任务已取消', 'AbortError');
     let next: StoryboardScript;
     try {
@@ -237,7 +241,7 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
       const repaired = await generateLlm({
         ...request,
         temperature: 0.1,
-        messages: buildStoryboardRepairMessages(first.content, outline, rows, cols),
+        messages: buildStoryboardRepairMessages(first.content, outline, rows, cols, { videoStyle }),
       });
       if (controller.signal.aborted) throw new DOMException('任务已取消', 'AbortError');
       next = parseStoryboardScript(repaired.content, expectedCount);
@@ -246,6 +250,7 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
       storyboardSourceText: outline,
       storyboardScriptRows: rows,
       storyboardScriptCols: cols,
+      storyboardScriptVideoStyle: videoStyle.id,
       llmKeyId: activeLlm?.id || '',
       llmModel,
       status: 'script-ready',
@@ -258,7 +263,11 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
 
   const splitSheet = async (url: string) => {
     update({ status: 'splitting-image', progress: `正在拆分 ${expectedCount} 个镜头…`, error: '' });
-    const result = await opGridCrop(url, rows, cols, cropGap, undefined, { orderMode: 'row', uniformTiles: true });
+    const result = await opGridCrop(url, rows, cols, cropGap, undefined, {
+      orderMode: 'row',
+      uniformTiles: true,
+      detectGridLines: true,
+    });
     if (result.urls.length !== expectedCount) throw new Error(`拆分得到 ${result.urls.length} 张图片，预期 ${expectedCount} 张`);
     update({
       status: 'success',
@@ -280,6 +289,7 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
       sheetAspectRatio: activeSheetRatio,
       cellAspectRatio: cellRatio,
       referenceImageCount: referenceImages.length,
+      videoStyle,
     });
     const mode: ImageGenerationMode = isExternal ? 'external' : isMj ? 'mj' : isFal ? 'fal' : 'standard';
     const seed = Math.max(0, Math.floor(Number(isMj ? d.mjSeed : isFal ? d.nbSeed : d.seed) || 0));
@@ -493,7 +503,7 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
           {referenceOverflow && <div className="flex items-center gap-1 text-[10px] text-amber-200"><AlertCircle size={11} />仅使用前 {MAX_REFERENCE_IMAGES} 张参考图</div>}
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <label className="space-y-1 text-[10px] text-white/55"><span>脚本模型（LLM 独立配置）</span><select className={FIELD} value={activeLlm?.id || 'default'} disabled={busy} onChange={(event) => update({ llmKeyId: event.target.value, llmModel: llmOptions.find((item) => item.id === event.target.value)?.model || '' })}>{llmOptions.map((item) => <option key={item.id} value={item.id}>{item.label || item.id}{item.model ? ` · ${item.model}` : ''}</option>)}</select></label>
           <label className="space-y-1 text-[10px] text-white/55"><span>生图来源</span><select className={FIELD} value={providerSelectValue} disabled={busy} onChange={(event) => {
             if (event.target.value === 'zhenzhen') update({ providerSource: 'zhenzhen', providerId: '', providerModel: '' });
@@ -503,6 +513,7 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
               if (provider) update({ providerSource: provider.protocol, providerId: provider.id, providerModel: models[0] || '' });
             }
           }}><option value="zhenzhen" disabled={!allowZhenzhen}>贞贞工坊</option>{imageProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label || provider.id}</option>)}</select></label>
+          <label className="space-y-1 text-[10px] text-white/55"><span>视频动画风格</span><select className={FIELD} value={videoStyle.id} disabled={busy} onChange={(event) => update({ storyboardVideoStyle: event.target.value })}>{STORYBOARD_VIDEO_STYLES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
         </div>
 
         {isExternal ? (
