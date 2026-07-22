@@ -9,6 +9,7 @@ const config = require('../config');
 const { isAdminRole, requireAdmin } = require('../auth/middleware');
 const settingsRouter = require('./settings');
 const { addHistoryItems } = require('../utils/generationHistory');
+const { createRunId, finishRun, startRun } = require('../utils/monitoringMetrics');
 const {
   MAX_WORKERS,
   RATIO_SUPPORT,
@@ -318,6 +319,8 @@ function rememberHistory(job, user) {
   if (!urls.length) return;
   try { addHistoryItems(urls, { ...job.request.historyContext, prompt: job.request.prompt, provider: 'FHL Images', model: 'gpt-image-2', taskId: job.id }, user); }
   catch (error) { console.warn('[fhl-image] generation history failed:', error?.message || error); }
+  const outputCount = Math.max(0, urls.length - Number(job.monitoringBaselineSuccess || 0));
+  if (job.monitoringRunId && outputCount > 0) finishRun(job.monitoringRunId, { outcome: 'success', outputCount });
 }
 
 async function executeJob(job, user, resume = false) {
@@ -365,10 +368,13 @@ async function executeJob(job, user, resume = false) {
     }
     job.status = controller.signal.aborted ? 'cancelled' : (job.tasks.some((task) => task.status === 'failed') ? 'partial' : 'completed');
     writeArtifacts(job); rememberHistory(job, user); persist(job);
+    if (job.monitoringRunId && controller.signal.aborted) finishRun(job.monitoringRunId, { outcome: 'cancelled' });
+    if (job.monitoringRunId && !job.tasks.some((task) => task.status === 'success')) finishRun(job.monitoringRunId, { outcome: 'upstream_failure' });
   } catch (error) {
     job.status = controller.signal.aborted ? 'cancelled' : 'failed';
     job.error = error?.message || String(error);
     writeArtifacts(job); persist(job);
+    if (job.monitoringRunId) finishRun(job.monitoringRunId, { outcome: controller.signal.aborted ? 'cancelled' : 'excluded' });
   } finally {
     activeJobs.delete(job.id);
   }
@@ -427,7 +433,14 @@ router.post('/jobs', (req, res) => {
     const request = normalizeRequest(req.body || {});
     if (!request.dryRun && !readWorkers().some((item) => item.enabled !== false)) return res.status(400).json({ success: false, error: '请先在 API 设置中配置并启用 FHL worker。' });
     const id = `fhl-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
-    const job = { id, userId: String(req.user?.id || ''), request, status: 'queued', error: '', tasks: [], workerStats: [], sessions: [], artifactUrls: {}, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const monitoringRunId = request.dryRun ? '' : startRun({
+      runId: request.historyContext?.generationRunId || createRunId('fhl-image'),
+      user: req.user,
+      provider: 'FHL Images',
+      model: 'gpt-image-2',
+      nodeType: request.historyContext?.sourceNodeType || 'fhl-image-gen',
+    }).runId;
+    const job = { id, userId: String(req.user?.id || ''), monitoringRunId, monitoringBaselineSuccess: 0, request, status: 'queued', error: '', tasks: [], workerStats: [], sessions: [], artifactUrls: {}, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     jobs.set(id, job); persist(job); setImmediate(() => executeJob(job, req.user));
     return res.json({ success: true, data: snapshot(job) });
   } catch (error) {
@@ -448,6 +461,7 @@ router.post('/jobs/:id/cancel', (req, res) => {
   if (!canAccessJob(job, req.user)) return res.status(403).json({ success: false, error: '无权停止该 FHL 任务。' });
   activeJobs.get(job.id)?.abort();
   job.status = 'cancelled'; persist(job);
+  if (job.monitoringRunId) finishRun(job.monitoringRunId, { outcome: 'cancelled' });
   return res.json({ success: true, data: snapshot(job) });
 });
 
@@ -456,6 +470,14 @@ router.post('/jobs/:id/resume', (req, res) => {
   if (!job) return res.status(404).json({ success: false, error: 'FHL 任务不存在。' });
   if (!canAccessJob(job, req.user)) return res.status(403).json({ success: false, error: '无权恢复该 FHL 任务。' });
   if (activeJobs.has(job.id)) return res.status(409).json({ success: false, error: '任务正在运行。' });
+  job.monitoringBaselineSuccess = job.tasks.filter((task) => task.status === 'success').length;
+  job.monitoringRunId = startRun({
+    runId: createRunId('fhl-image-resume'),
+    user: req.user,
+    provider: 'FHL Images',
+    model: 'gpt-image-2',
+    nodeType: job.request.historyContext?.sourceNodeType || 'fhl-image-gen',
+  }).runId;
   job.status = 'queued'; job.error = ''; persist(job); setImmediate(() => executeJob(job, req.user, true));
   return res.json({ success: true, data: snapshot(job) });
 });

@@ -1,4 +1,22 @@
 {
+  "adminMonitoringDashboard": {
+    "status": "implemented",
+    "label": "管理员数据监控大屏",
+    "capabilities": [
+      "仅 admin 角色可见和访问，manager、pm、designer 即使直接请求接口也会被拒绝",
+      "统计前台聚焦且最近 5 分钟有操作时的有效在线时长，并按用户合并多标签页心跳",
+      "按用户、Provider 和生图模型统计逻辑调用次数、图片产出数、上游失败数、未纳入成功率的异常数与模型成功率",
+      "覆盖标准生图、FAL、Midjourney、扩展 Provider、FHL、Grok OAuth、Qoder 和 RunningHub 图片工作流",
+      "支持今天、昨天、近 7 天、近 30 天、本月、自定义日期、用户/Provider/模型筛选、60 秒自动刷新和 CSV 导出",
+      "首次启用仅从 generation_history.json 回填历史图片产出，不伪造历史调用次数、失败数或在线时长",
+      "监控文件不得保存 prompt、素材 URL、完整文件名、API Key、Cookie 或原始错误正文"
+    ],
+    "verification": [
+      "node --test tests/monitoringMetrics.test.js",
+      "npm run type-check",
+      "npm run build"
+    ]
+  },
   "promptReverse": {
     "status": "implemented",
     "nodeType": "prompt-reverse",

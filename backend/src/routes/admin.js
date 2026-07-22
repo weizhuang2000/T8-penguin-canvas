@@ -1,8 +1,8 @@
 'use strict';
 
 const express = require('express');
-const { requireAdmin } = require('../auth/middleware');
-const { findUserById, listActiveUsers } = require('../auth/designTeamDb');
+const { requireAdmin, requireAdminOnly } = require('../auth/middleware');
+const { findUserById, listActiveUsers, listAllActiveUsers } = require('../auth/designTeamDb');
 const { publicUser } = require('../auth/session');
 const {
   ALL_NODE_TYPES,
@@ -15,6 +15,7 @@ const { normalizeExhibitionCompactForm } = require('../auth/exhibitionCompactFor
 const {
   listHistoryUsers,
 } = require('../utils/generationHistory');
+const { querySummary } = require('../utils/monitoringMetrics');
 
 const router = express.Router();
 
@@ -82,6 +83,30 @@ router.get('/generation-history/users', async (req, res) => {
     res.json({ success: true, data: await listHistoryUsers(req.user) });
   } catch (e) {
     res.status(500).json({ success: false, error: e?.message || String(e) });
+  }
+});
+
+router.get('/monitoring', requireAdminOnly, async (req, res) => {
+  try {
+    const users = await listAllActiveUsers().catch((error) => {
+      console.warn('[monitoring] list active users failed:', error?.message || error);
+      return [];
+    });
+    res.json({
+      success: true,
+      data: querySummary({
+        from: req.query?.from,
+        to: req.query?.to,
+        userId: req.query?.userId,
+        provider: req.query?.provider,
+        model: req.query?.model,
+        granularity: req.query?.granularity,
+        timezoneOffset: req.query?.timezoneOffset,
+      }, users),
+    });
+  } catch (error) {
+    console.error('[monitoring] summary failed:', error);
+    res.status(500).json({ success: false, error: '读取监控统计失败' });
   }
 });
 

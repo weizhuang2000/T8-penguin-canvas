@@ -118,6 +118,12 @@ async function listActiveUsers(search = '', limit = 20) {
   return rows.map(normalizeUser).filter(Boolean);
 }
 
+async function listAllActiveUsers(limit = 1000) {
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 1000, 5000));
+  const rows = await query("SELECT * FROM users WHERE status = 'active' ORDER BY id ASC LIMIT ?", [safeLimit]);
+  return rows.map(normalizeUser).filter(Boolean);
+}
+
 async function touchLastLogin(userId) {
   const columns = await getColumnNames();
   await query(`UPDATE users SET ${columns.lastLoginAt} = NOW() WHERE id = ?`, [Number(userId)]);
@@ -127,5 +133,6 @@ module.exports = {
   findActiveUserByLogin,
   findUserById,
   listActiveUsers,
+  listAllActiveUsers,
   touchLastLogin,
 };

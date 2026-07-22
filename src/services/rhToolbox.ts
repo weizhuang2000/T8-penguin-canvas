@@ -199,6 +199,7 @@ export async function runRhToolboxTool(options: RunRhToolboxToolOptions): Promis
       webappId: tool.webappId,
       nodeInfoList,
       instanceType: options.instanceType || tool.runtime?.instanceType || undefined,
+      monitorImage: tool.outputSchema.some((item) => item.kind === 'image'),
     });
     taskId = submitResult.taskId;
     if (!taskId) throw new Error('RH 未返回 taskId');

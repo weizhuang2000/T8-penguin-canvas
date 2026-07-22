@@ -727,6 +727,7 @@ const RHToolsNode = ({ id, data, selected }: NodeProps) => {
         webappId,
         nodeInfoList,
         instanceType: instanceType || undefined,
+        monitorImage: true,
       });
       activeTaskIdRef.current = r.taskId;
       if (stopRequestedRef.current) {

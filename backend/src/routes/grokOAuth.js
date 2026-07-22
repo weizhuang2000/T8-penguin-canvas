@@ -6,6 +6,8 @@ const path = require('path');
 const crypto = require('crypto');
 const config = require('../config');
 const { runLocalHooks } = require('../extensions/runtimeHooks');
+const { addHistoryItems } = require('../utils/generationHistory');
+const { createRunId, finishRun, startRun } = require('../utils/monitoringMetrics');
 
 const router = express.Router();
 
@@ -410,6 +412,7 @@ router.post('/agent/stream', async (req, res) => {
   const body = req.body || {};
   const mode = modeFromBody(body);
   const meta = agentMeta(body, mode);
+  let imageMonitoringRunId = '';
   try {
     const custom = await runGrokHook('agentStream', { req, res, body });
     if (custom?.handled) return undefined;
@@ -440,8 +443,27 @@ router.post('/agent/stream', async (req, res) => {
     if (mode === 'image') {
       const hookResult = await runGrokHook('image', { body });
       if (!hookResult?.handled) throw new Error(PRIVATE_DISABLED_MESSAGE);
+      const context = body.historyContext && typeof body.historyContext === 'object' ? body.historyContext : {};
+      imageMonitoringRunId = startRun({
+        runId: context.generationRunId || createRunId('grok-agent-image'),
+        user: req.user,
+        provider: 'Grok OAuth',
+        model: body.model || 'grok-image',
+        nodeType: context.sourceNodeType || 'grok-oauth-agent',
+      }).runId;
       const data = cleanHookData(hookResult);
       Object.assign(data, await normalizeMediaOutputs(data));
+      const imageUrls = Array.isArray(data.imageUrls) ? data.imageUrls : (data.imageUrl ? [data.imageUrl] : []);
+      if (imageUrls.length) {
+        addHistoryItems(imageUrls.map((url) => ({ url, kind: 'image' })), {
+          ...context,
+          provider: 'Grok OAuth',
+          model: body.model || 'grok-image',
+        }, req.user);
+        finishRun(imageMonitoringRunId, { outcome: 'success', outputCount: imageUrls.length });
+      } else {
+        finishRun(imageMonitoringRunId, { outcome: 'excluded' });
+      }
       const artifact = decorateAgentArtifact(artifactFromResult('image', data), meta);
       sendSse(res, 'artifact.completed', { ...meta, mode, artifact, result: data, progress: 100 });
       return endAgentSse(res, data, meta);
@@ -523,6 +545,7 @@ router.post('/agent/stream', async (req, res) => {
 
     throw new Error(`不支持的 Grok OAuth Agent 模式：${mode}`);
   } catch (e) {
+    if (imageMonitoringRunId) finishRun(imageMonitoringRunId, { outcome: 'excluded' });
     const message = e?.message || String(e);
     if (message === 'client_disconnected') return undefined;
     if (!res.headersSent) {
@@ -535,13 +558,36 @@ router.post('/agent/stream', async (req, res) => {
 });
 
 router.post('/image', async (req, res) => {
+  let monitoringRunId = '';
   try {
     const result = await runGrokHook('image', { body: req.body || {} });
     if (!result?.handled) return res.status(501).json(disabledPayload({ mode: 'image' }));
+    const context = req.body?.historyContext && typeof req.body.historyContext === 'object' ? req.body.historyContext : {};
+    monitoringRunId = startRun({
+      runId: context.generationRunId || createRunId('grok-image'),
+      user: req.user,
+      provider: 'Grok OAuth',
+      model: req.body?.model || 'grok-image',
+      nodeType: context.sourceNodeType || 'grok-oauth-agent',
+    }).runId;
     const mediaPatch = await normalizeMediaOutputs(result.data || result);
     result.data = { ...(result.data || result), ...mediaPatch };
+    const imageUrls = Array.isArray(mediaPatch.imageUrls) ? mediaPatch.imageUrls : [];
+    const ok = result.success !== false && result.ok !== false;
+    if (ok && imageUrls.length) {
+      addHistoryItems(imageUrls.map((url) => ({ url, kind: 'image' })), {
+        ...context,
+        provider: 'Grok OAuth',
+        model: req.body?.model || 'grok-image',
+      }, req.user);
+      finishRun(monitoringRunId, { outcome: 'success', outputCount: imageUrls.length });
+    } else {
+      const status = Number(result.status || result.statusCode || 0);
+      finishRun(monitoringRunId, { outcome: status === 429 || status >= 500 ? 'upstream_failure' : 'excluded' });
+    }
     return sendHookJson(res, result);
   } catch (e) {
+    if (monitoringRunId) finishRun(monitoringRunId, { outcome: 'excluded' });
     return res.status(500).json({ success: false, code: 'grok_oauth_image_failed', error: e?.message || String(e) });
   }
 });

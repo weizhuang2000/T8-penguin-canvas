@@ -13,6 +13,13 @@ const { getWhitePng } = require('../utils/whitePng');
 const { tryDecodeDuckPayload } = require('../utils/duckPayload');
 const { normalizeImageOutputFormat, writeImageOutput } = require('../utils/imageOutput');
 const { addHistoryItems, kindFromUrl } = require('../utils/generationHistory');
+const {
+  correlateRun,
+  createRunId,
+  findRunId,
+  finishRun,
+  startRun,
+} = require('../utils/monitoringMetrics');
 const { materializeOutputUrl } = require('../outputStorage/manager');
 const { resolveLlmChatCompletionsUrl } = require('../utils/llmBaseUrl');
 const { resolveLlmConfig: resolveReusableLlmConfig } = require('../providers/llmClient');
@@ -394,6 +401,45 @@ function historyContextFromBody(body, extra = {}) {
   };
 }
 
+function monitoringContext(req, extra = {}) {
+  const context = historyContextFromBody({ ...(req.query || {}), ...(req.body || {}) }, extra);
+  return {
+    runId: context.generationRunId || req.monitoringRunId || '',
+    provider: extra.provider || context.provider || 'unknown',
+    model: extra.model || context.model || 'unknown',
+    nodeType: context.sourceNodeType || extra.nodeType || '',
+  };
+}
+
+function startImageRun(req, extra = {}) {
+  const context = monitoringContext(req, extra);
+  const started = startRun({
+    runId: context.runId || createRunId(),
+    user: req.user,
+    provider: context.provider,
+    model: context.model,
+    nodeType: context.nodeType,
+  });
+  req.monitoringRunId = started.runId;
+  return started.runId;
+}
+
+function correlateImageRun(req, correlationKey) {
+  if (!req.monitoringRunId || !correlationKey) return;
+  correlateRun(req.monitoringRunId, correlationKey);
+}
+
+function finishImageRun(req, outcome, outputCount = 0, correlationKey = '') {
+  const runId = req.monitoringRunId || (correlationKey ? findRunId(correlationKey) : '');
+  if (runId) finishRun(runId, { outcome, outputCount });
+}
+
+function upstreamOutcomeForHttp(status) {
+  const value = Number(status) || 0;
+  if (value === 429 || value >= 500) return 'upstream_failure';
+  return 'excluded';
+}
+
 function rememberGeneratedUrls(req, urls, extra = {}) {
   const list = (Array.isArray(urls) ? urls : [])
     .filter((url) => typeof url === 'string' && url)
@@ -403,6 +449,11 @@ function rememberGeneratedUrls(req, urls, extra = {}) {
     addHistoryItems(list, historyContextFromBody({ ...(req.query || {}), ...(req.body || {}) }, extra), req.user);
   } catch (e) {
     console.warn('[generation-history] record failed:', e?.message || e);
+  }
+  const imageCount = list.filter((item) => item.kind === 'image').length;
+  if (imageCount) {
+    const correlationKey = extra.taskId ? `${extra.provider || 'image'}:${extra.taskId}` : '';
+    finishImageRun(req, 'success', imageCount, correlationKey);
   }
 }
 
@@ -845,6 +896,7 @@ router.post('/image', requireNodePermission(['image', 'storyboard-grid', 'exhibi
   if (typeof image === 'string' && image && !refs.includes(image)) refs.unshift(image);
 
   try {
+    startImageRun(req, { provider: 'zhenzhen', model: finalApiModel });
     const r = await callImageUpstreamAsync({
       apiKey: settings.zhenzhenApiKey, baseUrl: zhenzhenBaseUrl(settings), finalApiModel, paramKind,
       prompt, n, aspect_ratio, image_size, refs, size, quality, seed,
@@ -854,6 +906,7 @@ router.post('/image', requireNodePermission(['image', 'storyboard-grid', 'exhibi
       return res.status(500).json({ success: false, error: '上游响应非 JSON: ' + text.slice(0, 300) });
     }
     if (!r.ok) {
+      finishImageRun(req, upstreamOutcomeForHttp(r.status));
       return res.status(r.status).json({
         success: false,
         error: data?.error?.message || data?.message || `上游 HTTP ${r.status}`,
@@ -861,6 +914,7 @@ router.post('/image', requireNodePermission(['image', 'storyboard-grid', 'exhibi
     }
     const norm = await normalizeImageResponse(data, imageOutputFormat);
     if (norm.kind === 'failed') {
+      finishImageRun(req, 'upstream_failure');
       return res.status(500).json({ success: false, error: norm.error || '上游图像任务失败', raw: data });
     }
     if (norm.kind === 'sync') {
@@ -870,12 +924,16 @@ router.post('/image', requireNodePermission(['image', 'storyboard-grid', 'exhibi
     if (norm.kind === 'async') {
       // 同步接口需要同步返回结果 → 内部轮询
       const url = await pollImageTask(norm.taskId, settings.zhenzhenApiKey, imageOutputFormat, zhenzhenBaseUrl(settings));
-      if (!url) return res.status(500).json({ success: false, error: '异步任务轮询超时/失败', taskId: norm.taskId });
+      if (!url) {
+        finishImageRun(req, 'excluded');
+        return res.status(500).json({ success: false, error: '异步任务轮询超时/失败', taskId: norm.taskId });
+      }
       rememberGeneratedUrls(req, [url], { kind: 'image', prompt, provider: 'zhenzhen', model: finalApiModel, taskId: norm.taskId });
       return res.json({ success: true, data: { urls: [url], raw: data, taskId: norm.taskId, model: finalApiModel, prompt } });
     }
     return res.status(500).json({ success: false, error: '上游未返回图片也未返 task_id: ' + JSON.stringify(data).slice(0, 300) });
   } catch (e) {
+    finishImageRun(req, 'excluded');
     console.error('proxy/image 错误:', e);
     res.status(500).json({ success: false, error: e.message || '请求失败' });
   }
@@ -904,6 +962,7 @@ router.post('/image/submit', requireNodePermission(['image', 'storyboard-grid', 
     if (typeof image === 'string' && image && !refs.includes(image)) refs.unshift(image);
 
     // 完全对齐主项目 gpt-image-2-web:走 ?async=true,GPT2 强制 multipart edits + 白图占位
+    startImageRun(req, { provider: 'zhenzhen', model: finalApiModel });
     const r = await callImageUpstreamAsync({
       apiKey: settings.zhenzhenApiKey, baseUrl: zhenzhenBaseUrl(settings), finalApiModel, paramKind,
       prompt, n, aspect_ratio, image_size, refs, size, quality, seed,
@@ -911,11 +970,13 @@ router.post('/image/submit', requireNodePermission(['image', 'storyboard-grid', 
     const text = await r.text();
     let data; try { data = JSON.parse(text); } catch { data = { _raw: text }; }
     if (!r.ok) {
+      finishImageRun(req, upstreamOutcomeForHttp(r.status));
       return res.status(r.status).json({ success: false, error: data?.error?.message || data?.message || `上游 HTTP ${r.status}`, raw: data });
     }
 
     const norm = await normalizeImageResponse(data, imageOutputFormat);
     if (norm.kind === 'failed') {
+      finishImageRun(req, 'upstream_failure');
       return res.status(500).json({ success: false, error: norm.error || '上游图像任务失败', raw: data });
     }
     if (norm.kind === 'sync') {
@@ -926,10 +987,12 @@ router.post('/image/submit', requireNodePermission(['image', 'storyboard-grid', 
       rememberTaskKey(norm.taskId, settings.zhenzhenApiKey);
       rememberTaskBaseUrl(norm.taskId, zhenzhenBaseUrl(settings));
       rememberTaskImageFormat(norm.taskId, imageOutputFormat);
+      correlateImageRun(req, `zhenzhen:${norm.taskId}`);
       return res.json({ success: true, data: { sync: false, taskId: norm.taskId, status: 'pending', progress: '0%', raw: data } });
     }
     return res.status(500).json({ success: false, error: '未获取到 task_id 且无同步结果: ' + JSON.stringify(data).slice(0, 300) });
   } catch (e) {
+    finishImageRun(req, 'excluded');
     console.error('proxy/image/submit 错误:', e);
     res.status(500).json({ success: false, error: e.message || '请求失败' });
   }
@@ -955,9 +1018,11 @@ router.get('/image/status/:tid', requireNodePermission(['image', 'storyboard-gri
     const text = await r.text();
     let data; try { data = JSON.parse(text); } catch { data = { _raw: text }; }
     if (!r.ok) {
+      finishImageRun(req, upstreamOutcomeForHttp(r.status), 0, `zhenzhen:${tid}`);
       return res.status(r.status).json({ success: false, error: data?.error?.message || `上游 HTTP ${r.status}`, raw: data });
     }
     if (imageApiFailed(data)) {
+      finishImageRun(req, 'upstream_failure', 0, `zhenzhen:${tid}`);
       return res.json({ success: false, data: { status: 'failed', progress: '0%', error: imageError(data) || '任务失败', raw: data } });
     }
     const statusRaw = imageStatus(data);
@@ -972,10 +1037,12 @@ router.get('/image/status/:tid', requireNodePermission(['image', 'storyboard-gri
       return res.json({ success: true, data: { status: 'completed', progress: '100%', urls, raw: data } });
     }
     if (FAILURE.includes(status)) {
+      finishImageRun(req, status === 'cancelled' || status === 'canceled' ? 'cancelled' : 'upstream_failure', 0, `zhenzhen:${tid}`);
       return res.json({ success: false, data: { status: 'failed', progress, error: imageError(data) || inner.fail_reason || '任务失败', raw: data } });
     }
     res.json({ success: true, data: { status: status || 'pending', progress, raw: data } });
   } catch (e) {
+    finishImageRun(req, 'excluded', 0, `zhenzhen:${tid}`);
     console.error('proxy/image/status 错误:', e);
     res.status(500).json({ success: false, error: e.message || '查询失败' });
   }
@@ -1177,6 +1244,7 @@ router.post('/image/fal/submit', requireNodePermission(['image', 'storyboard-gri
     const falUrl = `${baseUrl}/fal/${endpoint}`;
     console.log('[fal/submit]', apiModel, '→', falUrl, '| payload keys:', Object.keys(payload), '| refs:', trimmedRefs.length);
 
+    startImageRun(req, { provider: 'fal', model: apiModel });
     const resp = await fetch(falUrl, {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -1185,15 +1253,18 @@ router.post('/image/fal/submit', requireNodePermission(['image', 'storyboard-gri
     const text = await resp.text();
     let data; try { data = JSON.parse(text); } catch { data = { _raw: text }; }
     if (!resp.ok) {
+      finishImageRun(req, upstreamOutcomeForHttp(resp.status));
       return res.status(resp.status).json({
         success: false,
         error: data?.error || data?.detail || data?.message || `FAL HTTP ${resp.status}: ${text.slice(0, 300)}`,
       });
     }
     if (Array.isArray(data)) {
+      finishImageRun(req, 'excluded');
       return res.status(400).json({ success: false, error: `FAL 参数校验错误: ${JSON.stringify(data).slice(0, 300)}` });
     }
     if (data?.detail && !data?.images && !data?.request_id) {
+      finishImageRun(req, 'excluded');
       return res.status(400).json({ success: false, error: `FAL 错误: ${JSON.stringify(data.detail).slice(0, 300)}` });
     }
 
@@ -1218,11 +1289,13 @@ router.post('/image/fal/submit', requireNodePermission(['image', 'storyboard-gri
     }
     responseUrl = fixFalResponseUrl(responseUrl, baseUrl, endpoint, requestId);
     rememberTaskImageFormat(requestId, imageOutputFormat);
+    correlateImageRun(req, `fal:${requestId}`);
     return res.json({
       success: true,
       data: { sync: false, requestId, responseUrl, endpoint, raw: data },
     });
   } catch (e) {
+    finishImageRun(req, 'excluded');
     console.error('proxy/image/fal/submit 错误:', e);
     return res.status(500).json({ success: false, error: e.message || '请求失败' });
   }
@@ -1251,6 +1324,7 @@ router.post('/image/fal/query', requireNodePermission(['image', 'storyboard-grid
       if (data && (data.status === 'IN_QUEUE' || data.status === 'IN_PROGRESS')) {
         return res.json({ success: true, data: { status: 'pending', raw: data } });
       }
+      finishImageRun(req, upstreamOutcomeForHttp(pr.status), 0, `fal:${requestId}`);
       return res.status(pr.status).json({
         success: false,
         error: `FAL Poll HTTP ${pr.status}: ${text.slice(0, 300)}`,
@@ -1258,6 +1332,7 @@ router.post('/image/fal/query', requireNodePermission(['image', 'storyboard-grid
       });
     }
     if (!data) {
+      finishImageRun(req, 'excluded', 0, `fal:${requestId}`);
       return res.status(500).json({ success: false, error: 'FAL Poll 响应非 JSON: ' + text.slice(0, 200) });
     }
     // 完成
@@ -1274,6 +1349,7 @@ router.post('/image/fal/query', requireNodePermission(['image', 'storyboard-grid
     }
     const st = String(data.status || '').toUpperCase();
     if (st === 'FAILED' || st === 'CANCELLED') {
+      finishImageRun(req, st === 'CANCELLED' ? 'cancelled' : 'upstream_failure', 0, `fal:${requestId}`);
       return res.json({
         success: false,
         data: { status: 'failed', error: data.error || data.detail || `FAL ${st}` },
@@ -1282,6 +1358,7 @@ router.post('/image/fal/query', requireNodePermission(['image', 'storyboard-grid
     // IN_QUEUE / IN_PROGRESS / 空 => pending
     return res.json({ success: true, data: { status: 'pending', falStatus: st || 'IN_QUEUE', raw: data } });
   } catch (e) {
+    finishImageRun(req, 'excluded', 0, `fal:${requestId}`);
     console.error('proxy/image/fal/query 错误:', e);
     return res.status(500).json({ success: false, error: e.message || '查询失败' });
   }
@@ -1333,6 +1410,7 @@ router.post('/mj/imagine', requireNodePermission(['image', 'storyboard-grid']), 
   };
   try {
     console.log(`[mj/imagine] -> ${url}\n  prompt: ${payload.prompt.slice(0, 200)}`);
+    startImageRun(req, { provider: 'mj', model: speedSeg });
     const r = await fetch(url, {
       method: 'POST',
       headers: {
@@ -1344,9 +1422,16 @@ router.post('/mj/imagine', requireNodePermission(['image', 'storyboard-grid']), 
     const text = await r.text();
     let data;
     try { data = JSON.parse(text); } catch { return res.status(500).json({ success: false, error: '上游响应非 JSON: ' + text.slice(0, 200) }); }
-    if (!r.ok) return res.status(r.status).json({ success: false, error: data?.error || data?.description || `上游 HTTP ${r.status}` });
+    if (!r.ok) {
+      finishImageRun(req, upstreamOutcomeForHttp(r.status));
+      return res.status(r.status).json({ success: false, error: data?.error || data?.description || `上游 HTTP ${r.status}` });
+    }
+    const taskId = String(data?.result || data?.task_id || '');
+    if (taskId) correlateImageRun(req, `mj:${taskId}`);
+    if (data?.code !== undefined && data.code !== 1) finishImageRun(req, 'upstream_failure');
     return res.json({ success: true, data });
   } catch (e) {
+    finishImageRun(req, 'excluded');
     console.error('proxy/mj/imagine 错误:', e);
     return res.status(500).json({ success: false, error: e.message || '提交失败' });
   }
@@ -1373,7 +1458,10 @@ router.get('/mj/task/:id', requireNodePermission(['image', 'storyboard-grid']), 
     const raw = await r.text();
     let data;
     try { data = JSON.parse(raw); } catch { return res.status(500).json({ success: false, error: '上游响应非 JSON: ' + raw.slice(0, 200) }); }
-    if (!r.ok) return res.status(r.status).json({ success: false, error: data?.error || data?.description || `上游 HTTP ${r.status}` });
+    if (!r.ok) {
+      finishImageRun(req, upstreamOutcomeForHttp(r.status), 0, `mj:${taskId}`);
+      return res.status(r.status).json({ success: false, error: data?.error || data?.description || `上游 HTTP ${r.status}` });
+    }
     if (String(data?.status || data?.data?.status || '').toUpperCase() === 'SUCCESS') {
       const rawList = data?.image_urls ?? data?.imageUrls ?? data?.data?.image_urls ?? data?.data?.imageUrls;
       const parsedList = typeof rawList === 'string'
@@ -1399,9 +1487,13 @@ router.get('/mj/task/:id', requireNodePermission(['image', 'storyboard-grid']), 
         }
       }
     }
+    const terminalStatus = String(data?.status || data?.data?.status || '').toUpperCase();
+    if (terminalStatus === 'FAILURE' || terminalStatus === 'FAILED') finishImageRun(req, 'upstream_failure', 0, `mj:${taskId}`);
+    if (terminalStatus === 'CANCELLED' || terminalStatus === 'CANCELED') finishImageRun(req, 'cancelled', 0, `mj:${taskId}`);
     // image_urls 可能是 JSON 字符串也可能已是数组，透传，让前端统一处理
     return res.json({ success: true, data });
   } catch (e) {
+    finishImageRun(req, 'excluded', 0, `mj:${taskId}`);
     console.error('proxy/mj/task 错误:', e);
     return res.status(500).json({ success: false, error: e.message || '查询失败' });
   }
@@ -2787,13 +2879,14 @@ router.post('/runninghub/video/query', requireNodePermission(['video', 'runningh
 
 router.post('/runninghub/submit', requireNodePermission(['runninghub', 'runninghub-wallet', 'rh-tools']), async (req, res) => {
   const settings = loadRawSettings();
-  const { webappId, nodeInfoList, instanceType } = req.body || {};
+  const { webappId, nodeInfoList, instanceType, monitorImage } = req.body || {};
   const apiKey = pickRhApiKey(settings);
   if (!apiKey) return res.status(400).json({ success: false, error: missingRhKeyError() });
   if (!webappId) return res.status(400).json({ success: false, error: 'webappId 必填' });
   try {
     const body = { apiKey, webappId, nodeInfoList: nodeInfoList || [] };
     if (instanceType) body.instanceType = instanceType;
+    if (monitorImage !== false) startImageRun(req, { provider: 'runninghub', model: `webapp:${webappId}`, nodeType: 'runninghub' });
     const r = await fetch(`${config.RH_BASE_URL}/task/openapi/ai-app/run`, {
       method: 'POST',
       headers: { Host: 'www.runninghub.cn', 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
@@ -2802,10 +2895,13 @@ router.post('/runninghub/submit', requireNodePermission(['runninghub', 'runningh
     const data = await r.json();
     if (data.code === 0) {
       const taskId = data?.data?.taskId;
+      if (taskId) correlateImageRun(req, `runninghub:${taskId}`);
       return res.json({ success: true, data: { taskId, raw: data } });
     }
+    finishImageRun(req, data.code === 805 ? 'upstream_failure' : 'excluded');
     return res.status(400).json({ success: false, error: data.msg || `RH 提交失败 code=${data.code}` });
   } catch (e) {
+    finishImageRun(req, 'excluded');
     console.error('proxy/rh/submit 错误:', e);
     res.status(500).json({ success: false, error: e.message || '请求失败' });
   }
@@ -2907,6 +3003,10 @@ router.get('/runninghub/query', requireNodePermission(['runninghub', 'runninghub
     if (status === 'SUCCESS' && urls.length) {
       rememberGeneratedUrls(req, urls, { provider: 'runninghub', taskId });
     }
+    if (status === 'FAILED') finishImageRun(req, 'upstream_failure', 0, `runninghub:${taskId}`);
+    if (status === 'SUCCESS' && !urls.some((url) => kindFromUrl(url) === 'image')) {
+      finishImageRun(req, 'excluded', 0, `runninghub:${taskId}`);
+    }
     res.json({
       success: true,
       data: {
@@ -2918,6 +3018,7 @@ router.get('/runninghub/query', requireNodePermission(['runninghub', 'runninghub
       },
     });
   } catch (e) {
+    finishImageRun(req, 'excluded', 0, `runninghub:${taskId}`);
     console.error('proxy/rh/query 错误:', e);
     res.status(500).json({ success: false, error: e.message || '请求失败' });
   }

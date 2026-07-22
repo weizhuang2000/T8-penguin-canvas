@@ -45,6 +45,15 @@ export interface GenerationHistoryContext {
   outputTitle?: string;
   prompt?: string;
   seed?: number;
+  /** 同一次用户生图任务在提交、轮询和自动重试期间保持不变。 */
+  generationRunId?: string;
+}
+
+export function createGenerationRunId(prefix = 'image'): string {
+  const random = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `${prefix}-${random}`;
 }
 
 export interface GenerateImageResult {
@@ -1082,13 +1091,22 @@ export interface RhSubmitRequest {
   webappId: string;
   nodeInfoList?: Array<{ nodeId: string; fieldName: string; fieldValue: any }>;
   instanceType?: string;
+  historyContext?: GenerationHistoryContext;
+  monitorImage?: boolean;
 }
 
 export async function submitRh(req: RhSubmitRequest): Promise<{ taskId: string }> {
+  const payload = {
+    ...req,
+    historyContext: {
+      ...(req.historyContext || {}),
+      generationRunId: req.historyContext?.generationRunId || createGenerationRunId('rh-image'),
+    },
+  };
   const r = await fetch('/api/proxy/runninghub/submit', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(req),
+    body: JSON.stringify(payload),
   });
   const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);

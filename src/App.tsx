@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { LogOut, Moon, Settings, Sun, Wifi, WifiOff, Sparkles, Cloud, ExternalLink, Copy, Check, Gift, Heart, Youtube, PlayCircle, Bell, Wand2, Globe, MessageCircle, CalendarDays, Rocket, Key, Library, Palette, Skull, Sailboat, Clock3, UserCog } from 'lucide-react';
+import { LogOut, Moon, Settings, Sun, Wifi, WifiOff, Sparkles, Cloud, ExternalLink, Copy, Check, Gift, Heart, Youtube, PlayCircle, Bell, Wand2, Globe, MessageCircle, CalendarDays, Rocket, Key, Library, Palette, Skull, Sailboat, Clock3, UserCog, BarChart3 } from 'lucide-react';
 import { useThemeStore } from './stores/theme';
 import { useApiKeysStore } from './stores/apiKeys';
 import { useShortcutStore } from './stores/shortcuts';
@@ -32,6 +32,7 @@ const Canvas = lazy(() => import('./components/Canvas'));
 const ApiSettingsModal = lazy(() => import('./components/ApiSettings'));
 const ResourceLibraryDrawer = lazy(() => import('./components/ResourceLibraryDrawer'));
 const ThemeTemplateManager = lazy(() => import('./components/ThemeTemplateManager'));
+const DataMonitoringDashboard = lazy(() => import('./components/DataMonitoringDashboard'));
 
 // vite.config 注入的编译期常量（与 package.json 同步），勿硬编码 v1.x.x
 declare const __APP_VERSION__: string;
@@ -142,6 +143,7 @@ function App() {
   const [themeManagerOpen, setThemeManagerOpen] = useState(false);
   const [userManagementOpen, setUserManagementOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
+  const [monitoringOpen, setMonitoringOpen] = useState(false);
   const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
   // 画布接收节点添加的 ref(从 Sidebar -> Canvas)
   const addNodeRef = useRef<AddNodeFn | null>(null);
@@ -264,6 +266,38 @@ function App() {
 
   useEffect(() => {
     if (!authUser?.id) return;
+    let lastInteractionAt = Date.now();
+    const markInteraction = () => { lastInteractionAt = Date.now(); };
+    const isEffectivelyActive = () => (
+      document.visibilityState === 'visible' &&
+      document.hasFocus() &&
+      Date.now() - lastInteractionAt <= 5 * 60 * 1000
+    );
+    const heartbeat = (keepalive = false) => {
+      if (!isEffectivelyActive()) return;
+      void api.sendMonitoringHeartbeat(keepalive).catch(() => {});
+    };
+    const onFocus = () => { markInteraction(); heartbeat(); };
+    const onVisibility = () => { if (document.visibilityState === 'visible') onFocus(); };
+    const onPageHide = () => heartbeat(true);
+    const activityEvents: Array<keyof WindowEventMap> = ['pointerdown', 'keydown', 'wheel', 'touchstart'];
+    activityEvents.forEach((eventName) => window.addEventListener(eventName, markInteraction, { passive: true }));
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', onPageHide);
+    heartbeat();
+    const timer = window.setInterval(() => heartbeat(), 30_000);
+    return () => {
+      window.clearInterval(timer);
+      activityEvents.forEach((eventName) => window.removeEventListener(eventName, markInteraction));
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', onPageHide);
+    };
+  }, [authUser?.id]);
+
+  useEffect(() => {
+    if (!authUser?.id) return;
     let cancelled = false;
     api.getNotifications()
       .then((items) => {
@@ -306,6 +340,7 @@ function App() {
   const isSoccer = currentTemplate.visuals?.style === 'soccer-hero';
   const isDragonBall = currentTemplate.visuals?.style === 'dragon-ball';
   const canManageSettings = authUser?.role === 'admin' || authUser?.role === 'manager';
+  const canViewMonitoring = authUser?.role === 'admin';
   const visibleNodeTypes = authUser?.permissions?.visibleNodeTypes;
   const allowedNodeTypes = authUser?.permissions?.allowedNodeTypes;
   const exhibitionCompactForm = authUser?.permissions?.exhibitionCompactForm;
@@ -651,6 +686,19 @@ function App() {
             <UserCog size={isPixel ? 14 : 16} />
           </button>
           )}
+          {canViewMonitoring && (
+          <button
+            onClick={() => setMonitoringOpen(true)}
+            className={
+              isPixel
+                ? 'px-btn px-btn--icon px-btn--ghost'
+                : `p-2 rounded-md ${isDark ? 'hover:bg-cyan-500/15 text-cyan-300' : 'hover:bg-cyan-50 text-cyan-700'}`
+            }
+            title="数据监控"
+          >
+            <BarChart3 size={isPixel ? 14 : 16} />
+          </button>
+          )}
           {canManageSettings && (
           <button
             onClick={() => setSettingsOpen(true)}
@@ -769,6 +817,9 @@ function App() {
             onClose={() => setHistoryOpen(false)}
             userRole={authUser.role}
           />
+        )}
+        {canViewMonitoring && monitoringOpen && (
+          <DataMonitoringDashboard open={monitoringOpen} onClose={() => setMonitoringOpen(false)} />
         )}
       </Suspense>
       <MaterialContextMenu userRole={authUser.role} />

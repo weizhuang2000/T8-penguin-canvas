@@ -2129,6 +2129,86 @@ export interface GenerationHistoryUserSummary {
   lastCreatedAt: number;
 }
 
+export interface MonitoringCounters {
+  calls: number;
+  successes: number;
+  upstreamFailures: number;
+  excluded: number;
+  cancelled: number;
+  outputs: number;
+  legacyOutputs: number;
+  successRate: number | null;
+}
+
+export interface MonitoringModelRow extends MonitoringCounters {
+  provider: string;
+  model: string;
+  nodeType: string;
+}
+
+export interface MonitoringUserRow extends MonitoringCounters {
+  user: Pick<AuthUser, 'id' | 'username' | 'name' | 'role'>;
+  activeSeconds: number;
+  lastActiveAt: number;
+  online: boolean;
+  models: MonitoringModelRow[];
+}
+
+export interface MonitoringSummary {
+  meta: {
+    from: string;
+    to: string;
+    granularity: 'hour' | 'day';
+    trackedFrom: string;
+    historyBackfilledAt: string | null;
+    historyBackfilledItems: number;
+    updatedAt: string;
+  };
+  totals: MonitoringCounters & { activeSeconds: number; currentOnline: number };
+  onlineUsers: Array<Pick<AuthUser, 'id' | 'username' | 'name' | 'role'> & { lastActiveAt: number }>;
+  trend: Array<{
+    start: string;
+    activeSeconds: number;
+    imageOutputs: number;
+    calls: number;
+    successes: number;
+    upstreamFailures: number;
+    excluded: number;
+  }>;
+  users: MonitoringUserRow[];
+  models: MonitoringModelRow[];
+  filters: { providers: string[]; models: string[] };
+}
+
+export function sendMonitoringHeartbeat(keepalive = false) {
+  return fetch(`${BASE}/monitoring/heartbeat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+    keepalive,
+  });
+}
+
+export function getMonitoringSummary(params: {
+  from: string;
+  to: string;
+  userId?: string;
+  provider?: string;
+  model?: string;
+  granularity?: 'auto' | 'hour' | 'day';
+}) {
+  const query = new URLSearchParams({
+    from: params.from,
+    to: params.to,
+    granularity: params.granularity || 'auto',
+    timezoneOffset: String(new Date().getTimezoneOffset()),
+  });
+  if (params.userId) query.set('userId', params.userId);
+  if (params.provider) query.set('provider', params.provider);
+  if (params.model) query.set('model', params.model);
+  return safeRequest<MonitoringSummary>(`${BASE}/admin/monitoring?${query.toString()}`);
+}
+
 export function getGenerationHistoryProjects() {
   return safeRequest<GenerationHistoryProject[]>(`${BASE}/generation-history/projects`);
 }

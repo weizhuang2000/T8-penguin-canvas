@@ -1,4 +1,4 @@
-import { buildMjPrompt, generateExternalImage, queryExternalImageStatus, queryImageFal, queryImageStatus, queryMjTask, submitImageAsync, submitImageFal, submitMjImagine, type GenerationHistoryContext, type MjSpeed } from './generation';
+import { buildMjPrompt, createGenerationRunId, generateExternalImage, queryExternalImageStatus, queryImageFal, queryImageStatus, queryMjTask, submitImageAsync, submitImageFal, submitMjImagine, type GenerationHistoryContext, type MjSpeed } from './generation';
 
 const IMAGE_POLL_TIMEOUT_MS = 60 * 60 * 1000;
 
@@ -354,7 +354,14 @@ export async function runConfiguredImageGeneration(options: ImageGenerationRunOp
   assertNotAborted(options.signal);
   const prompt = String(options.prompt || '').trim();
   if (!prompt) throw new Error('prompt 不得为空');
-  const normalized = { ...options, prompt };
+  const normalized = {
+    ...options,
+    prompt,
+    historyContext: {
+      ...(options.historyContext || {}),
+      generationRunId: options.historyContext?.generationRunId || createGenerationRunId(),
+    },
+  };
   if (options.mode === 'external') return runExternal(normalized);
   if (options.mode === 'mj') return runMidjourney(normalized);
   if (options.mode === 'fal') return runFal(normalized);

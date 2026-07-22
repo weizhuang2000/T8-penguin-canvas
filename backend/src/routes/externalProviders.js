@@ -15,6 +15,7 @@ const {
   testProviderConnection,
 } = require('../providers/adapters');
 const { addHistoryItems } = require('../utils/generationHistory');
+const { correlateRun, createRunId, findRunId, finishRun, startRun } = require('../utils/monitoringMetrics');
 
 const router = express.Router();
 const EXTERNAL_GENERATION_TIMEOUT_MS = 60 * 60 * 1000;
@@ -208,6 +209,24 @@ function parseHistoryContext(value) {
   return {};
 }
 
+function startExternalImageRun(body, user, provider) {
+  const context = parseHistoryContext(body?.historyContext);
+  return startRun({
+    runId: context.generationRunId || createRunId('external-image'),
+    user,
+    provider: provider?.label || provider?.id || 'external',
+    model: body?.providerModel || body?.model || 'unknown',
+    nodeType: context.sourceNodeType || 'image',
+  }).runId;
+}
+
+function externalFailureOutcome(result) {
+  const code = String(result?.code || '');
+  const status = Number(result?.statusCode || result?.httpStatus || result?.raw?.statusCode || 0);
+  if (code === 'http_error' && (status === 429 || status >= 500)) return 'upstream_failure';
+  return 'excluded';
+}
+
 function rememberExternalOutputs(req, urls, kind, provider, extra = {}) {
   const source = req.body && Object.keys(req.body).length ? req.body : (req.query || {});
   const list = (Array.isArray(urls) ? urls : [])
@@ -225,6 +244,12 @@ function rememberExternalOutputs(req, urls, kind, provider, extra = {}) {
     }, req.user);
   } catch (e) {
     console.warn('[generation-history] external record failed:', e?.message || e);
+  }
+  if (kind === 'image') {
+    const context = parseHistoryContext(source?.historyContext);
+    const correlationKey = extra.taskId ? `external:${extra.taskId}` : '';
+    const runId = req.monitoringRunId || context.generationRunId || (correlationKey ? findRunId(correlationKey) : '');
+    if (runId) finishRun(runId, { outcome: 'success', outputCount: list.length });
   }
 }
 
@@ -272,9 +297,16 @@ async function generateExternalImageInternal(body = {}, options = {}) {
   }
 
   const timeoutMs = generationTimeoutMs(body.timeoutMs);
+  const monitoringRunId = startExternalImageRun(body, options.user, resolved.provider);
   const startedAt = Date.now();
   const baseUrl = `http://127.0.0.1:${config.PORT}`;
-  let result = await generateImageWithProvider(resolved.provider, body, { timeoutMs, baseUrl, signal: options.signal });
+  let result;
+  try {
+    result = await generateImageWithProvider(resolved.provider, body, { timeoutMs, baseUrl, signal: options.signal });
+  } catch (error) {
+    finishRun(monitoringRunId, { outcome: 'excluded' });
+    throw error;
+  }
   let taskId = result?.taskId || '';
   const shouldPoll = (value) => Boolean(
     value?.taskId
@@ -287,25 +319,33 @@ async function generateExternalImageInternal(body = {}, options = {}) {
 
   while (shouldPoll(result)) {
     if (options.signal?.aborted) {
+      finishRun(monitoringRunId, { outcome: 'cancelled' });
       const error = new Error('Qoder 生图任务已取消。');
       error.name = 'AbortError';
       throw error;
     }
     if (Date.now() - startedAt >= timeoutMs) {
+      finishRun(monitoringRunId, { outcome: 'excluded' });
       const error = new Error('扩展平台生图任务超时。');
       error.code = 'timeout';
       throw error;
     }
     await new Promise((resolve) => setTimeout(resolve, 3000));
-    result = await queryImageTaskWithProvider(resolved.provider, taskId, {
-      timeoutMs: Math.max(1000, timeoutMs - (Date.now() - startedAt)),
-      baseUrl,
-      signal: options.signal,
-    });
+    try {
+      result = await queryImageTaskWithProvider(resolved.provider, taskId, {
+        timeoutMs: Math.max(1000, timeoutMs - (Date.now() - startedAt)),
+        baseUrl,
+        signal: options.signal,
+      });
+    } catch (error) {
+      finishRun(monitoringRunId, { outcome: 'excluded' });
+      throw error;
+    }
     taskId = result?.taskId || taskId;
   }
 
   if (!result?.ok || !Array.isArray(result.imageUrls) || !result.imageUrls.length) {
+    finishRun(monitoringRunId, { outcome: externalFailureOutcome(result) });
     const error = new Error(result?.error || '扩展平台完成任务但没有返回图片。');
     error.code = result?.code || 'empty_image';
     error.result = result;
@@ -315,7 +355,7 @@ async function generateExternalImageInternal(body = {}, options = {}) {
   const remoteImageUrls = result.imageUrls;
   const imageUrls = await saveImageOutputs(remoteImageUrls, { outputFormat: body.outputFormat });
   rememberExternalOutputs(
-    { body, user: options.user || null },
+    { body, user: options.user || null, monitoringRunId },
     imageUrls,
     'image',
     resolved.provider,
@@ -371,6 +411,7 @@ function setLocalImageJobFailed(job, result) {
     raw: result?.raw,
     updatedAt: Date.now(),
   });
+  if (job.monitoringRunId) finishRun(job.monitoringRunId, { outcome: externalFailureOutcome(result) });
 }
 
 async function setLocalImageJobCompleted(job, result) {
@@ -385,7 +426,7 @@ async function setLocalImageJobCompleted(job, result) {
     raw: result.raw,
     updatedAt: Date.now(),
   });
-  rememberExternalOutputs({ body: job.body, user: job.user }, imageUrls, 'image', job.provider, { taskId: job.upstreamTaskId || result.taskId || job.id });
+  rememberExternalOutputs({ body: job.body, user: job.user, monitoringRunId: job.monitoringRunId }, imageUrls, 'image', job.provider, { taskId: job.upstreamTaskId || result.taskId || job.id });
 }
 
 async function runLocalImageJob(job) {
@@ -432,6 +473,7 @@ function createLocalImageJob(req, provider) {
     error: '',
     createdAt: Date.now(),
     updatedAt: Date.now(),
+    monitoringRunId: req.monitoringRunId || '',
   };
   externalImageJobs.set(id, job);
   setImmediate(() => {
@@ -546,8 +588,10 @@ router.post('/image', async (req, res) => {
         data: resolved.provider ? { provider: safeProviderForResponse(resolved.provider) } : undefined,
       });
     }
+    req.monitoringRunId = startExternalImageRun(req.body || {}, req.user, resolved.provider);
     if (req.body?.async === true) {
       const job = createLocalImageJob(req, resolved.provider);
+      correlateRun(req.monitoringRunId, `external:${job.id}`);
       return resultResponse(res, imageTaskRunningResult({
         ok: true,
         kind: 'image',
@@ -562,8 +606,10 @@ router.post('/image', async (req, res) => {
     });
     if (!result.ok) {
       if (canContinueImageTask(result)) {
+        if (result.taskId) correlateRun(req.monitoringRunId, `external:${result.taskId}`);
         return resultResponse(res, imageTaskRunningResult(result), resolved.provider, { imageUrls: [], remoteImageUrls: [] });
       }
+      finishRun(req.monitoringRunId, { outcome: externalFailureOutcome(result) });
       return resultResponse(res, result, resolved.provider);
     }
     const remoteImageUrls = Array.isArray(result.imageUrls) ? result.imageUrls : [];
@@ -574,6 +620,7 @@ router.post('/image', async (req, res) => {
       imageUrls,
     });
   } catch (e) {
+    if (req.monitoringRunId) finishRun(req.monitoringRunId, { outcome: 'excluded' });
     return res.status(500).json({
       success: false,
       code: 'external_image_failed',
@@ -623,7 +670,11 @@ router.get('/image/status/:taskId', async (req, res) => {
         remoteImageUrls: [],
       });
     }
-    if (!result.ok) return resultResponse(res, result, resolved.provider);
+    if (!result.ok) {
+      const runId = findRunId(`external:${req.params.taskId}`);
+      if (runId) finishRun(runId, { outcome: externalFailureOutcome(result) });
+      return resultResponse(res, result, resolved.provider);
+    }
 
     const remoteImageUrls = Array.isArray(result.imageUrls) ? result.imageUrls : [];
     const imageUrls = remoteImageUrls.length ? await saveImageOutputs(remoteImageUrls, { outputFormat: req.query?.outputFormat }) : [];
@@ -635,6 +686,8 @@ router.get('/image/status/:taskId', async (req, res) => {
       imageUrls,
     });
   } catch (e) {
+    const runId = findRunId(`external:${req.params.taskId}`);
+    if (runId) finishRun(runId, { outcome: 'excluded' });
     return res.status(500).json({
       success: false,
       code: 'external_image_status_failed',

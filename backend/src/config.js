@@ -47,6 +47,7 @@ const config = {
   CANVAS_FILE: path.join(DATA_ROOT, 'data', 'canvas_list.json'),
   SETTINGS_FILE: path.join(DATA_ROOT, 'data', 'settings.json'),
   SESSION_FILE: path.join(DATA_ROOT, 'data', 'auth_sessions.json'),
+  MONITORING_METRICS_FILE: path.join(DATA_ROOT, 'data', 'monitoring_metrics.json'),
   TOOL_PERMISSIONS_FILE: path.join(DATA_ROOT, 'data', 'tool_permissions.json'),
   NOTIFICATIONS_FILE: path.join(DATA_ROOT, 'data', 'notifications.json'),
   NOTIFICATIONS_ASSET_DIR: path.join(DATA_ROOT, 'data', 'notification-assets'),

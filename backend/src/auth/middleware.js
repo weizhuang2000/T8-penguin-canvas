@@ -24,8 +24,16 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+function requireAdminOnly(req, res, next) {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ success: false, error: '仅管理员可查看数据监控大屏' });
+  }
+  next();
+}
+
 module.exports = {
   requireAuth,
   requireAdmin,
+  requireAdminOnly,
   isAdminRole,
 };
