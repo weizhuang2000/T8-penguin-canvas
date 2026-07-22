@@ -25,19 +25,11 @@ import {
   gptImage2ZhenzhenVariantSize,
 } from '../../providers/models';
 import {
-  submitImageAsync,
-  queryImageStatus,
-  submitImageFal,
-  queryImageFal,
   uploadFile,
-  submitMjImagine,
-  queryMjTask,
   uploadMjImage,
-  buildMjPrompt,
-  generateExternalImage,
-  queryExternalImageStatus,
   type MjSpeed,
 } from '../../services/generation';
+import { runConfiguredImageGeneration, type ImageGenerationMode } from '../../services/imageGenerationRunner';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useCanvasRuntime } from './canvasRuntimeContext';
 import { useHasAutoOutput } from './useHasAutoOutput';
@@ -79,10 +71,6 @@ import { LocalNodeAddonSlot } from 'virtual:t8-local-extensions';
  * 参数:模型 TAB / 比例 / 尺寸 / 多张参考图 / 本地 prompt
  * 上游 text 节点 → prompt(优先);上游 image 节点 → 参考图(并入 references)
  */
-const IMAGE_POLL_TIMEOUT_SECONDS = 3600;
-const minPollCountForTimeout = (intervalMs: number) =>
-  Math.ceil((IMAGE_POLL_TIMEOUT_SECONDS * 1000) / Math.max(1, intervalMs));
-const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
 const COMFY_NUMERIC_FIELD_SOURCES = new Set([
   'width',
   'height',
@@ -605,380 +593,96 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
       // collectUpstream 已返回「本地上传 + 上游接入」按用户拖拽顺序合并后的列表,
       // 这里不再二次叠加 refImages, 避免本地参考图重复传递。
       const allRefs = upstreamImages.slice(0, maxRefs);
-
-      if (isExternalSelected && providerSelection.provider) {
-        const providerModel = externalProviderModel;
-        if (!providerModel) throw new Error('扩展平台未配置可用图像模型');
-        let size = externalImageSizeFor(aspectRatio, sizeLevel);
-        if (isComfyExternal && comfyWorkflow) {
-          const width = comfyNumberForSource('width', 1024);
-          const height = comfyNumberForSource('height', 1024);
-          if (width > 0 && height > 0) size = `${Math.round(width)}x${Math.round(height)}`;
-        }
-        const externalProviderParams = { ...(d?.providerParams || {}) };
-        let loraLog = '';
-        if (isModelScopeExternal && modelscopeLoraEnabled) {
-          if (!selectedModelscopeLoras.length) throw new Error('当前 ModelScope 模型没有可用 LoRA，请先在 API 设置中绑定。');
-          const loraPayload: Record<string, number> = {};
-          selectedModelscopeLoras.forEach((item) => {
-            loraPayload[item.id] = item.strength;
-          });
-          externalProviderParams.loras = loraPayload;
-          externalProviderParams.modelscopeLoras = selectedModelscopeLoras;
-          externalProviderParams.modelscopeLoraId = selectedModelscopeLoras[0]?.id || '';
-          externalProviderParams.modelscopeLoraStrength = selectedModelscopeLoras[0]?.strength;
-          loraLog = ` · LoRA=${selectedModelscopeLoras.map((item) => {
-            const option = modelscopeLoras.find((lora) => lora.id === item.id);
-            return `${option?.name || item.id}@${item.strength.toFixed(2)}`;
-          }).join('+')}`;
-        } else {
-          delete externalProviderParams.loras;
-          delete externalProviderParams.modelscopeLoras;
-        }
-        const externalNegativePrompt = isComfyExternal
-          ? String(
-              externalProviderParams.negativePrompt
-              ?? externalProviderParams.negative
-              ?? '',
-            ).trim()
-          : '';
-        logBus.info(
-          `扩展平台提交: ${providerSelection.provider.label || providerSelection.provider.id} · ${providerModel}${loraLog} · size=${size} · 参考图=${allRefs.length}`,
-          src,
-        );
-        let res = await generateExternalImage({
+      const mode: ImageGenerationMode = isExternalSelected ? 'external' : isMj ? 'mj' : isFal ? 'fal' : 'standard';
+      const externalProviderParams = { ...(d?.providerParams || {}) };
+      if (isModelScopeExternal && modelscopeLoraEnabled) {
+        if (!selectedModelscopeLoras.length) throw new Error('当前 ModelScope 模型没有可用 LoRA，请先在 API 设置中绑定。');
+        const loras: Record<string, number> = {};
+        selectedModelscopeLoras.forEach((item) => { loras[item.id] = item.strength; });
+        externalProviderParams.loras = loras;
+        externalProviderParams.modelscopeLoras = selectedModelscopeLoras;
+        externalProviderParams.modelscopeLoraId = selectedModelscopeLoras[0]?.id || '';
+        externalProviderParams.modelscopeLoraStrength = selectedModelscopeLoras[0]?.strength;
+      } else {
+        delete externalProviderParams.loras;
+        delete externalProviderParams.modelscopeLoras;
+      }
+      let externalSize = externalImageSizeFor(aspectRatio, sizeLevel);
+      if (isComfyExternal && comfyWorkflow) {
+        const width = comfyNumberForSource('width', 1024);
+        const height = comfyNumberForSource('height', 1024);
+        if (width > 0 && height > 0) externalSize = `${Math.round(width)}x${Math.round(height)}`;
+      }
+      logBus.info(`提交图像任务: mode=${mode} model=${isExternalSelected ? externalProviderModel : apiModel} 参考图=${allRefs.length}`, src);
+      const result = await runConfiguredImageGeneration({
+        mode,
+        prompt: finalPrompt,
+        images: allRefs,
+        outputFormat,
+        historyContext,
+        model: modelDef.id,
+        apiModel,
+        paramKind: modelDef.paramKind,
+        aspectRatio,
+        sizeLevel,
+        providerParams: isExternalSelected ? externalProviderParams : providerParams,
+        seed: mode === 'mj' ? mjSeed : mode === 'fal' ? nbSeed : Number(d?.seed || 0),
+        n: mode === 'external' ? Math.max(1, Math.min(4, Number(d?.providerParams?.n || 1))) : mode === 'fal' ? falN : 1,
+        external: isExternalSelected && providerSelection.provider ? {
           providerId: providerSelection.provider.id,
-          providerModel,
-          model: providerModel,
-          prompt: finalPrompt,
-          size,
-          aspect_ratio: aspectRatio,
-          image_size: sizeLevel,
-          images: allRefs,
-          outputFormat,
-          negativePrompt: externalNegativePrompt || undefined,
-          negative: externalNegativePrompt || undefined,
-          n: Math.max(1, Math.min(4, Number(d?.providerParams?.n || 1))),
-          providerParams: externalProviderParams,
-          historyContext,
-          async: true,
-        });
-        if ((!res.imageUrls?.length) && res.taskId && (res.code === 'running' || res.status === 'running')) {
-          let pollingTaskId = res.taskId;
-          let transientFailures = 0;
-          update({ progress: '5%', taskId: pollingTaskId });
-          logBus.info(`扩展平台任务继续轮询 taskId=${pollingTaskId}`, src);
-          const maxPoll = minPollCountForTimeout(EXTERNAL_IMAGE_POLL_INTERVAL_MS);
-          for (let i = 0; i < maxPoll; i += 1) {
-            await new Promise((r) => setTimeout(r, EXTERNAL_IMAGE_POLL_INTERVAL_MS));
-            try {
-              res = await queryExternalImageStatus({
-                providerId: providerSelection.provider.id,
-                providerModel,
-                taskId: pollingTaskId,
-                outputFormat,
-                historyContext,
-              });
-              transientFailures = 0;
-            } catch (err: any) {
-              transientFailures += 1;
-              const message = err?.message || String(err);
-              logBus.warn(`扩展平台状态查询暂时失败(${transientFailures}/5): ${message}`, src);
-              if (transientFailures >= 5) throw err;
-              continue;
-            }
-            pollingTaskId = res.taskId || pollingTaskId;
-            update({
-              taskId: pollingTaskId,
-              progress: `${Math.min(99, Math.round(((i + 1) / maxPoll) * 100))}%`,
-            });
-            if (res.imageUrls?.length || (res.code && res.code !== 'running')) break;
-          }
-        }
-        const urls = res.imageUrls || [];
-        if (!urls.length) throw new Error('扩展平台完成但未返回图片');
-        update({
-          status: 'success',
-          progress: '100%',
-          imageUrl: urls[0],
-          imageUrls: urls,
-          remoteImageUrls: res.remoteImageUrls,
-          lastPrompt: finalPrompt,
-          usedI2I: allRefs.length > 0,
-          taskId: res.taskId || d?.taskId,
-        });
-        logBus.success(`扩展平台完成 → ${urls[0]}`, src);
-        taskCompletionSound.notifyComplete(id, 'image');
-        return;
-      }
-
-      // ============ MJ 路径(对齐 gpt-image-2-web runMJ L4437~L4716) ============
-      if (isMj) {
-        logBus.info(
-          `MJ提交: version=${mjVersion} ar=${mjAr} speed=${mjSpeed} ref=${allRefs.length} sref=${mjSrefImages.length} oref=${mjOrefImages.length} prompt="${finalPrompt.slice(0, 60)}${finalPrompt.length > 60 ? '…' : ''}"`,
-          src,
-        );
-        // 主参考图(垫图): 将 URL 转 base64(主项目只接受 base64Array,上游节点输出的 imageUrl 需下载转换)
-        const base64Array: string[] = [];
-        for (const u of allRefs) {
-          try {
-            const resp = await fetch(u);
-            const blob = await resp.blob();
-            const dataUrl: string = await new Promise((resolve, reject) => {
-              const fr = new FileReader();
-              fr.onload = () => resolve(String(fr.result || ''));
-              fr.onerror = () => reject(new Error('读取失败'));
-              fr.readAsDataURL(blob);
-            });
-            base64Array.push(dataUrl);
-          } catch (err: any) {
-            logBus.warn(`MJ 主参考图转 base64 失败,跳过: ${u}`, src);
-          }
-        }
-        // sref/oref 允许多张(buildMjPrompt 会为每个 URL 各追加一个 flag)
-        const fullPrompt = buildMjPrompt({
-          prompt: finalPrompt,
-          model: mjVersion,
-          ar: mjAr,
-          c: mjC || undefined,
-          s: mjS || undefined,
-          iw: mjIw || undefined,
-          sw: mjSw || undefined,
-          sv: mjSv || undefined,
-          no: mjNo || undefined,
-          srefUrls: mjSrefImages,
-          orefUrls: mjOrefImages,
-        });
-        const submit = await submitMjImagine({
-          prompt: fullPrompt,
-          ar: mjAr,
-          c: mjC || undefined,
-          s: mjS || undefined,
-          iw: mjIw || undefined,
-          sw: mjSw || undefined,
-          sv: mjSv || undefined,
-          no: mjNo || undefined,
-          seed: mjSeed || undefined,
-          speed: mjSpeed,
-          base64Array,
-          remix: true,
-          historyContext,
-        });
-        const taskId = submit.taskId;
-        logBus.info(`MJ 任务已提交 taskId=${taskId} fullPrompt="${fullPrompt.slice(0, 120)}${fullPrompt.length > 120 ? '…' : ''}"`, src);
-        update({ progress: '15%', taskId });
-        const interval = Math.max(1, Math.min(30, mjPollInt || 3)) * 1000;
-        const maxPoll = Math.max(
-          10,
-          minPollCountForTimeout(interval),
-          Math.min(3600, mjMaxPoll || 1200),
-        );
-        for (let i = 0; i < maxPoll; i++) {
-          await new Promise((r) => setTimeout(r, interval));
-          const q = await queryMjTask(taskId, mjSpeed, historyContext);
-          if (q.status === 'FAILURE') {
-            throw new Error(`MJ 失败: ${q.failReason || '未知错误'}`);
-          }
-          if (q.progress) {
-            const pct = parseInt(String(q.progress)) || 0;
-            const out = `${Math.min(99, 15 + Math.floor(pct * 0.85))}%`;
-            update({ progress: out });
-            if (i % 3 === 2) logBus.debug(`[${i + 1}/${maxPoll}] MJ progress=${q.progress} status=${q.status}`, src);
-          }
-          if (q.status === 'SUCCESS') {
-            const main = q.imageUrl || '';
-            const grid = q.imageUrls || [];
-            const all = grid.length ? grid : (main ? [main] : []);
-            if (!all.length) {
-              // 调试：上游字段名可能变化，把原始报文打到日志便于定位
-              try {
-                const dump = JSON.stringify(q.raw)?.slice(0, 800) || String(q.raw);
-                logBus.warn(`MJ 任务完成但未拿到 imageUrl/imageUrls，raw=${dump}`, src);
-              } catch {}
-              throw new Error('MJ 任务完成但未返回图片');
-            }
-            const final = main || all[0];
-            logBus.success(`MJ 任务完成 → ${final}` + (grid.length ? ` (含 ${grid.length} 张子图)` : ''), src);
-            update({
-              status: 'success',
-              progress: '100%',
-              imageUrl: final,
-              imageUrls: all,
-              lastPrompt: finalPrompt,
-              usedI2I: allRefs.length > 0 || mjSrefImages.length > 0 || mjOrefImages.length > 0,
-            });
-            taskCompletionSound.notifyComplete(id, 'image');
-            return;
-          }
-        }
-        throw new Error(`MJ 轮询超时: ${maxPoll} 次 × ${interval / 1000}s`);
-      }
-
-      // ============ FAL 路径(对齐 gpt-image-2-web runGPTFal / runNanoFal) ============
-      if (isFal && falDef) {
-        const sizeDesc = falKind === 'gpt-fal'
-          ? (falSize === 'custom' ? `${falCustomW}×${falCustomH}` : falSize)
-          : `${nbAspect}/${nbResolution}`;
-        logBus.info(
-          `FAL提交: model=${apiModel} kind=${falKind} size=${sizeDesc} 参考图=${allRefs.length} prompt="${finalPrompt.slice(0, 60)}${finalPrompt.length > 60 ? '…' : ''}"`,
-          src,
-        );
-        const submit = await submitImageFal({
-          apiModel,
-          prompt: finalPrompt,
-          images: allRefs,
-          n: falKind === 'gpt-fal' ? falN : (d?.falN ?? 1),
+          providerModel: externalProviderModel,
+          size: externalSize,
+          negativePrompt: isComfyExternal
+            ? String(externalProviderParams.negativePrompt ?? externalProviderParams.negative ?? '').trim()
+            : '',
+        } : undefined,
+        fal: isFal && falKind ? {
+          kind: falKind,
+          mode: falMode,
+          size: falSize,
+          customW: falCustomW,
+          customH: falCustomH,
+          quality: falQuality,
           format: falFormat,
           sync: falSync,
-          // gpt-fal
-          mode: falKind === 'gpt-fal' ? falMode : undefined,
-          size: falKind === 'gpt-fal' ? falSize : undefined,
-          customW: falKind === 'gpt-fal' && falSize === 'custom' ? falCustomW : undefined,
-          customH: falKind === 'gpt-fal' && falSize === 'custom' ? falCustomH : undefined,
-          quality: falKind === 'gpt-fal' ? falQuality : undefined,
-          // nbpro-fal
-          aspect_ratio: falKind === 'nbpro-fal' ? nbAspect : undefined,
-          resolution: falKind === 'nbpro-fal' ? nbResolution : undefined,
-          safety_tolerance: falKind === 'nbpro-fal' ? nbSafety : undefined,
-          seed: falKind === 'nbpro-fal' && nbSeed > 0 ? nbSeed : undefined,
-          system_prompt: falKind === 'nbpro-fal' ? nbSysPrompt : undefined,
-          enable_web_search: falKind === 'nbpro-fal' ? nbWebSearch : undefined,
-          image_mode: falKind === 'nbpro-fal' ? nbImgMode : undefined,
-          outputFormat,
-          providerParams,
-          historyContext,
-        });
-
-        // 同步完成
-        if (submit.sync && submit.urls && submit.urls.length) {
-          logBus.success(`FAL同步返回 → ${submit.urls[0]}`, src);
-          update({
-            status: 'success',
-            progress: '100%',
-            imageUrl: submit.urls[0],
-            lastPrompt: finalPrompt,
-            usedI2I: allRefs.length > 0,
-          });
-          taskCompletionSound.notifyComplete(id, 'image');
-          return;
-        }
-
-        // 异步轮询: 1200×3s = 3600s，避免 FAL 图像长队列 30min 提前超时。
-        const { requestId, responseUrl, endpoint } = submit;
-        if (!requestId || !responseUrl) throw new Error('FAL 提交后未获得 request_id/response_url');
-        logBus.info(`FAL异步任务已提交 requestId=${requestId}`, src);
-        update({
-          progress: '5%',
-          taskId: requestId,
-          falResponseUrl: responseUrl,
-          falEndpoint: endpoint,
-        });
-        const interval = 3000;
-        const maxPoll = minPollCountForTimeout(interval);
-        for (let i = 0; i < maxPoll; i++) {
-          await new Promise((r) => setTimeout(r, interval));
-          const q = await queryImageFal({ responseUrl, endpoint, requestId, outputFormat, historyContext });
-          const st = String(q.status || '').toLowerCase();
-          if (st === 'completed') {
-            const url = q.urls?.[0];
-            if (!url) throw new Error('FAL 任务完成但未返回图片');
-            logBus.success(`FAL 任务完成 → ${url}`, src);
-            update({
-              status: 'success',
-              progress: '100%',
-              imageUrl: url,
-              lastPrompt: finalPrompt,
-              usedI2I: allRefs.length > 0,
-            });
-            taskCompletionSound.notifyComplete(id, 'image');
-            return;
-          }
-          if (st === 'failed') {
-            throw new Error(q.error || 'FAL 任务失败');
-          }
-          // 进度估算(15% 起步,到 95% 上限)
-          const pct = Math.min(95, 15 + Math.floor((i / maxPoll) * 80));
-          if (i % 5 === 4) {
-            update({ progress: `${pct}%` });
-            logBus.debug(`[${i + 1}/${maxPoll}] FAL 轮询 status=${q.falStatus || 'IN_QUEUE'}`, src);
-          }
-        }
-        throw new Error(`FAL 超时: ${(maxPoll * interval) / 1000}s 未完成`);
-      }
-
-      // ============ 原有标准路径(GPT2 standard / nano-banana / nano-banana-pro 未动) ============
-      logBus.info(
-        `提交任务: model=${apiModel} 比例=${aspectRatio} 尺寸=${sizeLevel} 参考图=${allRefs.length} prompt="${finalPrompt.slice(0, 60)}${finalPrompt.length > 60 ? '…' : ''}"`,
-        src,
-      );
-      const submit = await submitImageAsync({
-        model: modelDef.id,
-        apiModel: apiModel,
-        paramKind: modelDef.paramKind,
-        prompt: finalPrompt,
-        aspect_ratio: aspectRatio,
-        image_size: sizeLevel,
-        images: allRefs,
-        n: 1,
-        outputFormat,
-        providerParams,
-        historyContext,
+          aspectRatio: nbAspect,
+          resolution: nbResolution,
+          safetyTolerance: nbSafety,
+          systemPrompt: nbSysPrompt,
+          enableWebSearch: nbWebSearch,
+          imageMode: nbImgMode,
+        } : undefined,
+        mj: isMj ? {
+          version: mjVersion,
+          aspectRatio: mjAr,
+          speed: mjSpeed,
+          chaos: mjC,
+          stylize: mjS,
+          imageWeight: mjIw,
+          styleWeight: mjSw,
+          styleVersion: mjSv,
+          negativePrompt: mjNo,
+          seed: mjSeed,
+          pollIntervalSeconds: mjPollInt,
+          maxPolls: mjMaxPoll,
+          srefUrls: mjSrefImages,
+          orefUrls: mjOrefImages,
+        } : undefined,
+        onProgress: ({ progress, taskId, meta }) => update({ progress, ...(taskId ? { taskId } : {}), ...(meta || {}) }),
+        onWarning: (message) => logBus.warn(message, src),
       });
-
-      // 分支一:同步完成
-      if (submit.sync && submit.urls && submit.urls.length) {
-        logBus.success(`同步返回 → ${submit.urls[0]}`, src);
-        update({
-          status: 'success',
-          progress: '100%',
-          imageUrl: submit.urls[0],
-          imageUrls: submit.urls,
-          lastPrompt: finalPrompt,
-          usedI2I: allRefs.length > 0,
-        });
-        taskCompletionSound.notifyComplete(id, 'image');
-        return;
-      }
-
-      // 分支二:异步任务 → 轮询状态(对齐主项目 gpt-image-2-web pollTask)
-      const taskId = submit.taskId;
-      if (!taskId) throw new Error('未获取到 taskId 且无同步结果');
-      logBus.info(`异步任务已提交 taskId=${taskId} 进入轮询…`, src);
-      update({ progress: submit.progress || '5%', taskId });
-      // GPT2 / nano-banana / nano-banana-pro 标准路径轮询上限:
-      //   maxPoll × interval = 1800 × 2s = 3600s = 60 分钟(避免复杂 prompt / 多参考图任务被 120s 提前中断)
-      const maxPoll = 1800;     // 最多 1800 次
-      const interval = 2000;    // 每 2 秒一次
-      let lastProg = '5%';
-      for (let i = 0; i < maxPoll; i++) {
-        await new Promise((r) => setTimeout(r, interval));
-        const q = await queryImageStatus(taskId, apiModel, outputFormat, historyContext);
-        if (q.progress && q.progress !== lastProg) {
-          lastProg = q.progress;
-          update({ progress: q.progress });
-          logBus.debug(`[${i + 1}/${maxPoll}] status=${q.status} progress=${q.progress}`, src);
-        }
-        const st = String(q.status || '').toLowerCase();
-        if (st === 'completed' || st === 'success' || st === 'done') {
-          const url = q.urls?.[0];
-          if (!url) throw new Error('任务完成但未返回图片');
-          logBus.success(`任务完成 → ${url}`, src);
-          update({
-            status: 'success',
-            progress: '100%',
-            imageUrl: url,
-            imageUrls: q.urls,
-            lastPrompt: finalPrompt,
-            usedI2I: allRefs.length > 0,
-          });
-          taskCompletionSound.notifyComplete(id, 'image');
-          return;
-        }
-        if (st === 'failed' || st === 'failure' || st === 'error') {
-          throw new Error(q.error || '任务失败');
-        }
-      }
-      throw new Error(`超时:${maxPoll * interval / 1000}s 未完成`);
+      update({
+        status: 'success',
+        progress: '100%',
+        imageUrl: result.primaryUrl,
+        imageUrls: result.urls,
+        remoteImageUrls: result.remoteImageUrls,
+        lastPrompt: finalPrompt,
+        usedI2I: allRefs.length > 0 || mjSrefImages.length > 0 || mjOrefImages.length > 0,
+        taskId: result.taskId || d?.taskId,
+      });
+      logBus.success(`图像任务完成 → ${result.primaryUrl}`, src);
+      taskCompletionSound.notifyComplete(id, 'image');
     } catch (e: any) {
       const msg = e?.message || '生成失败';
       setError(msg);

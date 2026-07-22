@@ -49,6 +49,7 @@ export const NODE_DEFAULT_SIZE: Record<string, { w: number; h: number }> = {
   'runninghub-video': { w: 320, h: 380 },
   seedance: { w: 320, h: 380 },
   'director-storyboard': { w: 460, h: 760 },
+  'storyboard-grid': { w: 520, h: 920 },
   audio: { w: 320, h: 380 },
   'gitee-music': { w: 360, h: 660 },
   llm: { w: 320, h: 360 },

@@ -14,6 +14,10 @@ const HANDLE_PORT_TYPES: Record<string, HandlePortMap> = {
     source: { image: 'image', text: 'text' },
     target: { text: 'text', fixed: 'image', items: 'image' },
   },
+  'storyboard-grid': {
+    source: { shots: 'image', script: 'text' },
+    target: { outline: 'text' },
+  },
 };
 
 const DEFAULT_HANDLE_IDS: Record<string, DefaultHandleMap> = {
@@ -23,6 +27,10 @@ const DEFAULT_HANDLE_IDS: Record<string, DefaultHandleMap> = {
   'fhl-image-gen': {
     source: { image: 'image', text: 'text' },
     target: { text: 'text', image: 'fixed' },
+  },
+  'storyboard-grid': {
+    source: { image: 'shots', text: 'script' },
+    target: { text: 'outline' },
   },
 };
 

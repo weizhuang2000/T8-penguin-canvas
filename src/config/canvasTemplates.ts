@@ -82,15 +82,14 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
   },
   {
     id: 'tpl-storyboard',
-    name: '三视图分镜',
-    description: 'Text → 多角度 3D → 分镜网格,角色多角度展开',
+    name: '大纲转分镜',
+    description: 'Text → 分镜脚本,自动撰写、生成宫格并拆分镜头',
     build() {
-      const t = makeNode('text', 0, 0, { text: '一位戴着耳机的少女角色设计' });
-      const ma = makeNode('multi-angle-3d', 1, 0, { preset: 'multi-angle-3d' });
-      const sb = makeNode('storyboard-grid', 2, 0);
+      const t = makeNode('text', 0, 0, { text: '一名年轻摄影师在暴雨夜追踪神秘信号，最终在废弃天文台发现来自未来的影像。' });
+      const sb = makeNode('storyboard-grid', 1, 0);
       return {
-        nodes: [t, ma, sb],
-        edges: [makeEdge(t.id, ma.id), makeEdge(ma.id, sb.id)],
+        nodes: [t, sb],
+        edges: [makeEdge(t.id, sb.id)],
       };
     },
   },

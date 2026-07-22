@@ -617,6 +617,27 @@ function ExhibitionCompactFormController({
 // 节点初始 data(用于区分共享组件的 kind/preset/model 等)
 const INITIAL_DATA: Record<string, Record<string, any>> = {
   image: { model: 'gpt-image-2', aspectRatio: '1:1', sizeLevel: '1K', referenceImages: [], outputFormat: 'jpg' },
+  'storyboard-grid': {
+    storyboardRows: 2,
+    storyboardCols: 3,
+    storyboardCropGap: 0,
+    llmKeyId: '',
+    llmModel: '',
+    model: 'gpt-image-2',
+    apiModel: 'gpt-image-2-all',
+    aspectRatio: '3:2',
+    sizeLevel: '2K',
+    outputFormat: 'jpg',
+    providerSource: 'zhenzhen',
+    providerId: '',
+    providerModel: '',
+    providerParams: {},
+    storyboardScript: null,
+    storyboardSheetUrl: '',
+    imageUrls: [],
+    textSegments: [],
+    status: 'idle',
+  },
   'fhl-image-gen': {
     fhlPanel: 'quick',
     fhlQuality: '2K',
@@ -1803,7 +1824,7 @@ function filterExclusiveTargetEdges(
 const EXECUTABLE_NODE_TYPES = new Set<string>([
   'image', 'edit', 'fhl-image-gen',
   'multi-angle-3d', 'panorama-720', 'penguin-portrait',
-  'video', 'runninghub-video', 'seedance', 'audio', 'llm', 'prompt-reverse', 'remotion-animation', 'runninghub', 'runninghub-wallet',
+  'video', 'runninghub-video', 'seedance', 'audio', 'llm', 'storyboard-grid', 'prompt-reverse', 'remotion-animation', 'runninghub', 'runninghub-wallet',
   // v1.2.10.1: rh-tools 与 RunningHub 同质，同样可被批量运行调起
   'rh-tools', 'rh-toolbox',
   'resize', 'upscale', 'grid-crop', 'mark', 'remove-bg', 'combine', 'image-compare', 'drawing-board',

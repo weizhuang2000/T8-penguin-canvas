@@ -275,6 +275,28 @@ export function useUpstreamMaterials(nodeId: string): UpstreamMaterials {
 
       // 显式素材集: 保留素材集内部顺序，并用序号 key 避免相同 URL 被全局去重误删。
       // 同时跳过下面的旧字段读取，避免 imageUrls/textSegments 双写后重复出现。
+      if (n.type === 'storyboard-grid') {
+        const wantText = handles.has('script') || handles.has(null);
+        const wantImages = handles.has('shots') || handles.has(null);
+        if (wantText) {
+          const segments = Array.isArray(ud.textSegments) ? ud.textSegments : [];
+          if (segments.length) {
+            segments.forEach((segment: any, index: number) => {
+              pushText(sid, segment, `storyboard:${sid}:script:${index}`, `镜头脚本 ${index + 1}`, textMeta);
+            });
+          } else {
+            pushText(sid, ud.outputText || ud.text || ud.prompt, `storyboard:${sid}:script`, '分镜脚本', textMeta);
+          }
+        }
+        if (wantImages) {
+          const urls = Array.isArray(ud.imageUrls) ? ud.imageUrls : [];
+          urls.forEach((url: any, index: number) => {
+            pushUrl(sid, 'image', url, images, `storyboard:${sid}:shot:${index}`, `分镜镜头 ${index + 1}`);
+          });
+        }
+        continue;
+      }
+
       if (n.type === 'exhibition-outline-split') {
         const wantText = handles.has('outline-text') || handles.has(null);
         const wantImages = handles.has('outline-image') || handles.has(null);

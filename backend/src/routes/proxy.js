@@ -824,7 +824,7 @@ async function normalizeImageResponse(data, outputFormat = 'jpg') {
   return { kind: 'unknown' };
 }
 
-router.post('/image', requireNodePermission(['image', 'exhibition-img2img', 'exhibition-style-transfer', 'exhibition-lighting-heatmap', 'exhibition-creative-image', 'unit-panel-design', 'showcase-interior-design']), async (req, res) => {
+router.post('/image', requireNodePermission(['image', 'storyboard-grid', 'exhibition-img2img', 'exhibition-style-transfer', 'exhibition-lighting-heatmap', 'exhibition-creative-image', 'unit-panel-design', 'showcase-interior-design']), async (req, res) => {
   const settings = loadRawSettings();
   const {
     model, apiModel, paramKind: paramKindIn,
@@ -886,7 +886,7 @@ router.post('/image', requireNodePermission(['image', 'exhibition-img2img', 'exh
 // POST /api/proxy/image/submit -> { taskId }(同 submit 逻辑,但不同步轮询)
 // GET  /api/proxy/image/status/:tid -> { status, progress, urls? }
 // ========================================================================
-router.post('/image/submit', requireNodePermission(['image', 'exhibition-img2img', 'exhibition-style-transfer', 'exhibition-lighting-heatmap', 'exhibition-creative-image', 'exhibition-render-to-elevation', 'unit-panel-design', 'showcase-interior-design']), async (req, res) => {
+router.post('/image/submit', requireNodePermission(['image', 'storyboard-grid', 'exhibition-img2img', 'exhibition-style-transfer', 'exhibition-lighting-heatmap', 'exhibition-creative-image', 'exhibition-render-to-elevation', 'unit-panel-design', 'showcase-interior-design']), async (req, res) => {
   const settings = loadRawSettings();
   try {
     const { model, apiModel, paramKind: paramKindIn, prompt, n,
@@ -936,7 +936,7 @@ router.post('/image/submit', requireNodePermission(['image', 'exhibition-img2img
 });
 
 // 查询异步图像任务状态
-router.get('/image/status/:tid', requireNodePermission(['image', 'exhibition-img2img', 'exhibition-style-transfer', 'exhibition-lighting-heatmap', 'exhibition-creative-image', 'exhibition-render-to-elevation', 'unit-panel-design', 'showcase-interior-design']), async (req, res) => {
+router.get('/image/status/:tid', requireNodePermission(['image', 'storyboard-grid', 'exhibition-img2img', 'exhibition-style-transfer', 'exhibition-lighting-heatmap', 'exhibition-creative-image', 'exhibition-render-to-elevation', 'unit-panel-design', 'showcase-interior-design']), async (req, res) => {
   const settings = loadRawSettings();
   // 优先从 submit 阶段记录的 (taskId → key) 映射恢复，防止前端未传 model 导致 fallback 错 key。
   const remembered = recallTaskKey(req.params.tid);
@@ -1076,7 +1076,7 @@ function fixFalResponseUrl(responseUrl, baseUrl, endpoint, requestId) {
 //   body 公用: { apiModel, prompt, images?, n?, format?, sync?, ... }
 //   gpt-fal 专属: { mode?: 'edit'|'gen', size?: '1024x1024'|'square'|...|'custom', customW?, customH?, quality?: low|medium|high|auto }
 //   nbpro-fal 专属: { aspect_ratio, resolution, safety_tolerance, seed?, system_prompt?, enable_web_search?, image_mode?: 'image_url'|'base64' }
-router.post('/image/fal/submit', requireNodePermission(['image', 'exhibition-img2img', 'exhibition-style-transfer', 'exhibition-lighting-heatmap', 'exhibition-creative-image', 'unit-panel-design', 'showcase-interior-design']), async (req, res) => {
+router.post('/image/fal/submit', requireNodePermission(['image', 'storyboard-grid', 'exhibition-img2img', 'exhibition-style-transfer', 'exhibition-lighting-heatmap', 'exhibition-creative-image', 'unit-panel-design', 'showcase-interior-design']), async (req, res) => {
   const settings = loadRawSettings();
   const {
     apiModel, prompt, images, n, format, sync,
@@ -1231,7 +1231,7 @@ router.post('/image/fal/submit', requireNodePermission(['image', 'exhibition-img
 // POST /api/proxy/image/fal/query
 //   body: { responseUrl, endpoint, requestId }
 //   返回: { status: 'pending'|'completed'|'failed', urls?, error? }
-router.post('/image/fal/query', requireNodePermission(['image', 'exhibition-img2img', 'exhibition-style-transfer', 'exhibition-lighting-heatmap', 'exhibition-creative-image', 'unit-panel-design', 'showcase-interior-design']), async (req, res) => {
+router.post('/image/fal/query', requireNodePermission(['image', 'storyboard-grid', 'exhibition-img2img', 'exhibition-style-transfer', 'exhibition-lighting-heatmap', 'exhibition-creative-image', 'unit-panel-design', 'showcase-interior-design']), async (req, res) => {
   const settings = loadRawSettings();
   const { responseUrl: rawUrl, endpoint, requestId, outputFormat } = req.body || {};
   const imageOutputFormat = normalizeImageOutputFormat(outputFormat || recallTaskImageFormat(requestId));
@@ -1302,7 +1302,7 @@ function mjSpeedSeg(speed) {
 // ---- POST /api/proxy/mj/imagine ----
 // body: { prompt, ar?, no?, c?, s?, iw?, sw?, cw?, sv?, seed?, base64Array?, speed?, modes?, instanceId?, notifyHook?, remix? }
 // 返回上游 imagine 原始响应 { code, description, result(taskId), properties }
-router.post('/mj/imagine', requireNodePermission('image'), async (req, res) => {
+router.post('/mj/imagine', requireNodePermission(['image', 'storyboard-grid']), async (req, res) => {
   const settings = loadRawSettings();
   // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
   if (!ensureKey(settings, res, 'mj', 'MJ')) return;
@@ -1354,7 +1354,7 @@ router.post('/mj/imagine', requireNodePermission('image'), async (req, res) => {
 
 // ---- GET /api/proxy/mj/task/:id?speed=fast ----
 // 轮询任务状态
-router.get('/mj/task/:id', requireNodePermission('image'), async (req, res) => {
+router.get('/mj/task/:id', requireNodePermission(['image', 'storyboard-grid']), async (req, res) => {
   const settings = loadRawSettings();
   // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
   if (!ensureKey(settings, res, 'mj', 'MJ')) return;
@@ -1410,7 +1410,7 @@ router.get('/mj/task/:id', requireNodePermission('image'), async (req, res) => {
 // ---- POST /api/proxy/mj/upload ----
 // body: { base64Data: 'data:image/png;base64,xxxx', speed? }
 // 上传参考图到 MJ Discord，返回 URL（主项目 uploadMJImage L4407 + server.py L2457）
-router.post('/mj/upload', requireNodePermission('image'), async (req, res) => {
+router.post('/mj/upload', requireNodePermission(['image', 'storyboard-grid']), async (req, res) => {
   const settings = loadRawSettings();
   // v1.2.9.15: 一体化「专属优先 fallback 通用」校验
   if (!ensureKey(settings, res, 'mj', 'MJ')) return;
@@ -1449,7 +1449,7 @@ router.post('/mj/upload', requireNodePermission('image'), async (req, res) => {
 //   - messages[i].content 支持 string 或 多模态数组 [{type:'text',text} | {type:'image_url',image_url:{url}}]
 //   - stream=true → 透传上游 SSE(text/event-stream) 到前端
 //   - 完全对齐 gpt-image-2-web _doSendChat (index.html L8128~L8305)
-router.post('/llm', requireNodePermission(['llm', 'prompt-reverse']), async (req, res) => {
+router.post('/llm', requireNodePermission(['llm', 'prompt-reverse', 'storyboard-grid']), async (req, res) => {
   const settings = loadRawSettings();
   if (!settings) {
     return res.status(400).json({ success: false, error: '未配置 LLM 独立 API Key' });

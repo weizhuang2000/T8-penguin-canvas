@@ -30,6 +30,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: 'director-storyboard', label: '导演分镜台', category: 'core', description: '秒级长片分镜台：多镜头提示词、参考素材和 Seedance2.0 无限并发生成', icon: 'Clapperboard', color: 'fuchsia' },
   { type: 'audio', label: '音频', category: 'core', description: 'Suno V5.5 全模式(生成/翻唱/续写)', icon: 'Music', color: 'violet' },
   { type: 'llm', label: 'LLM', category: 'core', description: 'GPT-5 / Claude 4.5 / Gemini 2.5(独立 Key)', icon: 'Brain', color: 'emerald' },
+  { type: 'storyboard-grid', label: '分镜脚本', category: 'core', description: '文本大纲经 LLM 拆成可编辑分镜卡，一次生成宫格整图并自动拆分镜头文件', icon: 'Clapperboard', color: 'indigo' },
   { type: 'prompt-reverse', label: '提示词反推', category: 'core', description: '反推 GPT Image 2 提示词，并可用接入文本替换画面内容', icon: 'BrainCircuit', color: 'emerald' },
   { type: 'remotion-animation', label: 'Remotion 动画', category: 'core', description: 'LLM 独立配置 + 内置 Skill 生成专业 TSX，经关键帧审片后本地渲染 MP4', icon: 'Clapperboard', color: 'rose' },
 
@@ -63,13 +64,12 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: 'comfyui-store', label: 'ComfyUI超市', category: 'comfyui', description: 'ComfyUI 应用库：导入制作好的工作流应用，接上游素材后一键运行', icon: 'Boxes', color: 'cyan' },
   { type: 'comfyui-app-maker', label: 'ComfyUI应用制作工具', category: 'comfyui', description: '上传 ComfyUI API Workflow JSON，自动识别参数并保存为可复用应用', icon: 'FileJson', color: 'emerald' },
 
-  // ========== Special 特殊节点(5) ==========
-  // 以下五个节点暂时隐藏不展示 (hidden: true) —— 需要重新启用时删除 hidden 即可。
+  // ========== Special 特殊节点(4) ==========
+  // 以下四个节点暂时隐藏不展示 (hidden: true) —— 需要重新启用时删除 hidden 即可。
   { type: 'multi-angle-3d', label: '多角度 3D', category: 'special', description: '3D 多视角生成', icon: 'Box', color: 'indigo', hidden: true },
   { type: 'panorama-720', label: '720 全景', category: 'special', description: '720° 全景图', icon: 'Globe', color: 'indigo', hidden: true },
   { type: 'penguin-portrait', label: '企鹅肖像', category: 'special', description: '肖像专用流程', icon: 'UserSquare2', color: 'indigo', hidden: true },
   { type: 'portrait-metadata', label: '肖像元数据', category: 'special', description: '肖像参数管理', icon: 'FileText', color: 'indigo', hidden: true },
-  { type: 'storyboard-grid', label: '分镜网格', category: 'special', description: '分镜九宫格布局', icon: 'LayoutGrid', color: 'indigo', hidden: true },
 
   // ========== Utility 工具节点(13) ==========
   // 其中 4 个暂时隐藏: browser / frame-extractor / remove-bg / upscale
