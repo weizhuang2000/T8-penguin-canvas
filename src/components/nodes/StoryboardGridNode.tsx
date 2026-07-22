@@ -16,7 +16,7 @@ import {
   gptImage2ZhenzhenVariantSize,
   isFalModel,
 } from '../../providers/models';
-import { generateLlm, type MjSpeed } from '../../services/generation';
+import { generateLlmStream, type MjSpeed } from '../../services/generation';
 import { runConfiguredImageGeneration, type ImageGenerationMode } from '../../services/imageGenerationRunner';
 import { opGridCrop } from '../../services/imageOps';
 import {
@@ -235,18 +235,24 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
       max_tokens: Math.min(32000, 1800 + expectedCount * 720),
     };
     const promptOptions = { videoStyle, totalDurationSeconds };
-    const first = await generateLlm({ ...request, messages: buildStoryboardScriptMessages(outline, rows, cols, promptOptions) });
+    const first = await generateLlmStream(
+      { ...request, messages: buildStoryboardScriptMessages(outline, rows, cols, promptOptions) },
+      { signal: controller.signal },
+    );
     if (controller.signal.aborted) throw new DOMException('任务已取消', 'AbortError');
     let next: StoryboardScript;
     try {
       next = parseStoryboardScript(first.content, expectedCount, totalDurationSeconds);
     } catch (parseError: any) {
       update({ progress: `正在修复脚本结构：${parseError?.message || '格式错误'}` });
-      const repaired = await generateLlm({
-        ...request,
-        temperature: 0.1,
-        messages: buildStoryboardRepairMessages(first.content, outline, rows, cols, promptOptions),
-      });
+      const repaired = await generateLlmStream(
+        {
+          ...request,
+          temperature: 0.1,
+          messages: buildStoryboardRepairMessages(first.content, outline, rows, cols, promptOptions),
+        },
+        { signal: controller.signal },
+      );
       if (controller.signal.aborted) throw new DOMException('任务已取消', 'AbortError');
       next = parseStoryboardScript(repaired.content, expectedCount, totalDurationSeconds);
     }

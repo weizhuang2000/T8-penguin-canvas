@@ -171,6 +171,8 @@ test('storyboard node is visible, executable, permissioned and uses shared gener
   assert.match(canvas, /EXECUTABLE_NODE_TYPES[\s\S]*'storyboard-grid'/);
   assert.match(node, /sourceNodeType:\s*'storyboard-grid'/);
   assert.match(node, /runConfiguredImageGeneration/);
+  assert.match(node, /generateLlmStream/);
+  assert.match(node, /signal:\s*controller\.signal/);
   assert.match(node, /Handle id="references"/);
   assert.match(node, /images:\s*referenceImages/);
   assert.match(node, /uniformTiles:\s*true/);

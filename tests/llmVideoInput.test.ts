@@ -101,6 +101,22 @@ test('streaming LLM parser keeps final SSE data even without a trailing newline'
   }
 });
 
+test('streaming LLM reports concise gateway errors without echoing IIS HTML', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response(
+      '<!DOCTYPE html><html><head><title>IIS 10.0 详细错误 - 502.3 - Bad Gateway</title></head></html>',
+      { status: 502, headers: { 'Content-Type': 'text/html' } },
+    ) as any;
+    await assert.rejects(
+      () => generateLlmStream({ model: 'test-model', messages: [{ role: 'user', content: '生成分镜' }] }),
+      (error: any) => /网关临时不可用.*避免重复计费未自动重试/.test(error?.message) && !/DOCTYPE/.test(error?.message),
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('LLM media normalizer converts local video references to absolute URLs in url mode', async () => {
   const messages = [
     {

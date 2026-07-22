@@ -1598,6 +1598,10 @@ router.post('/llm', requireNodePermission(['llm', 'prompt-reverse', 'storyboard-
       res.setHeader('Cache-Control', 'no-cache, no-transform');
       res.setHeader('Connection', 'keep-alive');
       res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders?.();
+      const heartbeat = setInterval(() => {
+        if (!res.writableEnded) res.write(': keep-alive\n\n');
+      }, 15000);
       // Node 18+ fetch response.body 为 ReadableStream
       try {
         const reader = r.body.getReader();
@@ -1611,6 +1615,8 @@ router.post('/llm', requireNodePermission(['llm', 'prompt-reverse', 'storyboard-
         }
       } catch (streamErr) {
         console.error('proxy/llm SSE 转发异常:', streamErr);
+      } finally {
+        clearInterval(heartbeat);
       }
       return res.end();
     }

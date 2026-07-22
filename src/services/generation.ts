@@ -10,6 +10,11 @@ async function parseJsonResponse<T = any>(res: Response): Promise<T> {
   try {
     return JSON.parse(text) as T;
   } catch {
+    const isGatewayFailure = [502, 503, 504].includes(res.status);
+    const isHtml = /<!doctype\s+html|<html[\s>]/i.test(text);
+    if (isGatewayFailure || isHtml) {
+      throw new Error(`上游 LLM 网关临时不可用（HTTP ${res.status}）。请求可能已到达模型，为避免重复计费未自动重试，请稍后手动重试。`);
+    }
     const preview = text.replace(/\s+/g, ' ').trim().slice(0, 240);
     throw new Error(`接口返回非 JSON，可能是上游或代理临时错误：HTTP ${res.status}。响应片段：${preview}`);
   }
@@ -632,7 +637,7 @@ export async function generateExternalLlm(req: GenerateExternalLlmRequest): Prom
 export async function generateLlmStream(
   req: GenerateLlmRequest,
   opts: { onDelta?: (chunk: string) => void; signal?: AbortSignal } = {}
-): Promise<{ content: string }> {
+): Promise<{ content: string; finishReason?: string; truncated?: boolean }> {
   const r = await fetch('/api/proxy/llm', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -655,6 +660,31 @@ export async function generateLlmStream(
   const decoder = new TextDecoder();
   let assembled = '';
   let buffer = '';
+  let finishReason = '';
+  const result = () => ({
+    content: assembled,
+    ...(finishReason ? { finishReason } : {}),
+    truncated: finishReason === 'length' || finishReason === 'max_tokens',
+  });
+  const consumeLine = (raw: string) => {
+    const line = raw.trim();
+    if (!line.startsWith('data:')) return false;
+    const data = line.slice(5).trim();
+    if (data === '[DONE]') return true;
+    try {
+      const json = JSON.parse(data);
+      const choice = json?.choices?.[0];
+      const delta = choice?.delta?.content;
+      if (typeof delta === 'string' && delta.length) {
+        assembled += delta;
+        opts.onDelta?.(delta);
+      }
+      if (typeof choice?.finish_reason === 'string' && choice.finish_reason) finishReason = choice.finish_reason;
+    } catch {
+      // 心跳或非标准事件忽略。
+    }
+    return false;
+  };
   // SSE 鎸夎瑙ｆ瀽
   // eslint-disable-next-line no-constant-condition
   while (true) {
@@ -664,23 +694,12 @@ export async function generateLlmStream(
     const lines = buffer.split('\n');
     buffer = lines.pop() || '';
     for (const raw of lines) {
-      const line = raw.trim();
-      if (!line.startsWith('data:')) continue;
-      const data = line.slice(5).trim();
-      if (data === '[DONE]') return { content: assembled };
-      try {
-        const j = JSON.parse(data);
-        const delta = j?.choices?.[0]?.delta?.content;
-        if (typeof delta === 'string' && delta.length) {
-          assembled += delta;
-          opts.onDelta?.(delta);
-        }
-      } catch {
-        /* 蹇冭烦鎴栦笉瀹屾暣 JSON 蹇界暐 */
-      }
+      if (consumeLine(raw)) return result();
     }
   }
-  return { content: assembled };
+  buffer += decoder.decode();
+  if (buffer.trim()) consumeLine(buffer);
+  return result();
 }
 
 /** File 鈫?dataURL(瀵归綈涓婚」鐩?FileReader.readAsDataURL) */
