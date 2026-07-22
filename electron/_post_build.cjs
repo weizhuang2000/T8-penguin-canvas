@@ -462,6 +462,8 @@ function main() {
   console.log('\n[2] 前端 dist:');
   checkFile(path.join(RES, 'frontend', 'index.html'));
   checkFile(path.join(RES, 'frontend', 'assets'));
+  checkFile(path.join(RES, 'resources', 'fonts', 'NotoSansSC-VF.ttf'));
+  checkFile(path.join(RES, 'resources', 'fonts', 'OFL.txt'));
   checkFile(path.join(RES, 'shared', 'achievementManifest.json'));
   checkFrontendAsset('classic-one-summer-day-', '.mp3');
   checkFrontendAsset('pixel-theme-of-sss-', '.mp3');

@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { AlertCircle, Brain, Clapperboard, Download, LayoutGrid, Loader2, Scissors, Sparkles, Square } from 'lucide-react';
+import { AlertCircle, Brain, Clapperboard, Download, FileDown, LayoutGrid, Loader2, Scissors, Sparkles, Square } from 'lucide-react';
 import {
   DEFAULT_MJ_RATIO,
   DEFAULT_MJ_SPEED,
@@ -19,6 +19,13 @@ import {
 import { generateLlm, type MjSpeed } from '../../services/generation';
 import { runConfiguredImageGeneration, type ImageGenerationMode } from '../../services/imageGenerationRunner';
 import { opGridCrop } from '../../services/imageOps';
+import {
+  downloadStoryboardExport,
+  exportStoryboardDocument,
+  type StoryboardExportFormat,
+  type StoryboardExportLayout,
+  type StoryboardPptShotsPerSlide,
+} from '../../services/storyboardExport';
 import { useApiKeysStore } from '../../stores/apiKeys';
 import { logBus } from '../../stores/logs';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
@@ -79,6 +86,8 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
   const upstream = useUpstreamMaterials(id);
   const abortRef = useRef<AbortController | null>(null);
   const [localError, setLocalError] = useState('');
+  const [exportError, setExportError] = useState('');
+  const [exporting, setExporting] = useState(false);
   const [openShotIndex, setOpenShotIndex] = useState(0);
 
   const rows = normalizeStoryboardDimension(d.storyboardRows ?? d.rows, 2);
@@ -157,6 +166,15 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
   const error = localError || String(d.error || '');
   const sheetUrl = String(d.storyboardSheetUrl || '');
   const shotUrls: string[] = Array.isArray(d.imageUrls) ? d.imageUrls.filter((url: unknown) => typeof url === 'string') : [];
+  const exportFormat: StoryboardExportFormat = ['docx', 'pdf', 'pptx'].includes(String(d.storyboardExportFormat))
+    ? d.storyboardExportFormat
+    : 'docx';
+  const exportLayout: StoryboardExportLayout = d.storyboardExportLayout === 'shot-card-table'
+    ? 'shot-card-table'
+    : 'production-table';
+  const pptShotsPerSlide: StoryboardPptShotsPerSlide = [1, 2, 4].includes(Number(d.storyboardPptShotsPerSlide))
+    ? Number(d.storyboardPptShotsPerSlide) as StoryboardPptShotsPerSlide
+    : 2;
 
   const setScript = (next: StoryboardScript, patch: Record<string, unknown> = {}) => {
     const textSegments = storyboardTextSegments(next);
@@ -378,6 +396,29 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
     }
   };
 
+  const runExport = async () => {
+    if (!script || exporting || busy) return;
+    setExportError('');
+    setExporting(true);
+    try {
+      const result = await exportStoryboardDocument({
+        format: exportFormat,
+        layout: exportLayout,
+        pptShotsPerSlide,
+        script,
+        imageUrls: shotUrls.slice(0, script.shots.length),
+        sourceNodeType: 'storyboard-grid',
+      });
+      downloadStoryboardExport(result);
+    } catch (errorValue: any) {
+      const message = errorValue?.message || '分镜脚本导出失败';
+      setExportError(message);
+      logBus.error(message, `storyboard-export:${id.slice(-6)}`);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const stop = () => {
     abortRef.current?.abort();
     abortRef.current = null;
@@ -413,7 +454,7 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
           <div className="text-[10px]" style={{ color: 'var(--t8-text-muted)' }}>{rows} × {cols} · {expectedCount} 镜 · 单格约 {cellRatio}</div>
         </div>
         <NodeHelpButton nodeType="storyboard-grid" />
-        {busy && <Loader2 size={15} className="animate-spin text-indigo-300" />}
+        {(busy || exporting) && <Loader2 size={15} className="animate-spin text-indigo-300" />}
       </div>
 
       <div className="nodrag nowheel space-y-2.5 p-3" onMouseDown={(event) => event.stopPropagation()}>
@@ -491,6 +532,18 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
           <button className="flex items-center justify-center gap-1 rounded bg-emerald-500/15 px-2 py-2 text-xs text-emerald-200 hover:bg-emerald-500/25 disabled:opacity-40" disabled={busy || !outline} onClick={() => { void runScriptOnly().catch(() => undefined); }}><Brain size={13} />生成脚本</button>
           <button className="flex items-center justify-center gap-1 rounded bg-amber-500/15 px-2 py-2 text-xs text-amber-200 hover:bg-amber-500/25 disabled:opacity-40" disabled={busy || scriptStale} onClick={() => { void runImageOnly().catch(() => undefined); }}><LayoutGrid size={13} />生成分镜图</button>
           {busy ? <button className="flex items-center justify-center gap-1 rounded bg-red-500/15 px-2 py-2 text-xs text-red-200 hover:bg-red-500/25" onClick={stop}><Square size={12} />停止</button> : <button className="flex items-center justify-center gap-1 rounded bg-indigo-500/25 px-2 py-2 text-xs font-medium text-indigo-100 hover:bg-indigo-500/35 disabled:opacity-40" disabled={!outline} onClick={() => { void runAll().catch(() => undefined); }}><Sparkles size={13} />一键生成</button>}
+        </div>
+
+        <div className="space-y-2 border-t border-white/10 pt-2">
+          <div className="grid grid-cols-3 gap-2">
+            <label className="space-y-1 text-[10px] text-white/55"><span>导出格式</span><select className={FIELD} value={exportFormat} disabled={busy || exporting} onChange={(event) => update({ storyboardExportFormat: event.target.value })}><option value="docx">DOCX</option><option value="pdf">PDF</option><option value="pptx">PPT</option></select></label>
+            <label className="space-y-1 text-[10px] text-white/55"><span>表格排版</span><select className={FIELD} value={exportLayout} disabled={busy || exporting} onChange={(event) => update({ storyboardExportLayout: event.target.value })}><option value="production-table">标准制片表</option><option value="shot-card-table">镜头大卡表</option></select></label>
+            <label className="space-y-1 text-[10px] text-white/55"><span>PPT 每页镜头</span><select className={FIELD} value={pptShotsPerSlide} disabled={busy || exporting || exportFormat !== 'pptx'} onChange={(event) => update({ storyboardPptShotsPerSlide: Number(event.target.value) })}><option value={1}>1</option><option value={2}>2</option><option value={4}>4</option></select></label>
+          </div>
+          <button className="flex w-full items-center justify-center gap-1.5 rounded bg-sky-500/15 px-2 py-2 text-xs font-medium text-sky-100 hover:bg-sky-500/25 disabled:opacity-40" disabled={!script || busy || exporting} onClick={() => { void runExport(); }}>
+            {exporting ? <Loader2 size={13} className="animate-spin" /> : <FileDown size={13} />}{exporting ? '正在导出' : `导出 ${exportFormat === 'pptx' ? 'PPT' : exportFormat.toUpperCase()}`}
+          </button>
+          {exportError && <div className="flex items-start gap-1.5 rounded border border-red-400/25 bg-red-500/10 px-2 py-1.5 text-[10px] text-red-200"><AlertCircle size={12} className="mt-0.5 shrink-0" /><span>{exportError}</span></div>}
         </div>
 
         {!!d.progress && <div className="rounded bg-indigo-500/10 px-2 py-1.5 text-[10px] text-indigo-200">{d.progress}</div>}

@@ -5145,7 +5145,7 @@
         {
           "type": "storyboard-grid",
           "label": "分镜脚本",
-          "description": "接入文本大纲后，用 LLM 独立配置严格撰写行×列数量的完整可编辑分镜卡；支持贞贞、FAL、Midjourney和扩展图像 Provider一次生成宫格整图，自动按行优先拆分为单镜头文件，整图仅在节点内预览下载"
+          "description": "接入文本大纲后，用 LLM 独立配置严格撰写行×列数量的完整可编辑分镜卡；支持贞贞、FAL、Midjourney和扩展图像 Provider一次生成宫格整图，自动按行优先拆分为单镜头文件，并以标准制片表或镜头大卡表导出 DOCX、PDF、PPTX"
         }
       ]
     },

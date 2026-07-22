@@ -50,6 +50,9 @@ test('Electron packaging verifies encrypted local extension hook points', () => 
   assert.match(postBuild, /tools['"], ['"]figma-bridge/);
   const packageJson = JSON.parse(read('../package.json'));
   const resources = packageJson.build.extraResources.map((item: any) => `${item.from}->${item.to}`);
+  assert.ok(resources.includes('resources/fonts->resources/fonts'));
+  assert.match(postBuild, /NotoSansSC-VF\.ttf/);
+  assert.match(postBuild, /resources['"], ['"]fonts/);
   assert.ok(resources.includes('tools/figma-bridge->tools/figma-bridge'));
   const localHook = new URL('../local-private/extensions/build/post-build.cjs', import.meta.url);
   if (existsSync(localHook)) {

@@ -12,11 +12,14 @@
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
+    "docx": "^9.7.1",
     "express": "^4.21.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
     "mysql2": "^3.11.0",
     "pdf-parse": "1.1.1",
+    "pdfmake": "^0.3.11",
+    "pptxgenjs": "^4.0.1",
     "sharp": "^0.34.5"
   }
 }

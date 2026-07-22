@@ -99,6 +99,13 @@ test('storyboard node is visible, executable, permissioned and uses shared gener
   assert.match(node, /sourceNodeType:\s*'storyboard-grid'/);
   assert.match(node, /runConfiguredImageGeneration/);
   assert.match(node, /storyboardSheetUrl/);
+  assert.match(node, /storyboardExportFormat/);
+  assert.match(node, /storyboardExportLayout/);
+  assert.match(node, /storyboardPptShotsPerSlide/);
+  assert.match(node, /exportStoryboardDocument/);
+  assert.match(canvas, /storyboardExportFormat:\s*'docx'/);
+  assert.match(canvas, /storyboardExportLayout:\s*'production-table'/);
+  assert.match(canvas, /storyboardPptShotsPerSlide:\s*2/);
   assert.match(imageNode, /runConfiguredImageGeneration/);
   assert.match(permissions, /DEFAULT_VISIBLE_NODE_TYPES[\s\S]*'storyboard-grid'/);
   assert.match(proxy, /requireNodePermission\(\['llm', 'prompt-reverse', 'storyboard-grid'\]\)/);

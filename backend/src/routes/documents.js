@@ -3,7 +3,9 @@
 const express = require('express');
 const multer = require('multer');
 const config = require('../config');
+const { requireNodePermission } = require('../auth/toolPermissions');
 const { extractDocument } = require('../utils/documentExtractor');
+const { exportStoryboardDocument } = require('../utils/storyboardExporter');
 
 const router = express.Router();
 const maxDocumentFileSize = config.MAX_DOCUMENT_FILE_SIZE || config.MAX_FILE_SIZE;
@@ -36,6 +38,23 @@ router.post('/extract', (req, res) => {
       return res.status(status).json({ success: false, error: message, code });
     }
   });
+});
+
+router.post('/storyboard/export', requireNodePermission('storyboard-grid'), async (req, res) => {
+  try {
+    const result = await exportStoryboardDocument(req.body || {});
+    const encodedFilename = encodeURIComponent(result.filename).replace(/['()]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+    res.setHeader('Content-Type', result.mime);
+    res.setHeader('Content-Disposition', `attachment; filename="storyboard-export.${result.model.format}"; filename*=UTF-8''${encodedFilename}`);
+    res.setHeader('Content-Length', String(result.buffer.length));
+    return res.send(result.buffer);
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    const code = String(error?.code || 'storyboard_export_failed');
+    const message = error?.message || '分镜脚本导出失败';
+    if (status >= 500) console.error('[documents/storyboard/export]', error?.stack || message);
+    return res.status(status).json({ success: false, error: message, code });
+  }
 });
 
 module.exports = router;
