@@ -45,6 +45,7 @@ import {
   formatStoryboardScript,
   legacyFramesToStoryboard,
   normalizeStoryboardDimension,
+  normalizeStoryboardTotalDuration,
   parseStoryboardScript,
   storyboardTextSegments,
   STORYBOARD_VIDEO_STYLES,
@@ -96,6 +97,7 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
   const rows = normalizeStoryboardDimension(d.storyboardRows ?? d.rows, 2);
   const cols = normalizeStoryboardDimension(d.storyboardCols ?? d.cols, 3);
   const expectedCount = rows * cols;
+  const totalDurationSeconds = normalizeStoryboardTotalDuration(d.storyboardTotalDuration, expectedCount, 90);
   const cropGap = Math.max(0, Math.min(240, Number.parseInt(String(d.storyboardCropGap ?? d.gap ?? 0), 10) || 0));
   const videoStyle = resolveStoryboardVideoStyle(d.storyboardVideoStyle);
   const outline = useMemo(() => upstream.texts.map((item) => item.url.trim()).filter(Boolean).join('\n\n'), [upstream.texts]);
@@ -107,6 +109,7 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
     || script.shots.length !== expectedCount
     || Number(d.storyboardScriptRows) !== rows
     || Number(d.storyboardScriptCols) !== cols
+    || Number(d.storyboardScriptTotalDuration || expectedCount * 5) !== totalDurationSeconds
     || String(d.storyboardScriptVideoStyle || 'auto') !== videoStyle.id
     || String(d.storyboardSourceText || '') !== outline;
 
@@ -231,25 +234,27 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
       temperature: 0.3,
       max_tokens: Math.min(32000, 1800 + expectedCount * 720),
     };
-    const first = await generateLlm({ ...request, messages: buildStoryboardScriptMessages(outline, rows, cols, { videoStyle }) });
+    const promptOptions = { videoStyle, totalDurationSeconds };
+    const first = await generateLlm({ ...request, messages: buildStoryboardScriptMessages(outline, rows, cols, promptOptions) });
     if (controller.signal.aborted) throw new DOMException('任务已取消', 'AbortError');
     let next: StoryboardScript;
     try {
-      next = parseStoryboardScript(first.content, expectedCount);
+      next = parseStoryboardScript(first.content, expectedCount, totalDurationSeconds);
     } catch (parseError: any) {
       update({ progress: `正在修复脚本结构：${parseError?.message || '格式错误'}` });
       const repaired = await generateLlm({
         ...request,
         temperature: 0.1,
-        messages: buildStoryboardRepairMessages(first.content, outline, rows, cols, { videoStyle }),
+        messages: buildStoryboardRepairMessages(first.content, outline, rows, cols, promptOptions),
       });
       if (controller.signal.aborted) throw new DOMException('任务已取消', 'AbortError');
-      next = parseStoryboardScript(repaired.content, expectedCount);
+      next = parseStoryboardScript(repaired.content, expectedCount, totalDurationSeconds);
     }
     setScript(next, {
       storyboardSourceText: outline,
       storyboardScriptRows: rows,
       storyboardScriptCols: cols,
+      storyboardScriptTotalDuration: totalDurationSeconds,
       storyboardScriptVideoStyle: videoStyle.id,
       llmKeyId: activeLlm?.id || '',
       llmModel,
@@ -477,16 +482,17 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
         <div className="flex h-7 w-7 items-center justify-center rounded bg-indigo-500/20 text-indigo-200"><Clapperboard size={15} /></div>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold" style={{ color: 'var(--t8-text-main)' }}>分镜脚本</div>
-          <div className="text-[10px]" style={{ color: 'var(--t8-text-muted)' }}>{rows} × {cols} · {expectedCount} 镜 · 单格约 {cellRatio}</div>
+          <div className="text-[10px]" style={{ color: 'var(--t8-text-muted)' }}>{rows} × {cols} · {expectedCount} 镜 · 总时长 {totalDurationSeconds}s · 单格约 {cellRatio}</div>
         </div>
         <NodeHelpButton nodeType="storyboard-grid" />
         {(busy || exporting) && <Loader2 size={15} className="animate-spin text-indigo-300" />}
       </div>
 
       <div className="nodrag nowheel space-y-2.5 p-3" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-5 gap-2">
           <label className="space-y-1 text-[10px] text-white/55"><span>行数</span><input className={FIELD} type="number" min={1} max={6} value={rows} disabled={busy} onChange={(event) => update({ storyboardRows: normalizeStoryboardDimension(event.target.value, rows) })} /></label>
           <label className="space-y-1 text-[10px] text-white/55"><span>列数</span><input className={FIELD} type="number" min={1} max={6} value={cols} disabled={busy} onChange={(event) => update({ storyboardCols: normalizeStoryboardDimension(event.target.value, cols) })} /></label>
+          <label className="space-y-1 text-[10px] text-white/55"><span>总时长（秒）</span><input className={FIELD} type="number" min={expectedCount} max={expectedCount * 60} value={totalDurationSeconds} disabled={busy} onChange={(event) => update({ storyboardTotalDuration: normalizeStoryboardTotalDuration(event.target.value, expectedCount, totalDurationSeconds) })} /></label>
           <label className="space-y-1 text-[10px] text-white/55"><span>去缝 px</span><input className={FIELD} type="number" min={0} max={240} value={cropGap} disabled={busy} onChange={(event) => update({ storyboardCropGap: Math.max(0, Math.min(240, Number(event.target.value) || 0)) })} /></label>
           <div className="space-y-1 text-[10px] text-white/55"><span>大纲</span><div className="truncate rounded border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white/70" title={outline}>{outline ? `${outline.length} 字` : '未连接'}</div></div>
         </div>

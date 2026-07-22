@@ -621,6 +621,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     storyboardRows: 2,
     storyboardCols: 3,
     storyboardCropGap: 0,
+    storyboardTotalDuration: 90,
     storyboardVideoStyle: 'auto',
     llmKeyId: '',
     llmModel: '',

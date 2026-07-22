@@ -64,6 +64,44 @@ export function normalizeStoryboardDimension(value: unknown, fallback: number): 
   return Math.max(1, Math.min(6, Number.isFinite(parsed) ? parsed : fallback));
 }
 
+export function normalizeStoryboardTotalDuration(value: unknown, shotCount: number, fallback?: number): number {
+  const count = Math.max(1, Math.floor(Number(shotCount) || 1));
+  const parsed = Number.parseInt(String(value), 10);
+  const defaultValue = Math.max(count, Math.min(count * 60, Math.round(fallback ?? count * 5)));
+  return Math.max(count, Math.min(count * 60, Number.isFinite(parsed) ? parsed : defaultValue));
+}
+
+export function allocateStoryboardDurations(shots: StoryboardShot[], totalDurationSeconds: number): StoryboardShot[] {
+  if (!shots.length) return [];
+  const total = normalizeStoryboardTotalDuration(totalDurationSeconds, shots.length);
+  const durations = Array.from({ length: shots.length }, () => 1);
+  const weights = shots.map((shot) => Math.max(1, Number(shot.durationSeconds) || 1));
+  let remaining = total - shots.length;
+
+  while (remaining > 0) {
+    const active = durations.map((duration, index) => ({ index, duration })).filter((item) => item.duration < 60);
+    if (!active.length) break;
+    const weightSum = active.reduce((sum, item) => sum + weights[item.index], 0);
+    const shares = active.map((item) => {
+      const exact = (remaining * weights[item.index]) / weightSum;
+      return { ...item, exact, whole: Math.min(60 - item.duration, Math.floor(exact)) };
+    });
+    const assigned = shares.reduce((sum, item) => sum + item.whole, 0);
+    if (assigned > 0) {
+      shares.forEach((item) => { durations[item.index] += item.whole; });
+      remaining -= assigned;
+      continue;
+    }
+    shares
+      .sort((a, b) => (b.exact - Math.floor(b.exact)) - (a.exact - Math.floor(a.exact)) || b.exact - a.exact || a.index - b.index)
+      .slice(0, remaining)
+      .forEach((item) => { durations[item.index] += 1; });
+    remaining = 0;
+  }
+
+  return shots.map((shot, index) => ({ ...shot, durationSeconds: durations[index] }));
+}
+
 function extractJsonObject(input: string): string {
   const text = String(input || '').trim();
   if (!text) throw new Error('LLM 未返回脚本内容');
@@ -82,7 +120,7 @@ function stringField(value: unknown, field: string, allowEmpty = false): string 
   return normalized;
 }
 
-export function parseStoryboardScript(input: string, expectedCount: number): StoryboardScript {
+export function parseStoryboardScript(input: string, expectedCount: number, totalDurationSeconds?: number): StoryboardScript {
   let raw: any;
   try {
     raw = JSON.parse(extractJsonObject(input));
@@ -102,6 +140,10 @@ export function parseStoryboardScript(input: string, expectedCount: number): Sto
     }
     const duration = Number(shot.durationSeconds);
     if (!Number.isFinite(duration)) throw new Error(`第 ${position + 1} 个镜头时长无效`);
+    const imagePrompt = stringField(shot.imagePrompt, 'imagePrompt');
+    if ([...imagePrompt].length < 60) {
+      throw new Error(`第 ${position + 1} 个镜头的 imagePrompt 过于简单，至少需要 60 个字符并包含具体情节与画面细节`);
+    }
     return {
       index: position + 1,
       title: stringField(shot.title, 'title'),
@@ -113,13 +155,16 @@ export function parseStoryboardScript(input: string, expectedCount: number): Sto
       action: stringField(shot.action, 'action'),
       dialogue: stringField(shot.dialogue, 'dialogue', true),
       voiceOver: stringField(shot.voiceOver, 'voiceOver', true),
-      imagePrompt: stringField(shot.imagePrompt, 'imagePrompt'),
+      imagePrompt,
     };
   });
+  const allocatedShots = totalDurationSeconds === undefined
+    ? shots
+    : allocateStoryboardDurations(shots, totalDurationSeconds);
   return {
     title: typeof raw.title === 'string' && raw.title.trim() ? raw.title.trim() : '未命名分镜',
     visualContinuity: typeof raw.visualContinuity === 'string' ? raw.visualContinuity.trim() : '',
-    shots,
+    shots: allocatedShots,
   };
 }
 
@@ -127,10 +172,11 @@ export function buildStoryboardScriptMessages(
   outline: string,
   rows: number,
   cols: number,
-  options: { videoStyle?: StoryboardVideoStyle } = {},
+  options: { videoStyle?: StoryboardVideoStyle; totalDurationSeconds?: number } = {},
 ) {
   const count = rows * cols;
   const style = options.videoStyle?.prompt ? `${options.videoStyle.label}：${options.videoStyle.prompt}` : '';
+  const totalDuration = normalizeStoryboardTotalDuration(options.totalDurationSeconds, count);
   return [
     {
       role: 'system' as const,
@@ -141,8 +187,11 @@ export function buildStoryboardScriptMessages(
         '顶层字段必须是 title、visualContinuity、shots。',
         'shots 中每项必须完整包含 index、title、durationSeconds、shotSize、cameraAngle、cameraMovement、visual、action、dialogue、voiceOver、imagePrompt。',
         `shots 数组必须恰好 ${count} 项，index 必须依次为 1 到 ${count}。`,
+        `全片总时长必须严格为 ${totalDuration} 秒。根据大纲的情节密度、动作复杂度、对白长度和戏剧节奏分配各镜头 durationSeconds；所有镜头时长相加必须恰好等于 ${totalDuration}，每镜 1-60 秒，不要机械平均。`,
         'dialogue 或 voiceOver 没有内容时使用空字符串；其它字段不得为空。',
-        'imagePrompt 必须是可直接用于图像模型的精炼画面描述，不包含镜头编号、字幕、对白文字或界面文字。',
+        '每个镜头都必须紧扣原始大纲中对应的具体情节，不得只写“人物在场景中”“电影感画面”等泛化描述。visual 和 action 要交代该时刻发生了什么、人物目的与情绪如何变化，以及它和前后镜头的叙事衔接。',
+        '每个 imagePrompt 必须是可直接用于图像模型的详细画面描述，至少 80 个中文字符或同等信息量；必须包含主体身份与外观连续性、此刻的具体动作和微表情、关键道具、时间与空间环境、前中后景层次、景别与机位构图、光线方向、色彩材质和情绪氛围。',
+        'imagePrompt 应描述一个明确可见的瞬间，不使用空洞形容词堆砌，不包含镜头编号、字幕、对白文字、旁白或界面文字。不要遗漏大纲中的关键情节信息，也不要凭空改变人物关系和事件结果。',
         'visualContinuity 要总结角色外观、服装、场景、时代、色彩、光线和美术风格，保证所有镜头视觉一致。',
         style ? `指定的视频动画风格为“${style}”。visualContinuity 和所有 imagePrompt 必须遵循该风格。` : '',
       ].filter(Boolean).join('\n'),
@@ -156,14 +205,15 @@ export function buildStoryboardRepairMessages(
   outline: string,
   rows: number,
   cols: number,
-  options: { videoStyle?: StoryboardVideoStyle } = {},
+  options: { videoStyle?: StoryboardVideoStyle; totalDurationSeconds?: number } = {},
 ) {
   const count = rows * cols;
   const style = options.videoStyle?.prompt ? `，并统一遵循“${options.videoStyle.label}：${options.videoStyle.prompt}”` : '';
+  const totalDuration = normalizeStoryboardTotalDuration(options.totalDurationSeconds, count);
   return [
     {
       role: 'system' as const,
-      content: `你负责修复分镜 JSON。严格返回一个合法 JSON 对象，shots 必须恰好 ${count} 项，字段完整${style}，不要 Markdown 或解释。`,
+      content: `你负责修复分镜 JSON。严格返回一个合法 JSON 对象，shots 必须恰好 ${count} 项，字段完整${style}。各镜头时长须按情节节奏分配且合计恰好 ${totalDuration} 秒；每个 imagePrompt 至少 80 个中文字符或同等信息量，结合原始大纲补足具体动作、表情、环境层次、构图、光线、色彩材质与氛围。不要 Markdown 或解释。`,
     },
     {
       role: 'user' as const,
@@ -191,7 +241,8 @@ export function storyboardTextSegments(script: StoryboardScript): string[] {
 }
 
 export function formatStoryboardScript(script: StoryboardScript): string {
-  return [`片名：${script.title}`, `视觉连续性：${script.visualContinuity}`, ...storyboardTextSegments(script)].join('\n\n');
+  const totalDuration = script.shots.reduce((sum, shot) => sum + shot.durationSeconds, 0);
+  return [`片名：${script.title}`, `总时长：${totalDuration} 秒`, `视觉连续性：${script.visualContinuity}`, ...storyboardTextSegments(script)].join('\n\n');
 }
 
 export interface StoryboardImagePromptOptions {

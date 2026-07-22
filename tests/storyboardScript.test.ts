@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import {
+  allocateStoryboardDurations,
   buildStoryboardImagePrompt,
   buildStoryboardScriptMessages,
   derivedStoryboardCellRatio,
   legacyFramesToStoryboard,
+  normalizeStoryboardTotalDuration,
   parseStoryboardScript,
   resolveStoryboardVideoStyle,
   storyboardTextSegments,
@@ -30,7 +32,7 @@ function validScriptJson(count = 4) {
       action: `动作 ${index + 1}`,
       dialogue: '',
       voiceOver: '',
-      imagePrompt: `cinematic shot ${index + 1}`,
+      imagePrompt: `雨夜旧城区的狭窄街道中，年轻摄影师握紧沾有雨水的相机缓慢前行，眉头紧锁并望向远处忽明忽暗的红色信号灯；湿润石板路形成前景反光，中景人物被侧后方冷蓝路灯勾勒轮廓，远景建筑隐入薄雾，电影写实质感、克制蓝灰色调与紧张悬疑氛围，镜头 ${index + 1}`,
     })),
   });
 }
@@ -49,10 +51,32 @@ test('storyboard parser rejects incomplete cards instead of padding fields', () 
   assert.throws(() => parseStoryboardScript(JSON.stringify(raw), 1), /缺少字段 cameraMovement/);
 });
 
+test('storyboard duration allocation preserves pacing weights and matches the configured total', () => {
+  const script = parseStoryboardScript(validScriptJson(3), 3);
+  const weighted = script.shots.map((shot, index) => ({ ...shot, durationSeconds: index + 1 }));
+  const allocated = allocateStoryboardDurations(weighted, 12);
+  assert.deepEqual(allocated.map((shot) => shot.durationSeconds), [2, 4, 6]);
+  assert.equal(allocated.reduce((sum, shot) => sum + shot.durationSeconds, 0), 12);
+
+  const parsed = parseStoryboardScript(validScriptJson(4), 4, 37);
+  assert.equal(parsed.shots.reduce((sum, shot) => sum + shot.durationSeconds, 0), 37);
+  assert.equal(normalizeStoryboardTotalDuration(2, 4), 4);
+  assert.equal(normalizeStoryboardTotalDuration(999, 4), 240);
+});
+
+test('storyboard parser rejects image prompts that are too generic', () => {
+  const raw = JSON.parse(validScriptJson(1));
+  raw.shots[0].imagePrompt = '一个人在雨夜向前走，电影感。';
+  assert.throws(() => parseStoryboardScript(JSON.stringify(raw), 1), /imagePrompt 过于简单/);
+});
+
 test('storyboard prompts specify row-major layout and prohibit visible text', () => {
   const messages = buildStoryboardScriptMessages('测试大纲', 2, 3);
   assert.match(String(messages[0].content), /严格拆分为 6 个/);
   assert.match(String(messages[0].content), /从左到右、从上到下/);
+  assert.match(String(messages[0].content), /总时长必须严格为 30 秒/);
+  assert.match(String(messages[0].content), /至少 80 个中文字符/);
+  assert.match(String(messages[0].content), /前中后景层次/);
 
   const script = parseStoryboardScript(validScriptJson(4), 4);
   const prompt = buildStoryboardImagePrompt(script, 2, 2, {
@@ -66,7 +90,7 @@ test('storyboard prompts specify row-major layout and prohibit visible text', ()
   assert.match(prompt, /禁止不等高行/);
   assert.match(prompt, /主要人物身份与面部、体型、服饰、道具、建筑、场景/);
   assert.match(prompt, /最终复核/);
-  assert.ok(prompt.indexOf('cinematic shot 1') < prompt.indexOf('cinematic shot 4'));
+  assert.ok(prompt.indexOf('第 1 格') < prompt.indexOf('第 4 格'));
 });
 
 test('storyboard video style is applied to both script and image prompts', () => {
@@ -138,6 +162,10 @@ test('storyboard node is visible, executable, permissioned and uses shared gener
   assert.match(canvas, /storyboardExportLayout:\s*'production-table'/);
   assert.match(canvas, /storyboardPptShotsPerSlide:\s*2/);
   assert.match(canvas, /storyboardVideoStyle:\s*'auto'/);
+  assert.match(canvas, /storyboardTotalDuration:\s*90/);
+  assert.match(node, /normalizeStoryboardTotalDuration\(d\.storyboardTotalDuration, expectedCount, 90\)/);
+  assert.match(node, /总时长（秒）/);
+  assert.match(node, /parseStoryboardScript\(first\.content, expectedCount, totalDurationSeconds\)/);
   assert.match(canvas, /referenceImages:\s*\[\]/);
   assert.match(imageNode, /runConfiguredImageGeneration/);
   assert.match(permissions, /DEFAULT_VISIBLE_NODE_TYPES[\s\S]*'storyboard-grid'/);
