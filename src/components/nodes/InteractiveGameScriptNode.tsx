@@ -2,16 +2,8 @@ import { memo, useEffect, useMemo, useRef, useState, type PointerEvent as ReactP
 import { createPortal } from 'react-dom';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { AlertCircle, Brain, Download, Gamepad2, Grid2X2, Images, Loader2, MousePointer2, Play, RefreshCcw, Sparkles, Square, X } from 'lucide-react';
-import {
-  DEFAULT_MJ_SPEED,
-  DEFAULT_MJ_VERSION,
-  FAL_REGISTRY,
-  IMAGE_MODELS,
-  gptImage2ZhenzhenVariantSize,
-  isFalModel,
-} from '../../providers/models';
-import { generateLlm, type MjSpeed } from '../../services/generation';
-import { runConfiguredImageGeneration, type ImageGenerationMode } from '../../services/imageGenerationRunner';
+import { generateLlm, type GenerateLlmRequest } from '../../services/generation';
+import { runConfiguredImageGeneration } from '../../services/imageGenerationRunner';
 import { opGridCompose } from '../../services/imageOps';
 import { downloadGameUiExport, exportGameUiDocument, type GameUiExportFormat } from '../../services/gameUiExport';
 import { useApiKeysStore } from '../../stores/apiKeys';
@@ -20,12 +12,6 @@ import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { PORT_COLOR } from '../../config/portTypes';
 import {
-  advancedProviderModelOptions,
-  advancedProvidersForNode,
-  externalImageSizeFor,
-  resolveAdvancedProviderSelection,
-} from '../../utils/advancedProviders';
-import {
   buildGameUiImagePrompt,
   buildGameUiRepairMessages,
   buildGameUiScriptMessages,
@@ -33,9 +19,11 @@ import {
   gameUiGridLayout,
   gameUiTextSegments,
   gameUiVisualFingerprint,
+  friendlyGameUiLlmError,
   GAME_UI_DEMO_MODES,
   GAME_UI_FLOW_MODES,
   parseGameUiScript,
+  isTransientGameUiLlmError,
   type GameUiCondition,
   type GameUiDemoMode,
   type GameUiEffect,
@@ -55,6 +43,9 @@ const COLOR = '#22d3ee';
 const FIELD = 'nodrag nowheel w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-xs text-white outline-none focus:border-cyan-300/60';
 const TEXTAREA = `${FIELD} resize-y`;
 const MAX_REFERENCES = 12;
+const SCRIPT_LLM_ATTEMPTS = 3;
+const FIXED_IMAGE_MODEL = 'gpt-image-2';
+const FIXED_IMAGE_API_MODEL = 'gpt-image-2-all';
 
 interface ScreenImageRecord {
   screenId: string;
@@ -234,19 +225,7 @@ const InteractiveGameScriptNode = ({ id, data, selected }: NodeProps) => {
   const activeLlm = llmOptions.find((item) => item.id === String(d.llmKeyId || '')) || llmOptions.find((item) => item.isDefault) || llmOptions[0];
   const llmModel = String(activeLlm?.model || settings.llmModel || '').trim();
 
-  const providers = settings.advancedProviders || [];
-  const imageProviders = useMemo(() => advancedProvidersForNode(providers, 'image'), [providers]);
-  const providerSelection = useMemo(() => resolveAdvancedProviderSelection(providers, 'image', { providerSource: d.providerSource, providerId: d.providerId, providerModel: d.providerModel }), [providers, d.providerId, d.providerModel, d.providerSource]);
-  const isExternal = providerSelection.available && providerSelection.providerSource !== 'zhenzhen';
-  const externalModels = providerSelection.provider ? advancedProviderModelOptions(providerSelection.provider, 'image') : [];
-  const externalModel = providerSelection.providerModel || externalModels[0] || '';
   const allowZhenzhen = settings.enableZhenzhenFallback !== false;
-  const providerSelectValue = isExternal ? providerSelection.providerId : (allowZhenzhen ? 'zhenzhen' : (imageProviders[0]?.id || ''));
-  const modelDef = IMAGE_MODELS.find((item) => item.id === String(d.model || 'gpt-image-2')) || IMAGE_MODELS[0];
-  const apiModel = modelDef.apiModelOptions.some((item) => item.value === String(d.apiModel || '')) ? String(d.apiModel) : modelDef.apiModel;
-  const isMj = !isExternal && modelDef.paramKind === 'mj';
-  const isFal = !isExternal && isFalModel(apiModel);
-  const falKind = isFal ? FAL_REGISTRY[apiModel]?.paramKind : undefined;
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
   const status = String(d.status || 'idle');
   const busy = ['writing-script', 'generating-screens', 'composing-grid'].includes(status);
@@ -281,18 +260,40 @@ const InteractiveGameScriptNode = ({ id, data, selected }: NodeProps) => {
   };
   const controller = () => { abortRef.current?.abort(); const next = new AbortController(); abortRef.current = next; setLocalError(''); return next; };
 
+  const waitForRetry = (ms: number, signal: AbortSignal) => new Promise<void>((resolve, reject) => {
+    if (signal.aborted) { reject(new DOMException('任务已取消', 'AbortError')); return; }
+    const timer = window.setTimeout(() => { signal.removeEventListener('abort', onAbort); resolve(); }, ms);
+    const onAbort = () => { window.clearTimeout(timer); reject(new DOMException('任务已取消', 'AbortError')); };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+
+  const generateScriptLlm = async (request: GenerateLlmRequest, activeController: AbortController, progressLabel: string) => {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= SCRIPT_LLM_ATTEMPTS; attempt += 1) {
+      if (activeController.signal.aborted) throw new DOMException('任务已取消', 'AbortError');
+      try { return await generateLlm(request); }
+      catch (error) {
+        lastError = error;
+        if (!isTransientGameUiLlmError(error) || attempt >= SCRIPT_LLM_ATTEMPTS) throw friendlyGameUiLlmError(error, attempt);
+        update({ progress: `${progressLabel}：上游临时不可用，正在重试 ${attempt + 1} / ${SCRIPT_LLM_ATTEMPTS}…` });
+        await waitForRetry(attempt * 1200, activeController.signal);
+      }
+    }
+    throw friendlyGameUiLlmError(lastError, SCRIPT_LLM_ATTEMPTS);
+  };
+
   const writeScript = async (activeController: AbortController) => {
     if (!brief) throw new Error('请先连接游戏需求文本');
     if (!llmModel) throw new Error('请先配置 LLM 独立配置');
     update({ status: 'writing-script', progress: '正在规划互动界面与逻辑…', error: '' });
-    const request = { model: llmModel, llmKeyId: activeLlm?.id && activeLlm.id !== 'default' ? activeLlm.id : undefined, sourceNodeType: 'interactive-game-script', temperature: 0.25, max_tokens: 24000 };
-    const first = await generateLlm({ ...request, messages: buildGameUiScriptMessages(brief, flowMode) });
+    const request = { model: llmModel, llmKeyId: activeLlm?.id && activeLlm.id !== 'default' ? activeLlm.id : undefined, sourceNodeType: 'interactive-game-script', temperature: 0.25, max_tokens: 16000 };
+    const first = await generateScriptLlm({ ...request, messages: buildGameUiScriptMessages(brief, flowMode) }, activeController, '正在规划互动界面与逻辑');
     if (activeController.signal.aborted) throw new DOMException('任务已取消', 'AbortError');
     let next: GameUiScript;
     try { next = parseGameUiScript(first.content, flowMode); }
     catch (parseError: any) {
       update({ progress: `正在修复脚本：${parseError?.message || '结构错误'}` });
-      const repaired = await generateLlm({ ...request, temperature: 0.1, messages: buildGameUiRepairMessages(first.content, brief, flowMode, parseError?.message || '结构错误') });
+      const repaired = await generateScriptLlm({ ...request, temperature: 0.1, messages: buildGameUiRepairMessages(first.content, brief, flowMode, parseError?.message || '结构错误') }, activeController, '正在修复脚本结构');
       if (activeController.signal.aborted) throw new DOMException('任务已取消', 'AbortError');
       next = parseGameUiScript(repaired.content, flowMode);
     }
@@ -301,27 +302,22 @@ const InteractiveGameScriptNode = ({ id, data, selected }: NodeProps) => {
   };
 
   const runImage = async (activeScript: GameUiScript, screen: GameUiScreen, signal: AbortSignal) => {
-    if (!isExternal && !allowZhenzhen) throw new Error('贞贞工坊已关闭，请选择扩展图像 Provider');
-    if (isExternal && (!providerSelection.provider || !externalModel)) throw new Error('扩展平台未配置可用图像模型');
-    const mode: ImageGenerationMode = isExternal ? 'external' : isMj ? 'mj' : isFal ? 'fal' : 'standard';
+    if (!allowZhenzhen) throw new Error('互动游戏节点固定使用贞贞 GPT Image 2，请先在设置中启用贞贞工坊');
     return runConfiguredImageGeneration({
-      mode,
+      mode: 'standard',
       prompt: buildGameUiImagePrompt(activeScript, screen, referenceImages.length),
       images: referenceImages,
       outputFormat,
       signal,
       historyContext: { canvasId: loadedCanvasId, sourceNodeId: id, sourceNodeType: 'interactive-game-script', nodeTitle: '互动游戏脚本', outputTitle: `${activeScript.title} · ${screen.title}` },
-      model: modelDef.id,
-      apiModel,
-      paramKind: modelDef.paramKind,
+      model: FIXED_IMAGE_MODEL,
+      apiModel: FIXED_IMAGE_API_MODEL,
+      paramKind: 'gpt-size',
       aspectRatio: '16:9',
       sizeLevel: '2K',
       seed: 0,
       n: 1,
       providerParams: { ...(d.providerParams || {}), n: 1 },
-      external: isExternal && providerSelection.provider ? { providerId: providerSelection.provider.id, providerModel: externalModel, size: externalImageSizeFor('16:9', '2K'), negativePrompt: String(d.providerParams?.negativePrompt || '').trim() } : undefined,
-      fal: isFal && falKind ? { kind: falKind, mode: referenceImages.length ? 'edit' : 'gen', size: 'landscape_16_9', quality: d.falQuality || 'medium', format: outputFormat === 'jpg' ? 'jpeg' : 'png', aspectRatio: '16:9', resolution: '2K', safetyTolerance: '4', imageMode: 'image_url' } : undefined,
-      mj: isMj ? { version: String(d.mjVersion || DEFAULT_MJ_VERSION), aspectRatio: '16:9', speed: (d.mjSpeed || DEFAULT_MJ_SPEED) as MjSpeed, seed: 0, pollIntervalSeconds: 3, maxPolls: 1200 } : undefined,
     });
   };
 
@@ -447,11 +443,7 @@ const InteractiveGameScriptNode = ({ id, data, selected }: NodeProps) => {
         <div className="rounded bg-white/[0.03] p-2 text-[10px] text-white/45">16:9 大屏触控 · AI 自动规划 4–8 个界面 · 逐界面 2K 生成 · 最多并发 2</div>
         <div className="space-y-1.5"><div className="flex justify-between text-[10px] text-white/55"><span>游戏需求</span><span>{brief ? `${brief.length} 字` : '未连接'}</span></div><div className="max-h-20 overflow-y-auto rounded bg-black/20 p-2 text-[10px] text-white/60">{brief || '从左侧黄色端口连接游戏需求文本'}</div></div>
         <div className="space-y-1.5"><div className="flex justify-between text-[10px] text-white/55"><span className="flex items-center gap-1"><Images size={11} />视觉参考</span><span>{upstream.images.length} / {MAX_REFERENCES}</span></div>{references.length ? <div className="grid grid-cols-6 gap-1">{references.map((item) => <SmartImage key={item.id} src={item.url} alt={item.label || '参考图'} className="h-12 rounded border border-white/10 object-contain" thumbSize={120} />)}</div> : <div className="rounded bg-white/[0.03] px-2 py-1.5 text-[10px] text-white/35">未连接</div>}</div>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="space-y-1 text-[10px] text-white/55"><span>脚本模型</span><select className={FIELD} value={activeLlm?.id || 'default'} disabled={busy} onChange={(event) => update({ llmKeyId: event.target.value, llmModel: llmOptions.find((item) => item.id === event.target.value)?.model || '' })}>{llmOptions.map((item) => <option key={item.id} value={item.id}>{item.label || item.id}{item.model ? ` · ${item.model}` : ''}</option>)}</select></label>
-          <label className="space-y-1 text-[10px] text-white/55"><span>生图来源</span><select className={FIELD} value={providerSelectValue} disabled={busy} onChange={(event) => { if (event.target.value === 'zhenzhen') update({ providerSource: 'zhenzhen', providerId: '', providerModel: '' }); else { const provider = imageProviders.find((item) => item.id === event.target.value); const models = provider ? advancedProviderModelOptions(provider, 'image') : []; if (provider) update({ providerSource: provider.protocol, providerId: provider.id, providerModel: models[0] || '' }); } }}><option value="zhenzhen" disabled={!allowZhenzhen}>贞贞工坊</option>{imageProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label || provider.id}</option>)}</select></label>
-        </div>
-        {isExternal ? <label className="space-y-1 text-[10px] text-white/55"><span>扩展模型</span><select className={FIELD} value={externalModel} disabled={busy} onChange={(event) => update({ providerModel: event.target.value })}>{externalModels.map((item) => <option key={item} value={item}>{item}</option>)}</select></label> : <div className="grid grid-cols-2 gap-2"><label className="space-y-1 text-[10px] text-white/55"><span>图像模型</span><select className={FIELD} value={modelDef.id} disabled={busy} onChange={(event) => { const next = IMAGE_MODELS.find((item) => item.id === event.target.value) || IMAGE_MODELS[0]; update({ model: next.id, apiModel: next.apiModel, aspectRatio: '16:9', sizeLevel: '2K' }); }}>{IMAGE_MODELS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>{!isMj && <label className="space-y-1 text-[10px] text-white/55"><span>具体模型</span><select className={FIELD} value={apiModel} disabled={busy} onChange={(event) => { const nextSize = gptImage2ZhenzhenVariantSize(event.target.value); update(nextSize ? { apiModel: event.target.value, sizeLevel: nextSize } : { apiModel: event.target.value }); }}>{modelDef.apiModelOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>}</div>}
+        <label className="block space-y-1 text-[10px] text-white/55"><span>脚本模型</span><select className={FIELD} value={activeLlm?.id || 'default'} disabled={busy} onChange={(event) => update({ llmKeyId: event.target.value, llmModel: llmOptions.find((item) => item.id === event.target.value)?.model || '' })}>{llmOptions.map((item) => <option key={item.id} value={item.id}>{item.label || item.id}{item.model ? ` · ${item.model}` : ''}</option>)}</select></label>
         <div className="grid grid-cols-4 gap-2">
           <button className="flex items-center justify-center gap-1 rounded bg-emerald-500/15 px-2 py-2 text-xs text-emerald-200 disabled:opacity-40" disabled={busy || !brief} onClick={() => void execute('script')}><Brain size={12} />生成脚本</button>
           <button className="flex items-center justify-center gap-1 rounded bg-amber-500/15 px-2 py-2 text-xs text-amber-200 disabled:opacity-40" disabled={busy || scriptStale} onClick={() => void execute('images')}><Images size={12} />生成界面</button>

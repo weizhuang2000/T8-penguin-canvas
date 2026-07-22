@@ -29,6 +29,11 @@ test('interactive game script node is registered, executable, permissioned and d
   assert.match(node, /gameUiSheetUrl/);
   assert.match(node, /HotspotModal/);
   assert.match(node, /PrototypeModal/);
+  assert.match(node, /SCRIPT_LLM_ATTEMPTS = 3/);
+  assert.match(node, /generateScriptLlm/);
+  assert.match(node, /mode: 'standard'/);
+  assert.match(node, /apiModel: FIXED_IMAGE_API_MODEL/);
+  assert.doesNotMatch(node, /<span>生图来源<\/span>|<span>图像模型<\/span>|<span>具体模型<\/span>|<span>扩展模型<\/span>/);
   assert.match(permissions, /DEFAULT_VISIBLE_NODE_TYPES[\s\S]*'interactive-game-script'/);
   assert.match(proxy, /requireNodePermission\(\['llm', 'prompt-reverse', 'storyboard-grid', 'interactive-game-script'\]\)/);
   assert.match(documents, /game-ui\/export'[\s\S]*requireNodePermission\('interactive-game-script'\)/);

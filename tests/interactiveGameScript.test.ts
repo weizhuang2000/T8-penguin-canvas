@@ -6,6 +6,8 @@ import {
   buildGameUiScriptMessages,
   gameUiGridLayout,
   gameUiTextSegments,
+  friendlyGameUiLlmError,
+  isTransientGameUiLlmError,
   parseGameUiScript,
   type GameUiFlowMode,
 } from '../src/utils/interactiveGameScript.ts';
@@ -101,4 +103,13 @@ test('interactive game prompts and grid layout target a 16:9 touch display', () 
   assert.match(prompt, /16:9/);
   assert.match(prompt, /2 张视觉参考图/);
   assert.deepEqual(gameUiGridLayout(5), { rows: 2, cols: 3, cellWidth: 960, cellHeight: 540, gap: 16, width: 2912, height: 1096 });
+});
+
+test('interactive game script recognizes gateway failures and hides HTML responses behind a friendly error', () => {
+  const upstream = new Error('接口返回非 JSON，可能是上游或代理临时错误：HTTP 502。响应片段：<!DOCTYPE html><title>IIS 10.0 502.3 Bad Gateway</title>');
+  assert.equal(isTransientGameUiLlmError(upstream), true);
+  const friendly = friendlyGameUiLlmError(upstream, 3);
+  assert.match(friendly.message, /已自动重试 3 次/);
+  assert.doesNotMatch(friendly.message, /DOCTYPE|IIS/);
+  assert.equal(isTransientGameUiLlmError(new Error('脚本 JSON 解析失败')), false);
 });
