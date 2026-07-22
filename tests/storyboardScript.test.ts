@@ -169,7 +169,7 @@ test('storyboard node is visible, executable, permissioned and uses shared gener
   assert.match(canvas, /referenceImages:\s*\[\]/);
   assert.match(imageNode, /runConfiguredImageGeneration/);
   assert.match(permissions, /DEFAULT_VISIBLE_NODE_TYPES[\s\S]*'storyboard-grid'/);
-  assert.match(proxy, /requireNodePermission\(\['llm', 'prompt-reverse', 'storyboard-grid'\]\)/);
+  assert.match(proxy, /requireNodePermission\(\['llm', 'prompt-reverse', 'storyboard-grid', 'interactive-game-script'\]\)/);
   assert.ok(features.executableNodeTypes.includes('storyboard-grid'));
   assert.ok(!features.nonExecutableNodeTypes.nodes.includes('storyboard-grid'));
 });

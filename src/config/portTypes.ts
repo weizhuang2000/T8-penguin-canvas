@@ -120,6 +120,7 @@ export const NODE_PORTS: Record<string, NodePorts> = {
   'penguin-portrait': { inputs: ['text', 'image', 'metadata'], outputs: ['image'] },
   'portrait-metadata': { inputs: ['image'], outputs: ['metadata'] },
   'storyboard-grid': { inputs: ['text', 'image'], outputs: ['text', 'image'] },
+  'interactive-game-script': { inputs: ['text', 'image'], outputs: ['text', 'image'] },
 
   // ========== Utility ==========
   'drawing-board': { inputs: ['image'], outputs: ['image'] },

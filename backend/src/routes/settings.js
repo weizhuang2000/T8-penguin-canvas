@@ -70,7 +70,7 @@ const DEFAULT_SETTINGS = {
       enabled: true,
       items: [
         'upload', 'model-3d-upload', 'model-3d-preview', 'material-set', 'output',
-        'text', 'image', 'video', 'seedance', 'director-storyboard', 'audio', 'llm',
+        'text', 'image', 'video', 'seedance', 'director-storyboard', 'audio', 'llm', 'interactive-game-script',
       ].map((type, order) => ({ type, visible: true, order })),
     },
     connectFromInput: { enabled: true, items: [] },
@@ -131,7 +131,7 @@ const DEFAULT_CANVAS_NODE_MENU_PREFERENCES = {
     enabled: true,
     items: [
       'upload', 'model-3d-upload', 'model-3d-preview', 'material-set', 'output',
-      'text', 'image', 'video', 'seedance', 'director-storyboard', 'audio', 'llm',
+      'text', 'image', 'video', 'seedance', 'director-storyboard', 'audio', 'llm', 'interactive-game-script',
     ].map((type, order) => ({ type, visible: true, order })),
   },
   connectFromInput: { enabled: true, items: [] },

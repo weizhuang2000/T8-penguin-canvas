@@ -155,6 +155,7 @@ import RemoveAiWatermarkNode from './nodes/RemoveAiWatermarkNode';
 import VideoOutputNode from './nodes/VideoOutputNode';
 import PortraitMetadataNode from './nodes/PortraitMetadataNode';
 import StoryboardGridNode from './nodes/StoryboardGridNode';
+import InteractiveGameScriptNode from './nodes/InteractiveGameScriptNode';
 import PresetImageNode from './nodes/PresetImageNode';
 import DrawingBoardNode from './nodes/DrawingBoardNode';
 import ImageEditNode from './nodes/ImageEditNode';
@@ -219,6 +220,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'penguin-portrait': PresetImageNode,
   'portrait-metadata': PortraitMetadataNode,
   'storyboard-grid': StoryboardGridNode,
+  'interactive-game-script': InteractiveGameScriptNode,
   // Utility (9)
   'drawing-board': DrawingBoardNode,
   'image-edit': ImageEditNode,
@@ -640,6 +642,29 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     storyboardExportFormat: 'docx',
     storyboardExportLayout: 'production-table',
     storyboardPptShotsPerSlide: 2,
+    imageUrls: [],
+    textSegments: [],
+    status: 'idle',
+  },
+  'interactive-game-script': {
+    gameUiFlowMode: 'state-graph',
+    gameUiDemoMode: 'static',
+    gameUiScript: null,
+    gameUiScreenImages: [],
+    gameUiSheetUrl: '',
+    gameUiExportFormat: 'pptx',
+    llmKeyId: '',
+    llmModel: '',
+    model: 'gpt-image-2',
+    apiModel: 'gpt-image-2-all',
+    aspectRatio: '16:9',
+    sizeLevel: '2K',
+    outputFormat: 'jpg',
+    providerSource: 'zhenzhen',
+    providerId: '',
+    providerModel: '',
+    providerParams: {},
+    referenceImages: [],
     imageUrls: [],
     textSegments: [],
     status: 'idle',
@@ -1830,7 +1855,7 @@ function filterExclusiveTargetEdges(
 const EXECUTABLE_NODE_TYPES = new Set<string>([
   'image', 'edit', 'fhl-image-gen',
   'multi-angle-3d', 'panorama-720', 'penguin-portrait',
-  'video', 'runninghub-video', 'seedance', 'audio', 'llm', 'storyboard-grid', 'prompt-reverse', 'remotion-animation', 'runninghub', 'runninghub-wallet',
+  'video', 'runninghub-video', 'seedance', 'audio', 'llm', 'storyboard-grid', 'interactive-game-script', 'prompt-reverse', 'remotion-animation', 'runninghub', 'runninghub-wallet',
   // v1.2.10.1: rh-tools 与 RunningHub 同质，同样可被批量运行调起
   'rh-tools', 'rh-toolbox',
   'resize', 'upscale', 'grid-crop', 'mark', 'remove-bg', 'combine', 'image-compare', 'drawing-board',

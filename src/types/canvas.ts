@@ -43,6 +43,7 @@ export type NodeType =
   | 'penguin-portrait'
   | 'portrait-metadata'
   | 'storyboard-grid'
+  | 'interactive-game-script'
   // Utility (9)
   | 'drawing-board'
   | 'image-edit'

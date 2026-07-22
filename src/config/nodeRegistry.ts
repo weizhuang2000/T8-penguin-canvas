@@ -31,6 +31,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: 'audio', label: '音频', category: 'core', description: 'Suno V5.5 全模式(生成/翻唱/续写)', icon: 'Music', color: 'violet' },
   { type: 'llm', label: 'LLM', category: 'core', description: 'GPT-5 / Claude 4.5 / Gemini 2.5(独立 Key)', icon: 'Brain', color: 'emerald' },
   { type: 'storyboard-grid', label: '分镜脚本', category: 'core', description: '文本大纲与视觉参考图生成严格等分宫格镜头，支持自动拆分和表格导出 DOCX/PDF/PPT', icon: 'Clapperboard', color: 'indigo' },
+  { type: 'interactive-game-script', label: '互动游戏脚本', category: 'core', description: '面向大屏触控演示，生成可编辑 UI 界面、状态/分支互动逻辑、高清界面图与离线热点原型', icon: 'Gamepad2', color: 'cyan' },
   { type: 'prompt-reverse', label: '提示词反推', category: 'core', description: '反推 GPT Image 2 提示词，并可用接入文本替换画面内容', icon: 'BrainCircuit', color: 'emerald' },
   { type: 'remotion-animation', label: 'Remotion 动画', category: 'core', description: 'LLM 独立配置 + 内置 Skill 生成专业 TSX，经关键帧审片后本地渲染 MP4', icon: 'Clapperboard', color: 'rose' },
 

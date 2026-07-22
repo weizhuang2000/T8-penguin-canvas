@@ -3080,7 +3080,7 @@
       "自动更新到带新影片的版本后，旧成就数据仍能解锁并播放新资源。"
     ]
   },
-  "totalNodes": 52,
+  "totalNodes": 53,
   "phases": {
     "phase0": {
       "label": "基础设施",
@@ -5123,7 +5123,7 @@
     },
     "core": {
       "label": "核心节点",
-      "count": 8,
+      "count": 9,
       "nodes": [
         {
           "type": "text",
@@ -5164,6 +5164,11 @@
           "type": "storyboard-grid",
           "label": "分镜脚本",
           "description": "接入文本大纲和人物、服饰、道具、建筑、场景等视觉参考图后，用 LLM 独立配置撰写完整可编辑分镜卡；支持设定总时长并按剧情节奏精确分配各镜时长，结合大纲生成包含人物动作、环境层次、构图和光色氛围的详细提示词；支持常用视频动画风格选择，以及贞贞、FAL、Midjourney和扩展图像 Provider生成宫格整图；拆分时自动检测偏移的真实行列边界，保留完整画面并归一化为统一尺寸镜头文件，可导出 DOCX、PDF、PPTX"
+        },
+        {
+          "type": "interactive-game-script",
+          "label": "互动游戏脚本",
+          "description": "面向 16:9 大屏触控甲方演示：由 LLM 自动规划 4–8 个可编辑 UI 界面、状态变量、条件分支、反馈与跳转；逐界面并发生成高清效果图并自动拼接概览宫格，支持热点框选、节点内交互预览以及 PPTX/PDF/DOCX/离线原型 ZIP 导出"
         }
       ]
     },
@@ -6041,6 +6046,7 @@
     "seedance",
     "director-storyboard",
     "storyboard-grid",
+    "interactive-game-script",
     "audio",
     "llm",
     "remotion-animation",
