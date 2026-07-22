@@ -86,18 +86,6 @@ export const GAME_UI_DEMO_MODES: Array<{ id: GameUiDemoMode; label: string }> = 
   { id: 'prototype', label: '图片热点交互原型' },
 ];
 
-export function isTransientGameUiLlmError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error || '');
-  return /HTTP\s*(408|425|429|500|502|503|504|524)\b|502\.3|Bad Gateway|Gateway Timeout|ECONNRESET|ECONNREFUSED|ETIMEDOUT|timeout|timed out|network error|fetch failed/i.test(message);
-}
-
-export function friendlyGameUiLlmError(error: unknown, attempts = 3): Error {
-  const message = error instanceof Error ? error.message : String(error || '');
-  if (!isTransientGameUiLlmError(error)) return error instanceof Error ? error : new Error(message || '脚本生成失败');
-  const reason = /429/.test(message) ? '请求过于频繁' : /timeout|timed out|504|524/i.test(message) ? '上游响应超时' : '上游网关暂时不可用';
-  return new Error(`脚本服务${reason}，已自动重试 ${attempts} 次。请稍后再试，或切换“脚本模型”。`);
-}
-
 const FLOW_MODE_SET = new Set(GAME_UI_FLOW_MODES.map((item) => item.id));
 const TRIGGER_SET = new Set<GameUiTrigger>(['tap', 'swipe-left', 'swipe-right', 'timeout']);
 const CONDITION_SET = new Set<GameUiConditionOperator>(['eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'truthy', 'falsy']);
