@@ -56,7 +56,6 @@ const REQUIRED_SHOT_KEYS: Array<keyof StoryboardShot> = [
   'action',
   'dialogue',
   'voiceOver',
-  'imagePrompt',
 ];
 
 export function normalizeStoryboardDimension(value: unknown, fallback: number): number {
@@ -120,6 +119,32 @@ function stringField(value: unknown, field: string, allowEmpty = false): string 
   return normalized;
 }
 
+export function enrichStoryboardImagePrompt(input: {
+  imagePrompt?: unknown;
+  visual: string;
+  action: string;
+  shotSize: string;
+  cameraAngle: string;
+  cameraMovement: string;
+  visualContinuity?: string;
+}): string {
+  const original = typeof input.imagePrompt === 'string' ? input.imagePrompt.trim() : '';
+  if ([...original].length >= 60) return original;
+
+  const parts = [
+    original,
+    input.visual ? `画面情节：${input.visual}` : '',
+    input.action && input.action !== input.visual ? `人物动作与状态：${input.action}` : '',
+    `镜头设计：${input.shotSize}，${input.cameraAngle}，${input.cameraMovement}`,
+    input.visualContinuity ? `视觉连续性：${input.visualContinuity}` : '',
+  ].filter(Boolean);
+  let enriched = parts.join('；').replace(/[；。\s]+$/, '');
+  if ([...enriched].length < 60) {
+    enriched += '；保持主体外观、服饰、关键道具与空间方位连续，明确前景、中景和背景层次，补充符合情节的光线方向、色彩材质与情绪氛围';
+  }
+  return enriched;
+}
+
 export function parseStoryboardScript(input: string, expectedCount: number, totalDurationSeconds?: number): StoryboardScript {
   let raw: any;
   try {
@@ -133,6 +158,7 @@ export function parseStoryboardScript(input: string, expectedCount: number, tota
   if (raw.shots.length !== expectedCount) {
     throw new Error(`LLM 返回 ${raw.shots.length} 个镜头，必须严格为 ${expectedCount} 个`);
   }
+  const visualContinuity = typeof raw.visualContinuity === 'string' ? raw.visualContinuity.trim() : '';
   const shots = raw.shots.map((shot: any, position: number): StoryboardShot => {
     if (!shot || typeof shot !== 'object' || Array.isArray(shot)) throw new Error(`第 ${position + 1} 个镜头不是对象`);
     for (const key of REQUIRED_SHOT_KEYS) {
@@ -140,19 +166,30 @@ export function parseStoryboardScript(input: string, expectedCount: number, tota
     }
     const duration = Number(shot.durationSeconds);
     if (!Number.isFinite(duration)) throw new Error(`第 ${position + 1} 个镜头时长无效`);
-    const imagePrompt = stringField(shot.imagePrompt, 'imagePrompt');
-    if ([...imagePrompt].length < 60) {
-      throw new Error(`第 ${position + 1} 个镜头的 imagePrompt 过于简单，至少需要 60 个字符并包含具体情节与画面细节`);
-    }
+    const title = stringField(shot.title, 'title');
+    const shotSize = stringField(shot.shotSize, 'shotSize');
+    const cameraAngle = stringField(shot.cameraAngle, 'cameraAngle');
+    const cameraMovement = stringField(shot.cameraMovement, 'cameraMovement');
+    const visual = stringField(shot.visual, 'visual');
+    const action = stringField(shot.action, 'action');
+    const imagePrompt = enrichStoryboardImagePrompt({
+      imagePrompt: shot.imagePrompt,
+      visual,
+      action,
+      shotSize,
+      cameraAngle,
+      cameraMovement,
+      visualContinuity,
+    });
     return {
       index: position + 1,
-      title: stringField(shot.title, 'title'),
+      title,
       durationSeconds: Math.max(1, Math.min(60, Math.round(duration))),
-      shotSize: stringField(shot.shotSize, 'shotSize'),
-      cameraAngle: stringField(shot.cameraAngle, 'cameraAngle'),
-      cameraMovement: stringField(shot.cameraMovement, 'cameraMovement'),
-      visual: stringField(shot.visual, 'visual'),
-      action: stringField(shot.action, 'action'),
+      shotSize,
+      cameraAngle,
+      cameraMovement,
+      visual,
+      action,
       dialogue: stringField(shot.dialogue, 'dialogue', true),
       voiceOver: stringField(shot.voiceOver, 'voiceOver', true),
       imagePrompt,
@@ -163,7 +200,7 @@ export function parseStoryboardScript(input: string, expectedCount: number, tota
     : allocateStoryboardDurations(shots, totalDurationSeconds);
   return {
     title: typeof raw.title === 'string' && raw.title.trim() ? raw.title.trim() : '未命名分镜',
-    visualContinuity: typeof raw.visualContinuity === 'string' ? raw.visualContinuity.trim() : '',
+    visualContinuity,
     shots: allocatedShots,
   };
 }

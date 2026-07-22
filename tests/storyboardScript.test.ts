@@ -7,6 +7,7 @@ import {
   buildStoryboardImagePrompt,
   buildStoryboardScriptMessages,
   derivedStoryboardCellRatio,
+  enrichStoryboardImagePrompt,
   legacyFramesToStoryboard,
   normalizeStoryboardTotalDuration,
   parseStoryboardScript,
@@ -64,10 +65,33 @@ test('storyboard duration allocation preserves pacing weights and matches the co
   assert.equal(normalizeStoryboardTotalDuration(999, 4), 240);
 });
 
-test('storyboard parser rejects image prompts that are too generic', () => {
+test('storyboard parser locally enriches short or missing image prompts instead of failing paid generations', () => {
   const raw = JSON.parse(validScriptJson(1));
   raw.shots[0].imagePrompt = '一个人在雨夜向前走，电影感。';
-  assert.throws(() => parseStoryboardScript(JSON.stringify(raw), 1), /imagePrompt 过于简单/);
+  raw.shots[0].visual = '摄影师在雨夜旧城区发现远处闪烁的红色信号。';
+  raw.shots[0].action = '他停下脚步，握紧相机并警惕地望向信号来源。';
+  const enriched = parseStoryboardScript(JSON.stringify(raw), 1).shots[0].imagePrompt;
+  assert.match(enriched, /一个人在雨夜向前走/);
+  assert.match(enriched, /摄影师在雨夜旧城区发现/);
+  assert.match(enriched, /握紧相机/);
+  assert.match(enriched, /中景，平视，缓慢推进/);
+  assert.ok([...enriched].length >= 60);
+
+  delete raw.shots[0].imagePrompt;
+  const recovered = parseStoryboardScript(JSON.stringify(raw), 1).shots[0].imagePrompt;
+  assert.match(recovered, /画面情节/);
+  assert.match(recovered, /视觉连续性/);
+  assert.ok([...recovered].length >= 60);
+
+  const alreadyDetailed = JSON.parse(validScriptJson(1)).shots[0].imagePrompt;
+  assert.equal(enrichStoryboardImagePrompt({
+    imagePrompt: alreadyDetailed,
+    visual: '不会追加',
+    action: '不会追加',
+    shotSize: '中景',
+    cameraAngle: '平视',
+    cameraMovement: '固定',
+  }), alreadyDetailed);
 });
 
 test('storyboard prompts specify row-major layout and prohibit visible text', () => {
