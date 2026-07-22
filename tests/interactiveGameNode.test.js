@@ -25,6 +25,8 @@ test('interactive game script node is registered, executable, permissioned and d
   assert.match(canvas, /EXECUTABLE_NODE_TYPES[\s\S]*'interactive-game-script'/);
   assert.match(canvas, /'interactive-game-script':[\s\S]*gameUiImageProviderInitialized:\s*false[\s\S]*providerSource:\s*''/);
   assert.match(node, /sourceNodeType:\s*'interactive-game-script'/);
+  assert.match(node, /generateLlmStream/);
+  assert.match(node, /signal:\s*activeController\.signal/);
   assert.match(node, /Promise\.all\(Array\.from\(\{ length: Math\.min\(2,/);
   assert.match(node, /opGridCompose/);
   assert.match(node, /gameUiSheetUrl/);

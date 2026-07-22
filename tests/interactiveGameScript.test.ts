@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   buildGameUiImagePrompt,
   buildGameUiScriptMessages,
+  enrichGameUiImagePrompt,
   gameUiGridLayout,
   gameUiTextSegments,
   parseGameUiScript,
@@ -90,6 +91,33 @@ test('interactive game parser enforces auto screen bounds and mode rules', () =>
   const branch = scriptObject('branching-story');
   branch.screens[0].interactions = branch.screens[0].interactions.slice(0, 1);
   assert.throws(() => parseGameUiScript(JSON.stringify(branch)), /多选分支/);
+});
+
+test('interactive game parser locally enriches short or missing image prompts', () => {
+  const shortPrompt = scriptObject();
+  shortPrompt.screens[0].imagePrompt = '蓝紫色科技游戏首页。';
+  const enriched = parseGameUiScript(JSON.stringify(shortPrompt)).screens[0].imagePrompt;
+  assert.match(enriched, /蓝紫色科技游戏首页/);
+  assert.match(enriched, /演示步骤 1/);
+  assert.match(enriched, /顶部状态栏/);
+  assert.match(enriched, /大型触控按钮/);
+  assert.match(enriched, /统一视觉系统/);
+  assert.ok([...enriched].length >= 60);
+
+  delete (shortPrompt.screens[0] as any).imagePrompt;
+  const recovered = parseGameUiScript(JSON.stringify(shortPrompt)).screens[0].imagePrompt;
+  assert.match(recovered, /界面用途/);
+  assert.ok([...recovered].length >= 60);
+
+  const detailed = scriptObject().screens[0].imagePrompt;
+  assert.equal(enrichGameUiImagePrompt({
+    imagePrompt: detailed,
+    purpose: '不追加',
+    layout: '不追加',
+    stateSummary: '不追加',
+    elements: [],
+    globalVisual: '不追加',
+  }), detailed);
 });
 
 test('interactive game prompts and grid layout target a 16:9 touch display', () => {

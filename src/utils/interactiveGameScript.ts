@@ -117,6 +117,34 @@ function text(value: unknown, label: string, allowEmpty = false, max = 8000): st
   return normalized;
 }
 
+export function enrichGameUiImagePrompt(input: {
+  imagePrompt?: unknown;
+  purpose: string;
+  layout: string;
+  stateSummary: string;
+  elements: GameUiElement[];
+  globalVisual: string;
+}): string {
+  const original = typeof input.imagePrompt === 'string' ? input.imagePrompt.trim() : '';
+  if ([...original].length >= 60) return original;
+  const elementSummary = input.elements
+    .map((element) => `${element.label || element.id}：${element.description}`)
+    .join('；');
+  const parts = [
+    original,
+    `界面用途：${input.purpose}`,
+    `16:9 大屏布局：${input.layout}`,
+    `当前状态：${input.stateSummary}`,
+    elementSummary ? `必须呈现的 UI 元素：${elementSummary}` : '',
+    `统一视觉系统：${input.globalVisual}`,
+  ].filter(Boolean);
+  let enriched = parts.join('；').replace(/[；。\s]+$/, '');
+  if ([...enriched].length < 60) {
+    enriched += '；使用远距离清晰可读的层级、高对比触控控件、统一图标与材质，四周保留大屏安全留白，呈现关键动效发生瞬间';
+  }
+  return enriched;
+}
+
 function id(value: unknown, label: string): string {
   const normalized = text(value, label, false, 48);
   if (!ID_RE.test(normalized)) throw new Error(`${label} 必须使用小写英文、数字和短横线，并以字母开头`);
@@ -210,6 +238,9 @@ export function parseGameUiScript(input: string, expectedMode?: GameUiFlowMode):
   if (expectedMode && flowMode !== expectedMode) throw new Error(`flowMode 必须为 ${expectedMode}`);
   if (!Array.isArray(raw.variables)) throw new Error('variables 必须是数组');
   if (!Array.isArray(raw.screens) || raw.screens.length < 4 || raw.screens.length > 8) throw new Error('screens 必须包含 4–8 个界面');
+  const title = text(raw.title, 'title', false, 200);
+  const concept = text(raw.concept, 'concept', false, 3000);
+  const globalVisual = text(raw.globalVisual, 'globalVisual', false, 3000);
 
   const variables: GameUiVariable[] = raw.variables.map((value: unknown, index: number) => {
     const item = record(value, `变量 ${index + 1}`);
@@ -277,15 +308,24 @@ export function parseGameUiScript(input: string, expectedMode?: GameUiFlowMode):
       };
     });
     uniqueIds(interactions, `界面 ${position + 1} 互动`);
-    const imagePrompt = text(item.imagePrompt, `界面 ${position + 1} imagePrompt`, false, 8000);
-    if ([...imagePrompt].length < 60) throw new Error(`界面 ${position + 1} imagePrompt 过于简单`);
+    const purpose = text(item.purpose, `界面 ${position + 1} purpose`);
+    const layout = text(item.layout, `界面 ${position + 1} layout`);
+    const stateSummary = text(item.stateSummary, `界面 ${position + 1} stateSummary`);
+    const imagePrompt = enrichGameUiImagePrompt({
+      imagePrompt: item.imagePrompt,
+      purpose,
+      layout,
+      stateSummary,
+      elements,
+      globalVisual,
+    });
     return {
       id: id(item.id, `界面 ${position + 1} id`),
       index: position + 1,
       title: text(item.title, `界面 ${position + 1} title`),
-      purpose: text(item.purpose, `界面 ${position + 1} purpose`),
-      layout: text(item.layout, `界面 ${position + 1} layout`),
-      stateSummary: text(item.stateSummary, `界面 ${position + 1} stateSummary`),
+      purpose,
+      layout,
+      stateSummary,
       elements,
       interactions,
       imagePrompt,
@@ -302,11 +342,11 @@ export function parseGameUiScript(input: string, expectedMode?: GameUiFlowMode):
   if (!screenIds.has(initialScreenId)) throw new Error('initialScreenId 不存在');
   const script: GameUiScript = {
     schemaVersion: 1,
-    title: text(raw.title, 'title', false, 200),
-    concept: text(raw.concept, 'concept', false, 3000),
+    title,
+    concept,
     flowMode,
     initialScreenId,
-    globalVisual: text(raw.globalVisual, 'globalVisual', false, 3000),
+    globalVisual,
     variables,
     screens,
   };

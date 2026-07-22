@@ -10,7 +10,7 @@ import {
   gptImage2ZhenzhenVariantSize,
   isFalModel,
 } from '../../providers/models';
-import { generateLlm, type MjSpeed } from '../../services/generation';
+import { generateLlmStream, type MjSpeed } from '../../services/generation';
 import { runConfiguredImageGeneration, type ImageGenerationMode } from '../../services/imageGenerationRunner';
 import { opGridCompose } from '../../services/imageOps';
 import { downloadGameUiExport, exportGameUiDocument, type GameUiExportFormat } from '../../services/gameUiExport';
@@ -313,13 +313,19 @@ const InteractiveGameScriptNode = ({ id, data, selected }: NodeProps) => {
       temperature: 0.3,
       max_tokens: Math.min(32000, 1800 + 8 * 720),
     };
-    const first = await generateLlm({ ...request, messages: buildGameUiScriptMessages(brief, flowMode) });
+    const first = await generateLlmStream(
+      { ...request, messages: buildGameUiScriptMessages(brief, flowMode) },
+      { signal: activeController.signal },
+    );
     if (activeController.signal.aborted) throw new DOMException('任务已取消', 'AbortError');
     let next: GameUiScript;
     try { next = parseGameUiScript(first.content, flowMode); }
     catch (parseError: any) {
       update({ progress: `正在修复脚本：${parseError?.message || '结构错误'}` });
-      const repaired = await generateLlm({ ...request, temperature: 0.1, messages: buildGameUiRepairMessages(first.content, brief, flowMode, parseError?.message || '结构错误') });
+      const repaired = await generateLlmStream(
+        { ...request, temperature: 0.1, messages: buildGameUiRepairMessages(first.content, brief, flowMode, parseError?.message || '结构错误') },
+        { signal: activeController.signal },
+      );
       if (activeController.signal.aborted) throw new DOMException('任务已取消', 'AbortError');
       next = parseGameUiScript(repaired.content, flowMode);
     }
