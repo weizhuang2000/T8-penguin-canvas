@@ -5,6 +5,7 @@ import {
   generateExternalImage,
   generateExternalVideo,
   generateExternalLlm,
+  queryExternalImageStatus,
 } from '../src/services/generation.ts';
 
 function jsonResponse(body: any, status = 200) {
@@ -102,6 +103,45 @@ test('generateExternalImage reports non JSON gateway pages in readable text', as
       }),
       /接口返回非 JSON.*HTTP 502.*IIS 10\.0 502\.3 Bad Gateway/,
     );
+  } finally {
+    globalThis.fetch = oldFetch;
+  }
+});
+
+test('queryExternalImageStatus omits long history context for local extension jobs', async () => {
+  const calls: string[] = [];
+  const oldFetch = globalThis.fetch;
+  (globalThis as any).fetch = async (url: string) => {
+    calls.push(url);
+    return jsonResponse({
+      success: true,
+      code: 'completed',
+      data: {
+        taskId: 'external-image-123-demo',
+        status: 'completed',
+        imageUrls: ['/files/output/storyboard.png'],
+      },
+    });
+  };
+  try {
+    const result = await queryExternalImageStatus({
+      providerId: 'openai-compatible',
+      providerModel: 'image-model',
+      taskId: 'external-image-123-demo',
+      outputFormat: 'png',
+      historyContext: {
+        sourceNodeType: 'storyboard-grid',
+        prompt: '分镜宏格提示词'.repeat(2000),
+      },
+    });
+
+    const requestUrl = new URL(calls[0], 'http://localhost');
+    assert.equal(requestUrl.pathname, '/api/proxy/external/image/status/external-image-123-demo');
+    assert.equal(requestUrl.searchParams.get('outputFormat'), 'png');
+    assert.equal(requestUrl.searchParams.has('providerId'), false);
+    assert.equal(requestUrl.searchParams.has('providerModel'), false);
+    assert.equal(requestUrl.searchParams.has('historyContext'), false);
+    assert.deepEqual(result.imageUrls, ['/files/output/storyboard.png']);
   } finally {
     globalThis.fetch = oldFetch;
   }
