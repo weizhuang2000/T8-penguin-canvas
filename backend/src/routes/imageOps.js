@@ -1206,7 +1206,8 @@ router.post('/convert', async (req, res) => {
 //   自定义矩形模式: { imageUrl, rectsPx: [{x,y,w,h,row?,col?}], orderMode?, exportIndexes? } 优先
 router.post('/grid-crop', async (req, res) => {
   try {
-    const { imageUrl, rows, cols, gap, rectsPx, orderMode, exportIndexes } = req.body || {};
+    const { imageUrl, rows, cols, gap, rectsPx, orderMode, exportIndexes, uniformTiles } = req.body || {};
+    const shouldUniformTiles = uniformTiles === true || uniformTiles === 1 || uniformTiles === 'true';
     if (!imageUrl) return res.status(400).json({ success: false, error: 'imageUrl 必填' });
     const buf = await fetchImageBuffer(imageUrl);
     const meta = await sharp(buf).metadata();
@@ -1243,13 +1244,13 @@ router.post('/grid-crop', async (req, res) => {
       for (let row = 0; row < r; row++) {
         const topLine = (row * H) / r;
         const bottomLine = ((row + 1) * H) / r;
-        const y1 = Math.round(row === 0 ? 0 : topLine + halfGap);
-        const y2 = Math.round(row === r - 1 ? H : bottomLine - halfGap);
+        const y1 = Math.round(shouldUniformTiles ? topLine + halfGap : (row === 0 ? 0 : topLine + halfGap));
+        const y2 = Math.round(shouldUniformTiles ? bottomLine - halfGap : (row === r - 1 ? H : bottomLine - halfGap));
         for (let col = 0; col < c; col++) {
           const leftLine = (col * W) / c;
           const rightLine = ((col + 1) * W) / c;
-          const x1 = Math.round(col === 0 ? 0 : leftLine + halfGap);
-          const x2 = Math.round(col === c - 1 ? W : rightLine - halfGap);
+          const x1 = Math.round(shouldUniformTiles ? leftLine + halfGap : (col === 0 ? 0 : leftLine + halfGap));
+          const x2 = Math.round(shouldUniformTiles ? rightLine - halfGap : (col === c - 1 ? W : rightLine - halfGap));
           if (x2 > x1 && y2 > y1) {
             outRects.push({ row, col, x: x1, y: y1, w: x2 - x1, h: y2 - y1 });
           }
@@ -1278,10 +1279,25 @@ router.post('/grid-crop', async (req, res) => {
       return res.status(400).json({ success: false, error: '没有可导出的宫格' });
     }
 
+    let extractionRects = selectedRects;
+    let tileWidth;
+    let tileHeight;
+    if (shouldUniformTiles && !(Array.isArray(rectsPx) && rectsPx.length > 0)) {
+      tileWidth = Math.min(...selectedRects.map((rect) => rect.w));
+      tileHeight = Math.min(...selectedRects.map((rect) => rect.h));
+      extractionRects = selectedRects.map((rect) => ({
+        ...rect,
+        x: rect.x + Math.floor((rect.w - tileWidth) / 2),
+        y: rect.y + Math.floor((rect.h - tileHeight) / 2),
+        w: tileWidth,
+        h: tileHeight,
+      }));
+    }
+
     const enc = chooseEncoder(meta);
     // 并发切割 + 并发保存, 显著提速 (N=9 时以往 ~9x 串行)
     const tiles = await Promise.all(
-      selectedRects.map((rect) =>
+      extractionRects.map((rect) =>
         enc
           .encode(
             sharp(buf).extract({ left: rect.x, top: rect.y, width: rect.w, height: rect.h }),
@@ -1300,7 +1316,15 @@ router.post('/grid-crop', async (req, res) => {
         orderMode: normalizedOrderMode,
         exportIndexes: selectedRects.map((_, index) => parsedIndexes.indexes[index]).filter(Boolean),
         totalTiles: orderedRects.length,
-        layout: { rows: layoutRows, cols: layoutCols, gap: layoutGap, orderMode: normalizedOrderMode },
+        layout: {
+          rows: layoutRows,
+          cols: layoutCols,
+          gap: layoutGap,
+          orderMode: normalizedOrderMode,
+          uniformTiles: shouldUniformTiles,
+          ...(tileWidth ? { tileWidth } : {}),
+          ...(tileHeight ? { tileHeight } : {}),
+        },
       },
     });
   } catch (e) {

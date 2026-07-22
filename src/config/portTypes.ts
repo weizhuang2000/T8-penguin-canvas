@@ -119,7 +119,7 @@ export const NODE_PORTS: Record<string, NodePorts> = {
   'panorama-720': { inputs: ['text'], outputs: ['image'] },
   'penguin-portrait': { inputs: ['text', 'image', 'metadata'], outputs: ['image'] },
   'portrait-metadata': { inputs: ['image'], outputs: ['metadata'] },
-  'storyboard-grid': { inputs: ['text'], outputs: ['text', 'image'] },
+  'storyboard-grid': { inputs: ['text', 'image'], outputs: ['text', 'image'] },
 
   // ========== Utility ==========
   'drawing-board': { inputs: ['image'], outputs: ['image'] },

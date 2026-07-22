@@ -54,9 +54,17 @@ test('storyboard prompts specify row-major layout and prohibit visible text', ()
   assert.match(String(messages[0].content), /从左到右、从上到下/);
 
   const script = parseStoryboardScript(validScriptJson(4), 4);
-  const prompt = buildStoryboardImagePrompt(script, 2, 2);
+  const prompt = buildStoryboardImagePrompt(script, 2, 2, {
+    sheetAspectRatio: '3:2',
+    cellAspectRatio: '3:4',
+    referenceImageCount: 3,
+  });
   assert.match(prompt, /2 行 × 2 列/);
   assert.match(prompt, /不要生成镜头编号、标题、字幕、对白/);
+  assert.match(prompt, /每一行必须严格占整图高度的 50%/);
+  assert.match(prompt, /禁止不等高行/);
+  assert.match(prompt, /主要人物身份与面部、体型、服饰、道具、建筑、场景/);
+  assert.match(prompt, /最终复核/);
   assert.ok(prompt.indexOf('cinematic shot 1') < prompt.indexOf('cinematic shot 4'));
 });
 
@@ -78,10 +86,12 @@ test('legacy storyboard frames remain readable as complete cards', () => {
 test('storyboard handles expose strict text and image port types', () => {
   const node = { id: 'storyboard-1', type: 'storyboard-grid', data: {} } as any;
   assert.deepEqual(getNodePortTypesForHandle(node, 'target', 'outline'), ['text']);
+  assert.deepEqual(getNodePortTypesForHandle(node, 'target', 'references'), ['image']);
   assert.deepEqual(getNodePortTypesForHandle(node, 'source', 'script'), ['text']);
   assert.deepEqual(getNodePortTypesForHandle(node, 'source', 'shots'), ['image']);
   assert.equal(resolveConnectionPickerHandleId('storyboard-grid', 'source', 'image'), 'shots');
   assert.equal(resolveConnectionPickerHandleId('storyboard-grid', 'source', 'text'), 'script');
+  assert.equal(resolveConnectionPickerHandleId('storyboard-grid', 'target', 'image'), 'references');
 });
 
 test('storyboard node is visible, executable, permissioned and uses shared generation runner', () => {
@@ -98,6 +108,10 @@ test('storyboard node is visible, executable, permissioned and uses shared gener
   assert.match(canvas, /EXECUTABLE_NODE_TYPES[\s\S]*'storyboard-grid'/);
   assert.match(node, /sourceNodeType:\s*'storyboard-grid'/);
   assert.match(node, /runConfiguredImageGeneration/);
+  assert.match(node, /Handle id="references"/);
+  assert.match(node, /images:\s*referenceImages/);
+  assert.match(node, /uniformTiles:\s*true/);
+  assert.match(node, /mode:\s*referenceImages\.length > 0 \? 'edit' : 'gen'/);
   assert.match(node, /storyboardSheetUrl/);
   assert.match(node, /storyboardExportFormat/);
   assert.match(node, /storyboardExportLayout/);
@@ -106,6 +120,7 @@ test('storyboard node is visible, executable, permissioned and uses shared gener
   assert.match(canvas, /storyboardExportFormat:\s*'docx'/);
   assert.match(canvas, /storyboardExportLayout:\s*'production-table'/);
   assert.match(canvas, /storyboardPptShotsPerSlide:\s*2/);
+  assert.match(canvas, /referenceImages:\s*\[\]/);
   assert.match(imageNode, /runConfiguredImageGeneration/);
   assert.match(permissions, /DEFAULT_VISIBLE_NODE_TYPES[\s\S]*'storyboard-grid'/);
   assert.match(proxy, /requireNodePermission\(\['llm', 'prompt-reverse', 'storyboard-grid'\]\)/);

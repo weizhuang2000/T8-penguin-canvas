@@ -16,7 +16,7 @@ const HANDLE_PORT_TYPES: Record<string, HandlePortMap> = {
   },
   'storyboard-grid': {
     source: { shots: 'image', script: 'text' },
-    target: { outline: 'text' },
+    target: { outline: 'text', references: 'image' },
   },
 };
 
@@ -30,7 +30,7 @@ const DEFAULT_HANDLE_IDS: Record<string, DefaultHandleMap> = {
   },
   'storyboard-grid': {
     source: { image: 'shots', text: 'script' },
-    target: { text: 'outline' },
+    target: { text: 'outline', image: 'references' },
   },
 };
 

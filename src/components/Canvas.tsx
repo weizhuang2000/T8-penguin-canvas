@@ -634,6 +634,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     providerParams: {},
     storyboardScript: null,
     storyboardSheetUrl: '',
+    referenceImages: [],
     storyboardExportFormat: 'docx',
     storyboardExportLayout: 'production-table',
     storyboardPptShotsPerSlide: 2,

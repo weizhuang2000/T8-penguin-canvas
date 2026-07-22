@@ -153,18 +153,40 @@ export function formatStoryboardScript(script: StoryboardScript): string {
   return [`片名：${script.title}`, `视觉连续性：${script.visualContinuity}`, ...storyboardTextSegments(script)].join('\n\n');
 }
 
-export function buildStoryboardImagePrompt(script: StoryboardScript, rows: number, cols: number): string {
+export interface StoryboardImagePromptOptions {
+  sheetAspectRatio?: string;
+  cellAspectRatio?: string;
+  referenceImageCount?: number;
+}
+
+export function buildStoryboardImagePrompt(
+  script: StoryboardScript,
+  rows: number,
+  cols: number,
+  options: StoryboardImagePromptOptions = {},
+): string {
+  const rowPercent = Number((100 / rows).toFixed(4));
+  const colPercent = Number((100 / cols).toFixed(4));
+  const referenceCount = Math.max(0, Math.floor(Number(options.referenceImageCount) || 0));
   const ordered = script.shots.map((shot) => (
     `第 ${shot.index} 格：${shot.imagePrompt}。景别 ${shot.shotSize}，机位 ${shot.cameraAngle}，运镜构图意图 ${shot.cameraMovement}。`
   )).join('\n');
   return [
-    `生成一张严格的 ${rows} 行 × ${cols} 列影视分镜宫格图，共 ${rows * cols} 个等宽等高画面。`,
+    `生成一张严格的 ${rows} 行 × ${cols} 列影视分镜接触表，共 ${rows * cols} 个完全等宽、完全等高的矩形画面。`,
+    `这是数学等分矩阵：每一行必须严格占整图高度的 ${rowPercent}%，每一列必须严格占整图宽度的 ${colPercent}%。所有横向分隔线必须笔直、平行并贯穿整张图；所有纵向分隔线必须笔直、平行并在每一行完全对齐。`,
+    '禁止不等高行、可变高度面板、大小格、跨格画面、漫画式分栏、瀑布流、拼贴、错位边界、倾斜边界、圆角卡片或任何不规则布局。不得让任何镜头比其他镜头更大或更小。',
+    options.sheetAspectRatio ? `整张接触表比例：${options.sheetAspectRatio}。` : '',
+    options.cellAspectRatio ? `每个单格使用相同构图比例，约为 ${options.cellAspectRatio}。` : '',
     '画面顺序必须从左到右、从上到下，与下面的分格描述一一对应。',
     '每一格只表现一个独立镜头，主体和动作不得跨越格子边界。',
     '不要生成镜头编号、标题、字幕、对白、旁白、水印、Logo 或任何可见文字。',
-    '不要额外增加格子，不要合并格子，不要使用不规则分栏。分格边界清楚，适合后续按等分坐标自动裁切。',
+    '不要额外增加格子，不要合并格子。格子之间无间距或只使用宽度完全一致的细分隔线，四周不得额外增加标题栏、留白或装饰边框。输出必须能直接按照等分像素坐标裁切。',
+    referenceCount > 0
+      ? `已提供 ${referenceCount} 张视觉参考图。将它们作为主要人物身份与面部、体型、服饰、道具、建筑、场景、色彩和材质的强参考，并在所有相关镜头中保持一致；不要把参考图本身画成额外宫格、拼贴板或说明页。`
+      : '',
     script.visualContinuity ? `全局视觉连续性：${script.visualContinuity}` : '',
     ordered,
+    `最终复核：只能有 ${rows} 条等高水平带和 ${cols} 条等宽垂直列，共 ${rows * cols} 个尺寸一致的矩形镜头；禁止任何一行高度不同。`,
   ].filter(Boolean).join('\n');
 }
 

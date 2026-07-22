@@ -177,6 +177,7 @@ export const opGridCrop = (
   options?: {
     orderMode?: 'row' | 'column' | 'snake' | 'reverse';
     exportIndexes?: number[] | string;
+    uniformTiles?: boolean;
   },
 ) =>
   postOp<{
@@ -187,7 +188,7 @@ export const opGridCrop = (
     orderMode?: string;
     exportIndexes?: number[];
     totalTiles?: number;
-    layout: { rows: number; cols: number; gap: number; orderMode?: string };
+    layout: { rows: number; cols: number; gap: number; orderMode?: string; uniformTiles?: boolean; tileWidth?: number; tileHeight?: number };
   }>(
     'grid-crop',
     { imageUrl, rows, cols, gap, rectsPx, ...(options || {}) },

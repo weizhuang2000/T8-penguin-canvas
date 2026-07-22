@@ -30,7 +30,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: 'director-storyboard', label: '导演分镜台', category: 'core', description: '秒级长片分镜台：多镜头提示词、参考素材和 Seedance2.0 无限并发生成', icon: 'Clapperboard', color: 'fuchsia' },
   { type: 'audio', label: '音频', category: 'core', description: 'Suno V5.5 全模式(生成/翻唱/续写)', icon: 'Music', color: 'violet' },
   { type: 'llm', label: 'LLM', category: 'core', description: 'GPT-5 / Claude 4.5 / Gemini 2.5(独立 Key)', icon: 'Brain', color: 'emerald' },
-  { type: 'storyboard-grid', label: '分镜脚本', category: 'core', description: '文本大纲经 LLM 拆成可编辑分镜卡，生成并拆分宫格镜头，支持表格导出 DOCX/PDF/PPT', icon: 'Clapperboard', color: 'indigo' },
+  { type: 'storyboard-grid', label: '分镜脚本', category: 'core', description: '文本大纲与视觉参考图生成严格等分宫格镜头，支持自动拆分和表格导出 DOCX/PDF/PPT', icon: 'Clapperboard', color: 'indigo' },
   { type: 'prompt-reverse', label: '提示词反推', category: 'core', description: '反推 GPT Image 2 提示词，并可用接入文本替换画面内容', icon: 'BrainCircuit', color: 'emerald' },
   { type: 'remotion-animation', label: 'Remotion 动画', category: 'core', description: 'LLM 独立配置 + 内置 Skill 生成专业 TSX，经关键帧审片后本地渲染 MP4', icon: 'Clapperboard', color: 'rose' },
 

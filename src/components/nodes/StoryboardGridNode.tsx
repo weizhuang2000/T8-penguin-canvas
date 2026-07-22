@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { AlertCircle, Brain, Clapperboard, Download, FileDown, LayoutGrid, Loader2, Scissors, Sparkles, Square } from 'lucide-react';
+import { AlertCircle, Brain, Clapperboard, Download, FileDown, Images, LayoutGrid, Loader2, Scissors, Sparkles, Square } from 'lucide-react';
 import {
   DEFAULT_MJ_RATIO,
   DEFAULT_MJ_SPEED,
@@ -61,6 +61,7 @@ const FIELD = 'nodrag nowheel w-full rounded border border-white/10 bg-black/20 
 const TEXTAREA = `${FIELD} resize-y`;
 const EXTERNAL_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'];
 const SIZE_LEVELS = ['1K', '2K', '4K'];
+const MAX_REFERENCE_IMAGES = 12;
 
 function falSheetRatio(size: string, width: number, height: number, fallback: string): string {
   if (size === 'square' || size === 'square_hd') return '1:1';
@@ -95,6 +96,9 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
   const expectedCount = rows * cols;
   const cropGap = Math.max(0, Math.min(240, Number.parseInt(String(d.storyboardCropGap ?? d.gap ?? 0), 10) || 0));
   const outline = useMemo(() => upstream.texts.map((item) => item.url.trim()).filter(Boolean).join('\n\n'), [upstream.texts]);
+  const referenceMaterials = useMemo(() => upstream.images.slice(0, MAX_REFERENCE_IMAGES), [upstream.images]);
+  const referenceImages = useMemo(() => referenceMaterials.map((item) => item.url), [referenceMaterials]);
+  const referenceOverflow = upstream.images.length > MAX_REFERENCE_IMAGES;
   const script = useMemo(() => storedScript(d.storyboardScript, d.frames), [d.frames, d.storyboardScript]);
   const scriptStale = !script
     || script.shots.length !== expectedCount
@@ -254,7 +258,7 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
 
   const splitSheet = async (url: string) => {
     update({ status: 'splitting-image', progress: `正在拆分 ${expectedCount} 个镜头…`, error: '' });
-    const result = await opGridCrop(url, rows, cols, cropGap, undefined, { orderMode: 'row' });
+    const result = await opGridCrop(url, rows, cols, cropGap, undefined, { orderMode: 'row', uniformTiles: true });
     if (result.urls.length !== expectedCount) throw new Error(`拆分得到 ${result.urls.length} 张图片，预期 ${expectedCount} 张`);
     update({
       status: 'success',
@@ -272,13 +276,24 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
     if (activeScript.shots.length !== expectedCount) throw new Error(`脚本镜头数必须为 ${expectedCount}`);
     if (!isExternal && !allowZhenzhen) throw new Error('贞贞工坊已关闭，请选择扩展图像 Provider');
     if (isExternal && (!providerSelection.provider || !externalModel)) throw new Error('扩展平台未配置可用图像模型');
-    const imagePrompt = buildStoryboardImagePrompt(activeScript, rows, cols);
+    const imagePrompt = buildStoryboardImagePrompt(activeScript, rows, cols, {
+      sheetAspectRatio: activeSheetRatio,
+      cellAspectRatio: cellRatio,
+      referenceImageCount: referenceImages.length,
+    });
     const mode: ImageGenerationMode = isExternal ? 'external' : isMj ? 'mj' : isFal ? 'fal' : 'standard';
     const seed = Math.max(0, Math.floor(Number(isMj ? d.mjSeed : isFal ? d.nbSeed : d.seed) || 0));
-    update({ status: 'generating-image', progress: '0%', error: '', storyboardImagePrompt: imagePrompt });
+    update({
+      status: 'generating-image',
+      progress: '0%',
+      error: '',
+      storyboardImagePrompt: imagePrompt,
+      referenceImages,
+    });
     const result = await runConfiguredImageGeneration({
       mode,
       prompt: imagePrompt,
+      images: referenceImages,
       outputFormat,
       historyContext: {
         canvasId: loadedCanvasId,
@@ -306,7 +321,7 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
       } : undefined,
       fal: isFal && falKind ? {
         kind: falKind,
-        mode: 'gen',
+        mode: referenceImages.length > 0 ? 'edit' : 'gen',
         size: falSize,
         customW: Math.max(256, Number(d.falCustomW) || 1280),
         customH: Math.max(256, Number(d.falCustomH) || 1280),
@@ -444,6 +459,7 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
       style={{ width: 520, background: 'var(--t8-bg-panel, rgba(20,20,24,.96))', borderColor: selected ? COLOR : 'var(--t8-border)' }}
     >
       <Handle id="outline" type="target" position={Position.Left} style={{ top: 92, background: PORT_COLOR.text, border: 0 }} />
+      <Handle id="references" type="target" position={Position.Left} style={{ top: 142, background: PORT_COLOR.image, border: 0 }} title="输入：人物、服饰、道具、建筑和场景参考图" />
       <Handle id="shots" type="source" position={Position.Right} style={{ top: '42%', background: PORT_COLOR.image, border: 0 }} />
       <Handle id="script" type="source" position={Position.Right} style={{ top: '65%', background: PORT_COLOR.text, border: 0 }} />
 
@@ -466,6 +482,16 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
         </div>
 
         {expectedCount > 16 && <div className="rounded border border-amber-400/25 bg-amber-500/10 px-2 py-1.5 text-[10px] text-amber-200">超过 16 镜时，图像模型对严格宫格和镜头内容的遵循度可能下降。</div>}
+
+        <div className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2">
+          <div className="flex items-center justify-between text-[10px] text-white/55"><span className="flex items-center gap-1"><Images size={12} />视觉参考</span><span>{upstream.images.length} / {MAX_REFERENCE_IMAGES}</span></div>
+          {referenceMaterials.length > 0 ? (
+            <div className="grid grid-cols-6 gap-1">
+              {referenceMaterials.map((material, index) => <SmartImage key={material.id} src={material.url} alt={material.label || `参考图 ${index + 1}`} title={material.label || `参考图 ${index + 1}`} className="h-14 w-full rounded border border-white/10 bg-black/20 object-contain" thumbSize={160} />)}
+            </div>
+          ) : <div className="rounded bg-white/[0.03] px-2 py-1.5 text-[10px] text-white/35">未连接</div>}
+          {referenceOverflow && <div className="flex items-center gap-1 text-[10px] text-amber-200"><AlertCircle size={11} />仅使用前 {MAX_REFERENCE_IMAGES} 张参考图</div>}
+        </div>
 
         <div className="grid grid-cols-2 gap-2">
           <label className="space-y-1 text-[10px] text-white/55"><span>脚本模型（LLM 独立配置）</span><select className={FIELD} value={activeLlm?.id || 'default'} disabled={busy} onChange={(event) => update({ llmKeyId: event.target.value, llmModel: llmOptions.find((item) => item.id === event.target.value)?.model || '' })}>{llmOptions.map((item) => <option key={item.id} value={item.id}>{item.label || item.id}{item.model ? ` · ${item.model}` : ''}</option>)}</select></label>
@@ -602,6 +628,8 @@ const StoryboardGridNode = ({ id, data, selected }: NodeProps) => {
           </div>
         )}
       </div>
+      <div className="pointer-events-none absolute -left-1 top-[92px] -translate-x-full -translate-y-1/2 pr-2 text-[9px] text-yellow-300">大纲</div>
+      <div className="pointer-events-none absolute -left-1 top-[142px] -translate-x-full -translate-y-1/2 pr-2 text-[9px] text-blue-300">参考图</div>
       <div className="pointer-events-none absolute -right-1 top-[42%] -translate-y-1/2 translate-x-full pl-2 text-[9px] text-blue-300">镜头</div>
       <div className="pointer-events-none absolute -right-1 top-[65%] -translate-y-1/2 translate-x-full pl-2 text-[9px] text-yellow-300">脚本</div>
     </div>
