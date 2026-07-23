@@ -649,6 +649,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
   'interactive-game-script': {
     gameUiFlowMode: 'state-graph',
     gameUiDemoMode: 'static',
+    gameUiDesignStyle: 'auto',
     gameUiScript: null,
     gameUiScreenImages: [],
     gameUiSheetUrl: '',

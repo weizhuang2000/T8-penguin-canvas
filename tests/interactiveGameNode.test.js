@@ -23,7 +23,7 @@ test('interactive game script node is registered, executable, permissioned and d
   assert.match(handles, /'interactive-game-script'[\s\S]*screens:\s*'image'[\s\S]*brief:\s*'text'/);
   assert.match(canvas, /'interactive-game-script': InteractiveGameScriptNode/);
   assert.match(canvas, /EXECUTABLE_NODE_TYPES[\s\S]*'interactive-game-script'/);
-  assert.match(canvas, /'interactive-game-script':[\s\S]*gameUiImageProviderInitialized:\s*false[\s\S]*providerSource:\s*''/);
+  assert.match(canvas, /'interactive-game-script':[\s\S]*gameUiDesignStyle:\s*'auto'[\s\S]*gameUiImageProviderInitialized:\s*false[\s\S]*providerSource:\s*''/);
   assert.match(node, /sourceNodeType:\s*'interactive-game-script'/);
   assert.match(node, /generateLlmStream/);
   assert.match(node, /signal:\s*activeController\.signal/);
@@ -40,6 +40,11 @@ test('interactive game script node is registered, executable, permissioned and d
   assert.match(node, /<span>生图来源<\/span>/);
   assert.match(node, /<span>扩展模型<\/span>/);
   assert.match(node, /<span>图像模型<\/span>/);
+  assert.match(node, /<span>UI 设计风格<\/span>/);
+  assert.match(node, /GAME_UI_DESIGN_STYLES\.map/);
+  assert.match(node, /gameUiScriptDesignStyle/);
+  assert.match(node, /buildGameUiScriptMessages\(brief, flowMode, designStyle\)/);
+  assert.match(node, /buildGameUiImagePrompt\(activeScript, screen, referenceImages\.length, designStyle\)/);
   assert.match(permissions, /DEFAULT_VISIBLE_NODE_TYPES[\s\S]*'interactive-game-script'/);
   assert.match(proxy, /requireNodePermission\(\['llm', 'prompt-reverse', 'storyboard-grid', 'interactive-game-script'\]\)/);
   assert.match(documents, /game-ui\/export'[\s\S]*requireNodePermission\('interactive-game-script'\)/);

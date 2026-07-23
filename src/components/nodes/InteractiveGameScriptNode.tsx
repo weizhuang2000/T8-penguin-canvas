@@ -33,9 +33,11 @@ import {
   gameUiGridLayout,
   gameUiTextSegments,
   gameUiVisualFingerprint,
+  GAME_UI_DESIGN_STYLES,
   GAME_UI_DEMO_MODES,
   GAME_UI_FLOW_MODES,
   parseGameUiScript,
+  resolveGameUiDesignStyle,
   type GameUiCondition,
   type GameUiDemoMode,
   type GameUiEffect,
@@ -217,11 +219,15 @@ const InteractiveGameScriptNode = ({ id, data, selected }: NodeProps) => {
 
   const flowMode = (GAME_UI_FLOW_MODES.some((item) => item.id === d.gameUiFlowMode) ? d.gameUiFlowMode : 'state-graph') as GameUiFlowMode;
   const demoMode = (GAME_UI_DEMO_MODES.some((item) => item.id === d.gameUiDemoMode) ? d.gameUiDemoMode : 'static') as GameUiDemoMode;
+  const designStyle = resolveGameUiDesignStyle(d.gameUiDesignStyle);
   const brief = useMemo(() => upstream.texts.map((item) => item.url.trim()).filter(Boolean).join('\n\n'), [upstream.texts]);
   const references = useMemo(() => upstream.images.slice(0, MAX_REFERENCES), [upstream.images]);
   const referenceImages = useMemo(() => references.map((item) => item.url), [references]);
   const script = useMemo(() => storedScript(d.gameUiScript), [d.gameUiScript]);
-  const scriptStale = !script || String(d.gameUiSourceText || '') !== brief || String(d.gameUiScriptFlowMode || '') !== flowMode;
+  const scriptStale = !script
+    || String(d.gameUiSourceText || '') !== brief
+    || String(d.gameUiScriptFlowMode || '') !== flowMode
+    || String(d.gameUiScriptDesignStyle || 'auto') !== designStyle.id;
   const records = useMemo(() => storedImages(d.gameUiScreenImages), [d.gameUiScreenImages]);
   const imageRecordById = useMemo(() => new Map(records.map((item) => [item.screenId, item])), [records]);
 
@@ -275,9 +281,9 @@ const InteractiveGameScriptNode = ({ id, data, selected }: NodeProps) => {
 
   const currentImageRecords = useMemo(() => script ? script.screens.map((screen) => {
     const record = imageRecordById.get(screen.id);
-    const fingerprint = gameUiVisualFingerprint(script, screen, referenceImages);
+    const fingerprint = gameUiVisualFingerprint(script, screen, referenceImages, designStyle.id);
     return { screen, record, fingerprint, fresh: !!record?.url && !record.error && record.fingerprint === fingerprint };
-  }) : [], [imageRecordById, referenceImages, script]);
+  }) : [], [designStyle.id, imageRecordById, referenceImages, script]);
   const allFresh = !!script && currentImageRecords.length === script.screens.length && currentImageRecords.every((item) => item.fresh);
   const imageByScreen = useMemo(() => new Map(currentImageRecords.filter((item) => item.fresh).map((item) => [item.screen.id, item.record!.url])), [currentImageRecords]);
 
@@ -314,7 +320,7 @@ const InteractiveGameScriptNode = ({ id, data, selected }: NodeProps) => {
       max_tokens: Math.min(32000, 1800 + 8 * 720),
     };
     const first = await generateLlmStream(
-      { ...request, messages: buildGameUiScriptMessages(brief, flowMode) },
+      { ...request, messages: buildGameUiScriptMessages(brief, flowMode, designStyle) },
       { signal: activeController.signal },
     );
     if (activeController.signal.aborted) throw new DOMException('任务已取消', 'AbortError');
@@ -329,7 +335,7 @@ const InteractiveGameScriptNode = ({ id, data, selected }: NodeProps) => {
       if (activeController.signal.aborted) throw new DOMException('任务已取消', 'AbortError');
       next = parseGameUiScript(repaired.content, flowMode);
     }
-    setScript(next, { gameUiSourceText: brief, gameUiScriptFlowMode: flowMode, llmKeyId: activeLlm?.id || '', llmModel, status: 'script-ready', progress: '', error: '' });
+    setScript(next, { gameUiSourceText: brief, gameUiScriptFlowMode: flowMode, gameUiScriptDesignStyle: designStyle.id, llmKeyId: activeLlm?.id || '', llmModel, status: 'script-ready', progress: '', error: '' });
     return next;
   };
 
@@ -339,7 +345,7 @@ const InteractiveGameScriptNode = ({ id, data, selected }: NodeProps) => {
     const mode: ImageGenerationMode = isExternal ? 'external' : isMj ? 'mj' : isFal ? 'fal' : 'standard';
     return runConfiguredImageGeneration({
       mode,
-      prompt: buildGameUiImagePrompt(activeScript, screen, referenceImages.length),
+      prompt: buildGameUiImagePrompt(activeScript, screen, referenceImages.length, designStyle),
       images: referenceImages,
       outputFormat,
       signal,
@@ -398,7 +404,7 @@ const InteractiveGameScriptNode = ({ id, data, selected }: NodeProps) => {
   const generateScreens = async (activeScript: GameUiScript, activeController: AbortController, onlyFailed = false) => {
     const map = new Map(storedImages(d.gameUiScreenImages).map((item) => [item.screenId, item]));
     const targets = activeScript.screens.filter((screen) => {
-      const fingerprint = gameUiVisualFingerprint(activeScript, screen, referenceImages);
+      const fingerprint = gameUiVisualFingerprint(activeScript, screen, referenceImages, designStyle.id);
       const existing = map.get(screen.id);
       return !onlyFailed || !existing?.url || !!existing.error || existing.fingerprint !== fingerprint;
     });
@@ -409,7 +415,7 @@ const InteractiveGameScriptNode = ({ id, data, selected }: NodeProps) => {
     const worker = async () => {
       while (cursor < targets.length) {
         const screen = targets[cursor++];
-        const fingerprint = gameUiVisualFingerprint(activeScript, screen, referenceImages);
+        const fingerprint = gameUiVisualFingerprint(activeScript, screen, referenceImages, designStyle.id);
         try {
           const result = await runImage(activeScript, screen, activeController.signal);
           const url = result.urls[0] || result.primaryUrl;
@@ -421,14 +427,14 @@ const InteractiveGameScriptNode = ({ id, data, selected }: NodeProps) => {
         }
         completed += 1;
         const ordered = activeScript.screens.map((item) => map.get(item.id)).filter(Boolean) as ScreenImageRecord[];
-        const freshUrls = activeScript.screens.map((item) => map.get(item.id)).filter((item) => item?.url && !item.error && item.fingerprint === gameUiVisualFingerprint(activeScript, activeScript.screens.find((screen) => screen.id === item.screenId)!, referenceImages)).map((item) => item!.url);
+        const freshUrls = activeScript.screens.map((item) => map.get(item.id)).filter((item) => item?.url && !item.error && item.fingerprint === gameUiVisualFingerprint(activeScript, activeScript.screens.find((screen) => screen.id === item.screenId)!, referenceImages, designStyle.id)).map((item) => item!.url);
         update({ gameUiScreenImages: ordered, imageUrls: freshUrls, imageUrl: freshUrls[0] || '', progress: `正在生成 ${completed} / ${targets.length} 个界面…` });
       }
     };
     await Promise.all(Array.from({ length: Math.min(2, targets.length) }, worker));
     const failed = activeScript.screens.filter((screen) => {
       const item = map.get(screen.id);
-      return !item?.url || !!item.error || item.fingerprint !== gameUiVisualFingerprint(activeScript, screen, referenceImages);
+      return !item?.url || !!item.error || item.fingerprint !== gameUiVisualFingerprint(activeScript, screen, referenceImages, designStyle.id);
     });
     if (failed.length) {
       update({ status: 'error', progress: '', error: `${failed.length} 个界面生成失败，可点击重试失败界面` });
@@ -458,7 +464,7 @@ const InteractiveGameScriptNode = ({ id, data, selected }: NodeProps) => {
     if (!script || scriptStale) return;
     const activeController = controller();
     const map = new Map(storedImages(d.gameUiScreenImages).map((item) => [item.screenId, item]));
-    const fingerprint = gameUiVisualFingerprint(script, screen, referenceImages);
+    const fingerprint = gameUiVisualFingerprint(script, screen, referenceImages, designStyle.id);
     update({ status: 'generating-screens', progress: `正在重新生成“${screen.title}”…`, error: '' });
     try {
       const result = await runImage(script, screen, activeController.signal);
@@ -466,9 +472,9 @@ const InteractiveGameScriptNode = ({ id, data, selected }: NodeProps) => {
       if (!url) throw new Error('图像模型未返回界面图');
       map.set(screen.id, { screenId: screen.id, url, fingerprint });
       const ordered = script.screens.map((item) => map.get(item.id)).filter(Boolean) as ScreenImageRecord[];
-      const freshUrls = script.screens.map((item) => map.get(item.id)).filter((item, index) => item?.url && !item.error && item.fingerprint === gameUiVisualFingerprint(script, script.screens[index], referenceImages)).map((item) => item!.url);
+      const freshUrls = script.screens.map((item) => map.get(item.id)).filter((item, index) => item?.url && !item.error && item.fingerprint === gameUiVisualFingerprint(script, script.screens[index], referenceImages, designStyle.id)).map((item) => item!.url);
       update({ gameUiScreenImages: ordered, imageUrls: freshUrls, imageUrl: freshUrls[0] || '' });
-      const complete = script.screens.every((item) => { const record = map.get(item.id); return !!record?.url && !record.error && record.fingerprint === gameUiVisualFingerprint(script, item, referenceImages); });
+      const complete = script.screens.every((item) => { const record = map.get(item.id); return !!record?.url && !record.error && record.fingerprint === gameUiVisualFingerprint(script, item, referenceImages, designStyle.id); });
       if (complete) await composeGrid(script, map);
       update({ status: complete ? 'success' : 'script-ready', progress: complete ? '100%' : '', error: '' });
     } catch (error) { handleError(error); }
@@ -499,6 +505,8 @@ const InteractiveGameScriptNode = ({ id, data, selected }: NodeProps) => {
           <label className="space-y-1 text-[10px] text-white/55"><span>流程模式</span><select className={FIELD} disabled={busy} value={flowMode} onChange={(event) => update({ gameUiFlowMode: event.target.value })}>{GAME_UI_FLOW_MODES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
           <label className="space-y-1 text-[10px] text-white/55"><span>演示模式</span><select className={FIELD} disabled={busy} value={demoMode} onChange={(event) => update({ gameUiDemoMode: event.target.value })}>{GAME_UI_DEMO_MODES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
         </div>
+        <label className="block space-y-1 text-[10px] text-white/55"><span>UI 设计风格</span><select className={FIELD} disabled={busy} value={designStyle.id} onChange={(event) => update({ gameUiDesignStyle: event.target.value })}>{GAME_UI_DESIGN_STYLES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+        <div className="rounded border border-cyan-400/10 bg-cyan-500/[0.05] px-2 py-1.5 text-[10px] leading-relaxed text-cyan-50/55">{designStyle.prompt || '根据游戏需求、展厅主题和视觉参考图自动匹配统一的界面风格。'}</div>
         <div className="rounded bg-white/[0.03] p-2 text-[10px] text-white/45">16:9 大屏触控 · AI 自动规划 4–8 个界面 · 逐界面 2K 生成 · 最多并发 2</div>
         <div className="space-y-1.5"><div className="flex justify-between text-[10px] text-white/55"><span>游戏需求</span><span>{brief ? `${brief.length} 字` : '未连接'}</span></div><div className="max-h-20 overflow-y-auto rounded bg-black/20 p-2 text-[10px] text-white/60">{brief || '从左侧黄色端口连接游戏需求文本'}</div></div>
         <div className="space-y-1.5"><div className="flex justify-between text-[10px] text-white/55"><span className="flex items-center gap-1"><Images size={11} />视觉参考</span><span>{upstream.images.length} / {MAX_REFERENCES}</span></div>{references.length ? <div className="grid grid-cols-6 gap-1">{references.map((item) => <SmartImage key={item.id} src={item.url} alt={item.label || '参考图'} className="h-12 rounded border border-white/10 object-contain" thumbSize={120} />)}</div> : <div className="rounded bg-white/[0.03] px-2 py-1.5 text-[10px] text-white/35">未连接</div>}</div>
@@ -522,7 +530,7 @@ const InteractiveGameScriptNode = ({ id, data, selected }: NodeProps) => {
           {busy ? <button className="flex items-center justify-center gap-1 rounded bg-red-500/15 px-2 py-2 text-xs text-red-200" onClick={stop}><Square size={12} />停止</button> : <button className="flex items-center justify-center gap-1 rounded bg-white/10 px-2 py-2 text-xs text-white/70 disabled:opacity-40" disabled={!script || allFresh} onClick={() => void execute('retry')}><RefreshCcw size={12} />重试失败</button>}
         </div>
         {!!d.progress && <div className="rounded bg-cyan-500/10 px-2 py-1.5 text-[10px] text-cyan-100">{d.progress}</div>}
-        {script && scriptStale && <div className="flex gap-1 rounded border border-amber-400/20 bg-amber-500/10 p-2 text-[10px] text-amber-200"><AlertCircle size={12} />需求或流程模式已变化，请重新生成脚本。</div>}
+        {script && scriptStale && <div className="flex gap-1 rounded border border-amber-400/20 bg-amber-500/10 p-2 text-[10px] text-amber-200"><AlertCircle size={12} />需求、流程模式或 UI 风格已变化，请重新生成脚本。</div>}
         {(localError || d.error) && <div className="flex gap-1 rounded border border-red-400/20 bg-red-500/10 p-2 text-[10px] text-red-200"><AlertCircle size={12} />{localError || d.error}</div>}
         {script && <div className="space-y-2 rounded border border-white/10 bg-white/[0.02] p-2">
           <div className="grid grid-cols-2 gap-2"><label className="space-y-1 text-[10px] text-white/50"><span>项目名</span><input className={FIELD} value={script.title} onChange={(event) => setScript({ ...script, title: event.target.value })} /></label><label className="space-y-1 text-[10px] text-white/50"><span>全局视觉</span><textarea className={TEXTAREA} rows={2} value={script.globalVisual} onChange={(event) => setScript({ ...script, globalVisual: event.target.value })} /></label></div>

@@ -7,7 +7,9 @@ import {
   enrichGameUiImagePrompt,
   gameUiGridLayout,
   gameUiTextSegments,
+  GAME_UI_DESIGN_STYLES,
   parseGameUiScript,
+  resolveGameUiDesignStyle,
   resolveGameUiGlobalVisual,
   type GameUiFlowMode,
 } from '../src/utils/interactiveGameScript.ts';
@@ -145,4 +147,19 @@ test('interactive game prompts and grid layout target a 16:9 touch display', () 
   assert.match(prompt, /16:9/);
   assert.match(prompt, /2 张视觉参考图/);
   assert.deepEqual(gameUiGridLayout(5), { rows: 2, cols: 3, cellWidth: 960, cellHeight: 540, gap: 16, width: 2912, height: 1096 });
+});
+
+test('interactive game UI styles cover common exhibition touch-screen treatments and affect both prompts', () => {
+  assert.ok(GAME_UI_DESIGN_STYLES.length >= 15);
+  assert.ok(GAME_UI_DESIGN_STYLES.some((item) => item.id === 'tech-dashboard'));
+  assert.ok(GAME_UI_DESIGN_STYLES.some((item) => item.id === 'museum-elegant'));
+  assert.ok(GAME_UI_DESIGN_STYLES.some((item) => item.id === 'kids-science'));
+  assert.equal(resolveGameUiDesignStyle('missing').id, 'auto');
+  const style = resolveGameUiDesignStyle('digital-twin');
+  const messages = buildGameUiScriptMessages('测试需求', 'state-graph', style);
+  assert.match(String(messages[0].content), /数字孪生控制台/);
+  assert.match(String(messages[0].content), /globalVisual/);
+  const script = parseGameUiScript(JSON.stringify(scriptObject()), 'state-graph');
+  const prompt = buildGameUiImagePrompt(script, script.screens[0], 0, style);
+  assert.match(prompt, /UI 设计风格：数字孪生控制台/);
 });

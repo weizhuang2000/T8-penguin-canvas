@@ -75,6 +75,12 @@ export interface GameUiScript {
   screens: GameUiScreen[];
 }
 
+export interface GameUiDesignStyle {
+  id: string;
+  label: string;
+  prompt: string;
+}
+
 export const GAME_UI_FLOW_MODES: Array<{ id: GameUiFlowMode; label: string; description: string }> = [
   { id: 'state-graph', label: '界面状态图', description: '以状态变量、条件和可回访页面组织互动。' },
   { id: 'linear', label: '线性步骤流', description: '按固定顺序演示完整操作路径。' },
@@ -85,6 +91,28 @@ export const GAME_UI_DEMO_MODES: Array<{ id: GameUiDemoMode; label: string }> = 
   { id: 'static', label: '静态界面与逻辑说明' },
   { id: 'prototype', label: '图片热点交互原型' },
 ];
+
+export const GAME_UI_DESIGN_STYLES: GameUiDesignStyle[] = [
+  { id: 'auto', label: '自动匹配', prompt: '' },
+  { id: 'tech-dashboard', label: '科技数据大屏', prompt: '深蓝黑底、高亮青蓝数据、模块化信息卡、清晰图表和动态光轨，专业可信，适合科技馆、企业展厅与成果展示' },
+  { id: 'future-hud', label: '未来 HUD', prompt: '未来舱 HUD、环形扫描界面、细线框、坐标网格、粒子和能量光效，具有科幻沉浸感但保持触控按钮清晰可读' },
+  { id: 'digital-twin', label: '数字孪生控制台', prompt: '三维园区或设备数字孪生主视觉，左右参数面板、底部时间轴和状态告警，工业级控制台秩序与真实数据可视化' },
+  { id: 'glassmorphism', label: '玻璃拟态交互', prompt: '半透明磨砂玻璃面板、柔和背景光晕、清晰层级阴影和大圆角触控卡片，精致现代且不牺牲文字对比度' },
+  { id: 'immersive-story', label: '深色沉浸叙事', prompt: '全屏电影级场景图、暗色渐变遮罩、少量悬浮控件和重点聚光，突出故事氛围、角色与空间代入感' },
+  { id: 'museum-elegant', label: '博物馆典雅', prompt: '米白、深褐与低饱和金色，克制留白、精细分隔线、展签式排版和文物细节特写，庄重安静且具有文化权威感' },
+  { id: 'chinese-trend', label: '文化国潮', prompt: '传统纹样、东方色彩、现代扁平图形与层叠卷轴结构结合，适量金红青绿点缀，文化辨识度强但避免繁复堆砌' },
+  { id: 'kids-science', label: '儿童科普卡通', prompt: '明亮友好色彩、圆润角色、夸张反馈动画、大图标和超大触控按钮，信息简单有趣，适合亲子与低龄观众' },
+  { id: 'eco-nature', label: '生态自然', prompt: '自然绿、湖蓝和暖白，植物、水体、地形等有机形态，柔和渐变与轻量信息图，营造环保、生命与可持续主题' },
+  { id: 'minimal-brand', label: '极简品牌发布', prompt: '大面积品牌主色与留白、超大标题、单一强视觉焦点、严格网格和高品质微动效，适合企业品牌与产品发布体验' },
+  { id: 'industrial-archive', label: '工业档案', prompt: '深灰金属、工程蓝图、编号标签、机械结构线稿和档案时间轴，粗犷可靠，适合工业史、制造业与遗产展陈' },
+  { id: 'pixel-game', label: '像素游戏', prompt: '统一像素网格、有限色板、街机按钮、得分条和逐帧反馈，复古游戏感明确，同时保证大屏像素边缘干净' },
+  { id: 'tactile-3d', label: '3D 拟物互动', prompt: '高品质三维物体、真实材质、柔和环境光和可按压拟物控件，强调旋转、拆解、组装等直接操控体验' },
+  { id: 'art-installation', label: '艺术装置实验', prompt: '抽象生成艺术、流体粒子、非对称构图和声音可视化式图形，保留极简导航与明确热点，适合艺术馆和互动装置' },
+];
+
+export function resolveGameUiDesignStyle(value: unknown): GameUiDesignStyle {
+  return GAME_UI_DESIGN_STYLES.find((item) => item.id === String(value || 'auto')) || GAME_UI_DESIGN_STYLES[0];
+}
 
 const FLOW_MODE_SET = new Set(GAME_UI_FLOW_MODES.map((item) => item.id));
 const TRIGGER_SET = new Set<GameUiTrigger>(['tap', 'swipe-left', 'swipe-right', 'timeout']);
@@ -374,7 +402,7 @@ export function parseGameUiScript(input: string, expectedMode?: GameUiFlowMode):
   return script;
 }
 
-export function buildGameUiScriptMessages(brief: string, flowMode: GameUiFlowMode) {
+export function buildGameUiScriptMessages(brief: string, flowMode: GameUiFlowMode, designStyle: GameUiDesignStyle = GAME_UI_DESIGN_STYLES[0]) {
   const mode = GAME_UI_FLOW_MODES.find((item) => item.id === flowMode) || GAME_UI_FLOW_MODES[0];
   return [
     {
@@ -392,6 +420,7 @@ export function buildGameUiScriptMessages(brief: string, flowMode: GameUiFlowMod
         'feedback.type 只能是 none/toast/highlight/modal，message 可为空。targetScreenId 为目标界面 id，终止互动使用 null。',
         '所有界面必须从 initialScreenId 可达。线性模式依次连接每个界面；剧情分支模式必须有多选分支和终局；状态图必须修改变量，并包含条件跳转或回访路径。',
         '每个 imagePrompt 至少 100 个中文字符，精确描述 16:9 大屏 UI：背景、层级、控件位置、真实可读的简短中文、品牌气质、色彩、材质、图标、动效定格和安全留白。所有界面保持同一视觉系统。',
+        designStyle.prompt ? `指定 UI 设计风格为“${designStyle.label}”：${designStyle.prompt}。globalVisual、所有界面布局和 imagePrompt 必须统一遵循该风格。` : '根据用户需求、展厅主题和视觉参考图自动选择统一的 UI 设计风格。',
       ].join('\n'),
     },
     { role: 'user' as const, content: brief.trim() },
@@ -439,12 +468,13 @@ export function formatGameUiScript(script: GameUiScript): string {
   ].join('\n\n');
 }
 
-export function buildGameUiImagePrompt(script: GameUiScript, screen: GameUiScreen, referenceImageCount = 0): string {
+export function buildGameUiImagePrompt(script: GameUiScript, screen: GameUiScreen, referenceImageCount = 0, designStyle: GameUiDesignStyle = GAME_UI_DESIGN_STYLES[0]): string {
   return [
     '生成一张 16:9 横向、无外框的互动游戏大屏 UI 最终效果图，只呈现当前一个完整界面，不要宫格、样机、透视屏幕或设计稿标注。',
     '目标为展厅或发布会的大型触摸屏：远距离易读、按钮触控面积充足、层级明确、边缘保留安全区。',
     `项目：${script.title}。核心概念：${script.concept}`,
     `统一视觉系统：${script.globalVisual}`,
+    designStyle.prompt ? `UI 设计风格：${designStyle.label}。${designStyle.prompt}` : '',
     `当前界面：${screen.title}。用途：${screen.purpose}`,
     `布局：${screen.layout}`,
     `状态：${screen.stateSummary}`,
@@ -455,8 +485,8 @@ export function buildGameUiImagePrompt(script: GameUiScript, screen: GameUiScree
   ].filter(Boolean).join('\n');
 }
 
-export function gameUiVisualFingerprint(script: GameUiScript, screen: GameUiScreen, references: string[]): string {
-  return JSON.stringify({ globalVisual: script.globalVisual, title: script.title, concept: script.concept, screen: {
+export function gameUiVisualFingerprint(script: GameUiScript, screen: GameUiScreen, references: string[], designStyleId = 'auto'): string {
+  return JSON.stringify({ globalVisual: script.globalVisual, title: script.title, concept: script.concept, designStyleId, screen: {
     id: screen.id,
     title: screen.title,
     purpose: screen.purpose,
