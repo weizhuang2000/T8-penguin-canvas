@@ -117,6 +117,25 @@ function text(value: unknown, label: string, allowEmpty = false, max = 8000): st
   return normalized;
 }
 
+export function resolveGameUiGlobalVisual(raw: Record<string, any>, concept: string): string {
+  const aliases = [
+    raw.globalVisual,
+    raw.global_visual,
+    raw.visualStyle,
+    raw.visual_style,
+    raw.styleGuide,
+    raw.artDirection,
+  ];
+  const configured = aliases.find((value) => typeof value === 'string' && value.trim());
+  if (configured) return text(configured, 'globalVisual', false, 3000);
+  return [
+    `围绕“${concept}”建立统一的 16:9 大屏互动视觉系统`,
+    '所有界面沿用一致的品牌主色、字体层级、图标语言、圆角、间距和材质',
+    '采用远距离清晰可读的高对比信息层级与大尺寸触控控件',
+    '背景、面板、按钮、反馈状态和动效定格保持连续，四周保留大屏安全留白',
+  ].join('；');
+}
+
 export function enrichGameUiImagePrompt(input: {
   imagePrompt?: unknown;
   purpose: string;
@@ -240,7 +259,7 @@ export function parseGameUiScript(input: string, expectedMode?: GameUiFlowMode):
   if (!Array.isArray(raw.screens) || raw.screens.length < 4 || raw.screens.length > 8) throw new Error('screens 必须包含 4–8 个界面');
   const title = text(raw.title, 'title', false, 200);
   const concept = text(raw.concept, 'concept', false, 3000);
-  const globalVisual = text(raw.globalVisual, 'globalVisual', false, 3000);
+  const globalVisual = resolveGameUiGlobalVisual(raw, concept);
 
   const variables: GameUiVariable[] = raw.variables.map((value: unknown, index: number) => {
     const item = record(value, `变量 ${index + 1}`);

@@ -8,6 +8,7 @@ import {
   gameUiGridLayout,
   gameUiTextSegments,
   parseGameUiScript,
+  resolveGameUiGlobalVisual,
   type GameUiFlowMode,
 } from '../src/utils/interactiveGameScript.ts';
 
@@ -118,6 +119,21 @@ test('interactive game parser locally enriches short or missing image prompts', 
     elements: [],
     globalVisual: '不追加',
   }), detailed);
+});
+
+test('interactive game parser recovers missing globalVisual and accepts common aliases', () => {
+  const missing = scriptObject();
+  delete (missing as any).globalVisual;
+  const recovered = parseGameUiScript(JSON.stringify(missing));
+  assert.match(recovered.globalVisual, /星海寻宝|观众通过大屏触控/);
+  assert.match(recovered.globalVisual, /统一的 16:9 大屏互动视觉系统/);
+  assert.match(recovered.globalVisual, /高对比信息层级/);
+
+  const aliased = scriptObject() as any;
+  delete aliased.globalVisual;
+  aliased.visual_style = '暖金色博物馆科技风，磨砂金属面板与深色背景。';
+  assert.equal(parseGameUiScript(JSON.stringify(aliased)).globalVisual, aliased.visual_style);
+  assert.match(resolveGameUiGlobalVisual({}, '海洋知识闯关'), /海洋知识闯关/);
 });
 
 test('interactive game prompts and grid layout target a 16:9 touch display', () => {
