@@ -179,10 +179,92 @@ async function prepareGameUiExport(input) {
   return model;
 }
 
-function interactionText(interaction) {
-  const conditions = interaction.conditions.length ? `条件 ${JSON.stringify(interaction.conditions)}` : '无条件';
-  const effects = interaction.effects.length ? `效果 ${JSON.stringify(interaction.effects)}` : '无状态修改';
-  return `${interaction.label}｜${interaction.trigger}｜${conditions}｜${effects}｜目标 ${interaction.targetScreenId || '结束'}${interaction.feedback.message ? `｜反馈 ${interaction.feedback.message}` : ''}`;
+function flowModeText(value) {
+  return { 'state-graph': '界面状态图', linear: '线性步骤流', 'branching-story': '剧情分支树' }[value] || '互动流程';
+}
+
+function quoted(value) {
+  return `“${String(value ?? '')}”`;
+}
+
+function variableFor(model, id) {
+  return model.variables.find((item) => item.id === id) || { id, label: id, type: 'string' };
+}
+
+function variableName(model, id) {
+  return quoted(variableFor(model, id).label || id);
+}
+
+function naturalValue(value) {
+  if (value === true) return '开启';
+  if (value === false) return '关闭';
+  if (value === '') return '空白';
+  return quoted(value);
+}
+
+function conditionText(condition, model) {
+  const name = variableName(model, condition.variableId);
+  const value = naturalValue(condition.value);
+  return ({
+    eq: `${name}为${value}`,
+    ne: `${name}不为${value}`,
+    gt: `${name}大于${value}`,
+    gte: `${name}达到或超过${value}`,
+    lt: `${name}小于${value}`,
+    lte: `${name}不超过${value}`,
+    truthy: `${name}已经满足`,
+    falsy: `${name}尚未满足`,
+  })[condition.operator] || `${name}满足要求`;
+}
+
+function effectText(effect, model) {
+  const variable = variableFor(model, effect.variableId);
+  const name = variableName(model, effect.variableId);
+  if (effect.operation === 'toggle') return `切换${name}的状态`;
+  if (effect.operation === 'increment') return `${name}增加${naturalValue(effect.value)}`;
+  if (effect.operation === 'decrement') return `${name}减少${naturalValue(effect.value)}`;
+  if (effect.value === '' && variable.type === 'string') return `清空${name}`;
+  if (effect.value === 0 && variable.type === 'number') return `将${name}归零`;
+  if (effect.value === true && variable.type === 'boolean') return `开启${name}`;
+  if (effect.value === false && variable.type === 'boolean') return `关闭${name}`;
+  return `将${name}设为${naturalValue(effect.value)}`;
+}
+
+function screenName(model, id) {
+  return model.screens.find((screen) => screen.id === id)?.title || id;
+}
+
+function naturalizeStateSummary(value, model) {
+  let text = String(value || '');
+  const variables = [...model.variables].sort((a, b) => b.id.length - a.id.length);
+  for (const variable of variables) {
+    const escaped = variable.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const name = variable.label || variable.id;
+    text = text
+      .replace(new RegExp(`${escaped}\\s*为\\s*true`, 'gi'), `${name}为“是”`)
+      .replace(new RegExp(`${escaped}\\s*为\\s*false`, 'gi'), `${name}为“否”`)
+      .replace(new RegExp(`${escaped}\\s*(?:大于等于|>=)\\s*`, 'gi'), `${name}达到或超过`)
+      .replace(new RegExp(`${escaped}\\s*(?:小于等于|<=)\\s*`, 'gi'), `${name}不超过`)
+      .replace(new RegExp(`${escaped}\\s*(?:不等于|!=)\\s*`, 'gi'), `${name}不为`)
+      .replace(new RegExp(`${escaped}\\s*(?:等于|==)\\s*`, 'gi'), `${name}为`)
+      .replace(new RegExp(escaped, 'gi'), name);
+  }
+  return text.replace(/\btrue\b/gi, '“是”').replace(/\bfalse\b/gi, '“否”').replace(/大于等于|>=/g, '达到或超过').replace(/小于等于|<=/g, '不超过').replace(/不等于|!=/g, '不为').replace(/等于|==/g, '为');
+}
+
+function interactionText(interaction, model) {
+  const trigger = ({
+    tap: `点击${quoted(interaction.label)}`,
+    'swipe-left': `向左滑动以执行${quoted(interaction.label)}`,
+    'swipe-right': `向右滑动以执行${quoted(interaction.label)}`,
+    timeout: `等待片刻后执行${quoted(interaction.label)}`,
+  })[interaction.trigger] || `执行${quoted(interaction.label)}`;
+  const parts = [trigger];
+  if (interaction.conditions.length) parts.push(`当${interaction.conditions.map((item) => conditionText(item, model)).join('，并且')}时`);
+  if (interaction.effects.length) parts.push(interaction.effects.map((item) => effectText(item, model)).join('，'));
+  parts.push(interaction.targetScreenId ? `进入${quoted(screenName(model, interaction.targetScreenId))}界面` : '结束当前体验');
+  if (interaction.feedback.message) parts.push(`显示提示${quoted(interaction.feedback.message)}`);
+  return `${parts.join('；')}。`;
 }
 
 function docxText(value, options = {}) {
@@ -199,7 +281,7 @@ async function generateDocx(model) {
     docxText(model.title, { bold: true, size: 36, color: '0E7490', alignment: AlignmentType.CENTER, after: 180 }),
     docxText(`项目概念：${model.concept}`),
     docxText(`全局视觉：${model.globalVisual}`),
-    docxText(`流程模式：${model.flowMode}｜初始界面：${model.initialScreenId}｜界面数：${model.screens.length}`, { after: 180 }),
+    docxText(`流程模式：${flowModeText(model.flowMode)}｜初始界面：${screenName(model, model.initialScreenId)}｜界面数：${model.screens.length}`, { after: 180 }),
   ];
   model.screens.forEach((screen) => {
     children.push(docxText(`${screen.index}. ${screen.title}`, { heading: HeadingLevel.HEADING_1, bold: true, size: 28, color: '0E7490' }));
@@ -207,8 +289,8 @@ async function generateDocx(model) {
     children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [
       new TableRow({ children: [new TableCell({ children: [docxText('用途', { bold: true })] }), new TableCell({ children: [docxText(screen.purpose)] })] }),
       new TableRow({ children: [new TableCell({ children: [docxText('布局', { bold: true })] }), new TableCell({ children: [docxText(screen.layout)] })] }),
-      new TableRow({ children: [new TableCell({ children: [docxText('状态', { bold: true })] }), new TableCell({ children: [docxText(screen.stateSummary)] })] }),
-      new TableRow({ children: [new TableCell({ children: [docxText('互动', { bold: true })] }), new TableCell({ children: screen.interactions.length ? screen.interactions.map((item) => docxText(interactionText(item))) : [docxText('终局 / 无互动')] })] }),
+      new TableRow({ children: [new TableCell({ children: [docxText('状态', { bold: true })] }), new TableCell({ children: [docxText(naturalizeStateSummary(screen.stateSummary, model))] })] }),
+      new TableRow({ children: [new TableCell({ children: [docxText('互动', { bold: true })] }), new TableCell({ children: screen.interactions.length ? screen.interactions.map((item) => docxText(interactionText(item, model))) : [docxText('这是流程终点，没有后续操作。')] })] }),
     ] }));
   });
   const document = new Document({ creator: 'T8 Penguin Canvas', title: `${model.title} 互动游戏方案`, sections: [{ properties: { page: { size: { orientation: PageOrientation.LANDSCAPE }, margin: { top: 600, right: 600, bottom: 600, left: 600 } } }, children }] });
@@ -225,14 +307,14 @@ async function generatePdf(model) {
     { text: model.title, style: 'title' },
     { text: `项目概念：${model.concept}`, margin: [0, 0, 0, 6] },
     { text: `全局视觉：${model.globalVisual}`, margin: [0, 0, 0, 6] },
-    { text: `流程模式：${model.flowMode}　初始界面：${model.initialScreenId}`, color: '#64748B', margin: [0, 0, 0, 12] },
+    { text: `流程模式：${flowModeText(model.flowMode)}　初始界面：${screenName(model, model.initialScreenId)}`, color: '#64748B', margin: [0, 0, 0, 12] },
   ];
   model.screens.forEach((screen, index) => {
     content.push({ text: `${screen.index}. ${screen.title}`, style: 'screen', pageBreak: index ? 'before' : undefined });
     content.push({ image: screen.image.dataUri, fit: [700, 394], alignment: 'center', margin: [0, 4, 0, 10] });
     content.push({ table: { widths: [70, '*'], body: [
-      ['用途', screen.purpose], ['布局', screen.layout], ['状态', screen.stateSummary],
-      ['互动', screen.interactions.length ? screen.interactions.map(interactionText).join('\n') : '终局 / 无互动'],
+      ['用途', screen.purpose], ['布局', screen.layout], ['状态', naturalizeStateSummary(screen.stateSummary, model)],
+      ['互动', screen.interactions.length ? screen.interactions.map((item) => interactionText(item, model)).join('\n') : '这是流程终点，没有后续操作。'],
     ] }, layout: 'lightHorizontalLines' });
   });
   return pdfmake.createPdf({ pageSize: 'A4', pageOrientation: 'landscape', pageMargins: [32, 28, 32, 28], defaultStyle: { font: FONT_NAME, fontSize: 9, color: '#111827' }, styles: { title: { fontSize: 23, bold: true, color: '#0E7490', alignment: 'center', margin: [0, 0, 0, 14] }, screen: { fontSize: 17, bold: true, color: '#0E7490', margin: [0, 0, 0, 6] } }, content }).getBuffer();
@@ -253,7 +335,7 @@ async function generatePptx(model) {
   slide.background = { color: 'ECFEFF' };
   addPptText(slide, model.title, { x: 0.8, y: 1.25, w: 11.73, h: 0.75, fontSize: 31, bold: true, align: 'center', color: '0E7490' });
   addPptText(slide, '互动游戏 UI 与逻辑演示方案', { x: 1, y: 2.2, w: 11.33, h: 0.4, fontSize: 17, align: 'center', color: '0891B2' });
-  addPptText(slide, `${model.concept}\n\n流程：${model.flowMode}　界面：${model.screens.length} 个`, { x: 1.4, y: 3, w: 10.53, h: 2.3, fontSize: 14, align: 'center', color: '334155' });
+  addPptText(slide, `${model.concept}\n\n流程：${flowModeText(model.flowMode)}　界面：${model.screens.length} 个`, { x: 1.4, y: 3, w: 10.53, h: 2.3, fontSize: 14, align: 'center', color: '334155' });
   slide = pptx.addSlide();
   addPptText(slide, '方案总览', { x: 0.55, y: 0.35, w: 12.2, h: 0.45, fontSize: 22, bold: true, color: '0E7490' });
   addPptText(slide, `全局视觉\n${model.globalVisual}\n\n界面流程\n${model.screens.map((screen) => `${screen.index}. ${screen.title}`).join('　→　')}`, { x: 0.8, y: 1.25, w: 11.73, h: 4.8, fontSize: 15, color: '334155' });
@@ -261,8 +343,8 @@ async function generatePptx(model) {
     const detail = pptx.addSlide();
     addPptText(detail, `${screen.index}. ${screen.title}`, { x: 0.5, y: 0.25, w: 12.3, h: 0.5, fontSize: 22, bold: true, color: '0E7490' });
     detail.addImage({ data: screen.image.dataUri, x: 0.5, y: 0.9, w: 7.6, h: 4.275 });
-    addPptText(detail, `用途\n${screen.purpose}\n\n布局\n${screen.layout}\n\n状态\n${screen.stateSummary}`, { x: 8.35, y: 0.95, w: 4.45, h: 3.0, fontSize: 10.5, color: '334155' });
-    addPptText(detail, `互动逻辑\n${screen.interactions.length ? screen.interactions.map(interactionText).join('\n') : '终局 / 无互动'}`, { x: 0.6, y: 5.45, w: 12.1, h: 1.45, fontSize: 9.5, color: '334155' });
+    addPptText(detail, `用途\n${screen.purpose}\n\n布局\n${screen.layout}\n\n状态\n${naturalizeStateSummary(screen.stateSummary, model)}`, { x: 8.35, y: 0.95, w: 4.45, h: 3.0, fontSize: 10.5, color: '334155' });
+    addPptText(detail, `互动逻辑\n${screen.interactions.length ? screen.interactions.map((item) => interactionText(item, model)).join('\n') : '这是流程终点，没有后续操作。'}`, { x: 0.6, y: 5.45, w: 12.1, h: 1.45, fontSize: 9.5, color: '334155' });
   });
   const output = await pptx.write({ outputType: 'nodebuffer', compression: true });
   return Buffer.isBuffer(output) ? output : Buffer.from(output);

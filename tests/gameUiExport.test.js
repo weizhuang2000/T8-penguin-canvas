@@ -22,7 +22,7 @@ function request(format = 'pptx', overrides = {}) {
     title: `界面 ${index + 1}`,
     purpose: `演示用途 ${index + 1}`,
     layout: '16:9 大屏布局，中央主视觉，底部大型触控按钮。',
-    stateSummary: `当前为状态 ${index + 1}`,
+    stateSummary: index === 0 ? 'score大于等于1且quiz-solved为true时，矿物和按钮显示高亮状态。' : `当前为状态 ${index + 1}`,
     imagePrompt: '蓝紫色科技大屏 UI，玻璃拟态面板、高对比真实中文按钮、中央主视觉与充足触控安全区，统一品牌设计语言。',
     elements: [{ id: `button-${index + 1}`, type: 'button', label: '继续', description: '底部中央的大型触控按钮' }],
     interactions: index === 3 ? [] : [{
@@ -31,7 +31,7 @@ function request(format = 'pptx', overrides = {}) {
       trigger: 'tap',
       elementId: `button-${index + 1}`,
       hotspot: { x: 40, y: 80, width: 20, height: 10 },
-      conditions: [],
+      conditions: index === 0 ? [{ variableId: 'score', operator: 'gte', value: 1 }, { variableId: 'quiz-solved', operator: 'truthy' }] : [],
       effects: index === 0 ? [{ variableId: 'score', operation: 'increment', value: 1 }] : [],
       targetScreenId: `screen-${index + 2}`,
       feedback: { type: 'toast', message: '操作成功' },
@@ -48,7 +48,10 @@ function request(format = 'pptx', overrides = {}) {
       flowMode: 'linear',
       initialScreenId: 'screen-1',
       globalVisual: '蓝紫色科技展陈风，玻璃拟态面板与高对比大按钮。',
-      variables: [{ id: 'score', label: '得分', type: 'number', initialValue: 0 }],
+      variables: [
+        { id: 'score', label: '得分', type: 'number', initialValue: 0 },
+        { id: 'quiz-solved', label: '答题完成', type: 'boolean', initialValue: false },
+      ],
       screens,
     },
     ...overrides,
@@ -85,15 +88,23 @@ test('game UI exporter creates client documents and a safe offline prototype', a
     assert.ok(result.buffer.length > 3000, `${format} should not be empty`);
     if (format === 'pdf') {
       assert.equal(result.buffer.subarray(0, 5).toString('ascii'), '%PDF-');
-      assert.match((await pdfParse(result.buffer)).text, /星海寻宝/);
+      const parsed = await pdfParse(result.buffer);
+      assert.match(parsed.text, /星海寻宝/);
+      assert.match(parsed.text, /得分达到或超过/);
+      assert.doesNotMatch(parsed.text, /variableId|operator|targetScreenId/);
     } else if (format === 'docx') {
       assert.equal(result.buffer.subarray(0, 2).toString('ascii'), 'PK');
-      assert.match((await builtInDocxParser(result.buffer)).value, /星海寻宝/);
+      const parsed = await builtInDocxParser(result.buffer);
+      assert.match(parsed.value, /星海寻宝/);
+      assert.match(parsed.value, /得分达到或超过/);
+      assert.doesNotMatch(parsed.value, /variableId|operator|targetScreenId/);
     } else if (format === 'pptx') {
       const zip = await JSZip.loadAsync(result.buffer);
       const xmlNames = Object.keys(zip.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name));
       const xml = (await Promise.all(xmlNames.map((name) => zip.files[name].async('string')))).join('\n');
       assert.match(xml, /星海寻宝/);
+      assert.match(xml, /得分达到或超过/);
+      assert.doesNotMatch(xml, /variableId|operator|targetScreenId/);
       assert.equal(xmlNames.length, 6);
     } else {
       const zip = await JSZip.loadAsync(result.buffer);
