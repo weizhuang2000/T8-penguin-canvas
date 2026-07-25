@@ -19,18 +19,21 @@ const { patchCanvasNodeData } = require('../utils/canvasDataPatch');
 const router = express.Router();
 const jsonWriteQueues = new Map();
 
-function loadCanvasList() {
-  if (!fs.existsSync(config.CANVAS_FILE)) return [];
+function readJsonFile(file) {
+  if (!fs.existsSync(file)) return null;
   try {
-    const parsed = JSON.parse(fs.readFileSync(config.CANVAS_FILE, 'utf-8'));
-    return Array.isArray(parsed) ? parsed : [];
+    const text = fs.readFileSync(file, 'utf-8')
+      .replace(/^\uFEFF/, '')
+      .replace(/\0/g, '');
+    return JSON.parse(text);
   } catch {
-    return [];
+    return null;
   }
 }
 
-function saveCanvasList(list) {
-  fs.writeFileSync(config.CANVAS_FILE, JSON.stringify(list, null, 2), 'utf-8');
+function readCanvasListFile() {
+  const parsed = readJsonFile(config.CANVAS_FILE);
+  return Array.isArray(parsed) ? parsed : [];
 }
 
 function getCanvasFile(id) {
@@ -46,12 +49,8 @@ function safeFilename(input) {
 }
 
 function loadSettings() {
-  try {
-    if (!fs.existsSync(config.SETTINGS_FILE)) return {};
-    return JSON.parse(fs.readFileSync(config.SETTINGS_FILE, 'utf-8'));
-  } catch {
-    return {};
-  }
+  const parsed = readJsonFile(config.SETTINGS_FILE);
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
 }
 
 function getCanvasAutoSaveDir() {
@@ -75,6 +74,20 @@ async function atomicWriteJsonNow(file, data, options = {}) {
   }
 }
 
+function atomicWriteJsonSync(file, data, options = {}) {
+  const dir = path.dirname(file);
+  fs.mkdirSync(dir, { recursive: true });
+  const tmp = `${file}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`;
+  const text = options.pretty === false ? JSON.stringify(data) : JSON.stringify(data, null, 2);
+  try {
+    fs.writeFileSync(tmp, text, 'utf-8');
+    fs.renameSync(tmp, file);
+  } catch (error) {
+    try { fs.unlinkSync(tmp); } catch { /* ignore */ }
+    throw error;
+  }
+}
+
 function atomicWriteJson(file, data, options = {}) {
   const previous = jsonWriteQueues.get(file) || Promise.resolve();
   const queued = previous.catch(() => undefined).then(() => atomicWriteJsonNow(file, data, options));
@@ -84,6 +97,132 @@ function atomicWriteJson(file, data, options = {}) {
   });
   jsonWriteQueues.set(file, tracked);
   return tracked;
+}
+
+function canvasIdFromDataFileName(name) {
+  const match = /^canvas_(.+)\.json$/i.exec(String(name || ''));
+  if (!match || match[1] === 'list') return '';
+  return match[1];
+}
+
+function canvasTimestampFromId(id) {
+  const match = /^canvas-(\d{10,})-/.exec(String(id || ''));
+  const value = Number(match?.[1] || 0);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function loadAutoSaveCanvasMetadata() {
+  const out = new Map();
+  const dir = getCanvasAutoSaveDir();
+  if (!dir || !fs.existsSync(dir)) return out;
+  let entries = [];
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return out; }
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.toLowerCase().endsWith('.json')) continue;
+    const parsed = readJsonFile(path.join(dir, entry.name));
+    const meta = parsed?.canvas;
+    const id = String(meta?.id || '').trim();
+    if (!id) continue;
+    const previous = out.get(id);
+    const updatedAt = Number(parsed?.autoSavedAt ? Date.parse(parsed.autoSavedAt) : meta?.updatedAt) || 0;
+    if (!previous || updatedAt >= previous.updatedAt) out.set(id, { ...meta, updatedAt });
+  }
+  return out;
+}
+
+function recoveredCanvasName(id, data, autoMeta) {
+  const explicit = String(autoMeta?.name || data?.name || data?.canvas?.name || '').trim();
+  if (explicit) return explicit;
+  const owner = String(data?.ownerName || autoMeta?.ownerName || '').trim();
+  const suffix = String(id).split('-').slice(-1)[0] || String(id).slice(-8);
+  return owner ? `${owner}的恢复画布-${suffix}` : `恢复画布-${suffix}`;
+}
+
+function recoverCanvasListFromFiles(existingList = readCanvasListFile()) {
+  fs.mkdirSync(config.DATA_DIR, { recursive: true });
+  const existing = Array.isArray(existingList) ? existingList.filter((item) => item?.id) : [];
+  const byId = new Map(existing.map((item) => [String(item.id), item]));
+  let entries = [];
+  try { entries = fs.readdirSync(config.DATA_DIR, { withFileTypes: true }); } catch { return existing; }
+  const candidates = entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => ({ entry, id: canvasIdFromDataFileName(entry.name) }))
+    .filter(({ id }) => id && !byId.has(id));
+  if (!candidates.length) return existing;
+  const autoMetadata = loadAutoSaveCanvasMetadata();
+  let recovered = 0;
+  for (const { entry, id } of candidates) {
+    const file = path.join(config.DATA_DIR, entry.name);
+    const data = readJsonFile(file);
+    if (!data || typeof data !== 'object' || !Array.isArray(data.nodes)) continue;
+    let stat;
+    try { stat = fs.statSync(file); } catch { continue; }
+    const autoMeta = autoMetadata.get(id) || {};
+    const createdAt = Number(autoMeta.createdAt || data.createdAt)
+      || canvasTimestampFromId(id)
+      || stat.birthtimeMs
+      || stat.mtimeMs
+      || Date.now();
+    const updatedAt = Math.max(
+      Number(autoMeta.updatedAt) || 0,
+      Number(data.updatedAt) || 0,
+      stat.mtimeMs || 0,
+      createdAt,
+    );
+    byId.set(id, {
+      id,
+      name: recoveredCanvasName(id, data, autoMeta),
+      ownerUserId: data.ownerUserId || autoMeta.ownerUserId || null,
+      ownerName: data.ownerName || autoMeta.ownerName || '',
+      ownerRole: data.ownerRole || autoMeta.ownerRole || '',
+      sharedWith: normalizeSharedWith(data.sharedWith || autoMeta.sharedWith),
+      allUsersShare: normalizeAllUsersShare(data.allUsersShare || autoMeta.allUsersShare),
+      nodeCount: data.nodes.length,
+      createdAt,
+      updatedAt,
+      recoveredFromDataFile: true,
+    });
+    recovered += 1;
+  }
+  if (!recovered) return existing;
+  const merged = Array.from(byId.values()).sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
+  if (fs.existsSync(config.CANVAS_FILE)) {
+    const backup = `${config.CANVAS_FILE}.recovery-${Date.now()}.bak`;
+    try { fs.copyFileSync(config.CANVAS_FILE, backup); } catch { /* best effort */ }
+  }
+  atomicWriteJsonSync(config.CANVAS_FILE, merged);
+  console.warn(`[canvas] canvas_list.json 缺少实体索引，已从 canvas_*.json 恢复 ${recovered} 个画布`);
+  return merged;
+}
+
+function loadCanvasList() {
+  return recoverCanvasListFromFiles(readCanvasListFile());
+}
+
+function mergeCanvasLists(current, incoming) {
+  const byId = new Map((Array.isArray(current) ? current : []).filter((item) => item?.id).map((item) => [String(item.id), item]));
+  for (const item of Array.isArray(incoming) ? incoming : []) {
+    if (!item?.id) continue;
+    const id = String(item.id);
+    const previous = byId.get(id);
+    if (!previous || Number(item.updatedAt || 0) >= Number(previous.updatedAt || 0)) {
+      byId.set(id, previous ? { ...previous, ...item } : item);
+    }
+  }
+  return Array.from(byId.values());
+}
+
+function saveCanvasList(list) {
+  const merged = mergeCanvasLists(readCanvasListFile(), list);
+  atomicWriteJsonSync(config.CANVAS_FILE, merged);
+  return merged;
+}
+
+function removeCanvasFromList(id) {
+  const targetId = String(id || '');
+  const latest = recoverCanvasListFromFiles(readCanvasListFile()).filter((item) => String(item?.id || '') !== targetId);
+  atomicWriteJsonSync(config.CANVAS_FILE, latest);
+  return latest;
 }
 
 function normalizeCanvasMeta(item) {
@@ -141,18 +280,18 @@ function syncCanvasFileMeta(id, item) {
   const file = getCanvasFile(id);
   if (!fs.existsSync(file)) return;
   try {
-    const data = JSON.parse(fs.readFileSync(file, 'utf-8'));
-    fs.writeFileSync(
+    const data = readJsonFile(file);
+    if (!data || typeof data !== 'object') return;
+    atomicWriteJsonSync(
       file,
-      JSON.stringify({
+      {
         ...data,
         ownerUserId: item.ownerUserId || data.ownerUserId || null,
         ownerName: item.ownerName || data.ownerName || '',
         ownerRole: item.ownerRole || data.ownerRole || '',
         sharedWith: normalizeSharedWith(item.sharedWith),
         allUsersShare: normalizeAllUsersShare(item.allUsersShare),
-      }, null, 2),
-      'utf-8'
+      }
     );
   } catch {
     // Best effort only; the canonical metadata lives in canvas_list.json.
@@ -202,12 +341,7 @@ function isGenericDefaultCanvasName(name) {
 
 function readCanvasDataFile(id) {
   const file = getCanvasFile(id);
-  if (!fs.existsSync(file)) return null;
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf-8'));
-  } catch {
-    return null;
-  }
+  return readJsonFile(file);
 }
 
 async function readCanvasDataFileAsync(id) {
@@ -266,10 +400,9 @@ router.post('/', (req, res) => {
     updatedAt: now,
   };
   list.push(canvas);
-  saveCanvasList(list);
-  fs.writeFileSync(
+  atomicWriteJsonSync(
     getCanvasFile(id),
-    JSON.stringify({
+    {
       ...owner,
       sharedWith: [],
       allUsersShare: normalizeAllUsersShare(null),
@@ -277,9 +410,9 @@ router.post('/', (req, res) => {
       edges: [],
       viewport: { x: 0, y: 0, zoom: 1 },
       nextNodeSerialId: 1,
-    }, null, 2),
-    'utf-8'
+    }
   );
+  saveCanvasList(list);
   res.json({ success: true, data: publicCanvasItem(canvas, req.user) });
 });
 
@@ -528,7 +661,7 @@ router.delete('/:id', (req, res) => {
   const found = findCanvasForRequest(req, res);
   if (!found) return;
   if (!requireCanvasManage(req, res, found)) return;
-  saveCanvasList(found.list.filter((x) => x.id !== req.params.id));
+  removeCanvasFromList(req.params.id);
   const file = getCanvasFile(req.params.id);
   if (fs.existsSync(file)) fs.unlinkSync(file);
   res.json({ success: true });
@@ -545,3 +678,10 @@ router.patch('/:id/name', (req, res) => {
 });
 
 module.exports = router;
+module.exports._test = {
+  loadCanvasList,
+  mergeCanvasLists,
+  readJsonFile,
+  recoverCanvasListFromFiles,
+  saveCanvasList,
+};
