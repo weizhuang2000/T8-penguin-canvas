@@ -66,8 +66,8 @@ router.get('/status', async (_req, res) => {
           guidanceScale: false,
         },
         setupHints: [
-          '推荐: pipx install remove-ai-watermarks',
-          '也可以: uv tool install remove-ai-watermarks',
+          '推荐: pipx install remove-ai-watermarks==0.11.0',
+          '也可以: uv tool install remove-ai-watermarks==0.11.0',
           '已有本地源码时设置 T8_REMOVE_AI_WATERMARKS_SRC 指向 clone 根目录',
         ],
         errors: [e?.message || String(e)],

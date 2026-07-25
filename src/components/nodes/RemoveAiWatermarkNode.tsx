@@ -437,7 +437,7 @@ function RemoveAiWatermarkNode({ id, data, selected }: { id: string; data: any; 
 
         {!status?.installed && (
           <div className="rounded-md border px-2 py-2 text-[10px]" style={{ borderColor: 'var(--t8-border)', color: 'var(--t8-text-muted)' }}>
-            {(status?.setupHints || ['pipx install remove-ai-watermarks']).slice(0, 3).map((hint) => (
+            {(status?.setupHints || ['pipx install remove-ai-watermarks==0.11.0']).slice(0, 3).map((hint) => (
               <div key={hint}>{hint}</div>
             ))}
           </div>

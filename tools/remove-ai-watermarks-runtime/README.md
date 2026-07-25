@@ -28,7 +28,8 @@ CUDA build, and installed extras (`gpu`, `detect`, `trustmark`, `lama`, optional
 Current bridge target:
 
 - Upstream: `wiltodelta/remove-ai-watermarks`
-- Version: `0.11.0` or newer for the current full UI
+- Version: exactly `0.11.0` for the current full UI. Newer upstream releases
+  may change CLI flags and must be validated against the bridge before use.
 - Required CLI behavior: visible registry includes Gemini / Doubao / Jimeng /
   Samsung marks; invisible removal defaults to `--pipeline controlnet` and
   supports `--pipeline sdxl`, `--model`, `--guidance-scale`, `--upscaler`,

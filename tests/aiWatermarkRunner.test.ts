@@ -20,6 +20,7 @@ const {
   redactCommandArgs,
   resolveAiWatermarkExecutionDevice,
   runCommand,
+  setupHints,
   versionAtLeast,
   visibleArgs,
 } = require('../backend/src/tools/aiWatermark/runner.js');
@@ -38,6 +39,12 @@ test('normalizeMode keeps supported modes and falls back to smart', () => {
 
 test('fallback registry includes current upstream visible marks', () => {
   assert.deepEqual(FALLBACK_MARKS, ['gemini', 'doubao', 'jimeng', 'samsung']);
+});
+
+test('setup hints pin the upstream version supported by the current CLI bridge', () => {
+  const hints = setupHints().join('\n');
+  assert.match(hints, /pipx install remove-ai-watermarks==0\.11\.0/);
+  assert.match(hints, /uv tool install remove-ai-watermarks==0\.11\.0/);
 });
 
 test('media resolver classifies upstream metadata containers', () => {

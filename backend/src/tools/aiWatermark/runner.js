@@ -1077,8 +1077,8 @@ async function detectCapabilities() {
 
 function setupHints() {
   return [
-    '推荐: pipx install remove-ai-watermarks',
-    '也可以: uv tool install remove-ai-watermarks',
+    '推荐: pipx install remove-ai-watermarks==0.11.0',
+    '也可以: uv tool install remove-ai-watermarks==0.11.0',
     'Electron 离线包: 将准备好的 runtime 放入 tools/remove-ai-watermarks-runtime, 打包前执行 npm run prepack:runtimes 生成归档',
     '已有 runtime 根目录时设置 T8_REMOVE_AI_WATERMARKS_RUNTIME',
     '已有本地源码时设置 T8_REMOVE_AI_WATERMARKS_SRC 指向 clone 根目录',
