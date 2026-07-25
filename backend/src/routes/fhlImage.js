@@ -9,6 +9,7 @@ const config = require('../config');
 const { isAdminRole, requireAdmin } = require('../auth/middleware');
 const settingsRouter = require('./settings');
 const { addHistoryItems } = require('../utils/generationHistory');
+const { storageEntryForUrl } = require('../outputStorage/manager');
 const { createRunId, finishRun, startRun } = require('../utils/monitoringMetrics');
 const {
   MAX_WORKERS,
@@ -303,10 +304,16 @@ async function isUsableImage(filePath) {
 async function incompleteTasks(tasks) {
   const out = [];
   for (const task of tasks) {
-    if (task.status === 'success' && await isUsableImage(task.outputPath)) continue;
+    const indexed = storageEntryForUrl(task.outputUrl);
+    const availableRemotely = indexed && indexed.storageSpaceId !== 'primary' && Number(indexed.size) > 0;
+    if (task.status === 'success' && (availableRemotely || await isUsableImage(task.outputPath))) continue;
     if (await isUsableImage(task.outputPath)) {
       task.status = 'success';
       task.outputUrl = outputUrl(task.outputPath);
+      continue;
+    }
+    if (availableRemotely) {
+      task.status = 'success';
       continue;
     }
     out.push(task);

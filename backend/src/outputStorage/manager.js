@@ -29,6 +29,9 @@ const {
 
 const INDEX_FILE = path.join(config.DATA_DIR, 'output_storage_index.json');
 const SCAN_INTERVAL_MS = Math.max(1000, Number(process.env.T8_OUTPUT_STORAGE_SCAN_MS) || 2500);
+const UPLOAD_CONCURRENCY = Math.max(1, Math.min(4, Number(process.env.T8_OUTPUT_STORAGE_UPLOAD_CONCURRENCY) || 2));
+const REMOTE_RETRY_BASE_MS = Math.max(1000, Number(process.env.T8_OUTPUT_STORAGE_RETRY_BASE_MS) || 15_000);
+const REMOTE_RETRY_MAX_MS = Math.max(REMOTE_RETRY_BASE_MS, Number(process.env.T8_OUTPUT_STORAGE_RETRY_MAX_MS) || 15 * 60_000);
 const IMMUTABLE_PRIVATE_OUTPUT_CACHE = 'private, max-age=31536000, immutable';
 const stableFiles = new Map();
 let indexCache = null;
@@ -182,11 +185,61 @@ function listLocalFiles(root = config.OUTPUT_DIR) {
   return out;
 }
 
-function registerExistingLocalFiles() {
+function isFhlOutputKey(key) {
+  return safeKey(key).startsWith('fhl/');
+}
+
+function fhlJobIdFromKey(key) {
+  const parts = safeKey(key).split('/');
+  return parts[0] === 'fhl' && parts[1] ? parts[1] : '';
+}
+
+function isFhlOutputReady(key) {
+  const jobId = fhlJobIdFromKey(key);
+  if (!jobId) return true;
+  const file = path.join(config.DATA_DIR, 'fhl-image', 'jobs', `${jobId}.json`);
+  if (!fs.existsSync(file)) return true;
+  try {
+    const job = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return ['completed', 'partial', 'failed', 'cancelled'].includes(String(job?.status || ''));
+  } catch {
+    return false;
+  }
+}
+
+function pruneEmptyOutputParents(filePath) {
+  const root = path.resolve(config.OUTPUT_DIR);
+  let current = path.dirname(path.resolve(filePath));
+  while (current !== root && current.startsWith(root + path.sep)) {
+    try {
+      if (fs.readdirSync(current).length > 0) break;
+      fs.rmdirSync(current);
+      current = path.dirname(current);
+    } catch {
+      break;
+    }
+  }
+}
+
+function removePublishedLocalFile(filePath) {
+  try {
+    fs.unlinkSync(filePath);
+    pruneEmptyOutputParents(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function registerExistingLocalFiles(storageSettings = getStorageSettings()) {
   const index = loadIndex();
+  const activeSpace = storageSettings.spaces.find((item) => item.id === storageSettings.activeId) || storageSettings.spaces[0];
+  const publishExistingFhl = activeSpace && activeSpace.id !== 'primary';
   let changed = false;
   for (const file of listLocalFiles()) {
     if (index.items[file.key]) continue;
+    // Completed FHL backlogs must drain to the selected remote space after a restart.
+    if (publishExistingFhl && isFhlOutputKey(file.key)) continue;
     index.items[file.key] = {
       key: file.key,
       storageSpaceId: 'primary',
@@ -201,11 +254,12 @@ function registerExistingLocalFiles() {
   if (changed) writeIndex(index);
 }
 
-async function publishLocalFile(file, activeSpace, storageSettings = getStorageSettings()) {
+async function publishLocalFile(file, activeSpace, storageSettings = getStorageSettings(), options = {}) {
   const contentType = MIME_BY_EXT[path.extname(file.key).toLowerCase()] || 'application/octet-stream';
   if (!activeSpace || activeSpace.id === 'primary') {
     return upsertEntry(file.key, {
       storageSpaceId: 'primary', size: file.size, contentType, createdAt: file.mtimeMs || Date.now(),
+      sourceMtimeMs: file.mtimeMs || 0,
     });
   }
   try {
@@ -233,21 +287,47 @@ async function publishLocalFile(file, activeSpace, storageSettings = getStorageS
       contentType,
       etag: result?.data?.etag || result?.etag || '',
       createdAt: file.mtimeMs || Date.now(),
+      sourceMtimeMs: file.mtimeMs || 0,
       storageFallbackFrom: '',
+      storageError: '',
+      pendingRemoteRetry: false,
+      remoteRetryCount: 0,
+      nextRemoteRetryAt: 0,
       ...storagePatch,
     });
-    try { fs.unlinkSync(file.filePath); } catch (error) {
+    try {
+      if (!removePublishedLocalFile(file.filePath)) throw new Error('local output is still in use');
+    } catch (error) {
       console.warn(`[output-storage] 远端上传成功，但无法删除暂存文件 ${file.key}:`, error?.message || error);
     }
     return entry;
   } catch (error) {
     console.warn(`[output-storage] ${activeSpace.label || activeSpace.id} 写入失败，已回落当前服务器:`, error?.message || error);
+    const previous = storageEntryForKey(file.key);
+    const retryCount = options.retryRemote === true ? Math.max(0, Number(previous?.remoteRetryCount) || 0) + 1 : 0;
+    const retryDelay = Math.min(REMOTE_RETRY_MAX_MS, REMOTE_RETRY_BASE_MS * (2 ** Math.min(6, Math.max(0, retryCount - 1))));
     return upsertEntry(file.key, {
       storageSpaceId: 'primary', size: file.size, contentType,
       createdAt: file.mtimeMs || Date.now(), storageFallbackFrom: activeSpace.id,
       storageError: String(error?.message || error).slice(0, 500),
+      sourceMtimeMs: file.mtimeMs || 0,
+      pendingRemoteRetry: options.retryRemote === true,
+      remoteRetryCount: retryCount,
+      nextRemoteRetryAt: options.retryRemote === true ? Date.now() + retryDelay : 0,
     });
   }
+}
+
+async function mapWithConcurrency(items, limit, mapper) {
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      await mapper(items[index], index);
+    }
+  });
+  await Promise.all(workers);
 }
 
 async function scanAndPublishNewFiles() {
@@ -261,8 +341,30 @@ async function scanAndPublishNewFiles() {
     const files = listLocalFiles();
     const present = new Set(files.map((item) => item.key));
     for (const key of stableFiles.keys()) if (!present.has(key)) stableFiles.delete(key);
+    const candidates = [];
     for (const file of files) {
-      if (index.items[file.key]) continue;
+      const entry = index.items[file.key] || null;
+      const fhlOutput = isFhlOutputKey(file.key);
+      if (fhlOutput && !isFhlOutputReady(file.key)) continue;
+
+      let targetSpace = activeSpace;
+      if (entry?.storageSpaceId === 'primary') {
+        // Other providers preserve the existing "switch affects new files only" behavior.
+        // FHL additionally drains completed local backlogs and transient fallbacks.
+        if (!fhlOutput || activeSpace?.id === 'primary') continue;
+        if (entry.pendingRemoteRetry && Number(entry.nextRemoteRetryAt) > Date.now()) continue;
+      } else if (entry?.storageSpaceId) {
+        targetSpace = spaces.find((item) => item.id === entry.storageSpaceId && item.enabled)
+          || (fhlOutput && activeSpace?.id !== 'primary' ? activeSpace : null);
+        if (!targetSpace) continue;
+        const samePublishedFile = Number(entry.sourceMtimeMs) > 0
+          && Number(entry.size) === Number(file.size)
+          && Math.abs(Number(entry.sourceMtimeMs) - Number(file.mtimeMs)) < 2;
+        if (samePublishedFile) {
+          removePublishedLocalFile(file.filePath);
+          continue;
+        }
+      }
       const fingerprint = `${file.size}:${file.mtimeMs}`;
       const previous = stableFiles.get(file.key);
       if (!previous || previous.fingerprint !== fingerprint) {
@@ -273,8 +375,11 @@ async function scanAndPublishNewFiles() {
       // 连续两个扫描周期大小和 mtime 都不再变化，避免把仍在渲染的大视频提前上传。
       if (previous.stableCount < 2) continue;
       stableFiles.delete(file.key);
-      await publishLocalFile(file, activeSpace, storageSettings);
+      candidates.push({ file, targetSpace, retryRemote: fhlOutput });
     }
+    await mapWithConcurrency(candidates, UPLOAD_CONCURRENCY, ({ file, targetSpace, retryRemote }) => (
+      publishLocalFile(file, targetSpace, storageSettings, { retryRemote })
+    ));
   } finally {
     scanRunning = false;
   }
@@ -294,7 +399,7 @@ function startOutputStorageManager() {
   } catch (error) {
     console.warn('[output-storage] 清理远端文件缓存失败:', error?.message || error);
   }
-  registerExistingLocalFiles();
+  registerExistingLocalFiles(getStorageSettings());
   if (timer) return;
   timer = setInterval(() => void scanAndPublishNewFiles(), SCAN_INTERVAL_MS);
   timer.unref?.();

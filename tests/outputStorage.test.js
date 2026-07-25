@@ -43,6 +43,7 @@ test('enabled Baidu cloud target is derived as an output storage space', () => {
 function createMockWebdavServer() {
   const files = new Map();
   const directories = new Set(['/']);
+  const state = { failPuts: 0 };
   const rootPrefix = '/dav/百度网盘';
   const remotePath = (url) => {
     const pathname = decodeURIComponent(new URL(url, 'http://localhost').pathname);
@@ -67,6 +68,11 @@ function createMockWebdavServer() {
       return;
     }
     if (req.method === 'PUT') {
+      if (state.failPuts > 0) {
+        state.failPuts -= 1;
+        res.writeHead(503).end('temporary upload failure');
+        return;
+      }
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
       directories.add(parent(key));
@@ -114,7 +120,7 @@ function createMockWebdavServer() {
     }
     res.writeHead(405).end();
   });
-  return { server, files, directories };
+  return { server, files, directories, state };
 }
 
 test('storage node and manager upload, proxy metadata, reconcile and delete remote output', async (t) => {
@@ -281,6 +287,67 @@ test('Baidu WebDAV works as active output storage and reconciles the whole T8 di
 
   await manager.deleteOutputByKey(imported.key);
   assert.equal(mock.files.has('/T8PenguinCanvas/archive/manual-old.png'), false);
+});
+
+test('completed FHL outputs drain to Baidu, retry transient failures, and remove empty local folders', async (t) => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 't8-fhl-output-storage-'));
+  const mock = createMockWebdavServer();
+  await new Promise((resolve) => mock.server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => mock.server.close(resolve)));
+  const webdavUrl = `http://127.0.0.1:${mock.server.address().port}/dav/%E7%99%BE%E5%BA%A6%E7%BD%91%E7%9B%98`;
+
+  const config = require('../backend/src/config.js');
+  config.DATA_DIR = path.join(temp, 'data');
+  config.OUTPUT_DIR = path.join(temp, 'output');
+  config.SETTINGS_FILE = path.join(config.DATA_DIR, 'settings.json');
+  fs.mkdirSync(path.join(config.DATA_DIR, 'fhl-image', 'jobs'), { recursive: true });
+  fs.mkdirSync(config.OUTPUT_DIR, { recursive: true });
+  fs.writeFileSync(config.SETTINGS_FILE, JSON.stringify({
+    activeOutputStorageSpaceId: 'cloud-baidu-netdisk',
+    outputStorageSpaces: [{ id: 'primary', type: 'local', label: 'Primary', enabled: true }],
+    cloudUploadTargets: [{
+      id: 'baidu-netdisk', provider: 'baidu-netdisk', label: 'Baidu', enabled: true,
+      baiduNetdisk: { webdavUrl, username: 'alist-user', password: 'alist-pass', folder: '/T8PenguinCanvas' },
+    }],
+  }));
+
+  const managerPath = require.resolve('../backend/src/outputStorage/manager.js');
+  delete require.cache[managerPath];
+  const manager = require(managerPath);
+  const jobId = 'fhl-test-drain';
+  const jobFile = path.join(config.DATA_DIR, 'fhl-image', 'jobs', `${jobId}.json`);
+  const localDir = path.join(config.OUTPUT_DIR, 'fhl', jobId);
+  const localFile = path.join(localDir, '001.png');
+  fs.mkdirSync(localDir, { recursive: true });
+  fs.writeFileSync(localFile, Buffer.from('fhl-image-payload'));
+  fs.writeFileSync(jobFile, JSON.stringify({ id: jobId, status: 'running' }));
+
+  await manager.scanAndPublishNewFiles();
+  await manager.scanAndPublishNewFiles();
+  await manager.scanAndPublishNewFiles();
+  assert.equal(fs.existsSync(localFile), true);
+  assert.equal(manager.storageEntryForKey(`fhl/${jobId}/001.png`), null);
+
+  fs.writeFileSync(jobFile, JSON.stringify({ id: jobId, status: 'completed' }));
+  mock.state.failPuts = 1;
+  await manager.scanAndPublishNewFiles();
+  await manager.scanAndPublishNewFiles();
+  await manager.scanAndPublishNewFiles();
+  const fallback = manager.storageEntryForKey(`fhl/${jobId}/001.png`);
+  assert.equal(fallback.storageSpaceId, 'primary');
+  assert.equal(fallback.pendingRemoteRetry, true);
+  assert.equal(fs.existsSync(localFile), true);
+
+  manager.upsertEntry(fallback.key, { nextRemoteRetryAt: 0 });
+  await manager.scanAndPublishNewFiles();
+  await manager.scanAndPublishNewFiles();
+  await manager.scanAndPublishNewFiles();
+  const published = manager.storageEntryForKey(fallback.key);
+  assert.equal(published.storageSpaceId, 'cloud-baidu-netdisk');
+  assert.equal(published.pendingRemoteRetry, false);
+  assert.equal(mock.files.get(`/T8PenguinCanvas/output/fhl/${jobId}/001.png`).toString(), 'fhl-image-payload');
+  assert.equal(fs.existsSync(localFile), false);
+  assert.equal(fs.existsSync(localDir), false);
 });
 
 test('manager falls back to primary when remote storage is unavailable', async () => {
