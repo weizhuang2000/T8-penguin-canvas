@@ -143,6 +143,34 @@ test('FHL worker pool distributes independent tasks and disables an auth-failed 
   assert.ok(report.results.every((item: any) => item.workerId === 'worker-2'));
 });
 
+test('FHL memory safety caps Base64 image concurrency by quality and reference count', async () => {
+  assert.equal(fhl.resolveMemorySafeConcurrency(10, [{ quality: '2K', operation: 'generate', images: [] }]), 2);
+  assert.equal(fhl.resolveMemorySafeConcurrency(10, [{ quality: '4K', operation: 'generate', images: [] }]), 1);
+  assert.equal(fhl.resolveMemorySafeConcurrency(10, [{ quality: '2K', operation: 'edit', images: ['1', '2', '3', '4'] }]), 1);
+
+  const workers = Array.from({ length: 6 }, (_, index) => ({
+    id: `worker-${index + 1}`, name: `worker ${index + 1}`, apiKey: `sk-${index + 1}`, enabled: true,
+  }));
+  const tasks = Array.from({ length: 6 }, (_, index) => ({
+    id: index + 1, quality: '2K', operation: 'generate', images: [],
+  }));
+  let active = 0;
+  let peak = 0;
+  const report = await fhl.runWorkerQueue(workers, tasks, {
+    concurrency: 6,
+    runTask: async (_worker: any, task: any) => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      return { ok: true, outputPath: `out-${task.id}.png` };
+    },
+  });
+  assert.equal(report.concurrency, 2);
+  assert.equal(peak, 2);
+  assert.equal(report.success, 6);
+});
+
 test('FHL worker normalization preserves masked keys and enforces unique workers', () => {
   const previous = [{ id: 'worker-1', name: 'old', apiKey: 'sk-secret', enabled: true }];
   const normalized = fhl.normalizeWorkers([{ id: 'worker-1', name: 'new', apiKey: '****cret', enabled: false }], previous);

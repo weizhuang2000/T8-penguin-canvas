@@ -263,8 +263,8 @@ function rawPngPath(outputPath, outputFormat) {
   return path.join(path.dirname(outputPath), `${path.basename(outputPath, extension)}__raw.png`);
 }
 
-async function writeFormattedImage(buffer, outputPath, outputFormat, resizeSize = '') {
-  let pipeline = sharp(buffer, { limitInputPixels: false });
+async function writeFormattedImage(input, outputPath, outputFormat, resizeSize = '') {
+  let pipeline = sharp(input, { limitInputPixels: false });
   const match = /^(\d+)x(\d+)$/.exec(resizeSize);
   if (match) pipeline = pipeline.resize(Number(match[1]), Number(match[2]), { fit: 'fill' });
   if (outputFormat === 'jpg') {
@@ -275,28 +275,43 @@ async function writeFormattedImage(buffer, outputPath, outputFormat, resizeSize 
   await pipeline.toFile(outputPath);
 }
 
-async function saveRawPng(base64, outputPath, resizeSize = '', requestedFormat = '') {
-  const clean = String(base64 || '').replace(/^data:image\/[^;]+;base64,/i, '').trim();
+function stageRawPng(base64, outputPath, requestedFormat = '') {
+  let clean = typeof base64 === 'string' ? base64 : String(base64 || '');
+  if (/^data:image\/[^;]+;base64,/i.test(clean)) clean = clean.slice(clean.indexOf(',') + 1);
+  clean = clean.trim();
   if (!clean) throw new Error('FHL Images API 未返回 b64_json。');
   const buffer = Buffer.from(clean, 'base64');
-  const meta = await sharp(buffer, { limitInputPixels: false }).metadata();
-  if (meta.format !== 'png') throw new Error(`FHL Images API 返回了非 PNG 栅格：${meta.format || 'unknown'}`);
+  const pngSignature = buffer.length >= 8
+    && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47
+    && buffer[4] === 0x0d && buffer[5] === 0x0a && buffer[6] === 0x1a && buffer[7] === 0x0a;
+  if (!pngSignature) throw new Error('FHL Images API 返回了非 PNG 栅格。');
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   const outputFormat = normalizeOutputFormat(requestedFormat, outputPath);
   const sourcePath = rawPngPath(outputPath, outputFormat);
   fs.writeFileSync(sourcePath, buffer);
-  if (outputFormat === 'jpg') await writeFormattedImage(buffer, outputPath, outputFormat);
+  return { outputPath, outputFormat, sourcePath };
+}
+
+async function finalizeStagedPng(staged, resizeSize = '') {
+  const { outputPath, outputFormat, sourcePath } = staged;
+  const meta = await sharp(sourcePath, { limitInputPixels: false }).metadata();
+  if (meta.format !== 'png') throw new Error(`FHL Images API 返回了非 PNG 栅格：${meta.format || 'unknown'}`);
+  if (outputFormat === 'jpg') await writeFormattedImage(sourcePath, outputPath, outputFormat);
   const result = { outputPath, rawOutputPath: sourcePath, outputFormat, size: fs.statSync(outputPath).size, width: meta.width || 0, height: meta.height || 0 };
   if (resizeSize) {
     const match = /^(\d+)x(\d+)$/.exec(resizeSize);
     if (match) {
       const extension = outputFormat === 'jpg' ? 'jpg' : 'png';
       const resizedPath = outputPath.replace(/\.(?:png|jpe?g)$/i, `__resized_${match[1]}x${match[2]}.${extension}`);
-      await writeFormattedImage(buffer, resizedPath, outputFormat, resizeSize);
+      await writeFormattedImage(sourcePath, resizedPath, outputFormat, resizeSize);
       result.resizedPath = resizedPath;
     }
   }
   return result;
+}
+
+async function saveRawPng(base64, outputPath, resizeSize = '', requestedFormat = '') {
+  return finalizeStagedPng(stageRawPng(base64, outputPath, requestedFormat), resizeSize);
 }
 
 async function requestImage(worker, task, options = {}) {
@@ -307,16 +322,22 @@ async function requestImage(worker, task, options = {}) {
     const sources = [];
     for (const value of task.images || []) sources.push(await loadReference(value, options));
     response = await fetchWithTimeout(EDITS_URL, { method: 'POST', headers, body: buildEditForm(task.prompt, size, sources), signal: options.signal }, REQUEST_TIMEOUT_MS, options.fetchImpl);
+    sources.length = 0;
   } else {
     response = await fetchWithTimeout(GENERATIONS_URL, {
       method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(buildGenerationBody(task.prompt, size)), signal: options.signal,
     }, REQUEST_TIMEOUT_MS, options.fetchImpl);
   }
   if (!response.ok) return { ok: false, status: response.status, error: await parseError(response) };
-  const json = await response.json().catch(() => null);
-  const base64 = extractBase64(json);
+  let json = await response.json().catch(() => null);
+  let base64 = extractBase64(json);
+  json = null;
   if (!base64) return { ok: false, status: response.status, error: 'FHL Images API 未返回 b64_json。' };
-  const saved = await saveRawPng(base64, task.outputPath, task.resize ? size : '', task.outputFormat);
+  // Decode and persist synchronously before Sharp starts so the very large JSON/Base64
+  // strings are no longer retained throughout image conversion.
+  const staged = stageRawPng(base64, task.outputPath, task.outputFormat);
+  base64 = '';
+  const saved = await finalizeStagedPng(staged, task.resize ? size : '');
   return { ok: true, ...saved, sizeName: size };
 }
 
@@ -345,6 +366,15 @@ function errorClass(result) {
 
 function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
+function resolveMemorySafeConcurrency(requested, tasks = []) {
+  const normalizedRequested = Math.max(1, Number(requested) || 1);
+  const fhlTasks = (Array.isArray(tasks) ? tasks : []).filter((task) => task?.quality || task?.operation);
+  if (!fhlTasks.length) return normalizedRequested;
+  if (fhlTasks.some((task) => String(task.quality || '2K').toUpperCase() === '4K')) return 1;
+  if (fhlTasks.some((task) => task.operation === 'edit' && (task.images || []).length >= 4)) return 1;
+  return Math.min(normalizedRequested, 2);
+}
+
 async function runWorkerQueue(workers, tasks, options = {}) {
   const enabled = normalizeWorkers(workers).filter((item) => item.enabled !== false);
   if (!enabled.length) throw new Error('请先配置并启用至少一个 FHL worker。');
@@ -352,7 +382,11 @@ async function runWorkerQueue(workers, tasks, options = {}) {
   const states = tasks.map((task, index) => ({ task, index, pending: true, running: false, done: false, attempts: 0, retries: 0, notBefore: 0, result: null }));
   const groupAssignments = new Map();
   const runningGroups = new Set();
-  const concurrency = Math.max(1, Math.min(Number(options.concurrency) || 1, states.length || 1, sessions.length, MAX_WORKERS));
+  const requestedConcurrency = Math.max(1, Math.min(Number(options.concurrency) || 1, states.length || 1, sessions.length, MAX_WORKERS));
+  const concurrency = resolveMemorySafeConcurrency(requestedConcurrency, tasks);
+  if (concurrency < requestedConcurrency) {
+    console.warn(`[fhl] 为避免大图 Base64 导致内存溢出，并发已从 ${requestedConcurrency} 自动限制为 ${concurrency}`);
+  }
   const maxRetries = options.maxRetries == null ? MAX_RETRIES : Math.max(0, Number(options.maxRetries));
   const retryDelay = options.retryDelayMs == null ? RETRY_DELAY_MS : Math.max(0, Number(options.retryDelayMs));
   const cooldown = options.cooldownMs == null ? WORKER_COOLDOWN_MS : Math.max(0, Number(options.cooldownMs));
@@ -450,6 +484,7 @@ async function runWorkerQueue(workers, tasks, options = {}) {
   const results = states.map((state) => state.result);
   return {
     results,
+    concurrency,
     workerStats: sessions.map(({ id, name, assigned, success, failed, retries, cooldowns, lastError }) => ({ id, name, assigned, success, failed, retries, cooldowns, lastError })),
     success: results.filter((item) => item?.ok).length,
     failed: results.filter((item) => item && !item.ok && !item.cancelled).length,
@@ -460,6 +495,6 @@ async function runWorkerQueue(workers, tasks, options = {}) {
 module.exports = {
   API_ROOT, GENERATIONS_URL, EDITS_URL, MODEL, MAX_WORKERS, MAX_RETRIES, REQUEST_TIMEOUT_MS,
   RATIO_SUPPORT, SIZE_MATRIX, normalizeWorkers, maskWorkers, previewKey, resolveSize,
-  aspectPromptSuffix, buildGenerationBody, buildEditForm, loadReference, normalizeT8LocalReference, normalizeOutputFormat, saveRawPng,
+  aspectPromptSuffix, buildGenerationBody, buildEditForm, loadReference, normalizeT8LocalReference, normalizeOutputFormat, resolveMemorySafeConcurrency, saveRawPng,
   requestImage, runWorkerQueue, isRetryableError, isAuthError, errorClass,
 };
