@@ -26,6 +26,7 @@ const {
   putFile: putWebdavFile,
   testConnection: testWebdavConnection,
 } = require('./webdav');
+const { prewarmThumbnailSources } = require('../utils/thumbnailCache');
 
 const INDEX_FILE = path.join(config.DATA_DIR, 'output_storage_index.json');
 const SCAN_INTERVAL_MS = Math.max(1000, Number(process.env.T8_OUTPUT_STORAGE_SCAN_MS) || 2500);
@@ -257,10 +258,14 @@ function registerExistingLocalFiles(storageSettings = getStorageSettings()) {
 async function publishLocalFile(file, activeSpace, storageSettings = getStorageSettings(), options = {}) {
   const contentType = MIME_BY_EXT[path.extname(file.key).toLowerCase()] || 'application/octet-stream';
   if (!activeSpace || activeSpace.id === 'primary') {
-    return upsertEntry(file.key, {
+    const entry = upsertEntry(file.key, {
       storageSpaceId: 'primary', size: file.size, contentType, createdAt: file.mtimeMs || Date.now(),
       sourceMtimeMs: file.mtimeMs || 0,
     });
+    if (contentType.startsWith('image/')) {
+      void prewarmThumbnailSources(file.filePath, { outputKey: file.key, storageEntry: entry });
+    }
+    return entry;
   }
   try {
     let result;
@@ -295,6 +300,9 @@ async function publishLocalFile(file, activeSpace, storageSettings = getStorageS
       nextRemoteRetryAt: 0,
       ...storagePatch,
     });
+    if (contentType.startsWith('image/')) {
+      await prewarmThumbnailSources(file.filePath, { outputKey: file.key, storageEntry: entry });
+    }
     try {
       if (!removePublishedLocalFile(file.filePath)) throw new Error('local output is still in use');
     } catch (error) {

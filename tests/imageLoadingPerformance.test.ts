@@ -23,11 +23,13 @@ test('local canvas image previews use cached backend thumbnails', () => {
   assert.match(mediaPreview, /LOCAL_FILE_PREFIX_RE/);
 
   assert.match(filesRoute, /router\.get\('\/thumbnail'/);
-  assert.match(filesRoute, /sharp\(sourcePath/);
-  assert.match(filesRoute, /thumbnailInflight/);
-  assert.match(filesRoute, /MAX_THUMBNAIL_JOBS/);
-  assert.match(filesRoute, /T8PC_THUMBNAIL_CONCURRENCY \|\| '4'/);
-  assert.match(filesRoute, /effort:\s*2/);
+  const thumbnailCache = read('../backend/src/utils/thumbnailCache.js');
+  assert.match(filesRoute, /stableThumbnailCacheFile/);
+  assert.match(filesRoute, /ensureThumbnailForSource/);
+  assert.match(thumbnailCache, /T8PC_THUMBNAIL_CONCURRENCY \|\| '4'/);
+  assert.match(thumbnailCache, /effort:\s*2/);
+  assert.match(thumbnailCache, /output:/);
+  assert.match(thumbnailCache, /outputRevision/);
   assert.match(filesRoute, /Cache-Control', 'private, max-age=31536000, immutable'/);
   assert.match(filesRoute, /THUMBNAILS_DIR/);
 });
