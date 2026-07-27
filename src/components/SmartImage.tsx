@@ -33,6 +33,22 @@ export default function SmartImage({
       setShouldLoad(true);
       return;
     }
+    // ReactFlow switches node sets and restores the target viewport in adjacent renders.
+    // Check the current transformed rect first so an already-visible node does not wait for
+    // IntersectionObserver to deliver a later frame after a canvas switch.
+    const rect = el.getBoundingClientRect();
+    const margin = 720;
+    if (
+      rect.width > 0
+      && rect.height > 0
+      && rect.right >= -margin
+      && rect.bottom >= -margin
+      && rect.left <= window.innerWidth + margin
+      && rect.top <= window.innerHeight + margin
+    ) {
+      setShouldLoad(true);
+      return;
+    }
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
@@ -55,7 +71,7 @@ export default function SmartImage({
       src={actualSrc}
       data-full-src={src}
       data-preview-src={previewSrc}
-      loading={loading}
+      loading={shouldLoad ? 'eager' : loading}
       decoding={decoding}
       onError={(event) => {
         if (!actualSrc) return;

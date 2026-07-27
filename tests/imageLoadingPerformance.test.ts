@@ -13,10 +13,13 @@ test('local canvas image previews use cached backend thumbnails', () => {
 
   assert.match(smartImage, /previewImageUrl\(src,\s*thumbSize\)/);
   assert.match(smartImage, /loading = 'lazy'/);
+  assert.match(smartImage, /loading=\{shouldLoad \? 'eager' : loading\}/);
   assert.match(smartImage, /decoding = 'async'/);
   assert.match(smartImage, /data-full-src=\{src\}/);
   assert.match(smartImage, /IntersectionObserver/);
   assert.match(smartImage, /rootMargin:\s*'720px 720px'/);
+  assert.match(smartImage, /getBoundingClientRect\(\)/);
+  assert.match(smartImage, /window\.innerWidth \+ margin/);
   assert.match(smartImage, /setFallback\(true\)/);
 
   assert.match(mediaPreview, /\/api\/files\/thumbnail\?size=\$\{safeSize\}&url=/);
@@ -46,8 +49,7 @@ test('historical canvases restore their viewport before online refresh and reuse
   assert.match(canvas, /normalizeRememberedViewport\(cachedData\.viewport\)/);
   assert.match(canvas, /setViewport\(cachedViewport, \{ duration: 0 \}\)/);
   assert.match(canvas, /normalizePersistedMediaUrls\(persisted\.data\)/);
-  assert.match(canvas, /onlyRenderVisibleElements=\{isReadonlyCanvas \|\| \(isForeignCanvas && !isRunning\)\}/);
-  assert.match(canvas, /window\.requestAnimationFrame\(\(\) => window\.requestAnimationFrame/);
+  assert.doesNotMatch(canvas, /onlyRenderVisibleElements=/);
   assert.match(server, /IMMUTABLE_PRIVATE_MEDIA_CACHE = 'private, max-age=31536000, immutable'/);
   assert.match(outputManager, /IMMUTABLE_PRIVATE_OUTPUT_CACHE = 'private, max-age=31536000, immutable'/);
   assert.match(outputManager, /materializeInflight/);
