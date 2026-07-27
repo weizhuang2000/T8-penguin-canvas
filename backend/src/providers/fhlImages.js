@@ -2,6 +2,7 @@
 
 const dns = require('dns').promises;
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const sharp = require('sharp');
 const { resolveMediaRef, mimeFromPath } = require('./mediaResolver');
@@ -257,10 +258,12 @@ function normalizeOutputFormat(value, outputPath = '') {
   return /\.jpe?g$/i.test(String(outputPath || '')) ? 'jpg' : 'png';
 }
 
-function rawPngPath(outputPath, outputFormat) {
+function stagedPngPath(outputPath, outputFormat) {
   if (outputFormat === 'png') return outputPath;
-  const extension = path.extname(outputPath);
-  return path.join(path.dirname(outputPath), `${path.basename(outputPath, extension)}__raw.png`);
+  const tempDir = path.join(os.tmpdir(), 't8-fhl-image');
+  fs.mkdirSync(tempDir, { recursive: true });
+  const name = path.basename(outputPath, path.extname(outputPath)).replace(/[^a-z0-9_-]+/gi, '_') || 'image';
+  return path.join(tempDir, `${name}-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}.png`);
 }
 
 async function writeFormattedImage(input, outputPath, outputFormat, resizeSize = '') {
@@ -287,27 +290,34 @@ function stageRawPng(base64, outputPath, requestedFormat = '') {
   if (!pngSignature) throw new Error('FHL Images API 返回了非 PNG 栅格。');
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   const outputFormat = normalizeOutputFormat(requestedFormat, outputPath);
-  const sourcePath = rawPngPath(outputPath, outputFormat);
+  const sourcePath = stagedPngPath(outputPath, outputFormat);
   fs.writeFileSync(sourcePath, buffer);
   return { outputPath, outputFormat, sourcePath };
 }
 
 async function finalizeStagedPng(staged, resizeSize = '') {
   const { outputPath, outputFormat, sourcePath } = staged;
-  const meta = await sharp(sourcePath, { limitInputPixels: false }).metadata();
-  if (meta.format !== 'png') throw new Error(`FHL Images API 返回了非 PNG 栅格：${meta.format || 'unknown'}`);
-  if (outputFormat === 'jpg') await writeFormattedImage(sourcePath, outputPath, outputFormat);
-  const result = { outputPath, rawOutputPath: sourcePath, outputFormat, size: fs.statSync(outputPath).size, width: meta.width || 0, height: meta.height || 0 };
-  if (resizeSize) {
-    const match = /^(\d+)x(\d+)$/.exec(resizeSize);
-    if (match) {
-      const extension = outputFormat === 'jpg' ? 'jpg' : 'png';
-      const resizedPath = outputPath.replace(/\.(?:png|jpe?g)$/i, `__resized_${match[1]}x${match[2]}.${extension}`);
-      await writeFormattedImage(sourcePath, resizedPath, outputFormat, resizeSize);
-      result.resizedPath = resizedPath;
+  const temporarySource = sourcePath !== outputPath;
+  try {
+    const meta = await sharp(sourcePath, { limitInputPixels: false }).metadata();
+    if (meta.format !== 'png') throw new Error(`FHL Images API 返回了非 PNG 栅格：${meta.format || 'unknown'}`);
+    if (outputFormat === 'jpg') await writeFormattedImage(sourcePath, outputPath, outputFormat);
+    const result = { outputPath, outputFormat, size: fs.statSync(outputPath).size, width: meta.width || 0, height: meta.height || 0 };
+    if (resizeSize) {
+      const match = /^(\d+)x(\d+)$/.exec(resizeSize);
+      if (match) {
+        const extension = outputFormat === 'jpg' ? 'jpg' : 'png';
+        const resizedPath = outputPath.replace(/\.(?:png|jpe?g)$/i, `__resized_${match[1]}x${match[2]}.${extension}`);
+        await writeFormattedImage(sourcePath, resizedPath, outputFormat, resizeSize);
+        result.resizedPath = resizedPath;
+      }
+    }
+    return result;
+  } finally {
+    if (temporarySource) {
+      try { fs.rmSync(sourcePath, { force: true }); } catch (_) {}
     }
   }
-  return result;
 }
 
 async function saveRawPng(base64, outputPath, resizeSize = '', requestedFormat = '') {
@@ -333,8 +343,8 @@ async function requestImage(worker, task, options = {}) {
   let base64 = extractBase64(json);
   json = null;
   if (!base64) return { ok: false, status: response.status, error: 'FHL Images API 未返回 b64_json。' };
-  // Decode and persist synchronously before Sharp starts so the very large JSON/Base64
-  // strings are no longer retained throughout image conversion.
+  // Decode to a temporary staging file before Sharp starts so the very large JSON/Base64
+  // strings are not retained throughout conversion. Only the selected format reaches output/.
   const staged = stageRawPng(base64, task.outputPath, task.outputFormat);
   base64 = '';
   const saved = await finalizeStagedPng(staged, task.resize ? size : '');

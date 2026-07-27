@@ -19,6 +19,20 @@ const fhl = {
   data: { nodeSerialId: 2 },
 } as Node;
 
+const imageOutput = {
+  id: 'output-image',
+  type: 'output',
+  position: { x: 0, y: 0 },
+  data: { pickKind: 'image', imageUrl: '/files/output/example.jpg' },
+} as Node;
+
+const textOutput = {
+  id: 'output-text',
+  type: 'output',
+  position: { x: 0, y: 0 },
+  data: { pickKind: 'text', outputText: 'upstream prompt' },
+} as Node;
+
 test('FHL handle ids resolve to their actual port types', () => {
   assert.deepEqual(getNodePortTypesForHandle(fhl, 'target', 'text'), ['text']);
   assert.deepEqual(getNodePortTypesForHandle(fhl, 'target', 'fixed'), ['image']);
@@ -39,11 +53,27 @@ test('connection picker chooses concrete FHL handles', () => {
   assert.equal(resolveConnectionPickerHandleId('fhl-image-gen', 'source', 'text'), 'text');
 });
 
+test('output material resolves its actual kind so picker targets the matching FHL handle', () => {
+  assert.deepEqual(getNodePortTypesForHandle(imageOutput, 'source', null), ['image']);
+  assert.deepEqual(getNodePortTypesForHandle(textOutput, 'source', null), ['text']);
+  assert.equal(resolveConnectionPickerHandleId('fhl-image-gen', 'target', 'image'), 'fixed');
+  assert.equal(resolveConnectionPickerHandleId('fhl-image-gen', 'target', 'text'), 'text');
+});
+
 test('canvas picker preserves the dragged handle and applies the matched target handle', () => {
   const canvas = readFileSync(new URL('../src/components/Canvas.tsx', import.meta.url), 'utf8');
   assert.match(canvas, /fromHandleId:\s*from\.handleId/);
   assert.match(canvas, /sourceHandle:\s*picker\.fromHandleId/);
   assert.match(canvas, /targetHandle:\s*resolveConnectionPickerHandleId\(meta\.type, 'target', matched\)/);
+});
+
+test('FHL reads picker-created edges immediately instead of waiting for connection lookup refresh', () => {
+  const node = readFileSync(new URL('../src/components/nodes/FhlImageGenNode.tsx', import.meta.url), 'utf8');
+  assert.match(node, /const edges = useEdges\(\)/);
+  assert.match(node, /edges\.filter\(\(edge\) => edge\.target === nodeId\)/);
+  assert.match(node, /handle === 'text' \|\| handle === ''/);
+  assert.match(node, /handle === 'fixed' \|\| handle === ''/);
+  assert.doesNotMatch(node, /useNodeConnections/);
 });
 
 test('NodeID connection from prompt reverse targets the FHL text handle immediately', () => {

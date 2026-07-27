@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
@@ -95,7 +95,7 @@ test('FHL request writes the raw upstream PNG and never needs Responses API', as
   }
 });
 
-test('FHL saves highest-quality JPG by default while preserving the raw upstream PNG', async () => {
+test('FHL saves only the selected highest-quality JPG without an extra PNG output', async () => {
   const dir = mkdtempSync(join(tmpdir(), 't8-fhl-jpg-'));
   const outputPath = join(dir, 'result.jpg');
   const rawOutputPath = join(dir, 'result__raw.png');
@@ -115,7 +115,8 @@ test('FHL saves highest-quality JPG by default while preserving the raw upstream
     assert.equal(result.ok, true);
     assert.equal(result.outputFormat, 'jpg');
     assert.equal(metadata.format, 'jpeg');
-    assert.deepEqual(readFileSync(rawOutputPath), sourcePng);
+    assert.equal(existsSync(rawOutputPath), false);
+    assert.deepEqual(readdirSync(dir), ['result.jpg']);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

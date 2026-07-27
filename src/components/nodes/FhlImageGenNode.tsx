@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
+import { Handle, Position, useEdges, useNodesData, type NodeProps } from '@xyflow/react';
 import { AlertTriangle, Download, Images, Loader2, Play, RotateCcw, Square, Upload, X } from 'lucide-react';
 import { PORT_COLOR } from '../../config/portTypes';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
@@ -48,7 +48,10 @@ function textValues(data: any): string[] {
 }
 
 function useHandleInputs(nodeId: string) {
-  const connections = useNodeConnections({ id: nodeId, handleType: 'target' });
+  // 直接订阅权威 edges 数组，避免“拖线后通过候选菜单新建节点”时，
+  // 新节点首次挂载早于 React Flow connection lookup 建立而漏掉首条连接。
+  const edges = useEdges();
+  const connections = useMemo(() => edges.filter((edge) => edge.target === nodeId), [edges, nodeId]);
   const sourceIds = useMemo(() => unique(connections.map((item) => item.source)), [connections]);
   const sourceNodes = useNodesData(sourceIds);
   return useMemo(() => {
@@ -60,8 +63,10 @@ function useHandleInputs(nodeId: string) {
       const node = nodeMap.get(connection.source);
       if (!node) continue;
       const handle = String((connection as any).targetHandle || '');
-      if (handle === 'text') texts.push(...textValues(node.data));
-      if (handle === 'fixed') fixed.push(...imageValues(node.data));
+      // 兼容旧版候选菜单为 any 输出创建的 targetHandle=null 边：
+      // 文本按 text 接收，图片按默认 fixed 接收，不要求用户断线重连。
+      if (handle === 'text' || handle === '') texts.push(...textValues(node.data));
+      if (handle === 'fixed' || handle === '') fixed.push(...imageValues(node.data));
       if (handle === 'items') items.push(...imageValues(node.data));
     }
     return { texts: unique(texts), fixed: unique(fixed), items: unique(items) };

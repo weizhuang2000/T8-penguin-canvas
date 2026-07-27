@@ -227,6 +227,23 @@ export function getNodeInputs(node: Node | null | undefined): PortType[] {
 export function getNodeOutputs(node: Node | null | undefined): PortType[] {
   if (!node || !node.type) return [];
 
+  // 输出素材节点的 UI 只有一个 any source handle，但候选菜单需要知道当前
+  // 实际素材类型，才能为 FHL 等多入口节点选择正确的 targetHandle。
+  if (node.type === 'output') {
+    const data = (node.data || {}) as any;
+    const pickKind = String(data.pickKind || '').trim() as PortType;
+    if (['text', 'image', 'video', 'audio', 'model3d'].includes(pickKind)) return [pickKind];
+    const hasArray = (value: unknown) => Array.isArray(value) && value.some(Boolean);
+    const actual: PortType[] = [];
+    if (data.imageUrl || data.directImageUrl || hasArray(data.imageUrls) || hasArray(data.directImageUrls) || hasArray(data.urls)) actual.push('image');
+    if (data.videoUrl || data.directVideoUrl || hasArray(data.videoUrls) || hasArray(data.directVideoUrls)) actual.push('video');
+    if (data.audioUrl || data.directAudioUrl || hasArray(data.audioUrls) || hasArray(data.directAudioUrls)) actual.push('audio');
+    if (data.modelUrl || data.directModelUrl || hasArray(data.modelUrls) || hasArray(data.directModelUrls)) actual.push('model3d');
+    if (data.outputText || data.prompt || data.text || data.reply || data.directOutputText || hasArray(data.textSegments) || hasArray(data.segments)) actual.push('text');
+    if (actual.length > 0) return actual;
+    return ['any'];
+  }
+
   // upload 节点根据 data.uploadType 动态决定输出类型
   if (node.type === 'upload') {
     const uploadType = (node.data as any)?.uploadType as
