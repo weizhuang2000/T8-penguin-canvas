@@ -17,13 +17,14 @@ test('local canvas image previews use cached backend thumbnails', () => {
   assert.match(smartImage, /decoding = 'async'/);
   assert.match(smartImage, /data-full-src=\{src\}/);
   assert.match(smartImage, /IntersectionObserver/);
-  assert.match(smartImage, /rootMargin:\s*'720px 720px'/);
+  assert.match(smartImage, /rootMargin:\s*'160px 160px'/);
   assert.match(smartImage, /getBoundingClientRect\(\)/);
   assert.match(smartImage, /window\.innerWidth \+ margin/);
   assert.match(smartImage, /setFallback\(true\)/);
 
   assert.match(mediaPreview, /\/api\/files\/thumbnail\?size=\$\{safeSize\}&url=/);
   assert.match(mediaPreview, /LOCAL_FILE_PREFIX_RE/);
+  assert.match(mediaPreview, /const safeSize = 360/);
 
   assert.match(filesRoute, /router\.get\('\/thumbnail'/);
   const thumbnailCache = read('../backend/src/utils/thumbnailCache.js');

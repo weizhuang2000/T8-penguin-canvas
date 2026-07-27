@@ -32,6 +32,6 @@ test('persisted canvas media fields migrate without rewriting prompt text', () =
 test('absolute historical output URLs request backend thumbnails instead of remote originals', () => {
   assert.equal(
     previewImageUrl('https://old.example.com/files/output/image.png', 720),
-    '/api/files/thumbnail?size=720&url=%2Ffiles%2Foutput%2Fimage.png',
+    '/api/files/thumbnail?size=360&url=%2Ffiles%2Foutput%2Fimage.png',
   );
 });

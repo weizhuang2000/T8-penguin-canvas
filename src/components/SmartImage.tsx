@@ -37,7 +37,7 @@ export default function SmartImage({
     // Check the current transformed rect first so an already-visible node does not wait for
     // IntersectionObserver to deliver a later frame after a canvas switch.
     const rect = el.getBoundingClientRect();
-    const margin = 720;
+    const margin = 160;
     if (
       rect.width > 0
       && rect.height > 0
@@ -56,7 +56,7 @@ export default function SmartImage({
           observer.disconnect();
         }
       },
-      { rootMargin: '720px 720px' },
+      { rootMargin: '160px 160px' },
     );
     observer.observe(el);
     return () => observer.disconnect();

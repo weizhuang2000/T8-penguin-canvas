@@ -49,6 +49,9 @@ export function canUseLocalImageThumbnail(url: unknown): url is string {
 export function previewImageUrl(url: string, size = 360): string {
   const normalizedUrl = normalizeLocalMediaUrl(url);
   if (!canUseLocalImageThumbnail(normalizedUrl)) return url;
-  const safeSize = Math.max(96, Math.min(1024, Math.round(size || 360)));
+  // Canvas/history cards always start from the shared 360px cache. Full-resolution actions keep
+  // using data-full-src, while avoiding a second 720/1024 thumbnail wave on every canvas switch.
+  void size;
+  const safeSize = 360;
   return `/api/files/thumbnail?size=${safeSize}&url=${encodeURIComponent(normalizedUrl)}`;
 }
