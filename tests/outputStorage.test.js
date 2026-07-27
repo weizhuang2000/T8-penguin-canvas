@@ -43,7 +43,7 @@ test('enabled Baidu cloud target is derived as an output storage space', () => {
 function createMockWebdavServer() {
   const files = new Map();
   const directories = new Set(['/']);
-  const state = { failPuts: 0 };
+  const state = { failPuts: 0, getCounts: new Map(), getDelayMs: 0 };
   const rootPrefix = '/dav/百度网盘';
   const remotePath = (url) => {
     const pathname = decodeURIComponent(new URL(url, 'http://localhost').pathname);
@@ -87,6 +87,8 @@ function createMockWebdavServer() {
       return;
     }
     if (req.method === 'GET') {
+      state.getCounts.set(key, (state.getCounts.get(key) || 0) + 1);
+      if (state.getDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, state.getDelayMs));
       const body = files.get(key);
       if (!body) { res.writeHead(404).end(); return; }
       const match = /^bytes=(\d+)-(\d*)$/.exec(String(req.headers.range || ''));
@@ -267,8 +269,15 @@ test('Baidu WebDAV works as active output storage and reconciles the whole T8 di
   assert.equal(proxied.headers.get('cache-control'), 'private, max-age=31536000, immutable');
   assert.equal(await proxied.text(), 'baid');
 
-  const materialized = await manager.materializeOutputUrl('/files/output/image/baidu-generated.png');
-  assert.equal(fs.readFileSync(materialized, 'utf8'), 'baidu-generated-payload');
+  const getCountBeforeMaterialize = mock.state.getCounts.get(entry.remotePath) || 0;
+  mock.state.getDelayMs = 40;
+  const materializedCopies = await Promise.all(Array.from({ length: 6 }, () => (
+    manager.materializeOutputUrl('/files/output/image/baidu-generated.png')
+  )));
+  mock.state.getDelayMs = 0;
+  assert.equal(new Set(materializedCopies).size, 1);
+  assert.equal(fs.readFileSync(materializedCopies[0], 'utf8'), 'baidu-generated-payload');
+  assert.equal((mock.state.getCounts.get(entry.remotePath) || 0) - getCountBeforeMaterialize, 1);
 
   mock.directories.add('/T8PenguinCanvas/archive');
   mock.files.set('/T8PenguinCanvas/archive/manual-old.png', Buffer.from('manual-old'));

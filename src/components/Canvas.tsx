@@ -45,6 +45,7 @@ import {
 } from '../utils/nodePlacement';
 import { createOutputDataFromItems, createUploadDataFromItems, fileNameFromUrl, getMediaItemsFromData, type MediaItem, type MediaKind } from '../utils/mediaCollection';
 import { markCanvasNodesDeleted } from '../utils/deletedNodeRegistry';
+import { normalizePersistedMediaUrls } from '../utils/mediaPreview';
 import { CanvasRuntimeProvider } from './nodes/canvasRuntimeContext';
 import {
   bucketSendableMaterials,
@@ -312,6 +313,9 @@ function withNodeSerialBadge(Component: ComponentType<any>): ComponentType<any> 
 function canvasNodeForPersistence(node: Node): Node {
   const persisted = { ...node, selected: false, dragging: false } as Node & Record<string, unknown>;
   if (persisted.type === 'flux-image') persisted.type = 'image';
+  if (persisted.data && typeof persisted.data === 'object') {
+    persisted.data = normalizePersistedMediaUrls(persisted.data);
+  }
   delete persisted.measured;
   delete persisted.resizing;
   delete persisted.positionAbsolute;
@@ -2531,6 +2535,9 @@ function CanvasInner({
   const activeCanvas = useMemo(() => canvases.find((canvas) => canvas.id === activeId) || null, [canvases, activeId]);
   const canEditActiveCanvas = activeCanvas?.access?.canEdit !== false;
   const isReadonlyCanvas = Boolean(activeCanvas && !canEditActiveCanvas);
+  const isForeignCanvas = Boolean(
+    activeCanvas?.ownerUserId && currentUserId && String(activeCanvas.ownerUserId) !== String(currentUserId),
+  );
   const allowedNodeTypeSet = useMemo(() => new Set(allowedNodeTypes || []), [allowedNodeTypes]);
   const canUseNodeType = useCallback(
     (type: unknown) => !allowedNodeTypes || allowedNodeTypeSet.has(String(type || '')),
@@ -4004,6 +4011,11 @@ function CanvasInner({
       if (order.length === 0) return 0;
       cancelRunRef.current = false;
       setIsRunning(true);
+      // Foreign canvases normally virtualize off-screen nodes. Give ReactFlow two frames to mount
+      // every executable node before dispatching the run-bus event.
+      await new Promise<void>((resolve) => {
+        window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()));
+      });
       const { triggerRun, setBatchProgress, cancelAll } = useRunBusStore.getState();
       setBatchProgress(order.length, 0);
       try {
@@ -6501,6 +6513,7 @@ function CanvasInner({
         selectionKeyCode={memoSelectionKeyCode}
         multiSelectionKeyCode={memoMultiSelectionKeyCode}
         selectionMode={SelectionMode.Partial}
+        onlyRenderVisibleElements={isReadonlyCanvas || (isForeignCanvas && !isRunning)}
         snapToGrid={snapEnabled}
         snapGrid={SNAP_GRID}
         elevateNodesOnSelect={false}

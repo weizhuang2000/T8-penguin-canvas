@@ -31,6 +31,7 @@ const { prewarmThumbnailSources } = require('../utils/thumbnailCache');
 const INDEX_FILE = path.join(config.DATA_DIR, 'output_storage_index.json');
 const SCAN_INTERVAL_MS = Math.max(1000, Number(process.env.T8_OUTPUT_STORAGE_SCAN_MS) || 2500);
 const UPLOAD_CONCURRENCY = Math.max(1, Math.min(4, Number(process.env.T8_OUTPUT_STORAGE_UPLOAD_CONCURRENCY) || 2));
+const MATERIALIZE_CONCURRENCY = Math.max(1, Math.min(4, Number(process.env.T8_OUTPUT_STORAGE_DOWNLOAD_CONCURRENCY) || 2));
 const REMOTE_RETRY_BASE_MS = Math.max(1000, Number(process.env.T8_OUTPUT_STORAGE_RETRY_BASE_MS) || 15_000);
 const REMOTE_RETRY_MAX_MS = Math.max(REMOTE_RETRY_BASE_MS, Number(process.env.T8_OUTPUT_STORAGE_RETRY_MAX_MS) || 15 * 60_000);
 const IMMUTABLE_PRIVATE_OUTPUT_CACHE = 'private, max-age=31536000, immutable';
@@ -39,6 +40,9 @@ let indexCache = null;
 let indexMtime = 0;
 let scanRunning = false;
 let timer = null;
+const materializeInflight = new Map();
+const materializeQueue = [];
+let activeMaterializeJobs = 0;
 
 const MIME_BY_EXT = {
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp',
@@ -472,6 +476,27 @@ async function deleteOutputByKey(key) {
   return true;
 }
 
+function pumpMaterializeQueue() {
+  while (activeMaterializeJobs < MATERIALIZE_CONCURRENCY && materializeQueue.length > 0) {
+    const job = materializeQueue.shift();
+    activeMaterializeJobs += 1;
+    Promise.resolve()
+      .then(job.task)
+      .then(job.resolve, job.reject)
+      .finally(() => {
+        activeMaterializeJobs -= 1;
+        pumpMaterializeQueue();
+      });
+  }
+}
+
+function queueMaterialize(task) {
+  return new Promise((resolve, reject) => {
+    materializeQueue.push({ task, resolve, reject });
+    pumpMaterializeQueue();
+  });
+}
+
 async function materializeOutputUrl(url) {
   const key = keyFromOutputUrl(url);
   if (!key) return '';
@@ -487,14 +512,24 @@ async function materializeOutputUrl(url) {
   const cacheDir = path.join(config.DATA_DIR, 'output-cache');
   const cachePath = path.join(cacheDir, `${crypto.createHash('sha256').update(`${entry.storageSpaceId}:${key}`).digest('hex')}${ext}`);
   if (fs.existsSync(cachePath)) return cachePath;
-  if (space.type === 'cloud-upload-target') {
-    const target = cloudTargetForSpace(storageSettings, space);
-    if (!target) throw new Error('百度网盘云端目标配置不存在');
-    await downloadWebdavFile(webdavConfigForTarget(target), entry.remotePath || webdavOutputPath(target, key), cachePath);
-  } else {
-    await downloadStorageFile(space, key, cachePath);
-  }
-  return cachePath;
+  const inflightKey = `${entry.storageSpaceId}:${key}`;
+  const existing = materializeInflight.get(inflightKey);
+  if (existing) return existing;
+  const pending = queueMaterialize(async () => {
+    if (fs.existsSync(cachePath)) return cachePath;
+    if (space.type === 'cloud-upload-target') {
+      const target = cloudTargetForSpace(storageSettings, space);
+      if (!target) throw new Error('百度网盘云端目标配置不存在');
+      await downloadWebdavFile(webdavConfigForTarget(target), entry.remotePath || webdavOutputPath(target, key), cachePath);
+    } else {
+      await downloadStorageFile(space, key, cachePath);
+    }
+    return cachePath;
+  }).finally(() => {
+    materializeInflight.delete(inflightKey);
+  });
+  materializeInflight.set(inflightKey, pending);
+  return pending;
 }
 
 async function reconcileRemoteSpace(space) {

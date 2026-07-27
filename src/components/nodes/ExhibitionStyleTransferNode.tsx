@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, useReactFlow, type NodeProps } from '@xyflow/react';
+import SmartImage from '../SmartImage';
 import { EXHIBITION_IMAGE_HANDLE_COLOR } from '../../config/portTypes';
 import { Image as ImageIcon, Palette, Play, Settings, Shuffle } from 'lucide-react';
 import { IMAGE_MODELS } from '../../providers/models';
@@ -229,7 +230,7 @@ function ImageSlot({ title, subtitle, url }: { title: string; subtitle: string; 
       <div className="mb-1 text-[11px] font-semibold text-cyan-100">{title}</div>
       <div className="mb-2 text-[10px] leading-snug text-white/45">{subtitle}</div>
       {url ? (
-        <img src={url} alt="" className="h-28 w-full rounded border border-white/10 object-contain" draggable={false} />
+        <SmartImage src={url} alt="" className="h-28 w-full rounded border border-white/10 object-contain" draggable={false} thumbSize={360} />
       ) : (
         <div className="flex h-28 items-center justify-center rounded border border-dashed border-white/15 text-[10px] text-white/35">连接图像输入</div>
       )}
@@ -811,7 +812,7 @@ const ExhibitionStyleTransferNode = ({ id, data, selected }: NodeProps) => {
             </label>
           </div>
           {d.progress && <div className="text-[10px] text-cyan-100">{d.progress}</div>}
-          {d.imageUrl && <img src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} />}
+          {d.imageUrl && <SmartImage src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} thumbSize={360} />}
         </section>
       </div>
 

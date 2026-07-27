@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
+import SmartImage from '../SmartImage';
 import { Brain, FileText, Image as ImageIcon, Loader2, Pencil, Play, Settings2, Theater, Upload } from 'lucide-react';
 import { EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR, EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
@@ -768,7 +769,7 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
               <div className="grid grid-cols-4 gap-1.5">
                 {colorMaterialReferenceImages.slice(0, 8).map((url, index) => (
                   <div key={url} className="relative">
-                    <img src={url} alt="" className="h-16 w-full rounded border border-white/10 object-cover" draggable={false} />
+                    <SmartImage src={url} alt="" className="h-16 w-full rounded border border-white/10 object-cover" draggable={false} thumbSize={180} />
                     <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[9px] text-rose-100">@img{environmentReferenceImages.length + index + 1}</span>
                   </div>
                 ))}
@@ -870,7 +871,7 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
             <div className="mb-1 text-[10px] text-white/55">整体环境参考图 · {environmentReferenceImages.length}</div>
             {environmentReferenceImages.length ? (
               <div className="grid grid-cols-3 gap-1.5">
-                {environmentReferenceImages.slice(0, 6).map((url) => <img key={url} src={url} alt="" className="h-20 w-full rounded border border-white/10 object-cover" draggable={false} />)}
+                {environmentReferenceImages.slice(0, 6).map((url) => <SmartImage key={url} src={url} alt="" className="h-20 w-full rounded border border-white/10 object-cover" draggable={false} thumbSize={180} />)}
               </div>
             ) : <div className="rounded border border-dashed border-white/15 p-2 text-center text-[10px] text-white/35">可连接整体环境参考图，约束空间结构、尺度、动线和氛围。</div>}
           </div>
@@ -880,7 +881,7 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
               <div className="grid grid-cols-4 gap-1.5">
                 {peoplePropsReferenceImages.slice(0, 8).map((url, index) => (
                   <div key={url} className="relative">
-                    <img src={url} alt="" className="h-16 w-full rounded border border-white/10 object-cover" draggable={false} />
+                    <SmartImage src={url} alt="" className="h-16 w-full rounded border border-white/10 object-cover" draggable={false} thumbSize={180} />
                     <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[9px] text-cyan-100">@img{peoplePropsImageOffset + index + 1}</span>
                   </div>
                 ))}
@@ -965,7 +966,7 @@ const ExhibitionSceneDesignNode = ({ id, data, selected }: NodeProps) => {
             </label>
           </div>
           {d.progress && <div data-exhibition-compact-item="progress" className="text-[10px] text-cyan-100">{d.progress}</div>}
-          {d.imageUrl && <img data-exhibition-compact-item="preview" src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} />}
+          {d.imageUrl && <SmartImage data-exhibition-compact-item="preview" src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} thumbSize={360} />}
         </section>
 
         <section data-exhibition-compact-section="prompt" data-exhibition-compact-item="prompt-preview" className="rounded border border-white/10 bg-black/20 p-2">

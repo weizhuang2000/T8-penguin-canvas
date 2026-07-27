@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, useReactFlow, type NodeProps } from '@xyflow/react';
+import SmartImage from '../SmartImage';
 import { EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR, EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import {
   Brain,
@@ -2162,7 +2163,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
           </div>
           {spaceImage ? (
             <div className="rounded border border-white/10 bg-black/20 p-2">
-              <img src={spaceImage} alt="" className="h-44 w-full rounded border border-white/10 object-contain" draggable={false} />
+              <SmartImage src={spaceImage} alt="" className="h-44 w-full rounded border border-white/10 object-contain" draggable={false} thumbSize={360} />
               <div className="mt-1 truncate text-[10px] text-white/40" title={spaceImage}>{spaceImage.split('/').pop() || spaceImage}</div>
             </div>
           ) : (
@@ -2215,7 +2216,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
               </div>
               {colorMaterialReferenceImage ? (
                 <>
-                  <img src={colorMaterialReferenceImage} alt="" className="h-24 w-full rounded border border-white/10 object-contain" draggable={false} />
+                  <SmartImage src={colorMaterialReferenceImage} alt="" className="h-24 w-full rounded border border-white/10 object-contain" draggable={false} thumbSize={360} />
                   <div className="mt-1 truncate text-[9px] text-white/40" title={colorMaterialReferenceImage}>{colorMaterialReferenceImage.split('/').pop() || colorMaterialReferenceImage}</div>
                   <div className="mt-1.5 space-y-1">
                     <div className="flex items-center justify-between gap-2">
@@ -2288,7 +2289,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
                 <div className="max-h-64 space-y-1.5 overflow-y-auto">
                   {exhibitReferenceItems.map((item, index) => (
                     <div key={item.url} className="grid grid-cols-[54px_minmax(0,1fr)] items-start gap-1.5 rounded border border-white/10 bg-black/15 p-1.5">
-                      <img src={item.url} alt="" className="h-12 w-12 rounded border border-white/10 object-cover" draggable={false} />
+                      <SmartImage src={item.url} alt="" className="h-12 w-12 rounded border border-white/10 object-cover" draggable={false} thumbSize={180} />
                       <div className="min-w-0">
                         <MentionPromptInput
                           title="扩大编辑"
@@ -3100,7 +3101,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
             <div className="grid grid-cols-3 gap-2">
               {creativeResults.map((item) => (
                 <div key={`${item.index}:${item.imageUrl}`} className="rounded border border-white/10 bg-black/20 p-1.5">
-                  <img src={item.imageUrl} alt="" className="h-32 w-full rounded border border-white/10 object-contain" draggable={false} />
+                  <SmartImage src={item.imageUrl} alt="" className="h-32 w-full rounded border border-white/10 object-contain" draggable={false} thumbSize={360} />
                   <div className="mt-1 flex items-center justify-between gap-2 text-[9px] text-white/45">
                     <span className="truncate text-cyan-100" title={item.name || outputImageNames[item.index - 1] || `#${item.index}`}>
                       {item.name || outputImageNames[item.index - 1] || `#${item.index}`}

@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
+import SmartImage from '../SmartImage';
 import {
   Archive,
   Copy,
@@ -958,7 +959,7 @@ export const CodexImageConjureNode = ({ id, data, selected, runtime = 'codex' }:
                   onClick={() => toggleGalleryRef(item.fileUrl)}
                   title={active ? '移除参考' : '加入参考'}
                 >
-                  <img src={url} alt={item.title} className="h-full w-full object-cover" />
+                  <SmartImage src={url} alt={item.title} className="h-full w-full object-cover" thumbSize={180} />
                   <span className="absolute inset-x-1 bottom-1 rounded px-1 py-0.5 text-[10px] font-bold" style={{ background: active ? accent : 'rgba(2,6,23,0.78)', color: active ? '#00111a' : '#fff' }}>
                     {active ? '移除参考' : '加入参考'}
                   </span>

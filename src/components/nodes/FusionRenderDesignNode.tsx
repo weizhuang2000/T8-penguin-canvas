@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
+import SmartImage from '../SmartImage';
 import { Image as ImageIcon, Loader2, Play, Sparkles } from 'lucide-react';
 import { EXHIBITION_IMAGE_HANDLE_COLOR } from '../../config/portTypes';
 import { IMAGE_MODELS } from '../../providers/models';
@@ -133,8 +134,8 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
       <section data-exhibition-compact-section="inputs" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
         <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} />参考素材</div>
         <div className="grid grid-cols-2 gap-2">
-          <div className="rounded border border-white/10 bg-black/20 p-1.5"><div className="mb-1 text-[9px] text-white/45">空间参考图（可选、单图排他）</div>{spaceReferenceImage ? <img src={spaceReferenceImage} className="h-24 w-full rounded object-contain" /> : <div className="flex h-24 items-center justify-center rounded border border-dashed border-white/15 text-[10px] text-white/30">等待连接</div>}</div>
-          <div className="rounded border border-white/10 bg-black/20 p-1.5"><div className="mb-1 text-[9px] text-white/45">展项效果图（{exhibitImages.length}）</div><div className="grid h-24 grid-cols-3 gap-1 overflow-y-auto">{exhibitImages.map((item) => <img key={item.id + item.url} src={item.url} className="h-10 w-full rounded object-cover" />)}</div></div>
+          <div className="rounded border border-white/10 bg-black/20 p-1.5"><div className="mb-1 text-[9px] text-white/45">空间参考图（可选、单图排他）</div>{spaceReferenceImage ? <SmartImage src={spaceReferenceImage} alt="空间参考" className="h-24 w-full rounded object-contain" thumbSize={360} /> : <div className="flex h-24 items-center justify-center rounded border border-dashed border-white/15 text-[10px] text-white/30">等待连接</div>}</div>
+          <div className="rounded border border-white/10 bg-black/20 p-1.5"><div className="mb-1 text-[9px] text-white/45">展项效果图（{exhibitImages.length}）</div><div className="grid h-24 grid-cols-3 gap-1 overflow-y-auto">{exhibitImages.map((item) => <SmartImage key={item.id + item.url} src={item.url} alt="展项效果" className="h-10 w-full rounded object-cover" thumbSize={180} />)}</div></div>
         </div>
       </section>
       <section data-exhibition-compact-section="view" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
@@ -166,7 +167,7 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
         </div>
       </section>
       {(d.progress || d.error) && <section data-exhibition-compact-section="status" data-exhibition-compact-item="main" className="space-y-1 rounded border border-cyan-300/20 bg-cyan-300/10 p-2">{d.progress && <div className="text-[10px] text-cyan-100">{d.progress}</div>}{d.error && <div className="text-[10px] text-rose-200">{d.error}</div>}</section>}
-      {d.imageUrl && <section data-exhibition-compact-section="result" data-exhibition-compact-item="main" className="rounded border border-white/10 bg-black/20 p-2"><img src={d.imageUrl} alt="融合效果图" className="max-h-64 w-full rounded object-contain" /></section>}
+      {d.imageUrl && <section data-exhibition-compact-section="result" data-exhibition-compact-item="main" className="rounded border border-white/10 bg-black/20 p-2"><SmartImage src={d.imageUrl} alt="融合效果图" className="max-h-64 w-full rounded object-contain" thumbSize={360} /></section>}
       <section data-exhibition-compact-section="prompt" data-exhibition-compact-item="main" className="rounded border border-white/10 bg-white/[0.03] p-2"><div className="mb-1 text-[10px] font-semibold text-cyan-100">生成约束 Prompt</div><div className="max-h-36 overflow-y-auto whitespace-pre-wrap text-[9px] leading-relaxed text-white/55">{previewPrompt}</div></section>
     </div>
   </div>;

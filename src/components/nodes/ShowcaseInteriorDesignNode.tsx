@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
+import SmartImage from '../SmartImage';
 import { EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR, EXHIBITION_IMAGE_HANDLE_COLOR } from '../../config/portTypes';
 import { Boxes, Image as ImageIcon, Layers, Loader2, MoveDiagonal2, Palette, Play, Ruler, Settings2, Trash2, X } from 'lucide-react';
 import { IMAGE_MODELS } from '../../providers/models';
@@ -533,7 +534,7 @@ function ShowcaseManualLayoutModal({
                       }}
                       onPointerDown={(event) => startDrag(event, item, 'move')}
                     >
-                      <img src={item.url} alt="" className="h-full w-full object-fill" draggable={false} />
+                      <SmartImage src={item.url} alt="" className="h-full w-full object-fill" draggable={false} thumbSize={180} />
                       <div className="pointer-events-none absolute left-0 top-0 bg-slate-950/75 px-1.5 py-0.5 text-[10px] font-semibold text-white">{item.label}</div>
                       {selected && (
                         <button
@@ -1093,7 +1094,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
             <div className="space-y-1.5">
               {exhibitItems.map((item, index) => (
                 <div key={item.url} className="grid grid-cols-[52px_minmax(0,1fr)_84px_84px_88px] items-center gap-2 rounded border border-white/10 bg-black/15 p-1.5">
-                  <img src={item.url} alt="" className="h-12 w-12 rounded border border-white/10 object-cover" draggable={false} />
+                  <SmartImage src={item.url} alt="" className="h-12 w-12 rounded border border-white/10 object-cover" draggable={false} thumbSize={180} />
                   <div className="min-w-0">
                     <div className="truncate text-[10px] font-semibold text-white/75">{index + 1}. {item.label}</div>
                     <div className="truncate text-[9px] text-white/35">{item.url}</div>
@@ -1174,7 +1175,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
           <textarea className={`${FIELD} min-h-[56px] resize-y`} value={d.colorMaterial || ''} disabled={isReadonly || busy} placeholder="手动色彩与材质补充" onChange={(event) => update({ colorMaterial: event.target.value, colorMaterialPreset: '' })} />
           {colorMaterialReferenceImage ? (
             <div className="rounded border border-white/10 bg-black/15 p-2">
-              <img src={colorMaterialReferenceImage} alt="" className="h-24 w-full rounded border border-white/10 object-contain" draggable={false} />
+              <SmartImage src={colorMaterialReferenceImage} alt="" className="h-24 w-full rounded border border-white/10 object-contain" draggable={false} thumbSize={360} />
               <textarea className={`${FIELD} mt-1 min-h-[42px] resize-y`} value={d.colorMaterialReferenceTone || ''} disabled={isReadonly || busy} placeholder="可手动填写参考图主色调 / 材质特征" onChange={(event) => update({ colorMaterialReferenceTone: event.target.value })} />
             </div>
           ) : (
@@ -1278,7 +1279,7 @@ const ShowcaseInteriorDesignNode = ({ id, data, selected }: NodeProps) => {
           </div>
           {d.progress && <div className="text-[10px] text-cyan-100">{d.progress}</div>}
           {d.error && <div className="rounded border border-rose-400/20 bg-rose-500/10 px-2 py-1.5 text-[10px] text-rose-100">{d.error}</div>}
-          {d.imageUrl && <img src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} />}
+          {d.imageUrl && <SmartImage src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} thumbSize={360} />}
         </section>
 
         <section data-exhibition-compact-section="result" data-exhibition-compact-item="main" className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">

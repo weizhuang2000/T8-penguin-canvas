@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
+import SmartImage from '../SmartImage';
 import { Brain, FileText, Image as ImageIcon, Landmark, Loader2, Pencil, Play, Upload } from 'lucide-react';
 import { EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
@@ -717,7 +718,7 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
           <PromptTextarea data-exhibition-compact-item="manual-input" title="扩大编辑" className={`${FIELD} min-h-[48px] resize-y`} value={d.manualMaterial || ''} disabled={isReadonly || busy} readOnly={isReadonly || busy} placeholder="手动材质/工艺补充，例如：局部内发光、金属蚀刻、仿石肌理、背板安装方式" onValueChange={(value) => update({ manualMaterial: value })} />
           {patternReferenceImage ? (
             <div data-exhibition-compact-item="reference" className="rounded border border-white/10 bg-black/15 p-2">
-              <img src={patternReferenceImage} alt="" className="h-28 w-full rounded border border-white/10 object-contain" draggable={false} />
+              <SmartImage src={patternReferenceImage} alt="" className="h-28 w-full rounded border border-white/10 object-contain" draggable={false} thumbSize={360} />
               <div className="mt-1 text-[10px] leading-relaxed text-cyan-100/75">参考图案仅用于轮廓、剪影、外形节奏和构图，不复制细节、色彩或材质。</div>
             </div>
           ) : <div data-exhibition-compact-item="reference" className="rounded border border-dashed border-white/15 p-2 text-center text-[10px] text-white/35">可连接参考图案，为雕塑或浮雕提供大致轮廓。</div>}
@@ -727,7 +728,7 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
               <div className="grid grid-cols-4 gap-1.5">
                 {peoplePropsReferenceImages.slice(0, 8).map((url, index) => (
                   <div key={url} className="relative">
-                    <img src={url} alt="" className="h-16 w-full rounded border border-white/10 object-cover" draggable={false} />
+                    <SmartImage src={url} alt="" className="h-16 w-full rounded border border-white/10 object-cover" draggable={false} thumbSize={180} />
                     <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[9px] text-cyan-100">@img{peoplePropsOffset + index + 1}</span>
                   </div>
                 ))}
@@ -812,7 +813,7 @@ const SculptureReliefDesignNode = ({ id, data, selected }: NodeProps) => {
             </label>
           </div>
           {d.progress && <div data-exhibition-compact-item="progress" className="text-[10px] text-cyan-100">{d.progress}</div>}
-          {d.imageUrl && <img data-exhibition-compact-item="preview" src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} />}
+          {d.imageUrl && <SmartImage data-exhibition-compact-item="preview" src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} thumbSize={360} />}
         </section>
 
         <section data-exhibition-compact-section="prompt" data-exhibition-compact-item="prompt-preview" className="rounded border border-white/10 bg-black/20 p-2">

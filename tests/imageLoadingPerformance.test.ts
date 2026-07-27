@@ -26,6 +26,8 @@ test('local canvas image previews use cached backend thumbnails', () => {
   const thumbnailCache = read('../backend/src/utils/thumbnailCache.js');
   assert.match(filesRoute, /stableThumbnailCacheFile/);
   assert.match(filesRoute, /ensureThumbnailForSource/);
+  assert.match(filesRoute, /X-T8-Thumbnail-Fallback/);
+  assert.match(filesRoute, /scheduleRemoteThumbnailUpgrade/);
   assert.match(thumbnailCache, /T8PC_THUMBNAIL_CONCURRENCY \|\| '4'/);
   assert.match(thumbnailCache, /effort:\s*2/);
   assert.match(thumbnailCache, /output:/);
@@ -43,8 +45,13 @@ test('historical canvases restore their viewport before online refresh and reuse
 
   assert.match(canvas, /normalizeRememberedViewport\(cachedData\.viewport\)/);
   assert.match(canvas, /setViewport\(cachedViewport, \{ duration: 0 \}\)/);
+  assert.match(canvas, /normalizePersistedMediaUrls\(persisted\.data\)/);
+  assert.match(canvas, /onlyRenderVisibleElements=\{isReadonlyCanvas \|\| \(isForeignCanvas && !isRunning\)\}/);
+  assert.match(canvas, /window\.requestAnimationFrame\(\(\) => window\.requestAnimationFrame/);
   assert.match(server, /IMMUTABLE_PRIVATE_MEDIA_CACHE = 'private, max-age=31536000, immutable'/);
   assert.match(outputManager, /IMMUTABLE_PRIVATE_OUTPUT_CACHE = 'private, max-age=31536000, immutable'/);
+  assert.match(outputManager, /materializeInflight/);
+  assert.match(outputManager, /T8_OUTPUT_STORAGE_DOWNLOAD_CONCURRENCY/);
   assert.match(storageClient, /response\.status === 200 \|\| response\.status === 206/);
   assert.match(storageClient, /'private, max-age=31536000, immutable'/);
   assert.match(webdav, /response\.status === 200 \|\| response\.status === 206/);

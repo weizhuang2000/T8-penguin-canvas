@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
+import SmartImage from '../SmartImage';
 import { AlertCircle, GitCompare, Loader2, Sparkles } from 'lucide-react';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
@@ -187,7 +188,7 @@ const ImageCompareNode = (p: NodeProps) => {
       return (
         <div className="space-y-2">
           <div className="aspect-video rounded-lg overflow-hidden bg-[var(--t8-bg-panel-muted)] border border-[var(--t8-border)]">
-            <img src={previewUrl} alt={previewLabel} className="w-full h-full object-contain" draggable={false} />
+            <SmartImage src={previewUrl} alt={previewLabel} className="w-full h-full object-contain" draggable={false} thumbSize={360} />
           </div>
           <div className="text-center text-xs text-[var(--t8-text-dim)]">继续连接{missingLabel}图像</div>
         </div>

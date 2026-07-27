@@ -1,4 +1,5 @@
 import { Handle, Position, useNodeConnections, useNodesData, useReactFlow, type Node, type NodeProps } from '@xyflow/react';
+import SmartImage from '../SmartImage';
 import {
   BookOpen,
   ChevronLeft,
@@ -896,7 +897,7 @@ function ArtistStyleMasterNode({ id, data, selected }: NodeProps) {
 
       <section className="artist-style-master-section nodrag nopan">
         <div className="artist-style-master-selected">
-          <img src={selectedStyle?.thumbnailUrl || selectedStyle?.imageUrl} alt={selectedStyle?.name || '艺术风格'} />
+          {selectedStyle ? <SmartImage src={selectedStyle.thumbnailUrl || selectedStyle.imageUrl} alt={selectedStyle.name || '艺术风格'} thumbSize={180} /> : <div />}
           <div>
             <strong>{selectedStyle?.chineseName || '请选择风格'}</strong>
             <span>{selectedStyle?.name || 'No style selected'}</span>
@@ -913,11 +914,11 @@ function ArtistStyleMasterNode({ id, data, selected }: NodeProps) {
         </div>
         <div className="artist-style-master-redraw-grid">
           <div className="artist-style-master-redraw-slot">
-            {originalImage ? <img src={originalImage} alt="原始图像" /> : <div>连接原始图像</div>}
+            {originalImage ? <SmartImage src={originalImage} alt="原始图像" thumbSize={360} /> : <div>连接原始图像</div>}
             <span>原始图像</span>
           </div>
           <div className="artist-style-master-redraw-slot">
-            {selectedStyle ? <img src={selectedStyle.thumbnailUrl || selectedStyle.imageUrl} alt="艺术风格参考" /> : <div>选择风格</div>}
+            {selectedStyle ? <SmartImage src={selectedStyle.thumbnailUrl || selectedStyle.imageUrl} alt="艺术风格参考" thumbSize={180} /> : <div>选择风格</div>}
             <span>艺术风格</span>
           </div>
         </div>
@@ -937,7 +938,7 @@ function ArtistStyleMasterNode({ id, data, selected }: NodeProps) {
         </small>
         {d.error ? <div className="artist-style-master-error">{d.error}</div> : null}
         {d.progress ? <div className="artist-style-master-status">{d.progress}</div> : null}
-        {d.imageUrl ? <img className="artist-style-master-redraw-result" src={d.imageUrl} alt="艺术风格重绘结果" draggable={false} /> : null}
+        {d.imageUrl ? <SmartImage className="artist-style-master-redraw-result" src={d.imageUrl} alt="艺术风格重绘结果" draggable={false} thumbSize={360} /> : null}
       </section>
 
       <section className="artist-style-master-section nodrag nopan">
@@ -1057,7 +1058,7 @@ function ArtistStyleMasterNode({ id, data, selected }: NodeProps) {
         <div className="artist-style-master-mini-grid" onWheelCapture={stopCanvasWheel}>
           {filteredStyles.map((style) => (
             <button key={style.id} type="button" className={selectedStyle?.id === style.id ? 'active' : ''} onClick={() => setSelectedId(style.id)}>
-              <img src={style.thumbnailUrl || style.imageUrl} alt={style.chineseName} />
+              <SmartImage src={style.thumbnailUrl || style.imageUrl} alt={style.chineseName} thumbSize={180} />
               <span>{style.chineseName}</span>
             </button>
           ))}

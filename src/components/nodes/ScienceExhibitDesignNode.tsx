@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
+import SmartImage from '../SmartImage';
 import { Atom, Brain, FileText, Image as ImageIcon, Loader2, Pencil, Play, Upload } from 'lucide-react';
 import { EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
@@ -1201,15 +1202,15 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
           <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} /> 参考图</div>
           <div data-exhibition-compact-item="finished-render-reference" className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
             <div className="mb-1 text-[10px] text-cyan-100">成品展项效果图 · {finishedRenderReferenceImages.length}</div>
-            {finishedRenderReferenceImages.length ? <div className="grid grid-cols-4 gap-1.5">{finishedRenderReferenceImages.slice(0, 4).map((url) => <img key={url} src={url} alt="" className="h-16 w-full rounded border border-cyan-200/20 object-cover" draggable={false} />)}</div> : <div className="rounded border border-dashed border-cyan-200/20 p-2 text-center text-[10px] text-cyan-100/55">接入后跳过 LLM 提炼和主效果图，只生成爆炸图、原理图、三视图、参数表等配套图纸。</div>}
+            {finishedRenderReferenceImages.length ? <div className="grid grid-cols-4 gap-1.5">{finishedRenderReferenceImages.slice(0, 4).map((url) => <SmartImage key={url} src={url} alt="" className="h-16 w-full rounded border border-cyan-200/20 object-cover" draggable={false} thumbSize={180} />)}</div> : <div className="rounded border border-dashed border-cyan-200/20 p-2 text-center text-[10px] text-cyan-100/55">接入后跳过 LLM 提炼和主效果图，只生成爆炸图、原理图、三视图、参数表等配套图纸。</div>}
           </div>
           <div data-exhibition-compact-item="space-reference" className="rounded border border-white/10 bg-black/15 p-2">
             <div className="mb-1 text-[10px] text-white/55">整体空间/风格参考 · {spaceReferenceImages.length}</div>
-            {spaceReferenceImages.length ? <div className="grid grid-cols-4 gap-1.5">{spaceReferenceImages.slice(0, 8).map((url) => <img key={url} src={url} alt="" className="h-16 w-full rounded border border-white/10 object-cover" draggable={false} />)}</div> : <div className="rounded border border-dashed border-white/15 p-2 text-center text-[10px] text-white/35">可连接空间、风格或展厅环境参考图。</div>}
+            {spaceReferenceImages.length ? <div className="grid grid-cols-4 gap-1.5">{spaceReferenceImages.slice(0, 8).map((url) => <SmartImage key={url} src={url} alt="" className="h-16 w-full rounded border border-white/10 object-cover" draggable={false} thumbSize={180} />)}</div> : <div className="rounded border border-dashed border-white/15 p-2 text-center text-[10px] text-white/35">可连接空间、风格或展厅环境参考图。</div>}
           </div>
           <div data-exhibition-compact-item="device-reference" className="space-y-2 rounded border border-white/10 bg-black/15 p-2">
             <div className="text-[10px] text-white/55">装置/结构参考 · {deviceReferenceImages.length}</div>
-            {deviceReferenceImages.length ? <div className="grid grid-cols-4 gap-1.5">{deviceReferenceImages.slice(0, 8).map((url, index) => <div key={url} className="relative"><img src={url} alt="" className="h-16 w-full rounded border border-white/10 object-cover" draggable={false} /><span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[9px] text-cyan-100">@img{spaceReferenceImages.length + index + 1}</span></div>)}</div> : <div className="rounded border border-dashed border-white/15 p-2 text-center text-[10px] text-white/35">可连接机械结构、设备、传感器或屏幕参考图。</div>}
+            {deviceReferenceImages.length ? <div className="grid grid-cols-4 gap-1.5">{deviceReferenceImages.slice(0, 8).map((url, index) => <div key={url} className="relative"><SmartImage src={url} alt="" className="h-16 w-full rounded border border-white/10 object-cover" draggable={false} thumbSize={180} /><span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[9px] text-cyan-100">@img{spaceReferenceImages.length + index + 1}</span></div>)}</div> : <div className="rounded border border-dashed border-white/15 p-2 text-center text-[10px] text-white/35">可连接机械结构、设备、传感器或屏幕参考图。</div>}
             <MentionPromptInput
               title="补充要求 / @ 装置参考"
               value={supplement}
@@ -1287,7 +1288,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
               {results.map((item) => (
                 <div key={`${item.kind}:${item.imageUrl}`} className="rounded border border-white/10 bg-black/20 p-1.5">
                   <div className="mb-1 truncate text-[10px] text-cyan-100">{item.name}</div>
-                  <img src={item.imageUrl} alt={item.name} className="h-32 w-full rounded object-cover" draggable={false} />
+                  <SmartImage src={item.imageUrl} alt={item.name} className="h-32 w-full rounded object-cover" draggable={false} thumbSize={360} />
                 </div>
               ))}
             </div>

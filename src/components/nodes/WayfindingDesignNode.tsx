@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
+import SmartImage from '../SmartImage';
 import { Brain, FileText, Image as ImageIcon, Loader2, MapPinned, Play, Settings, Upload } from 'lucide-react';
 import { EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
@@ -897,11 +898,11 @@ const WayfindingDesignNode = ({ id, data, selected }: NodeProps) => {
         <section data-exhibition-compact-section="references" className="grid grid-cols-2 gap-2 rounded border border-white/10 bg-white/[0.035] p-2">
           <div data-exhibition-compact-item="space-reference" className="space-y-1">
             <div className="text-[10px] text-white/55">空间/材质参考 · {spaceReferenceImages.length}</div>
-            {spaceReferenceImages.length ? <div className="grid grid-cols-4 gap-1">{spaceReferenceImages.slice(0, 8).map((url) => <img key={url} src={url} alt="" className="h-14 w-full rounded border border-white/10 object-cover" draggable={false} />)}</div> : <div className="rounded border border-dashed border-white/15 p-2 text-center text-[10px] text-white/35">可连接空间或材质参考图</div>}
+            {spaceReferenceImages.length ? <div className="grid grid-cols-4 gap-1">{spaceReferenceImages.slice(0, 8).map((url) => <SmartImage key={url} src={url} alt="" className="h-14 w-full rounded border border-white/10 object-cover" draggable={false} thumbSize={180} />)}</div> : <div className="rounded border border-dashed border-white/15 p-2 text-center text-[10px] text-white/35">可连接空间或材质参考图</div>}
           </div>
           <div data-exhibition-compact-item="graphic-reference" className="space-y-1">
             <div className="text-[10px] text-white/55">标识图形参考 · {graphicReferenceImages.length}</div>
-            {graphicReferenceImages.length ? <div className="grid grid-cols-4 gap-1">{graphicReferenceImages.slice(0, 8).map((url) => <img key={url} src={url} alt="" className="h-14 w-full rounded border border-white/10 object-cover" draggable={false} />)}</div> : <div className="rounded border border-dashed border-white/15 p-2 text-center text-[10px] text-white/35">可连接图标/箭头/视觉参考图</div>}
+            {graphicReferenceImages.length ? <div className="grid grid-cols-4 gap-1">{graphicReferenceImages.slice(0, 8).map((url) => <SmartImage key={url} src={url} alt="" className="h-14 w-full rounded border border-white/10 object-cover" draggable={false} thumbSize={180} />)}</div> : <div className="rounded border border-dashed border-white/15 p-2 text-center text-[10px] text-white/35">可连接图标/箭头/视觉参考图</div>}
           </div>
         </section>
 
@@ -967,7 +968,7 @@ const WayfindingDesignNode = ({ id, data, selected }: NodeProps) => {
             </label>
           </div>
           {d.progress && <div data-exhibition-compact-item="progress" className="text-[10px] text-cyan-100">{d.progress}</div>}
-          {d.imageUrl && <img data-exhibition-compact-item="preview" src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} />}
+          {d.imageUrl && <SmartImage data-exhibition-compact-item="preview" src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} thumbSize={360} />}
         </section>
 
         <section data-exhibition-compact-section="prompt" data-exhibition-compact-item="prompt-preview" className="rounded border border-white/10 bg-black/20 p-2">

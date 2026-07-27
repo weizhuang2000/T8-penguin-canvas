@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
+import SmartImage from '../SmartImage';
 import { Image as ImageIcon, Loader2, Maximize2, Play, Settings2, Theater, X } from 'lucide-react';
 import { EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR, EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import { IMAGE_MODELS } from '../../providers/models';
@@ -1465,7 +1466,7 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
           <div data-exhibition-compact-item="outputs" className="grid grid-cols-3 gap-2">
             {results.map((item) => (
               <div key={`${item.kind}-${item.imageUrl}`} className="rounded border border-white/10 bg-black/20 p-1">
-                <img src={item.imageUrl} className="h-24 w-full rounded object-cover" />
+                <SmartImage src={item.imageUrl} alt="影院设计结果" className="h-24 w-full rounded object-cover" thumbSize={360} />
                 <div className="mt-1 truncate text-center text-[10px] text-cyan-100" title={item.name}>{item.name}</div>
               </div>
             ))}

@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
+import SmartImage from '../SmartImage';
 import { Boxes, Image as ImageIcon, Layers, Loader2, Play, RotateCw, Trash2, X } from 'lucide-react';
 import { EXHIBITION_IMAGE_HANDLE_COLOR } from '../../config/portTypes';
 import { IMAGE_MODELS } from '../../providers/models';
@@ -251,7 +252,7 @@ export function ReverseIsometricLayoutModal({ open, planUrl, allowBlankStage = f
               <div className="text-[9px] text-white/40">{planUrl ? '尺寸用于约束真实空间尺度，底图比例保持不变。' : '空白矩形按展厅长宽比例显示。'}</div>
             </div>}
             <div className="text-[11px] font-semibold text-cyan-100">图层（{draft.length}）</div>
-            {draft.map((item) => <button key={item.id} className={`flex w-full items-center gap-2 rounded border p-1.5 text-left ${item.id === selectedId ? 'border-cyan-300/60 bg-cyan-300/10' : 'border-white/10 bg-white/[0.03]'}`} onClick={() => setSelectedId(item.id)}><img src={item.url} className="h-9 w-9 rounded object-cover" /><span className="min-w-0 flex-1 truncate text-[10px]">{item.label}</span></button>)}
+            {draft.map((item) => <button key={item.id} className={`flex w-full items-center gap-2 rounded border p-1.5 text-left ${item.id === selectedId ? 'border-cyan-300/60 bg-cyan-300/10' : 'border-white/10 bg-white/[0.03]'}`} onClick={() => setSelectedId(item.id)}><SmartImage src={item.url} alt={item.label} className="h-9 w-9 rounded object-cover" thumbSize={180} /><span className="min-w-0 flex-1 truncate text-[10px]">{item.label}</span></button>)}
             {selected && <div className="space-y-2 rounded border border-white/10 bg-black/20 p-2">
               <label className="block text-[10px] text-white/55">旋转角度<input className={FIELD} type="number" value={selected.rotationDeg} disabled={disabled} onChange={(e) => patchSelected({ rotationDeg: Number(e.target.value) })} /></label>
               <label className="block text-[10px] text-white/55">层级<input className={FIELD} type="number" min={0} value={selected.zIndex} disabled={disabled} onChange={(e) => patchSelected({ zIndex: Math.max(0, Math.round(Number(e.target.value) || 0)) })} /></label>
@@ -401,8 +402,8 @@ const ReverseIsometricDesignNode = ({ id, data, selected }: NodeProps) => {
       <section data-exhibition-compact-section="inputs" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
         <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} />输入与排版</div>
         <div className="grid grid-cols-2 gap-2">
-          <div className="rounded border border-white/10 bg-black/20 p-1.5"><div className="mb-1 text-[9px] text-white/45">平面布局（单图排他）</div>{planImage ? <img src={planImage} className="h-24 w-full rounded object-contain" /> : <div className="flex h-24 items-center justify-center text-[10px] text-white/30">等待连接</div>}</div>
-          <div className="rounded border border-white/10 bg-black/20 p-1.5"><div className="mb-1 text-[9px] text-white/45">展项效果图（{exhibitImages.length}）</div><div className="grid h-24 grid-cols-3 gap-1 overflow-y-auto">{exhibitImages.map((item) => <img key={item.id + item.url} src={item.url} className="h-10 w-full rounded object-cover" />)}</div></div>
+          <div className="rounded border border-white/10 bg-black/20 p-1.5"><div className="mb-1 text-[9px] text-white/45">平面布局（单图排他）</div>{planImage ? <SmartImage src={planImage} alt="平面布局" className="h-24 w-full rounded object-contain" thumbSize={360} /> : <div className="flex h-24 items-center justify-center text-[10px] text-white/30">等待连接</div>}</div>
+          <div className="rounded border border-white/10 bg-black/20 p-1.5"><div className="mb-1 text-[9px] text-white/45">展项效果图（{exhibitImages.length}）</div><div className="grid h-24 grid-cols-3 gap-1 overflow-y-auto">{exhibitImages.map((item) => <SmartImage key={item.id + item.url} src={item.url} alt={item.label} className="h-10 w-full rounded object-cover" thumbSize={180} />)}</div></div>
         </div>
         <button className={`${BUTTON} w-full border-cyan-300/30 bg-cyan-300/10 text-cyan-100`} disabled={isReadonly || busy || !planImage || !exhibitImages.length} onClick={() => setLayoutOpen(true)}><Layers size={13} />打开手动排版</button>
       </section>
@@ -422,7 +423,7 @@ const ReverseIsometricDesignNode = ({ id, data, selected }: NodeProps) => {
         </div>
       </section>
       {(d.progress || d.error) && <section data-exhibition-compact-section="status" data-exhibition-compact-item="main" className="space-y-1 rounded border border-cyan-300/20 bg-cyan-300/10 p-2">{d.progress && <div className="text-[10px] text-cyan-100">{d.progress}</div>}{d.error && <div className="text-[10px] text-rose-200">{d.error}</div>}</section>}
-      {d.imageUrl && <section data-exhibition-compact-section="result" data-exhibition-compact-item="main" className="rounded border border-white/10 bg-black/20 p-2"><img src={d.imageUrl} alt="展陈轴侧图" className="max-h-64 w-full rounded object-contain" /></section>}
+      {d.imageUrl && <section data-exhibition-compact-section="result" data-exhibition-compact-item="main" className="rounded border border-white/10 bg-black/20 p-2"><SmartImage src={d.imageUrl} alt="展陈轴侧图" className="max-h-64 w-full rounded object-contain" thumbSize={360} /></section>}
       <section data-exhibition-compact-section="prompt" data-exhibition-compact-item="main" className="rounded border border-white/10 bg-white/[0.03] p-2"><div className="mb-1 text-[10px] font-semibold text-cyan-100">生成约束 Prompt</div><div className="max-h-36 overflow-y-auto whitespace-pre-wrap text-[9px] leading-relaxed text-white/55">{previewPrompt}</div></section>
     </div>
     <ReverseIsometricLayoutModal open={layoutOpen} planUrl={planImage} items={layoutItems} disabled={isReadonly || busy} onChange={persistLayoutItems} onClose={() => setLayoutOpen(false)} onReset={() => update({ manualLayoutItems: normalizeReverseIsometricLayoutItems([], exhibitImages), excludedLayoutUrls: [] })} />

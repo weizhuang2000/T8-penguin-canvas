@@ -319,6 +319,17 @@ function spawnOpenFolder(targetDir) {
   });
 }
 
+function scheduleRemoteThumbnailUpgrade(url, outputKey, storageEntry, size) {
+  void materializeOutputUrl(url)
+    .then((sourcePath) => {
+      if (!sourcePath) return null;
+      return ensureThumbnailForSource(sourcePath, { size, outputKey, storageEntry });
+    })
+    .catch((error) => {
+      console.warn(`[thumbnail] 后台升级远端缩略图失败 ${outputKey}:`, error?.message || error);
+    });
+}
+
 // GET /api/files/thumbnail?url=/files/input/x.png&size=360
 // 用于画布内预览：只为本地 input/output 图片生成轻量 webp 缩略图。
 router.get('/thumbnail', async (req, res) => {
@@ -338,6 +349,22 @@ router.get('/thumbnail', async (req, res) => {
       res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
       res.type('image/webp');
       return res.sendFile(stableRemoteTarget);
+    }
+    if (stableRemoteTarget && size > 360) {
+      const fallbackSizes = size > 720 ? [720, 360] : [360];
+      const fallback = fallbackSizes
+        .map((fallbackSize) => ({
+          size: fallbackSize,
+          file: stableThumbnailCacheFile({ outputKey, storageEntry: outputEntry, size: fallbackSize }),
+        }))
+        .find((item) => fs.existsSync(item.file));
+      if (fallback) {
+        scheduleRemoteThumbnailUpgrade(url, outputKey, outputEntry, size);
+        res.setHeader('Cache-Control', 'private, max-age=30, stale-while-revalidate=86400');
+        res.setHeader('X-T8-Thumbnail-Fallback', String(fallback.size));
+        res.type('image/webp');
+        return res.sendFile(fallback.file);
+      }
     }
     if (sourcePath && !fs.existsSync(sourcePath) && (url.startsWith('/files/output/') || url.startsWith('/output/'))) {
       sourcePath = await materializeOutputUrl(url).catch(() => '');

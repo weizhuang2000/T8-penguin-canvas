@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
+import SmartImage from '../SmartImage';
 import { EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR, EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import { ArrowDown, ArrowUp, Brain, FileText, Image as ImageIcon, Loader2, Palette, Play, Upload } from 'lucide-react';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
@@ -839,7 +840,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
           <textarea data-exhibition-compact-item="manual-input" className={`${FIELD} min-h-[50px] resize-y`} value={d.colorMaterial || ''} disabled={isReadonly || busy || referenceOverridesMaterialAndFont} placeholder="手动色彩与材质补充（优先级最低）" onChange={(e) => update({ colorMaterial: e.target.value, colorMaterialPreset: '' })} />
           {colorMaterialReferenceImage ? (
             <div data-exhibition-compact-item="reference" className="rounded border border-white/10 bg-black/15 p-2">
-              <img src={colorMaterialReferenceImage} alt="" className="h-24 w-full rounded border border-white/10 object-contain" draggable={false} />
+              <SmartImage src={colorMaterialReferenceImage} alt="" className="h-24 w-full rounded border border-white/10 object-contain" draggable={false} thumbSize={360} />
               <textarea className={`${FIELD} mt-1 min-h-[42px] resize-y`} value={colorMaterialReferenceTone} disabled={isReadonly || busy} onChange={(e) => update({ colorMaterialReferenceTone: e.target.value, colorMaterialReferenceToneSource: colorMaterialReferenceImage, colorMaterialReferenceToneStatus: '' })} />
             </div>
           ) : <div data-exhibition-compact-item="reference" className="rounded border border-dashed border-white/15 p-2 text-center text-[10px] text-white/35">可连接色彩与材质参考图，自动读取主色调</div>}
@@ -920,7 +921,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
             </div>
           </div>
           {d.progress && <div data-exhibition-compact-item="progress" className="text-[10px] text-cyan-100">{d.progress}</div>}
-          {d.imageUrl && <img data-exhibition-compact-item="preview" src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} />}
+          {d.imageUrl && <SmartImage data-exhibition-compact-item="preview" src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} thumbSize={360} />}
         </section>
       </div>
 

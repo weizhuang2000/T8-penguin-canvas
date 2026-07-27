@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
+import SmartImage from '../SmartImage';
 import { EXHIBITION_IMAGE_HANDLE_COLOR } from '../../config/portTypes';
 import { Image as ImageIcon, Play, SunMedium, ThermometerSun } from 'lucide-react';
 import { IMAGE_MODELS } from '../../providers/models';
@@ -128,7 +129,7 @@ function ImageSlot({ url }: { url: string }) {
     <div className="rounded border border-white/10 bg-black/15 p-2">
       <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} /> 输入图像</div>
       {url ? (
-        <img src={url} alt="" className="h-40 w-full rounded border border-white/10 object-contain" draggable={false} />
+        <SmartImage src={url} alt="" className="h-40 w-full rounded border border-white/10 object-contain" draggable={false} thumbSize={360} />
       ) : (
         <div className="flex h-40 items-center justify-center rounded border border-dashed border-white/15 text-[10px] text-white/35">连接上游图像输入</div>
       )}
@@ -561,7 +562,7 @@ const ExhibitionLightingHeatmapNode = ({ id, data, selected }: NodeProps) => {
             </label>
           </div>
           {d.progress && <div data-exhibition-compact-item="progress" className="text-[10px] text-cyan-100">{d.progress}</div>}
-          {d.imageUrl && <img data-exhibition-compact-item="preview" src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} />}
+          {d.imageUrl && <SmartImage data-exhibition-compact-item="preview" src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} thumbSize={360} />}
         </section>
       </div>
     </div>

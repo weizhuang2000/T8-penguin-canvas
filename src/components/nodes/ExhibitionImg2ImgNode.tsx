@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Handle, Position, useNodeConnections, useNodesData, useReactFlow, type NodeProps } from '@xyflow/react';
+import SmartImage from '../SmartImage';
 import { EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR, EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import {
   ArrowDown,
@@ -1053,7 +1054,7 @@ function ImageSlot({
         </div>
         {url ? (
           <div className="flex items-center gap-2">
-            <img src={url} alt="" className="h-14 w-20 rounded border border-white/10 object-cover" draggable={false} />
+            <SmartImage src={url} alt="" className="h-14 w-20 rounded border border-white/10 object-cover" draggable={false} thumbSize={180} />
             <div className="min-w-0 flex-1 text-[10px] text-white/45">
               <div className="truncate">{subtitle}</div>
               <div className="mt-1 truncate" title={url}>{url.split('/').pop() || url}</div>
@@ -1649,7 +1650,7 @@ function PlanCameraModalEditor({
       {camera ? (
         <div className="rounded border border-white/10 bg-black/20 p-2">
           {confirmed && compositeImage ? (
-            <img src={compositeImage} alt="" className="max-h-32 w-full rounded object-contain" draggable={false} />
+            <SmartImage src={compositeImage} alt="" className="max-h-32 w-full rounded object-contain" draggable={false} thumbSize={360} />
           ) : (
             <div className="rounded border border-dashed border-red-300/25 bg-red-400/10 px-2 py-3 text-[10px] leading-snug text-red-50/70">
               相机视角尚未确认，请在弹窗中调整平面图裁切、相机位置、朝向和取景角。
@@ -3459,7 +3460,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
             <div className="mt-2 grid max-h-64 grid-cols-3 gap-1.5 overflow-y-auto">
               {exhibitReferenceItems.map((item, index) => (
                 <div key={item.url} className="min-w-0 rounded border border-white/10 bg-black/15 p-1.5">
-                  <img src={item.url} alt="" className="h-16 w-full rounded border border-white/10 object-cover" draggable={false} />
+                  <SmartImage src={item.url} alt="" className="h-16 w-full rounded border border-white/10 object-cover" draggable={false} thumbSize={180} />
                   <div className="mt-1 truncate text-[9px] text-white/45" title={item.url}>
                     {item.label || `展品参考图 ${index + 1}`}
                   </div>
@@ -3993,11 +3994,12 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
             <div className={outputImageUrls.length > 1 ? 'grid grid-cols-2 gap-2' : ''}>
               {outputImageUrls.map((url: string, index: number) => (
                 <div key={`${url}-${index}`} className="min-w-0">
-                  <img
+                  <SmartImage
                     src={url}
                     alt=""
                     className="max-h-52 w-full rounded border border-white/10 object-contain"
                     draggable={false}
+                    thumbSize={360}
                   />
                   {outputImageNames[index] && (
                     <div className="mt-1 truncate text-center text-[10px] font-semibold text-cyan-100" title={outputImageNames[index]}>

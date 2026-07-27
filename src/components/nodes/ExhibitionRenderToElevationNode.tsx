@@ -1,5 +1,6 @@
 import { memo, useCallback, useMemo, useRef } from 'react';
 import { Handle, Position, useNodeConnections, useNodesData, type NodeProps } from '@xyflow/react';
+import SmartImage from '../SmartImage';
 import { Image as ImageIcon, Loader2, Play, RefreshCw, Square, Wand2 } from 'lucide-react';
 import { EXHIBITION_IMAGE_HANDLE_COLOR, EXHIBITION_TEXT_HANDLE_COLOR } from '../../config/portTypes';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
@@ -548,7 +549,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
           <div className="rounded border border-white/10 bg-black/15 p-2">
             <div className="mb-1 text-white/50">效果图参考</div>
             {referenceImage ? (
-              <img src={referenceImage} alt="效果图参考" className="h-24 w-full rounded object-cover" draggable={false} />
+              <SmartImage src={referenceImage} alt="效果图参考" className="h-24 w-full rounded object-cover" draggable={false} thumbSize={360} />
             ) : (
               <div className="flex h-24 items-center justify-center rounded bg-white/[0.04] text-white/35">
                 <ImageIcon size={18} />
@@ -558,7 +559,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
           <div className="rounded border border-white/10 bg-black/15 p-2">
             <div className="mb-1 text-white/50">立面形式参考图</div>
             {formReferenceImage ? (
-              <img src={formReferenceImage} alt="立面形式参考图" className="h-24 w-full rounded object-cover" draggable={false} />
+              <SmartImage src={formReferenceImage} alt="立面形式参考图" className="h-24 w-full rounded object-cover" draggable={false} thumbSize={360} />
             ) : (
               <div className="flex h-24 items-center justify-center rounded bg-white/[0.04] text-white/35">
                 <ImageIcon size={18} />
@@ -727,7 +728,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
           <div data-exhibition-compact-item="preview" className="nodrag nopan grid grid-cols-3 gap-2" data-exhibition-compact-section="result">
             {outputImageUrls.map((url: string, index: number) => (
               <div key={`${url}-${index}`} className="overflow-hidden rounded border border-white/10 bg-black/20">
-                <img src={url} alt={outputImageNames[index] || `立面${index + 1}`} className="h-24 w-full object-cover" draggable={false} />
+                <SmartImage src={url} alt={outputImageNames[index] || `立面${index + 1}`} className="h-24 w-full object-cover" draggable={false} thumbSize={360} />
                 <div className="truncate px-2 py-1 text-[10px] text-white/60">{outputImageNames[index] || `立面${index + 1}`}</div>
               </div>
             ))}

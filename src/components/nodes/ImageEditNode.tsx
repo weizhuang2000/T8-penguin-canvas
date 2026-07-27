@@ -1,5 +1,6 @@
 import { memo, useMemo, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
+import SmartImage from '../SmartImage';
 import { AlertCircle, Brush, Edit3, Image as ImageIcon, Loader2, Paintbrush, Sparkles, type LucideIcon } from 'lucide-react';
 import { PORT_COLOR } from '../../config/portTypes';
 import { generateExternalImage, queryExternalImageStatus } from '../../services/generation';
@@ -346,7 +347,7 @@ const ImageEditNode = ({ id, data, selected }: NodeProps) => {
           </div>
           <div className="flex aspect-video items-center justify-center bg-black/5">
             {sourceImage ? (
-              <img src={sourceImage} alt="原图" className="h-full w-full object-contain" draggable={false} />
+              <SmartImage src={sourceImage} alt="原图" className="h-full w-full object-contain" draggable={false} thumbSize={360} />
             ) : (
               <ImageIcon size={24} className="opacity-35" />
             )}
@@ -358,7 +359,7 @@ const ImageEditNode = ({ id, data, selected }: NodeProps) => {
           </div>
           <div className="flex aspect-video items-center justify-center bg-black/5">
             {resultUrl ? (
-              <img src={resultUrl} alt="最新结果" className="h-full w-full object-contain" draggable={false} />
+              <SmartImage src={resultUrl} alt="最新结果" className="h-full w-full object-contain" draggable={false} thumbSize={360} />
             ) : (
               <span className="px-2 text-center text-[11px]" style={{ color: 'var(--t8-text-muted)' }}>
                 暂无结果
