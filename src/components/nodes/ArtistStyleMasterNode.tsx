@@ -61,6 +61,7 @@ import {
   type ArtistStyleUserLibrary,
 } from '../../utils/artistStyleMaster';
 import { useUpdateNodeData } from './useUpdateNodeData';
+import { FhlImageModuleControls } from './FhlImageModule';
 
 const EMPTY_LIBRARY: ArtistStyleUserLibrary = { categories: [], styles: [] };
 const EMPTY_CUSTOM_DRAFT = {
@@ -990,6 +991,7 @@ function ArtistStyleMasterNode({ id, data, selected }: NodeProps) {
         <div className="artist-style-master-section-title">
           <span><ImageIcon size={14} /> 生图模型</span>
         </div>
+        <FhlImageModuleControls compact nodeId={id} data={d} update={update} busy={busy} isReadonly={isReadonly} />
         <div className="artist-style-master-model-grid">
           <label>
             <span>生图平台</span>

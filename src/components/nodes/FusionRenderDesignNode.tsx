@@ -17,6 +17,7 @@ import { logBus } from '../../stores/logs';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useUpdateNodeData } from './useUpdateNodeData';
+import { FhlImageModuleControls } from './FhlImageModule';
 import NodeHelpButton from './NodeHelpButton';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
 import { useHandleImages } from './ReverseIsometricDesignNode';
@@ -156,6 +157,7 @@ const FusionRenderDesignNode = ({ id, data, selected }: NodeProps) => {
         </div>
       </section>
       <section data-exhibition-compact-section="model" data-exhibition-compact-item="main" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+        <FhlImageModuleControls compact nodeId={id} data={d} update={update} busy={busy} isReadonly={isReadonly} referenceCount={exhibitImages.length} />
         <div className="flex items-center justify-between"><div className="text-[11px] font-semibold text-cyan-100">模型与尺寸</div><button className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy || !exhibitImages.length} onClick={() => void runGenerate()}>{busy ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}生成</button></div>
         <div className="grid grid-cols-2 gap-2">
           <label className="space-y-1"><span className="text-[10px] text-white/55">生图平台</span><select className={FIELD} value={providerValue} disabled={isReadonly || busy} onChange={(e) => { const provider = imageProviders.find((item) => item.id === e.target.value); if (e.target.value === 'zhenzhen') update({ providerSource: 'zhenzhen', providerId: '', providerModel: '' }); else if (provider) update({ providerSource: provider.protocol, providerId: provider.id, providerModel: advancedProviderModelOptions(provider, 'image')[0] || '' }); }}>{allowZhenzhenFallback && <option value="zhenzhen">内置生图平台</option>}{imageProviders.map((item) => <option key={item.id} value={item.id}>{item.label || item.id}</option>)}</select></label>

@@ -6304,5 +6304,16 @@
       "npm run type-check",
       "npm run build"
     ]
+  },
+  "exhibitionImageNodesFhlImageModule": {
+    "description": "展陈工具中其余 16 个图像生成节点复用 FHL 生图模块。启用后，原有平台和模型参数保留但生成请求统一改走 FHL Images 任务。",
+    "nodes": [
+      "artist-style-master", "exhibition-img2img", "exhibition-style-transfer", "exhibition-recolor", "exhibition-lighting-heatmap", "exhibition-creative-image", "exhibition-render-to-elevation", "sculpture-relief-design", "exhibition-wayfinding-design", "exhibition-scene-design", "science-exhibit-design", "exhibition-floorplan-layout", "showcase-interior-design", "reverse-isometric-design", "fusion-render-design", "cinema-auditorium-design"
+    ],
+    "capabilities": [
+      "每个节点提供独立 FHL 启用按钮和 2K/4K、比例、JPG/PNG 控件",
+      "接入参考图时提交 FHL 编辑，否则提交文生图",
+      "覆盖普通、异步和扩展 Provider 图像提交路径，复用原节点结果输出与下游传递"
+    ]
   }
 }

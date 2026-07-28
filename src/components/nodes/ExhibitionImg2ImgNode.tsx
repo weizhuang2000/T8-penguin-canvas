@@ -85,6 +85,7 @@ import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useThemeStore } from '../../stores/theme';
 import { useUpdateNodeData } from './useUpdateNodeData';
+import { FhlImageModuleControls } from './FhlImageModule';
 import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
 import NodeHelpButton from './NodeHelpButton';
@@ -3732,6 +3733,7 @@ const ExhibitionImg2ImgNode = ({ id, data, selected }: NodeProps) => {
         </section>
 
         <section data-exhibition-compact-section="model" className="rounded border border-white/10 bg-white/[0.035] p-2 space-y-2">
+          <FhlImageModuleControls compact nodeId={id} data={d} update={update} busy={busy} isReadonly={isReadonly} referenceCount={2} />
           <div className="text-[11px] font-semibold text-cyan-100">模型与输出</div>
           {imageAdvancedProviders.length > 0 && (
             <div className="rounded border border-white/10 bg-white/[0.03] p-2 space-y-2">

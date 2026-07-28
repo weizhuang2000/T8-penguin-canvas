@@ -66,6 +66,7 @@ import PromptTextarea from '../PromptTextarea';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
 import ScienceExhibitOptionEditorModal from './ScienceExhibitOptionEditorModal';
 import { useUpdateNodeData } from './useUpdateNodeData';
+import { FhlImageModuleControls } from './FhlImageModule';
 import { useUpstreamMaterials, type Material } from './useUpstreamMaterials';
 import MentionPromptInput from './MentionPromptInput';
 import { resolveMediaMentions, type MediaMention } from './mediaMentions';
@@ -1228,6 +1229,7 @@ const ScienceExhibitDesignNode = ({ id, data, selected }: NodeProps) => {
         </section>
 
         <section data-exhibition-compact-section="model" className="space-y-2 rounded border border-white/10 bg-white/[0.035] p-2">
+          <FhlImageModuleControls compact nodeId={id} data={d} update={update} busy={busy} isReadonly={isReadonly} />
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} /> 生图图包</div>
             <button data-exhibition-compact-item="actions" type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy} onClick={() => void runGenerate()}><Play size={13} /> 生成整套图包</button>

@@ -84,6 +84,7 @@ import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useThemeStore } from '../../stores/theme';
 import { useUpdateNodeData } from './useUpdateNodeData';
+import { FhlImageModuleControls } from './FhlImageModule';
 import ColorMaterialPresetEditorModal from './ColorMaterialPresetEditorModal';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
 import PromptConstraintPresetEditorModal from './PromptConstraintPresetEditorModal';
@@ -2792,6 +2793,7 @@ const ExhibitionCreativeImageNode = ({ id, data, selected }: NodeProps) => {
         </section>
 
         <section data-exhibition-compact-section="model" className="space-y-1.5 rounded border border-white/10 bg-black/15 p-2" data-exhibition-compact-item="actions">
+          <FhlImageModuleControls compact nodeId={id} data={d} update={update} busy={busy} isReadonly={isReadonly} />
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-semibold text-cyan-100">视角控制</span>
               <span className="min-w-0 flex-1 truncate text-[9px] text-white/40">

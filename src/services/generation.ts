@@ -3,6 +3,7 @@
  * 鎵€鏈夎姹傝蛋 /api/proxy/* (鍚庣浼氭敞鍏ュ搴?Key 骞惰浆瀛樼粨鏋?
  */
 import type { AdvancedProviderConfig } from '../types/canvas';
+import { runFhlImageRuntimeGeneration } from './fhlImageRuntime';
 
 async function parseJsonResponse<T = any>(res: Response): Promise<T> {
   const text = await res.text();
@@ -67,6 +68,8 @@ export interface GenerateImageResult {
 }
 
 export async function generateImage(req: GenerateImageRequest): Promise<GenerateImageResult> {
+  const fhl = await runFhlImageRuntimeGeneration({ prompt: req.prompt, images: req.images || (req.image ? [req.image] : []), historyContext: req.historyContext });
+  if (fhl) return { urls: fhl.urls, raw: { fhlJobId: fhl.jobId } };
   const r = await fetch('/api/proxy/image', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -120,6 +123,8 @@ export interface GenerateExternalImageResult {
 }
 
 export async function generateExternalImage(req: GenerateExternalImageRequest): Promise<GenerateExternalImageResult> {
+  const fhl = await runFhlImageRuntimeGeneration({ prompt: req.prompt || '', images: req.images, historyContext: req.historyContext });
+  if (fhl) return { imageUrls: fhl.urls, taskId: fhl.jobId, status: 'completed', code: 'completed', raw: { fhlJobId: fhl.jobId } };
   const r = await fetch('/api/proxy/external/image', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -299,6 +304,8 @@ export interface ImageSubmitResult {
 }
 
 export async function submitImageAsync(req: GenerateImageRequest): Promise<ImageSubmitResult> {
+  const fhl = await runFhlImageRuntimeGeneration({ prompt: req.prompt, images: req.images || (req.image ? [req.image] : []), historyContext: req.historyContext });
+  if (fhl) return { sync: true, taskId: fhl.jobId, urls: fhl.urls, status: 'completed', progress: '100%', raw: { fhlJobId: fhl.jobId } };
   const r = await fetch('/api/proxy/image/submit', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

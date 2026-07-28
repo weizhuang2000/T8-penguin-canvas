@@ -32,6 +32,7 @@ import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import PromptTextarea from '../PromptTextarea';
 import { useUpdateNodeData } from './useUpdateNodeData';
+import { FhlImageModuleControls } from './FhlImageModule';
 import NodeHelpButton from './NodeHelpButton';
 
 const FIELD = 'w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/60 disabled:opacity-55';
@@ -569,6 +570,7 @@ const ExhibitionRenderToElevationNode = ({ id, data, selected }: NodeProps) => {
         </div>
 
         <div className="nodrag nopan grid grid-cols-2 gap-2" data-exhibition-compact-section="model">
+          <div className="col-span-2"><FhlImageModuleControls compact nodeId={id} data={d} update={update} busy={isGenerating} isReadonly={isReadonly} referenceCount={1} /></div>
           <label data-exhibition-compact-item="provider" className="space-y-1">
             <span className="text-[10px] text-white/45">LLM Key</span>
             <select

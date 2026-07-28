@@ -7,6 +7,7 @@ import { useApiKeysStore } from '../../stores/apiKeys';
 import { advancedProviderModelOptions, advancedProvidersForNode, externalImageSizeFor, resolveAdvancedProviderSelection } from '../../utils/advancedProviders';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useUpdateNodeData } from './useUpdateNodeData';
+import { FhlImageModuleControls } from './FhlImageModule';
 import { buildFloorplanSvg, floorplanSvgToPngDataUrl, svgDataUrl } from '../../utils/floorplanSvg';
 import type { FloorplanArchitecture, FloorplanCandidate, FloorplanRequirement, FloorplanValidation } from '../../types/floorplan';
 
@@ -191,7 +192,7 @@ function ExhibitionFloorplanLayoutNode({ id, data }: NodeProps) {
         }
         imageUrl = result.imageUrls?.[0] || '';
       } else {
-        const result = await generateImage({ model: 'gpt-image-2', apiModel: 'gpt-image-2-all', prompt, images: referenceImages, aspectRatio: '16:9', image_size: '2K', n: 1 });
+        const result = await generateImage({ model: 'gpt-image-2', apiModel: 'gpt-image-2-all', prompt, images: referenceImages, aspectRatio: '16:9', image_size: '2K', n: 1, historyContext: { sourceNodeId: id, sourceNodeType: 'exhibition-floorplan-layout', nodeTitle: '展陈平面布局 AI 表现图', outputTitle: '平面表现图' } });
         imageUrl = result.urls[0] || '';
       }
       if (!imageUrl) throw new Error('生成完成但未返回图片');
@@ -225,6 +226,7 @@ function ExhibitionFloorplanLayoutNode({ id, data }: NodeProps) {
         <div className="rounded border border-white/10 p-2"><div className="mb-1 text-[10px] text-cyan-200">2. 展陈需求</div><textarea className={`${FIELD} h-24 resize-none`} value={sourceText} placeholder="粘贴展陈大纲；运行时由 LLM 提炼结构化需求" onChange={(e) => update({ sourceText: e.target.value })}/><label className="mt-1 block text-[9px] text-white/50">最小通道宽度（mm）</label><input className={FIELD} type="number" min={600} value={d.minimumPathWidth || 1200} onChange={(e) => update({ minimumPathWidth: Number(e.target.value) })}/></div>
         <div className="rounded border border-white/10 p-2">
           <div className="mb-1 text-[10px] text-cyan-200">3. 生图模型</div>
+          <FhlImageModuleControls compact nodeId={id} data={d} update={update} busy={!!busy} />
           <label className="mb-1 block text-[9px] text-white/50">生图平台</label>
           <select className={FIELD} value={providerSelectValue} disabled={!allowZhenzhenFallback && imageAdvancedProviders.length === 0} onChange={(e) => {
             const nextId = e.target.value;

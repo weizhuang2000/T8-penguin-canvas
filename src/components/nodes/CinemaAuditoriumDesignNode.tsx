@@ -48,6 +48,7 @@ import { logBus } from '../../stores/logs';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useUpdateNodeData } from './useUpdateNodeData';
+import { FhlImageModuleControls } from './FhlImageModule';
 import ColorMaterialPresetSelect from './ColorMaterialPresetSelect';
 import MentionPromptInput from './MentionPromptInput';
 import { resolveMediaMentions, type MediaMention } from './mediaMentions';
@@ -1402,6 +1403,7 @@ const CinemaAuditoriumDesignNode = memo((p: NodeProps) => {
       </div>
 
       <div data-exhibition-compact-section="model" className="mt-2 grid grid-cols-4 gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-2">
+        <div className="col-span-4"><FhlImageModuleControls compact nodeId={id} data={d} update={update} busy={busy} isReadonly={isReadonly} /></div>
         <button data-exhibition-compact-item="actions" type="button" className={`${BUTTON} col-span-4 border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy} onClick={() => void runGenerate()}><Play size={13} /> 生成图包</button>
         <label data-exhibition-compact-item="provider" className="space-y-1 text-[10px] text-white/55">
           平台
