@@ -48,6 +48,33 @@ test('unit panel design node exposes reference handle and shared controls', () =
   assert.match(source, /queryExternalImageStatus/);
 });
 
+test('unit panel design has an isolated mutually exclusive FHL image module', () => {
+  const source = read('src/components/nodes/UnitPanelDesignNode.tsx');
+  const canvas = read('src/components/Canvas.tsx');
+  assert.match(source, /createFhlJob/);
+  assert.match(source, /getFhlJob/);
+  assert.match(source, /unitPanelImageEngine === 'fhl'/);
+  assert.match(source, /data-unit-panel-image-module="standard"/);
+  assert.match(source, /data-unit-panel-image-module="fhl"/);
+  assert.match(source, /unitPanelImageEngine !== 'standard'/);
+  assert.match(source, /unitPanelImageEngine !== 'fhl'/);
+  assert.match(source, /mode: colorMaterialReferenceImage \? 'edit' : 'generate'/);
+  assert.match(source, /fixedImages: colorMaterialReferenceImage \? \[colorMaterialReferenceImage\] : \[\]/);
+  assert.match(source, /quality: unitPanelFhlQuality/);
+  assert.match(source, /aspect: unitPanelFhlAspect/);
+  assert.match(source, /outputFormat: unitPanelFhlOutputFormat/);
+  assert.match(source, /count: 1/);
+  assert.match(source, /concurrency: 1/);
+  assert.match(source, /FHL_GENERATE_2K_ASPECTS/);
+  assert.match(source, /FHL_EDIT_2K_ASPECTS/);
+  assert.match(source, /FHL_4K_ASPECTS/);
+  assert.match(source, /unitPanelFhlJobId/);
+  assert.match(canvas, /unitPanelImageEngine: 'standard'/);
+  assert.match(canvas, /unitPanelFhlQuality: '2K'/);
+  assert.match(canvas, /unitPanelFhlAspect: '16:9'/);
+  assert.match(canvas, /unitPanelFhlOutputFormat: 'jpg'/);
+});
+
 test('unit panel design is registered in frontend and permissions', () => {
   assert.match(read('src/types/canvas.ts'), /\| 'unit-panel-design'/);
   assert.match(read('src/config/nodeRegistry.ts'), /type: 'unit-panel-design'/);

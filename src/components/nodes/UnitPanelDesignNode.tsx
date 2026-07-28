@@ -5,6 +5,7 @@ import { EXHIBITION_COLOR_MATERIAL_REFERENCE_COLOR, EXHIBITION_IMAGE_HANDLE_COLO
 import { ArrowDown, ArrowUp, Brain, FileText, Image as ImageIcon, Loader2, Palette, Play, Upload } from 'lucide-react';
 import { DEFAULT_LLM_MODEL, IMAGE_MODELS } from '../../providers/models';
 import { extractDocument, getCurrentUser, getElevationPromptPresets, getUnitPanelMaterials, MAX_DOCUMENT_FILE_SIZE, MAX_DOCUMENT_FILE_SIZE_MB, updateUnitPanelMaterials, type AuthUser, type ElevationColorMaterialPresetItem, type ExtractedDocument, type UnitPanelMaterialItem } from '../../services/api';
+import { createFhlJob, getFhlJob } from '../../services/fhlImage';
 import { generateExternalImage, generateLlm, queryExternalImageStatus, queryImageStatus, submitImageAsync } from '../../services/generation';
 import {
   advancedProviderModelOptions,
@@ -51,6 +52,10 @@ const BUTTON = 'inline-flex h-7 items-center justify-center gap-1 rounded border
 const MAX_IMAGE_SEED = 2147483647;
 const EXTERNAL_IMAGE_MAX_POLLS = 300;
 const EXTERNAL_IMAGE_POLL_INTERVAL_MS = 3000;
+const FHL_GENERATE_2K_ASPECTS = ['1:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16', '2:1', '1:2', '7:4', '4:7'];
+const FHL_EDIT_2K_ASPECTS = ['1:1', '3:2', '2:3', '4:3', '3:4', '5:4', '4:5', '16:9', '9:16', '2:1', '1:2', '3:1', '1:3', '7:4', '4:7'];
+const FHL_4K_ASPECTS = ['1:1', '3:2', '2:3', '16:9', '9:16', '2:1', '1:2', '3:1', '1:3', '7:4', '4:7'];
+const FHL_TERMINAL_JOB_STATUSES = new Set(['completed', 'partial', 'failed', 'cancelled', 'interrupted']);
 
 function documentLabel(meta?: Omit<ExtractedDocument, 'text'> | null) {
   if (!meta) return '未选择文档';
@@ -250,6 +255,15 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
   const aspectRatio = d.aspectRatio || '16:9';
   const sizeLevel = d.sizeLevel || '2K';
   const outputFormat: 'jpg' | 'png' = d.outputFormat === 'png' ? 'png' : 'jpg';
+  const unitPanelImageEngine: 'standard' | 'fhl' = d.unitPanelImageEngine === 'fhl' ? 'fhl' : 'standard';
+  const unitPanelFhlQuality: '2K' | '4K' = d.unitPanelFhlQuality === '4K' ? '4K' : '2K';
+  const unitPanelFhlOutputFormat: 'jpg' | 'png' = d.unitPanelFhlOutputFormat === 'png' ? 'png' : 'jpg';
+  const unitPanelFhlAspectOptions = unitPanelFhlQuality === '4K'
+    ? FHL_4K_ASPECTS
+    : (colorMaterialReferenceImage ? FHL_EDIT_2K_ASPECTS : FHL_GENERATE_2K_ASPECTS);
+  const unitPanelFhlAspect = unitPanelFhlAspectOptions.includes(String(d.unitPanelFhlAspect || '16:9'))
+    ? String(d.unitPanelFhlAspect || '16:9')
+    : '16:9';
   const seed = Math.max(0, Math.floor(Number(d.seed) || 0));
 
   const outputMode = normalizeUnitPanelOutputMode(d.outputMode);
@@ -316,6 +330,12 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
     getUnitPanelMaterials().then(setMaterials).catch(() => setMaterials([]));
     getElevationPromptPresets().then((presets) => setColorMaterialPresets(presets.colorMaterial || [])).catch(() => setColorMaterialPresets([]));
   }, []);
+
+  useEffect(() => {
+    if (d.unitPanelFhlAspect && d.unitPanelFhlAspect !== unitPanelFhlAspect) {
+      update({ unitPanelFhlAspect });
+    }
+  }, [d.unitPanelFhlAspect, unitPanelFhlAspect, update]);
 
   useEffect(() => {
     if (!colorMaterialReferenceImage) {
@@ -450,12 +470,55 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
     taskCompletionSound.primeAudio();
     const runSeed = seed > 0 ? seed : randomImageSeed();
     const src = `unit-panel-design:${id.slice(0, 6)}`;
-    update({ status: 'generating', progress: '提交生图...', error: '', imageUrls: [], lastPrompt: imagePrompt, lastSeed: runSeed });
+    update({
+      status: 'generating',
+      progress: unitPanelImageEngine === 'fhl' ? '创建 FHL 任务...' : '提交生图...',
+      error: '',
+      imageUrls: [],
+      lastPrompt: imagePrompt,
+      ...(unitPanelImageEngine === 'standard' ? { lastSeed: runSeed } : {}),
+    });
     try {
-      logBus.info(`单元板设计生图提交 seed=${runSeed}`, src);
+      logBus.info(`单元板设计生图提交 engine=${unitPanelImageEngine}${unitPanelImageEngine === 'standard' ? ` seed=${runSeed}` : ''}`, src);
       const historyContext = { canvasId: activeCanvasId, sourceNodeId: id, sourceNodeType: 'unit-panel-design', seed: runSeed, nodeTitle: '单元板设计' };
       let urls: string[] = [];
-      if (isExternalSelected && providerSelection.provider) {
+      if (unitPanelImageEngine === 'fhl') {
+        const created = await createFhlJob({
+          mode: colorMaterialReferenceImage ? 'edit' : 'generate',
+          prompt: imagePrompt,
+          fixedImages: colorMaterialReferenceImage ? [colorMaterialReferenceImage] : [],
+          quality: unitPanelFhlQuality,
+          aspect: unitPanelFhlAspect,
+          outputFormat: unitPanelFhlOutputFormat,
+          count: 1,
+          concurrency: 1,
+          historyContext: {
+            canvasId: activeCanvasId,
+            sourceNodeId: id,
+            sourceNodeType: 'unit-panel-design',
+            nodeTitle: '单元板设计',
+            prompt: imagePrompt,
+          },
+        });
+        update({ unitPanelFhlJobId: created.id, taskId: created.id, progress: `${Math.max(0, Math.min(100, created.progress || 0))}%` });
+        for (;;) {
+          if (pollAbortRef.current) throw new Error('任务已取消');
+          const job = await getFhlJob(created.id);
+          update({
+            unitPanelFhlJobId: job.id,
+            taskId: job.id,
+            progress: `${Math.max(0, Math.min(100, job.progress || 0))}%`,
+          });
+          if (FHL_TERMINAL_JOB_STATUSES.has(job.status)) {
+            urls = job.outputUrls || [];
+            if (!urls.length) {
+              throw new Error(job.error || job.tasks.find((task) => task.error)?.error || `FHL 任务${job.status}`);
+            }
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+      } else if (isExternalSelected && providerSelection.provider) {
         if (!externalProviderModel) throw new Error('扩展平台未配置可用图像模型');
         const size = externalImageSizeFor(aspectRatio, sizeLevel);
         let res = await generateExternalImage({
@@ -555,7 +618,7 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
       logBus.error(`单元板设计生图失败: ${msg}`, src);
       throw error;
     }
-  }, [activeCanvasId, apiModel, aspectRatio, bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.backgroundMode, d.colorMaterial, d.dimensionMarksEnabled, d.imageDisplayEnabled, d.mixedLanguageLayoutEnabled, d.providerParams, d.specialShapeEnabled, d.splitDesignEnabled, d.subtitleEnabled, dimensions, externalProviderModel, id, isExternalSelected, isReadonly, languageTextDirections, languages, modelDef.id, modelDef.paramKind, outputFormat, outputMode, providerSelection.provider, seed, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, sizeLevel, subtitleText, textLayoutBounds, titleFont, titleText, translations, update]);
+  }, [activeCanvasId, apiModel, aspectRatio, bodyFont, bodyText, colorMaterialReferenceImage, colorMaterialReferenceTone, d.backgroundMode, d.colorMaterial, d.dimensionMarksEnabled, d.imageDisplayEnabled, d.mixedLanguageLayoutEnabled, d.providerParams, d.specialShapeEnabled, d.splitDesignEnabled, d.subtitleEnabled, dimensions, externalProviderModel, id, isExternalSelected, isReadonly, languageTextDirections, languages, modelDef.id, modelDef.paramKind, outputFormat, outputMode, providerSelection.provider, seed, selectedColorMaterialPreset, selectedPrimaryMaterial, selectedSecondaryMaterials, sizeLevel, subtitleText, textLayoutBounds, titleFont, titleText, translations, unitPanelFhlAspect, unitPanelFhlOutputFormat, unitPanelFhlQuality, unitPanelImageEngine, update]);
 
   useRunTrigger(id, runGenerate, 'image');
 
@@ -851,9 +914,23 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-100"><ImageIcon size={13} /> 生图</div>
             <button data-exhibition-compact-item="actions" type="button" className={`${BUTTON} border-cyan-300/30 bg-cyan-300/15 text-cyan-100`} disabled={isReadonly || busy} onClick={() => void runGenerate()}><Play size={13} /> 生成单元板</button>
           </div>
-          <div data-exhibition-compact-item="model" className="rounded border border-cyan-300/20 bg-cyan-300/10 p-2">
-            <div className="mb-2 text-[11px] font-semibold text-cyan-100">生图平台与模型</div>
-            <div className="grid grid-cols-2 gap-2">
+          <div
+            data-exhibition-compact-item="model"
+            data-unit-panel-image-module="standard"
+            className={`rounded border p-2 ${unitPanelImageEngine === 'standard' ? 'border-cyan-300/35 bg-cyan-300/10' : 'border-white/10 bg-white/[0.025]'}`}
+          >
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className={`text-[11px] font-semibold ${unitPanelImageEngine === 'standard' ? 'text-cyan-100' : 'text-white/55'}`}>原生生图模块</div>
+              <button
+                type="button"
+                className={`${BUTTON} ${unitPanelImageEngine === 'standard' ? 'border-cyan-300/35 bg-cyan-300/20 text-cyan-100' : ''}`}
+                disabled={isReadonly || busy}
+                onClick={() => update({ unitPanelImageEngine: 'standard' })}
+              >
+                {unitPanelImageEngine === 'standard' ? '已生效' : '设为生效'}
+              </button>
+            </div>
+            <fieldset disabled={isReadonly || busy || unitPanelImageEngine !== 'standard'} className={`grid grid-cols-2 gap-2 ${unitPanelImageEngine !== 'standard' ? 'opacity-45' : ''}`}>
               <label className="space-y-1">
                 <span className="text-[10px] text-white/55">生图平台</span>
                 <select
@@ -918,7 +995,49 @@ const UnitPanelDesignNode = ({ id, data, selected }: NodeProps) => {
                   })}
                 </div>
               </label>
+            </fieldset>
+          </div>
+          <div
+            data-exhibition-compact-item="model"
+            data-unit-panel-image-module="fhl"
+            className={`rounded border p-2 ${unitPanelImageEngine === 'fhl' ? 'border-amber-300/35 bg-amber-300/10' : 'border-white/10 bg-white/[0.025]'}`}
+          >
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div>
+                <div className={`text-[11px] font-semibold ${unitPanelImageEngine === 'fhl' ? 'text-amber-100' : 'text-white/55'}`}>FHL 生图模块</div>
+                <div className="mt-0.5 text-[9px] text-white/35">参考图已连接时自动使用组合编辑</div>
+              </div>
+              <button
+                type="button"
+                className={`${BUTTON} ${unitPanelImageEngine === 'fhl' ? 'border-amber-300/35 bg-amber-300/20 text-amber-100' : ''}`}
+                disabled={isReadonly || busy}
+                onClick={() => update({ unitPanelImageEngine: 'fhl' })}
+              >
+                {unitPanelImageEngine === 'fhl' ? '已生效' : '设为生效'}
+              </button>
             </div>
+            <fieldset disabled={isReadonly || busy || unitPanelImageEngine !== 'fhl'} className={`grid grid-cols-3 gap-2 ${unitPanelImageEngine !== 'fhl' ? 'opacity-45' : ''}`}>
+              <label className="space-y-1">
+                <span className="text-[10px] text-white/55">规格</span>
+                <select className={FIELD} value={unitPanelFhlQuality} onChange={(event) => update({ unitPanelFhlQuality: event.target.value })}>
+                  <option value="2K">2K</option>
+                  <option value="4K">4K</option>
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="text-[10px] text-white/55">比例</span>
+                <select className={FIELD} value={unitPanelFhlAspect} onChange={(event) => update({ unitPanelFhlAspect: event.target.value })}>
+                  {unitPanelFhlAspectOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="text-[10px] text-white/55">保存格式</span>
+                <select className={FIELD} value={unitPanelFhlOutputFormat} onChange={(event) => update({ unitPanelFhlOutputFormat: event.target.value })}>
+                  <option value="jpg">JPG</option>
+                  <option value="png">PNG</option>
+                </select>
+              </label>
+            </fieldset>
           </div>
           {d.progress && <div data-exhibition-compact-item="progress" className="text-[10px] text-cyan-100">{d.progress}</div>}
           {d.imageUrl && <SmartImage data-exhibition-compact-item="preview" src={d.imageUrl} alt="" className="max-h-56 w-full rounded border border-white/10 object-contain" draggable={false} thumbSize={360} />}

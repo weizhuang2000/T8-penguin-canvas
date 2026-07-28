@@ -6284,5 +6284,25 @@
       "npm run type-check",
       "npm run build"
     ]
+  },
+  "unitPanelDesignFhlImageModule": {
+    "description": "单元板设计节点内置独立 FHL 生图模块，与原生生图模块互斥，复用现有 FHL Images 任务服务且不影响独立 FHL 生图节点。",
+    "defaults": {
+      "engine": "standard",
+      "quality": "2K",
+      "aspect": "16:9",
+      "outputFormat": "jpg"
+    },
+    "capabilities": [
+      "原生与 FHL 模块同时显示，通过设为生效按钮互斥切换，未生效模块保留参数并禁用控件",
+      "FHL 模块仅提供 2K/4K、合法比例和 JPG/PNG 保存格式",
+      "连接色彩与材质参考图时自动提交 FHL edit，否则提交 generate",
+      "FHL 任务固定单任务单并发，结果复用单元板现有图片输出、历史、运行总线和完成提示音"
+    ],
+    "verification": [
+      "node --test tests\\unitPanelDesignNode.test.js",
+      "npm run type-check",
+      "npm run build"
+    ]
   }
 }
