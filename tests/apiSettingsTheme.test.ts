@@ -53,6 +53,14 @@ test('ApiSettings advanced provider fields stay mounted while typing and ModelSc
   assert.match(apiSettingsSource, /https:\/\/www\.modelscope\.cn\/aigc\/models/);
 });
 
+test('ApiSettings advanced provider cards support drag sorting', () => {
+  assert.match(apiSettingsSource, /handleAdvancedProviderDragStart/);
+  assert.match(apiSettingsSource, /handleAdvancedProviderDrop/);
+  assert.match(apiSettingsSource, /reorderAdvancedProviders/);
+  assert.match(apiSettingsSource, /draggable/);
+  assert.match(apiSettingsSource, /拖拽调整平台顺序/);
+});
+
 test('ApiSettings Jimeng CLI panel explains install, login, and executable path', () => {
   assert.match(apiSettingsSource, /如何安装即梦 CLI/);
   assert.match(apiSettingsSource, /curl -s https:\/\/jimeng\.jianying\.com\/cli \| bash/);

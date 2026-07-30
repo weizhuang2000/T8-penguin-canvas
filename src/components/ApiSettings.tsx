@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ArrowDown, ArrowUp, Brain, ChevronDown, ChevronRight, CloudUpload, Download, ExternalLink, Eye, EyeOff, FileUp, Info, KeyRound, Loader2, Lock, MousePointer2, Plus, Save, Settings2, TestTube2, Trash2, X, FolderOpen, ServerCog, Volume2, HelpCircle, RotateCcw, Edit3, Eye as EyeIcon } from 'lucide-react';
+import { useEffect, useRef, useState, type DragEvent as ReactDragEvent, type ReactNode } from 'react';
+import { ArrowDown, ArrowUp, Brain, ChevronDown, ChevronRight, CloudUpload, Download, ExternalLink, Eye, EyeOff, FileUp, GripVertical, Info, KeyRound, Loader2, Lock, MousePointer2, Plus, Save, Settings2, TestTube2, Trash2, X, FolderOpen, ServerCog, Volume2, HelpCircle, RotateCcw, Edit3, Eye as EyeIcon } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { useApiKeysStore, FIXED_ZHENZHEN_BASE, RH_BASE, normalizeApiSettings } from '../stores/apiKeys';
 import { taskCompletionSound as taskCompletionSoundController } from '../stores/taskCompletionSound';
@@ -16,6 +16,7 @@ import {
   normalizeModelscopeLoraStrength,
   normalizeModelscopeLoras,
   parseAdvancedProviderModelText,
+  reorderAdvancedProviders,
   stringifyAdvancedProviderModels,
 } from '../utils/advancedProviders';
 import {
@@ -418,6 +419,8 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   const [advancedProvidersInput, setAdvancedProvidersInput] = useState<AdvancedProviderConfig[]>([]);
   const [activeAdvancedProviderId, setActiveAdvancedProviderId] = useState<string>('');
   const [advancedDirty, setAdvancedDirty] = useState(false);
+  const [draggedAdvancedProviderId, setDraggedAdvancedProviderId] = useState<string | null>(null);
+  const [dragOverAdvancedProviderId, setDragOverAdvancedProviderId] = useState<string | null>(null);
   const [advancedTestStatus, setAdvancedTestStatus] = useState<Record<string, { loading?: boolean; ok?: boolean; message?: string }>>({});
   const [advancedComfyDrafts, setAdvancedComfyDrafts] = useState<Record<string, { workflowJson?: string; fields?: string; excludeRules?: string }>>({});
   const [cloudUploadOpen, setCloudUploadOpen] = useState(false);
@@ -487,6 +490,8 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       setAdvancedProvidersInput(providers);
       setActiveAdvancedProviderId(providers[0]?.id || '');
       setAdvancedDirty(false);
+      setDraggedAdvancedProviderId(null);
+      setDragOverAdvancedProviderId(null);
       setAdvancedTestStatus({});
       setAdvancedComfyDrafts({});
       setCloudUploadOpen(false);
@@ -1231,6 +1236,29 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       provider.id === id ? { ...provider, ...patch } : provider
     )));
     setAdvancedDirty(true);
+  };
+
+  const handleAdvancedProviderDragStart = (event: ReactDragEvent<HTMLButtonElement>, providerId: string) => {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', providerId);
+    setDraggedAdvancedProviderId(providerId);
+    setDragOverAdvancedProviderId(providerId);
+  };
+
+  const handleAdvancedProviderDrop = (event: ReactDragEvent<HTMLButtonElement>, targetProviderId: string) => {
+    event.preventDefault();
+    const sourceProviderId = draggedAdvancedProviderId || event.dataTransfer.getData('text/plain');
+    if (
+      sourceProviderId
+      && sourceProviderId !== targetProviderId
+      && advancedProvidersInput.some((provider) => provider.id === sourceProviderId)
+      && advancedProvidersInput.some((provider) => provider.id === targetProviderId)
+    ) {
+      setAdvancedProvidersInput((providers) => reorderAdvancedProviders(providers, sourceProviderId, targetProviderId));
+      setAdvancedDirty(true);
+    }
+    setDraggedAdvancedProviderId(null);
+    setDragOverAdvancedProviderId(null);
   };
 
   const addAdvancedProvider = (protocol: 'openai-compatible' | 'gemini-compatible') => {
@@ -3456,15 +3484,30 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                           key={provider.id}
                           type="button"
                           onClick={() => setActiveAdvancedProviderId(provider.id)}
+                          draggable
+                          aria-grabbed={draggedAdvancedProviderId === provider.id}
+                          onDragStart={(event) => handleAdvancedProviderDragStart(event, provider.id)}
+                          onDragOver={(event) => {
+                            event.preventDefault();
+                            event.dataTransfer.dropEffect = 'move';
+                            setDragOverAdvancedProviderId(provider.id);
+                          }}
+                          onDrop={(event) => handleAdvancedProviderDrop(event, provider.id)}
+                          onDragEnd={() => {
+                            setDraggedAdvancedProviderId(null);
+                            setDragOverAdvancedProviderId(null);
+                          }}
                           data-active={activeAdvancedProvider?.id === provider.id}
                           data-enabled={!!provider.enabled}
+                          title="拖拽调整平台顺序；点击编辑平台设置"
                           className={
                             isPixel
-                              ? 't8-api-settings-provider-card w-full !block text-left px-2 py-2 px-btn'
-                              : 't8-api-settings-provider-card w-full block text-left px-2 py-2 rounded-md border text-xs transition'
+                              ? `t8-api-settings-provider-card w-full !block text-left px-2 py-2 px-btn cursor-grab active:cursor-grabbing ${draggedAdvancedProviderId === provider.id ? 'opacity-50' : ''} ${dragOverAdvancedProviderId === provider.id && draggedAdvancedProviderId !== provider.id ? 'ring-2 ring-cyan-400/70' : ''}`
+                              : `t8-api-settings-provider-card w-full block text-left px-2 py-2 rounded-md border text-xs transition cursor-grab active:cursor-grabbing ${draggedAdvancedProviderId === provider.id ? 'opacity-50' : ''} ${dragOverAdvancedProviderId === provider.id && draggedAdvancedProviderId !== provider.id ? 'ring-2 ring-cyan-400/70' : ''}`
                           }
                         >
                           <div className="flex items-center gap-2 min-w-0 w-full">
+                            <GripVertical size={13} className={`shrink-0 ${hintCls}`} aria-hidden="true" />
                             <span className={`w-2 h-2 rounded-full shrink-0 ${provider.enabled ? 'bg-emerald-400' : 'bg-zinc-400'}`} />
                             <span className="font-bold min-w-0 truncate">{displayAdvancedProviderLabel(provider)}</span>
                             <span className={`ml-auto text-[10px] shrink-0 ${provider.enabled ? 'text-emerald-500' : hintCls}`}>

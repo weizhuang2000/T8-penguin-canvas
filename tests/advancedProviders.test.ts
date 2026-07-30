@@ -42,6 +42,22 @@ test('normalizeAdvancedProviders migrates missing settings to disabled default p
   ]);
 });
 
+test('normalizeAdvancedProviders preserves submitted platform order and appends missing defaults', () => {
+  const providers = normalizeAdvancedProviders([
+    { id: 'comfyui', protocol: 'comfyui', enabled: false },
+    { id: 'modelscope', protocol: 'modelscope', enabled: false },
+  ]);
+
+  assert.deepEqual(providers.slice(0, 2).map((provider: any) => provider.id), [
+    'comfyui',
+    'modelscope',
+  ]);
+  assert.deepEqual(
+    new Set(providers.map((provider: any) => provider.id)),
+    new Set(DEFAULT_ADVANCED_PROVIDER_IDS),
+  );
+});
+
 test('normalizeAdvancedProviders removes the retired Gitee Flux card from legacy settings', () => {
   const providers = normalizeAdvancedProviders([
     {

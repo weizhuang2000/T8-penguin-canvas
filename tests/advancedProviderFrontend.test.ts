@@ -16,6 +16,7 @@ import {
   normalizeModelscopeLoraStrength,
   normalizeModelscopeSelectedLoras,
   parseAdvancedProviderModelText,
+  reorderAdvancedProviders,
   stringifyAdvancedProviderModels,
 } from '../src/utils/advancedProviders.ts';
 
@@ -31,6 +32,27 @@ test('stringifyAdvancedProviderModels keeps compact one-model-per-line output', 
     stringifyAdvancedProviderModels(['gpt-image-1', '', 'seedream-4']),
     'gpt-image-1\nseedream-4',
   );
+});
+
+test('reorderAdvancedProviders moves a dragged platform to the dropped card position', () => {
+  const providers = [
+    { id: 'openai-compatible' },
+    { id: 'modelscope' },
+    { id: 'comfyui' },
+  ] as any;
+
+  const reordered = reorderAdvancedProviders(providers, 'comfyui', 'openai-compatible');
+  assert.deepEqual(reordered.map((provider) => provider.id), [
+    'comfyui',
+    'openai-compatible',
+    'modelscope',
+  ]);
+  assert.deepEqual(providers.map((provider: any) => provider.id), [
+    'openai-compatible',
+    'modelscope',
+    'comfyui',
+  ]);
+  assert.equal(reorderAdvancedProviders(providers, 'missing', 'modelscope'), providers);
 });
 
 test('advancedProviderSummary mirrors settings folded header counts', () => {

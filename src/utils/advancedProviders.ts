@@ -41,6 +41,21 @@ export function stringifyAdvancedProviderModels(values?: string[]): string {
     .join('\n');
 }
 
+export function reorderAdvancedProviders(
+  providers: AdvancedProviderConfig[],
+  sourceProviderId: string,
+  targetProviderId: string,
+): AdvancedProviderConfig[] {
+  const sourceIndex = providers.findIndex((provider) => provider.id === sourceProviderId);
+  const targetIndex = providers.findIndex((provider) => provider.id === targetProviderId);
+  if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return providers;
+
+  const next = [...providers];
+  const [moved] = next.splice(sourceIndex, 1);
+  next.splice(targetIndex, 0, moved);
+  return next;
+}
+
 export function normalizeModelscopeLoraStrength(value: unknown, fallback = 0.8): number {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;

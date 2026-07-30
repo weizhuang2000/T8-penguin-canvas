@@ -540,6 +540,7 @@ function normalizeAdvancedProviders(rawProviders, currentProviders = []) {
       .filter(([id]) => !!id),
   );
   const byId = new Map();
+  const requestedOrder = [];
 
   for (const template of DEFAULT_ADVANCED_PROVIDERS) {
     const previous = previousById.get(template.id);
@@ -553,10 +554,17 @@ function normalizeAdvancedProviders(rawProviders, currentProviders = []) {
     const id = cleanId(raw?.id);
     const previous = previousById.get(id) || byId.get(id) || null;
     const provider = normalizeProvider(raw, previous);
-    if (provider) byId.set(provider.id, provider);
+    if (provider) {
+      byId.set(provider.id, provider);
+      if (!requestedOrder.includes(provider.id)) requestedOrder.push(provider.id);
+    }
   }
 
-  return [...byId.values()];
+  const requestedIds = new Set(requestedOrder);
+  return [
+    ...requestedOrder.map((id) => byId.get(id)).filter(Boolean),
+    ...[...byId.values()].filter((provider) => !requestedIds.has(provider.id)),
+  ];
 }
 
 function maskAdvancedProviders(providers) {
