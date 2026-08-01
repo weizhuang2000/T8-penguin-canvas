@@ -640,6 +640,30 @@ function App() {
           )}
         </div>
         <div className="flex items-center gap-1">
+          {imageEditorVisible && (
+            <button
+              type="button"
+              onClick={() => navigateApp('/image-editor')}
+              disabled={!imageEditorAvailable}
+              className={
+                isPixel
+                  ? 'px-btn px-btn--sm px-btn--mint'
+                  : `flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors border disabled:cursor-not-allowed disabled:opacity-40 ${
+                      imageEditorRoute
+                        ? isDark
+                          ? 'bg-emerald-500/25 border-emerald-400/55 text-emerald-200'
+                          : 'bg-emerald-100 border-emerald-400 text-emerald-800'
+                        : isDark
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'
+                          : 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
+                    }`
+              }
+              title={imageEditorAvailable ? '打开网页版改图' : '需要提示词反推与图像节点权限'}
+            >
+              <Wand2 size={14} />
+              <span className="text-[11px]">网页版改图</span>
+            </button>
+          )}
           {/* 主题模板 */}
           <button
             onClick={() => setThemeManagerOpen(true)}
@@ -806,8 +830,6 @@ function App() {
           <>
             <Sidebar
               onAddNode={handleAddNode}
-              onOpenImageEditor={imageEditorVisible ? () => navigateApp('/image-editor') : undefined}
-              imageEditorAvailable={imageEditorAvailable}
               visibleNodeTypes={visibleNodeTypes}
               currentUserId={authUser.id}
             />

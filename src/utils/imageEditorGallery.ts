@@ -51,6 +51,23 @@ function normalizeUrl(value: unknown): string {
   return String(value || '').trim();
 }
 
+function isDirectMediaUrl(value: string): boolean {
+  return /^(?:data:|blob:|https?:\/\/|\/(?:api|files|input|output)\/)/i.test(value);
+}
+
+export function normalizeImageEditorHistoryUrl(value: unknown): string {
+  const url = normalizeUrl(value);
+  if (!url || isDirectMediaUrl(url)) return url;
+  const clean = url.replace(/\\/g, '/').replace(/^\.?\/+/, '');
+  return clean ? `/files/output/${clean.split('/').map(encodeURIComponent).join('/')}` : '';
+}
+
+export function normalizeImageEditorResourceUrl(value: unknown, resourceId: string, kind: 'file' | 'thumb' = 'file'): string {
+  const url = normalizeUrl(value);
+  if (url && isDirectMediaUrl(url)) return url;
+  return resourceId ? `/api/resources/${kind}/${encodeURIComponent(resourceId)}` : url;
+}
+
 function resourceSourceUrls(item: ResourceItem): string[] {
   return [...new Set([
     ...(Array.isArray(item.sourceUrls) ? item.sourceUrls : []),
@@ -82,11 +99,15 @@ export function mergeImageEditorGallery(
       .filter(Boolean) as GenerationHistoryItem[];
     matchedHistories.forEach((item) => matchedHistoryIds.add(item.id));
     const matchedHistory = matchedHistories.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0];
+    const fileUrl = normalizeImageEditorResourceUrl(resource.fileUrl, resource.id, 'file');
+    const thumbUrl = resource.thumbUrl
+      ? normalizeImageEditorResourceUrl(resource.thumbUrl, resource.id, 'thumb')
+      : fileUrl;
     merged.push({
       id: `resource:${resource.id}`,
       title: resource.title || resource.originalName || '资源图片',
-      url: resource.fileUrl,
-      previewUrl: resource.thumbUrl || resource.fileUrl,
+      url: fileUrl,
+      previewUrl: thumbUrl,
       createdAt: Math.max(resource.updatedAt || 0, resource.createdAt || 0, matchedHistory?.createdAt || 0),
       inResourceLibrary: true,
       resourceId: resource.id,
@@ -102,11 +123,12 @@ export function mergeImageEditorGallery(
 
   for (const item of myHistory) {
     if (matchedHistoryIds.has(item.id)) continue;
+    const historyUrl = normalizeImageEditorHistoryUrl(item.url);
     merged.push({
       id: `history:${item.id}`,
       title: item.title || item.fileName || '我的生成',
-      url: item.url,
-      previewUrl: item.url,
+      url: historyUrl,
+      previewUrl: historyUrl,
       createdAt: item.createdAt || 0,
       inResourceLibrary: false,
       historyId: item.id,

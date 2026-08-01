@@ -5,6 +5,8 @@ import type { GenerationHistoryItem, ResourceItem } from '../src/services/api.ts
 import {
   coerceImageEditorList,
   mergeImageEditorGallery,
+  normalizeImageEditorHistoryUrl,
+  normalizeImageEditorResourceUrl,
   paginateImageEditorGallery,
   replaceImageEditorSelectionId,
   toggleImageEditorSelection,
@@ -86,6 +88,9 @@ test('gallery list normalization tolerates legacy envelopes and malformed API pa
   assert.deepEqual(coerceImageEditorList({ message: 'connection reset' }), []);
   assert.deepEqual(mergeImageEditorGallery({ items: [] } as any, { items: [] } as any, 'u1'), []);
   assert.equal(paginateImageEditorGallery({ items: [] } as any, { source: 'all', page: 1, pageSize: 24 }).total, 0);
+  assert.equal(normalizeImageEditorHistoryUrl('003.jpg'), '/files/output/003.jpg');
+  assert.equal(normalizeImageEditorResourceUrl('004.jpg', 'res-4'), '/api/resources/file/res-4');
+  assert.equal(normalizeImageEditorResourceUrl('/api/resources/thumb/res-4', 'res-4', 'thumb'), '/api/resources/thumb/res-4');
 });
 
 test('web image editor reverse prompt applies edit instruction and multi-image priority', () => {
@@ -108,7 +113,8 @@ test('web image editor route, sidebar permission entry and shared-library action
   const page = fs.readFileSync(new URL('../src/components/ImageEditorPage.tsx', import.meta.url), 'utf8');
   assert.match(app, /appPath === '\/image-editor'/);
   assert.match(app, /visibleNodeTypes\.includes\('prompt-reverse'\).*visibleNodeTypes\.includes\('image'\)/s);
-  assert.match(sidebar, /网页版改图/);
+  assert.doesNotMatch(sidebar, /网页版改图/);
+  assert.match(app, /网页版改图[\s\S]*\{\/\* 主题模板 \*\/\}/);
   assert.match(page, /getResourceItems\(\{ kind: 'image' \}\)/);
   assert.match(page, /getGenerationHistoryItems\(\{ kind: 'image' \}\)/);
   assert.match(page, /addResourceItem\(\{/);

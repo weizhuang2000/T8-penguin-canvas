@@ -13,7 +13,6 @@ import {
   Search,
   Share2,
   Trash2,
-  Wand2,
   X,
 } from 'lucide-react';
 import { NODE_GROUPS } from '../config/nodeRegistry';
@@ -386,13 +385,11 @@ const SAINT_SEIYA_ICON_BY_TYPE: Record<string, string> = {
 
 interface SidebarProps {
   onAddNode: (type: NodeType) => void;
-  onOpenImageEditor?: () => void;
-  imageEditorAvailable?: boolean;
   visibleNodeTypes?: string[];
   currentUserId: string;
 }
 
-export default function Sidebar({ onAddNode, onOpenImageEditor, imageEditorAvailable = true, visibleNodeTypes, currentUserId }: SidebarProps) {
+export default function Sidebar({ onAddNode, visibleNodeTypes, currentUserId }: SidebarProps) {
   const { theme, style, templateId, customTemplates } = useThemeStore();
   const currentTemplate = useMemo(
     () => resolveThemeTemplate(templateId, customTemplates),
@@ -581,26 +578,6 @@ export default function Sidebar({ onAddNode, onOpenImageEditor, imageEditorAvail
             : 'bg-white border-black/10'
       }`}
     >
-      {onOpenImageEditor && (
-        <div className={`border-b p-2 ${isPixel ? 'border-[#1A1410]/80' : isDark ? 'border-white/10' : 'border-black/10'}`}>
-          <button
-            type="button"
-            onClick={onOpenImageEditor}
-            disabled={!imageEditorAvailable}
-            title={imageEditorAvailable ? '打开网页版改图' : '需要提示词反推与图像节点权限'}
-            className={`flex w-full items-center justify-center gap-2 rounded-lg px-2 py-2 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-40 ${
-              isPixel
-                ? 'px-btn px-btn--mint'
-                : isDark
-                  ? 'border border-emerald-400/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
-                  : 'border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-            }`}
-          >
-            <Wand2 size={15} className="shrink-0" />
-            {sidebarExpanded && <span>网页版改图</span>}
-          </button>
-        </div>
-      )}
       {/* 画布管理(可折叠) */}
       <div
         className={`border-b ${

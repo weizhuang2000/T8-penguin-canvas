@@ -12,6 +12,7 @@ import {
   Library,
   LibraryBig,
   Loader2,
+  RefreshCw,
   Search,
   Sparkles,
   Upload,
@@ -467,7 +468,10 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
           <div className="space-y-3 border-b border-current/10 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2"><LibraryBig size={18} className="text-cyan-400" /><div><div className="font-bold">参考图片库</div><div className="text-[11px] opacity-50">共享资源与我的历史生成</div></div></div>
-              <button type="button" disabled={uploading} onClick={() => uploadRef.current?.click()} className="flex items-center gap-2 rounded-lg bg-cyan-500/15 px-3 py-2 text-xs font-bold text-cyan-400 disabled:opacity-45">{uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} 上传并共享</button>
+              <div className="flex items-center gap-2">
+                <button type="button" disabled={loadingGallery} onClick={() => { setLoadingGallery(true); void reloadGallery().finally(() => setLoadingGallery(false)); }} className="flex items-center gap-2 rounded-lg bg-current/5 px-3 py-2 text-xs font-bold disabled:opacity-45"><RefreshCw size={14} className={loadingGallery ? 'animate-spin' : ''} /> 刷新图库</button>
+                <button type="button" disabled={uploading} onClick={() => uploadRef.current?.click()} className="flex items-center gap-2 rounded-lg bg-cyan-500/15 px-3 py-2 text-xs font-bold text-cyan-400 disabled:opacity-45">{uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} 上传并共享</button>
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {([
