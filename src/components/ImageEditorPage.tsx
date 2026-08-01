@@ -21,6 +21,7 @@ import {
 import { IMAGE_MODELS, DEFAULT_LLM_MODEL, gptImage2ZhenzhenVariantSize } from '../providers/models';
 import { generateLlm, uploadFile } from '../services/generation';
 import { runConfiguredImageGeneration } from '../services/imageGenerationRunner';
+import { createFhlJob, getFhlJob } from '../services/fhlImage';
 import * as api from '../services/api';
 import type { AuthUser, GenerationHistoryItem, ResourceCategory, ResourceItem } from '../services/api';
 import { useApiKeysStore } from '../stores/apiKeys';
@@ -28,6 +29,11 @@ import { useCanvasStore } from '../stores/canvas';
 import { logBus } from '../stores/logs';
 import { taskCompletionSound } from '../stores/taskCompletionSound';
 import { useThemeStore } from '../stores/theme';
+import {
+  advancedProviderModelOptions,
+  advancedProvidersForNode,
+  externalImageSizeFor,
+} from '../utils/advancedProviders';
 import {
   coerceImageEditorList,
   mergeImageEditorGallery,
@@ -52,6 +58,9 @@ const GPT_IMAGE = IMAGE_MODELS.find((item) => item.id === 'gpt-image-2') || IMAG
 const GPT_VARIANTS = GPT_IMAGE.apiModelOptions.filter((item) => !item.value.toLowerCase().includes('fal'));
 const PAGE_SIZES = [12, 24, 48, 96] as const;
 const MAX_REFERENCES = 9;
+const FHL_TERMINAL = new Set(['completed', 'partial', 'failed', 'cancelled', 'interrupted']);
+const FHL_EDIT_2K_RATIOS = ['1:1', '3:2', '2:3', '4:3', '3:4', '5:4', '4:5', '16:9', '9:16', '2:1', '1:2', '3:1', '1:3', '7:4', '4:7'];
+const FHL_4K_RATIOS = ['1:1', '3:2', '2:3', '16:9', '9:16', '2:1', '1:2', '3:1', '1:3', '7:4', '4:7'];
 
 type RunStage = 'idle' | 'reversing' | 'generating' | 'success' | 'error';
 
@@ -108,7 +117,11 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
   const [llmKeyId, setLlmKeyId] = useState('');
   const [strength, setStrength] = useState<PromptReverseStrength>('standard');
   const [language, setLanguage] = useState<PromptReverseLanguage>('zh');
+  const fhlAllowed = !user.permissions?.allowedNodeTypes
+    || user.permissions.allowedNodeTypes.includes('fhl-image-gen');
+  const [generationSource, setGenerationSource] = useState(() => fhlAllowed ? 'fhl' : 'standard');
   const [apiModel, setApiModel] = useState('gpt-image-2-all');
+  const [externalProviderModel, setExternalProviderModel] = useState('');
   const [aspectRatio, setAspectRatio] = useState('Auto');
   const [sizeLevel, setSizeLevel] = useState('2K');
   const [count, setCount] = useState(1);
@@ -123,6 +136,39 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
     || llmConfigs.find((item) => item.isDefault)
     || llmConfigs[0];
   const llmModel = String(activeLlm?.model || settings.llmModel || DEFAULT_LLM_MODEL).trim();
+  const imageProviders = useMemo(
+    () => advancedProvidersForNode(settings.advancedProviders, 'image'),
+    [settings.advancedProviders],
+  );
+  const externalProviderId = generationSource.startsWith('external:')
+    ? generationSource.slice('external:'.length)
+    : '';
+  const externalProvider = imageProviders.find((item) => item.id === externalProviderId) || null;
+  const externalModels = useMemo(
+    () => externalProvider ? advancedProviderModelOptions(externalProvider, 'image') : [],
+    [externalProvider],
+  );
+  const activeExternalModel = externalModels.includes(externalProviderModel)
+    ? externalProviderModel
+    : (externalModels[0] || '');
+  const aspectOptions = generationSource === 'fhl'
+    ? (sizeLevel === '4K' ? FHL_4K_RATIOS : FHL_EDIT_2K_RATIOS)
+    : GPT_IMAGE.aspectRatios;
+  const sizeOptions = generationSource === 'fhl' ? ['2K', '4K'] : GPT_IMAGE.sizes;
+
+  useEffect(() => {
+    if (generationSource === 'fhl' && !fhlAllowed) setGenerationSource('standard');
+  }, [fhlAllowed, generationSource]);
+
+  useEffect(() => {
+    if (generationSource !== 'fhl' || aspectOptions.includes(aspectRatio)) return;
+    setAspectRatio(aspectOptions[0]);
+  }, [aspectOptions, aspectRatio, generationSource]);
+
+  useEffect(() => {
+    if (generationSource !== 'fhl' || sizeOptions.includes(sizeLevel)) return;
+    setSizeLevel('2K');
+  }, [generationSource, sizeLevel, sizeOptions]);
 
   const reloadGallery = async () => {
     const [resourceResult, categoryResult, historyResult] = await Promise.all([
@@ -262,31 +308,71 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
     setPublishingId('');
   };
 
-  const generateFromPrompt = async (prompt: string) => {
-    const refs = selectedAssets.map((asset) => asset.url).slice(0, MAX_REFERENCES);
-    if (!refs.length) throw new Error('请至少选择一张参考图');
-    const forcedSize = gptImage2ZhenzhenVariantSize(apiModel);
-    const result = await runConfiguredImageGeneration({
-      mode: 'standard',
+  const runFhlGeneration = async (prompt: string, refs: string[]) => {
+    const created = await createFhlJob({
+      mode: 'edit',
       prompt,
-      images: refs,
+      fixedImages: refs,
+      quality: sizeLevel === '4K' ? '4K' : '2K',
+      aspect: aspectOptions.includes(aspectRatio) ? aspectRatio : aspectOptions[0],
       outputFormat,
-      model: GPT_IMAGE.id,
-      apiModel,
-      paramKind: GPT_IMAGE.paramKind,
-      aspectRatio,
-      sizeLevel: forcedSize || sizeLevel,
-      n: count,
+      count,
+      concurrency: Math.max(1, Math.min(10, count)),
       historyContext: {
         canvasId: activeId,
         sourceNodeId: `web-image-editor-${user.id}`,
         sourceNodeType: 'image-editor',
-        nodeTitle: '网页版改图',
+        nodeTitle: '网页版改图 · FHL',
         prompt,
       },
-      onProgress: ({ progress: next }) => setProgress(next),
-      onWarning: (warning) => logBus.warn(warning, '网页版改图'),
     });
+    setProgress(`${Math.max(0, Math.min(100, created.progress || 0))}%`);
+    for (;;) {
+      const job = await getFhlJob(created.id);
+      setProgress(`${Math.max(0, Math.min(100, job.progress || 0))}%`);
+      if (FHL_TERMINAL.has(job.status)) {
+        if (!job.outputUrls.length) {
+          throw new Error(job.error || job.tasks.find((item) => item.error)?.error || `FHL 任务${job.status}`);
+        }
+        return { primaryUrl: job.outputUrls[0], urls: job.outputUrls, taskId: job.id };
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 1000));
+    }
+  };
+
+  const generateFromPrompt = async (prompt: string) => {
+    const refs = selectedAssets.map((asset) => asset.url).slice(0, MAX_REFERENCES);
+    if (!refs.length) throw new Error('请至少选择一张参考图');
+    const forcedSize = gptImage2ZhenzhenVariantSize(apiModel);
+    const result = generationSource === 'fhl'
+      ? await runFhlGeneration(prompt, refs)
+      : await runConfiguredImageGeneration({
+          mode: externalProvider ? 'external' : 'standard',
+          prompt,
+          images: refs,
+          outputFormat,
+          model: GPT_IMAGE.id,
+          apiModel,
+          paramKind: GPT_IMAGE.paramKind,
+          aspectRatio,
+          sizeLevel: externalProvider ? sizeLevel : (forcedSize || sizeLevel),
+          n: count,
+          providerParams: externalProvider ? {} : undefined,
+          external: externalProvider ? {
+            providerId: externalProvider.id,
+            providerModel: activeExternalModel,
+            size: externalImageSizeFor(aspectRatio, sizeLevel),
+          } : undefined,
+          historyContext: {
+            canvasId: activeId,
+            sourceNodeId: `web-image-editor-${user.id}`,
+            sourceNodeType: 'image-editor',
+            nodeTitle: externalProvider ? `网页版改图 · ${externalProvider.label}` : '网页版改图 · GPT Image 2',
+            prompt,
+          },
+          onProgress: ({ progress: next }) => setProgress(next),
+          onWarning: (warning) => logBus.warn(warning, '网页版改图'),
+        });
     const existingUrls = new Set(history.map((item) => item.url));
     const optimistic: GenerationHistoryItem[] = result.urls
       .filter((url) => !existingUrls.has(url))
@@ -300,7 +386,7 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
         sourceNodeId: `web-image-editor-${user.id}`,
         sourceNodeType: 'image-editor',
         prompt,
-        model: apiModel,
+        model: generationSource === 'fhl' ? 'FHL Images · gpt-image-2' : (externalProvider ? activeExternalModel : apiModel),
         createdAt: Date.now() + index,
         createdByUserId: user.id,
         createdByUserName: user.name || user.username,
@@ -391,7 +477,7 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
           <button type="button" onClick={onBack} className={`${field} flex items-center gap-2 text-sm font-semibold`}><ArrowLeft size={16} /> 返回无限画布</button>
           <div className="text-right">
             <h2 className="text-lg font-black">网页版改图</h2>
-            <p className="text-xs opacity-55">共享资源参考 · 提示词反推 · GPT Image 2</p>
+            <p className="text-xs opacity-55">共享资源参考 · 提示词反推 · FHL / 扩展平台生图</p>
           </div>
         </div>
 
@@ -437,9 +523,10 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
                 <label className="col-span-2 text-xs">识图 LLM<select className={`${field} mt-1 w-full text-xs`} value={activeLlm?.id || 'default'} onChange={(event) => setLlmKeyId(event.target.value)}>{llmConfigs.map((item) => <option key={item.id} value={item.id}>{item.label || item.id} · {item.model}</option>)}</select></label>
                 <label className="text-xs">细节<select className={`${field} mt-1 w-full text-xs`} value={strength} onChange={(event) => setStrength(normalizePromptReverseStrength(event.target.value))}>{PROMPT_REVERSE_STRENGTHS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
                 <label className="text-xs">语言<select className={`${field} mt-1 w-full text-xs`} value={language} onChange={(event) => setLanguage(normalizePromptReverseLanguage(event.target.value))}><option value="zh">中文</option><option value="en">English</option></select></label>
-                <label className="col-span-2 text-xs">GPT Image 2<select className={`${field} mt-1 w-full text-xs`} value={apiModel} onChange={(event) => setApiModel(event.target.value)}>{GPT_VARIANTS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
-                <label className="text-xs">比例<select className={`${field} mt-1 w-full text-xs`} value={aspectRatio} onChange={(event) => setAspectRatio(event.target.value)}>{GPT_IMAGE.aspectRatios.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-                <label className="text-xs">尺寸<select className={`${field} mt-1 w-full text-xs`} value={sizeLevel} disabled={!!gptImage2ZhenzhenVariantSize(apiModel)} onChange={(event) => setSizeLevel(event.target.value)}>{GPT_IMAGE.sizes.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+                <label className="col-span-2 text-xs">生图平台<select className={`${field} mt-1 w-full text-xs`} value={generationSource} onChange={(event) => setGenerationSource(event.target.value)}>{fhlAllowed && <option value="fhl">FHL 生图（默认）</option>}<option value="standard">GPT Image 2 标准平台</option>{imageProviders.map((provider) => <option key={provider.id} value={`external:${provider.id}`}>扩展 · {provider.label || provider.id}</option>)}</select></label>
+                <label className="col-span-2 text-xs">生图模型{generationSource === 'fhl' ? <select className={`${field} mt-1 w-full text-xs`} value="fhl-gpt-image-2" disabled><option value="fhl-gpt-image-2">FHL · gpt-image-2</option></select> : externalProvider ? <select className={`${field} mt-1 w-full text-xs`} value={activeExternalModel} onChange={(event) => setExternalProviderModel(event.target.value)}>{externalModels.map((item) => <option key={item} value={item}>{item}</option>)}</select> : <select className={`${field} mt-1 w-full text-xs`} value={apiModel} onChange={(event) => setApiModel(event.target.value)}>{GPT_VARIANTS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>}</label>
+                <label className="text-xs">比例<select className={`${field} mt-1 w-full text-xs`} value={aspectOptions.includes(aspectRatio) ? aspectRatio : aspectOptions[0]} onChange={(event) => setAspectRatio(event.target.value)}>{aspectOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+                <label className="text-xs">尺寸<select className={`${field} mt-1 w-full text-xs`} value={sizeOptions.includes(sizeLevel) ? sizeLevel : sizeOptions[0]} disabled={generationSource === 'standard' && !!gptImage2ZhenzhenVariantSize(apiModel)} onChange={(event) => setSizeLevel(event.target.value)}>{sizeOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
                 <label className="text-xs">数量<select className={`${field} mt-1 w-full text-xs`} value={count} onChange={(event) => setCount(Math.max(1, Math.min(4, Number(event.target.value))))}>{[1, 2, 3, 4].map((item) => <option key={item} value={item}>{item} 张</option>)}</select></label>
                 <label className="text-xs">格式<select className={`${field} mt-1 w-full text-xs`} value={outputFormat} onChange={(event) => setOutputFormat(event.target.value === 'png' ? 'png' : 'jpg')}><option value="jpg">JPG</option><option value="png">PNG</option></select></label>
               </div>

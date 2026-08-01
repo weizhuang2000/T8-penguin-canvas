@@ -119,4 +119,8 @@ test('web image editor route, sidebar permission entry and shared-library action
   assert.match(page, /getGenerationHistoryItems\(\{ kind: 'image' \}\)/);
   assert.match(page, /addResourceItem\(\{/);
   assert.match(page, /runConfiguredImageGeneration\(\{/);
+  assert.match(page, /useState\(\(\) => fhlAllowed \? 'fhl' : 'standard'\)/);
+  assert.match(page, /createFhlJob\(\{/);
+  assert.match(page, /advancedProvidersForNode\(settings\.advancedProviders, 'image'\)/);
+  assert.match(page, /mode: externalProvider \? 'external' : 'standard'/);
 });
