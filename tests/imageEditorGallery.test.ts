@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import type { GenerationHistoryItem, ResourceItem } from '../src/services/api.ts';
 import {
+  coerceImageEditorList,
   mergeImageEditorGallery,
   paginateImageEditorGallery,
   replaceImageEditorSelectionId,
@@ -77,6 +78,14 @@ test('gallery filtering, pagination and selection keep deterministic behavior', 
   for (let index = 0; index < 10; index += 1) selection = toggleImageEditorSelection(selection, `asset-${index}`);
   assert.equal(selection.length, 9);
   assert.deepEqual(replaceImageEditorSelectionId(['a', 'b'], 'a', 'resource:1'), ['resource:1', 'b']);
+});
+
+test('gallery list normalization tolerates legacy envelopes and malformed API payloads', () => {
+  assert.deepEqual(coerceImageEditorList({ items: [1, 2] }), [1, 2]);
+  assert.deepEqual(coerceImageEditorList({ data: { history: ['a'] } }, ['history']), ['a']);
+  assert.deepEqual(coerceImageEditorList({ message: 'connection reset' }), []);
+  assert.deepEqual(mergeImageEditorGallery({ items: [] } as any, { items: [] } as any, 'u1'), []);
+  assert.equal(paginateImageEditorGallery({ items: [] } as any, { source: 'all', page: 1, pageSize: 24 }).total, 0);
 });
 
 test('web image editor reverse prompt applies edit instruction and multi-image priority', () => {

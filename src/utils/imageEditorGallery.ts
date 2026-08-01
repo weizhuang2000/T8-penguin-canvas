@@ -34,6 +34,19 @@ export interface ImageEditorGalleryPage {
   pageCount: number;
 }
 
+export function coerceImageEditorList<T>(value: unknown, keys: string[] = ['items']): T[] {
+  if (Array.isArray(value)) return value as T[];
+  if (!value || typeof value !== 'object') return [];
+  const record = value as Record<string, unknown>;
+  for (const key of keys) {
+    if (Array.isArray(record[key])) return record[key] as T[];
+  }
+  if (record.data && typeof record.data === 'object') {
+    return coerceImageEditorList<T>(record.data, keys);
+  }
+  return [];
+}
+
 function normalizeUrl(value: unknown): string {
   return String(value || '').trim();
 }
@@ -50,7 +63,9 @@ export function mergeImageEditorGallery(
   history: GenerationHistoryItem[],
   currentUserId: string,
 ): ImageEditorGalleryAsset[] {
-  const myHistory = history.filter((item) => (
+  const safeResources = coerceImageEditorList<ResourceItem>(resources);
+  const safeHistory = coerceImageEditorList<GenerationHistoryItem>(history);
+  const myHistory = safeHistory.filter((item) => (
     item.kind === 'image'
     && item.createdByUserId === currentUserId
     && normalizeUrl(item.url)
@@ -59,7 +74,7 @@ export function mergeImageEditorGallery(
   const matchedHistoryIds = new Set<string>();
   const merged: ImageEditorGalleryAsset[] = [];
 
-  for (const resource of resources) {
+  for (const resource of safeResources) {
     if (resource.kind !== 'image' || !normalizeUrl(resource.fileUrl)) continue;
     const sourceUrls = resourceSourceUrls(resource);
     const matchedHistories = sourceUrls
@@ -111,7 +126,7 @@ export function paginateImageEditorGallery(
   query: ImageEditorGalleryQuery,
 ): ImageEditorGalleryPage {
   const keyword = String(query.keyword || '').trim().toLowerCase();
-  const filtered = assets.filter((asset) => {
+  const filtered = coerceImageEditorList<ImageEditorGalleryAsset>(assets).filter((asset) => {
     if (query.source === 'resources' && !asset.inResourceLibrary) return false;
     if (query.source === 'mine' && !asset.fromMyGeneration) return false;
     if (query.categoryId && query.categoryId !== 'all' && asset.categoryId !== query.categoryId) return false;
@@ -131,11 +146,14 @@ export function paginateImageEditorGallery(
 }
 
 export function toggleImageEditorSelection(ids: string[], id: string, max = 9): string[] {
-  if (ids.includes(id)) return ids.filter((item) => item !== id);
-  if (ids.length >= max) return ids;
-  return [...ids, id];
+  const safeIds = coerceImageEditorList<string>(ids);
+  if (safeIds.includes(id)) return safeIds.filter((item) => item !== id);
+  if (safeIds.length >= max) return safeIds;
+  return [...safeIds, id];
 }
 
 export function replaceImageEditorSelectionId(ids: string[], previousId: string, nextId: string): string[] {
-  return ids.map((id) => (id === previousId ? nextId : id)).filter((id, index, list) => list.indexOf(id) === index);
+  return coerceImageEditorList<string>(ids)
+    .map((id) => (id === previousId ? nextId : id))
+    .filter((id, index, list) => list.indexOf(id) === index);
 }

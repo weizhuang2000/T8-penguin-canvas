@@ -28,6 +28,7 @@ import { logBus } from '../stores/logs';
 import { taskCompletionSound } from '../stores/taskCompletionSound';
 import { useThemeStore } from '../stores/theme';
 import {
+  coerceImageEditorList,
   mergeImageEditorGallery,
   paginateImageEditorGallery,
   replaceImageEditorSelectionId,
@@ -58,8 +59,8 @@ interface ImageEditorPageProps {
   onBack: () => void;
 }
 
-function resultData<T>(result: api.Result<T>): T | null {
-  return result.success ? result.data : null;
+function resultList<T>(result: api.Result<unknown>, keys: string[]): T[] | null {
+  return result.success ? coerceImageEditorList<T>(result.data, keys) : null;
 }
 
 function pageSizeStorageKey(userId: string) {
@@ -113,7 +114,7 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
   const [outputFormat, setOutputFormat] = useState<'jpg' | 'png'>('jpg');
 
   const llmConfigs = useMemo(() => {
-    const configured = settings.llmConfigs || settings.llmApiKeys || [];
+    const configured = coerceImageEditorList<any>(settings.llmConfigs || settings.llmApiKeys, ['items', 'configs']);
     const saved = configured.filter((item) => item && (item.hasApiKey || item.apiKey || item.baseUrl || item.model));
     return saved.length ? saved : [{ id: 'default', label: '默认 LLM', model: settings.llmModel || DEFAULT_LLM_MODEL, isDefault: true }];
   }, [settings.llmApiKeys, settings.llmConfigs, settings.llmModel]);
@@ -128,9 +129,9 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
       api.getResourceCategories('image'),
       api.getGenerationHistoryItems({ kind: 'image' }),
     ]);
-    const nextResources = resultData(resourceResult);
-    const nextCategories = resultData(categoryResult);
-    const nextHistory = resultData(historyResult);
+    const nextResources = resultList<ResourceItem>(resourceResult, ['items', 'resources']);
+    const nextCategories = resultList<ResourceCategory>(categoryResult, ['items', 'categories']);
+    const nextHistory = resultList<GenerationHistoryItem>(historyResult, ['items', 'history']);
     if (nextResources) setResources(nextResources);
     if (nextCategories) setCategories(nextCategories);
     if (nextHistory) {
