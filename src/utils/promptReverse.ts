@@ -73,6 +73,55 @@ export function buildPromptReverseMessages(options: {
   ];
 }
 
+export function buildImageEditorReverseMessages(options: {
+  imageUrls: string[];
+  editInstruction?: string;
+  strength?: PromptReverseStrength;
+  language?: PromptReverseLanguage;
+}): LlmMessage[] {
+  const strength = normalizePromptReverseStrength(options.strength);
+  const language = normalizePromptReverseLanguage(options.language);
+  const detail = PROMPT_REVERSE_STRENGTHS.find((item) => item.value === strength)!;
+  const images = options.imageUrls.map((url) => String(url || '').trim()).filter(Boolean).slice(0, 9);
+  const editInstruction = String(options.editInstruction || '').trim();
+  const languageRule = language === 'en'
+    ? 'Write the final prompt entirely in English.'
+    : '最终提示词使用自然、准确的简体中文；必须保留的外文可使用原文并加引号。';
+  const referenceRule = images.length > 1
+    ? `共有 ${images.length} 张参考图。图 1 是主体画面，其余图片只补充风格、材质、造型或构图信息；最终合成一条统一提示词。`
+    : '只有一张参考图，以它作为主体画面。';
+
+  return [
+    {
+      role: 'system',
+      content: [
+        '你是面向 GPT Image 2 的参考图改图提示词专家。先准确反推参考图，再产出一条可直接用于生图的完整自然语言提示词。',
+        '保留用户没有要求修改的主体数量与关系、构图、景别、视角、空间层次、光线、色彩关系、材质、媒介和成像质感。',
+        '用户的改图要求优先级最高；只修改要求明确涉及的主体、动作、场景、颜色、材质、文字或风格，其余视觉信息保持稳定。',
+        '如果用户没有提供改图要求，就生成一条尽可能复现参考图的提示词。',
+        '不要提到分析过程、参考图、改图或反推。不要输出 JSON、Markdown、标题、项目符号、负面提示词列表、Midjourney 参数或 Stable Diffusion 权重。',
+        '最终只输出一条可直接送入 GPT Image 2 的成品提示词。',
+      ].join('\n'),
+    },
+    {
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: [
+            `细节强度：${detail.label}（${detail.description}；${detail.lengthGuide}）。`,
+            languageRule,
+            referenceRule,
+            editInstruction ? `改图要求：${editInstruction}` : '改图要求：无，请尽可能复现主体画面。',
+            '直接输出最终生图提示词。',
+          ].join('\n'),
+        },
+        ...images.map((url) => ({ type: 'image_url' as const, image_url: { url } })),
+      ],
+    },
+  ];
+}
+
 export function buildPromptReverseContentSwapMessages(options: {
   prompt: string;
   contentText: string;

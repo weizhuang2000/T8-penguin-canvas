@@ -1,4 +1,23 @@
 {
+  "webImageEditor": {
+    "status": "implemented",
+    "label": "网页版改图与共享资源图库",
+    "route": "/image-editor",
+    "capabilities": [
+      "从无限画布左侧顶部进入独立网页版改图工作区，并支持浏览器前进、后退和刷新直达",
+      "首版提供参考图反推生图：融合用户改图要求后，将提示词和最多9张有序参考图交给 GPT Image 2",
+      "统一展示共享资源图库与当前用户跨画布的图像生成历史，支持全部、资源图库、我的生成筛选",
+      "支持资源分类、标题或提示词搜索、12/24/48/96分页、跨页选择与按用户保存每页数量",
+      "本地上传图片会先加入共享资源库；个人生成图可一键加入成品分类供其他登录用户使用",
+      "资源项通过 sourceUrls 兼容旧 sourceUrl 并累计哈希去重后的多个生成来源，可靠显示是否已入库",
+      "反推提示词可展开编辑并仅重试生图，新生成结果不会改变原参考图选择"
+    ],
+    "verification": [
+      "node --experimental-strip-types --test tests/imageEditorGallery.test.ts tests/resourceLibrarySourceUrls.test.ts",
+      "npm run type-check",
+      "npm run build"
+    ]
+  },
   "adminMonitoringDashboard": {
     "status": "implemented",
     "label": "管理员数据监控大屏",

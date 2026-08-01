@@ -29,6 +29,7 @@ import { matchesAnyShortcut } from './utils/keyboardShortcuts';
 import { portraitResourceToNodeData } from './utils/portraitResource';
 
 const Canvas = lazy(() => import('./components/Canvas'));
+const ImageEditorPage = lazy(() => import('./components/ImageEditorPage'));
 const ApiSettingsModal = lazy(() => import('./components/ApiSettings'));
 const ResourceLibraryDrawer = lazy(() => import('./components/ResourceLibraryDrawer'));
 const ThemeTemplateManager = lazy(() => import('./components/ThemeTemplateManager'));
@@ -145,9 +146,21 @@ function App() {
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [monitoringOpen, setMonitoringOpen] = useState(false);
   const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
+  const [appPath, setAppPath] = useState(() => window.location.pathname);
   // 画布接收节点添加的 ref(从 Sidebar -> Canvas)
   const addNodeRef = useRef<AddNodeFn | null>(null);
   const insertWorkflowRef = useRef<InsertWorkflowFn | null>(null);
+
+  useEffect(() => {
+    const onPopState = () => setAppPath(window.location.pathname);
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  const navigateApp = (path: string) => {
+    if (window.location.pathname !== path) window.history.pushState({}, '', path);
+    setAppPath(path);
+  };
 
 
   useEffect(() => {
@@ -344,6 +357,11 @@ function App() {
   const visibleNodeTypes = authUser?.permissions?.visibleNodeTypes;
   const allowedNodeTypes = authUser?.permissions?.allowedNodeTypes;
   const exhibitionCompactForm = authUser?.permissions?.exhibitionCompactForm;
+  const imageEditorVisible = !visibleNodeTypes
+    || (visibleNodeTypes.includes('prompt-reverse') && visibleNodeTypes.includes('image'));
+  const imageEditorAvailable = !allowedNodeTypes
+    || (allowedNodeTypes.includes('prompt-reverse') && allowedNodeTypes.includes('image'));
+  const imageEditorRoute = appPath === '/image-editor' || appPath.startsWith('/image-editor/');
 
   const handleLogout = async () => {
     await api.logout().catch(() => {});
@@ -768,20 +786,46 @@ function App() {
 
       {/* 主体两栏布局 */}
       <div className="flex-1 flex overflow-hidden">
-        <Sidebar onAddNode={handleAddNode} visibleNodeTypes={visibleNodeTypes} currentUserId={authUser.id} />
-        <ErrorBoundary fallbackTitle="画布渲染出错了，已被错误边界捕获">
-          <Suspense fallback={<InfiniteCanvasBootLoading />}>
-            <Canvas
-              onAddNodeRef={addNodeRef}
-              onInsertWorkflowRef={insertWorkflowRef}
+        {imageEditorRoute ? (
+          imageEditorAvailable ? (
+            <ErrorBoundary fallbackTitle="网页版改图渲染出错了，已被错误边界捕获">
+              <Suspense fallback={<InfiniteCanvasBootLoading />}>
+                <ImageEditorPage user={authUser} onBack={() => navigateApp('/')} />
+              </Suspense>
+            </ErrorBoundary>
+          ) : (
+            <div className="flex flex-1 items-center justify-center p-6">
+              <div className="max-w-md rounded-xl border border-amber-400/30 bg-amber-500/10 p-6 text-center">
+                <div className="font-semibold">当前账号没有网页版改图权限</div>
+                <div className="mt-2 text-xs opacity-65">需要同时开放“提示词反推”和“图像”节点。</div>
+                <button type="button" onClick={() => navigateApp('/')} className="mt-4 rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold text-black">返回无限画布</button>
+              </div>
+            </div>
+          )
+        ) : (
+          <>
+            <Sidebar
+              onAddNode={handleAddNode}
+              onOpenImageEditor={imageEditorVisible ? () => navigateApp('/image-editor') : undefined}
+              imageEditorAvailable={imageEditorAvailable}
+              visibleNodeTypes={visibleNodeTypes}
               currentUserId={authUser.id}
-              allowedNodeTypes={allowedNodeTypes}
-              exhibitionCompactForm={exhibitionCompactForm}
-              canEditExhibitionCompactForm={canManageSettings}
-              onExhibitionCompactFormChanged={refreshAuthUser}
             />
-          </Suspense>
-        </ErrorBoundary>
+            <ErrorBoundary fallbackTitle="画布渲染出错了，已被错误边界捕获">
+              <Suspense fallback={<InfiniteCanvasBootLoading />}>
+                <Canvas
+                  onAddNodeRef={addNodeRef}
+                  onInsertWorkflowRef={insertWorkflowRef}
+                  currentUserId={authUser.id}
+                  allowedNodeTypes={allowedNodeTypes}
+                  exhibitionCompactForm={exhibitionCompactForm}
+                  canEditExhibitionCompactForm={canManageSettings}
+                  onExhibitionCompactFormChanged={refreshAuthUser}
+                />
+              </Suspense>
+            </ErrorBoundary>
+          </>
+        )}
       </div>
 
       {/* API 设置弹窗 */}

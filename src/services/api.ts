@@ -1596,6 +1596,7 @@ export interface ResourceItem {
   tags: string[];
   favorite: boolean;
   sourceUrl?: string;
+  sourceUrls?: string[];
   sourceNodeId?: string;
   sourceCanvasId?: string;
   materialSetKind?: ResourceMaterialSetKind;

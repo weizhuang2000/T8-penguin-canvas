@@ -65,6 +65,16 @@ function safeText(value, fallback = '') {
   return String(value || fallback).trim().slice(0, 200);
 }
 
+function normalizeSourceUrls(value, fallback = '') {
+  const sourceUrls = Array.isArray(value) ? value : [];
+  const normalized = sourceUrls
+    .map((item) => safeText(item))
+    .filter(Boolean);
+  const legacy = safeText(fallback);
+  if (legacy) normalized.unshift(legacy);
+  return [...new Set(normalized)].slice(0, 500);
+}
+
 function safeFilename(value, fallback = 'asset') {
   const cleaned = String(value || fallback)
     .replace(/[\\/:*?"<>|]/g, '_')
@@ -418,6 +428,7 @@ function normalizeDb(raw) {
       tags: Array.isArray(item?.tags) ? item.tags.map((t) => safeText(t)).filter(Boolean).slice(0, 20) : [],
       favorite: !!item?.favorite,
       sourceUrl: safeText(item?.sourceUrl, ''),
+      sourceUrls: normalizeSourceUrls(item?.sourceUrls, item?.sourceUrl),
       sourceNodeId: safeText(item?.sourceNodeId, ''),
       sourceCanvasId: safeText(item?.sourceCanvasId, ''),
       materialSetKind,
@@ -439,7 +450,7 @@ function normalizeDb(raw) {
 
   return {
     schema: 't8-resource-library',
-    version: 1,
+    version: 2,
     updatedAt: safeText(db.updatedAt, new Date().toISOString()),
     categories: finalCategories,
     items: normalizedItems,
@@ -819,6 +830,7 @@ router.post('/items/add', express.json({ limit: '4mb' }), async (req, res) => {
     const categoryOk = db.categories.some((c) => c.id === requestedCat && c.kind === kind);
     if (existing) {
       if (categoryOk) existing.categoryId = requestedCat;
+      existing.sourceUrls = normalizeSourceUrls([...(existing.sourceUrls || []), url], existing.sourceUrl);
       existing.updatedAt = now();
       existing.lastUsedAt = now();
       writeDb(root, db);
@@ -849,6 +861,7 @@ router.post('/items/add', express.json({ limit: '4mb' }), async (req, res) => {
       tags: Array.isArray(req.body?.tags) ? req.body.tags.map((t) => safeText(t)).filter(Boolean).slice(0, 20) : [],
       favorite: !!req.body?.favorite,
       sourceUrl: url,
+      sourceUrls: [url],
       sourceNodeId: safeText(req.body?.sourceNodeId),
       sourceCanvasId: safeText(req.body?.sourceCanvasId),
       createdAt: now(),
