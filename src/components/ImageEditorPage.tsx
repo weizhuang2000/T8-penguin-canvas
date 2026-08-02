@@ -47,6 +47,8 @@ import {
 } from '../utils/imageEditorGallery';
 import {
   buildImageEditorReverseMessages,
+  buildPromptReverseContentSwapMessages,
+  cleanPromptReverseContentSwapOutput,
   cleanPromptReverseOutput,
   normalizePromptReverseLanguage,
   normalizePromptReverseStrength,
@@ -123,7 +125,7 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
   const [runError, setRunError] = useState('');
   const [reversedPrompt, setReversedPrompt] = useState('');
   const [llmKeyId, setLlmKeyId] = useState('');
-  const [strength, setStrength] = useState<PromptReverseStrength>('standard');
+  const [strength, setStrength] = useState<PromptReverseStrength>('extreme');
   const [language, setLanguage] = useState<PromptReverseLanguage>('zh');
   const fhlAllowed = !user.permissions?.allowedNodeTypes
     || user.permissions.allowedNodeTypes.includes('fhl-image-gen');
@@ -454,13 +456,32 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
         max_tokens: detail.maxTokens,
         messages: buildImageEditorReverseMessages({
           imageUrls: selectedAssets.map((asset) => asset.url),
-          editInstruction: instruction,
           strength: normalizePromptReverseStrength(strength),
           language: normalizePromptReverseLanguage(language),
         }),
       });
-      const prompt = cleanPromptReverseOutput(response.content);
-      if (!prompt) throw new Error('识图模型未返回有效提示词');
+      const reversePrompt = cleanPromptReverseOutput(response.content);
+      if (!reversePrompt) throw new Error('识图模型未返回有效提示词');
+      let prompt = reversePrompt;
+      const contentText = instruction.trim();
+      if (contentText) {
+        setProgress('正在替换内容');
+        logBus.info(`反推完成，开始替换内容 · ${contentText.length} 字`, '网页版改图');
+        const swapped = await generateLlm({
+          model: llmModel,
+          llmKeyId: activeLlm?.id && activeLlm.id !== 'default' ? activeLlm.id : undefined,
+          sourceNodeType: 'prompt-reverse',
+          temperature: 0.2,
+          max_tokens: detail.maxTokens,
+          messages: buildPromptReverseContentSwapMessages({
+            prompt: reversePrompt,
+            contentText,
+            language: normalizePromptReverseLanguage(language),
+          }),
+        });
+        prompt = cleanPromptReverseContentSwapOutput(swapped.content);
+        if (!prompt) throw new Error('识图模型未返回有效的换内容提示词');
+      }
       setReversedPrompt(prompt);
       setStage('generating');
       setProgress('0%');
@@ -518,7 +539,7 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400"><BrainCircuit size={20} /></span>
             <div>
               <div className="font-bold">参考图反推生图</div>
-              <div className="text-xs opacity-55">选择共享资源或自己的生成图，输入改图要求后一键运行</div>
+              <div className="text-xs opacity-55">选择共享资源或自己的生成图，输入内容文本后一键运行</div>
             </div>
           </div>
           <div className="bg-gradient-to-r from-emerald-500/15 via-cyan-500/10 to-sky-500/15 p-4 sm:p-5">
@@ -534,7 +555,8 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
                 }}
                 rows={3}
                 disabled={busy}
-                placeholder="描述想怎样修改，可留空直接复现参考图。Enter 运行，Shift+Enter 换行。"
+                aria-label="输入内容文本"
+                placeholder="输入要替换到画面中的内容文本；将保留参考图的构图、风格和材质，并替换主体、场景、叙事及可见文字。留空则复现参考图。Enter 运行，Shift+Enter 换行。"
                 className={`${field} min-h-[86px] flex-1 resize-y text-sm leading-relaxed`}
               />
               <button
@@ -544,7 +566,7 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
                 className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-7 font-bold text-black hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 {busy ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
-                {stage === 'reversing' ? '正在反推' : stage === 'generating' ? `正在生图 ${progress}` : '运行'}
+                {stage === 'reversing' ? (progress || '正在反推') : stage === 'generating' ? `正在生图 ${progress}` : '运行'}
               </button>
             </div>
             <button type="button" onClick={() => setAdvancedOpen((value) => !value)} className="mt-3 flex items-center gap-1 text-xs font-semibold opacity-70 hover:opacity-100">
@@ -553,8 +575,8 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
             {advancedOpen && (
               <div className="mt-3 grid grid-cols-2 gap-3 rounded-xl border border-current/10 bg-black/5 p-3 md:grid-cols-4 lg:grid-cols-7">
                 <label className="col-span-2 text-xs">识图 LLM<select className={`${field} mt-1 w-full text-xs`} value={activeLlm?.id || 'default'} onChange={(event) => setLlmKeyId(event.target.value)}>{llmConfigs.map((item) => <option key={item.id} value={item.id}>{item.label || item.id} · {item.model}</option>)}</select></label>
-                <label className="text-xs">细节<select className={`${field} mt-1 w-full text-xs`} value={strength} onChange={(event) => setStrength(normalizePromptReverseStrength(event.target.value))}>{PROMPT_REVERSE_STRENGTHS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
-                <label className="text-xs">语言<select className={`${field} mt-1 w-full text-xs`} value={language} onChange={(event) => setLanguage(normalizePromptReverseLanguage(event.target.value))}><option value="zh">中文</option><option value="en">English</option></select></label>
+                <label className="text-xs">细节强度<select className={`${field} mt-1 w-full text-xs`} value={strength} onChange={(event) => setStrength(normalizePromptReverseStrength(event.target.value))}>{PROMPT_REVERSE_STRENGTHS.map((item) => <option key={item.value} value={item.value}>{item.label} · {item.description}</option>)}</select></label>
+                <label className="text-xs">输出语言<select className={`${field} mt-1 w-full text-xs`} value={language} onChange={(event) => setLanguage(normalizePromptReverseLanguage(event.target.value))}><option value="zh">简体中文</option><option value="en">English</option></select></label>
                 <label className="col-span-2 text-xs">生图平台<select className={`${field} mt-1 w-full text-xs`} value={generationSource} onChange={(event) => setGenerationSource(event.target.value)}>{fhlAllowed && <option value="fhl">FHL 生图（默认）</option>}<option value="standard">GPT Image 2 标准平台</option>{imageProviders.map((provider) => <option key={provider.id} value={`external:${provider.id}`}>扩展 · {provider.label || provider.id}</option>)}</select></label>
                 <label className="col-span-2 text-xs">生图模型{generationSource === 'fhl' ? <select className={`${field} mt-1 w-full text-xs`} value="fhl-gpt-image-2" disabled><option value="fhl-gpt-image-2">FHL · gpt-image-2</option></select> : externalProvider ? <select className={`${field} mt-1 w-full text-xs`} value={activeExternalModel} onChange={(event) => setExternalProviderModel(event.target.value)}>{externalModels.map((item) => <option key={item} value={item}>{item}</option>)}</select> : <select className={`${field} mt-1 w-full text-xs`} value={apiModel} onChange={(event) => setApiModel(event.target.value)}>{GPT_VARIANTS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>}</label>
                 <label className="text-xs">比例<select className={`${field} mt-1 w-full text-xs`} value={aspectOptions.includes(aspectRatio) ? aspectRatio : aspectOptions[0]} onChange={(event) => setAspectRatio(event.target.value)}>{aspectOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>

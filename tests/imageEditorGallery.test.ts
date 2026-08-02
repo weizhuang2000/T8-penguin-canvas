@@ -11,7 +11,7 @@ import {
   replaceImageEditorSelectionId,
   toggleImageEditorSelection,
 } from '../src/utils/imageEditorGallery.ts';
-import { buildImageEditorReverseMessages } from '../src/utils/promptReverse.ts';
+import { buildImageEditorReverseMessages, buildPromptReverseContentSwapMessages } from '../src/utils/promptReverse.ts';
 
 function history(id: string, url: string, userId = 'u1'): GenerationHistoryItem {
   return {
@@ -93,18 +93,24 @@ test('gallery list normalization tolerates legacy envelopes and malformed API pa
   assert.equal(normalizeImageEditorResourceUrl('/api/resources/thumb/res-4', 'res-4', 'thumb'), '/api/resources/thumb/res-4');
 });
 
-test('web image editor reverse prompt applies edit instruction and multi-image priority', () => {
+test('web image editor uses reference reverse and the same content-swap prompt as the canvas node', () => {
   const messages = buildImageEditorReverseMessages({
     imageUrls: ['/files/input/main.png', '/files/input/style.png'],
-    editInstruction: '把主体外套改成蓝色，其余保持不变',
     strength: 'standard',
     language: 'zh',
   });
-  assert.match(String(messages[0].content), /用户的改图要求优先级最高/);
+  assert.match(String(messages[0].content), /后续如提供内容文本/);
   const userContent = messages[1].content as Array<{ type: string; text?: string }>;
   assert.match(String(userContent[0].text), /图 1 是主体画面/);
-  assert.match(String(userContent[0].text), /把主体外套改成蓝色/);
   assert.equal(userContent.filter((item) => item.type === 'image_url').length, 2);
+
+  const contentSwap = buildPromptReverseContentSwapMessages({
+    prompt: '保留的视觉形式',
+    contentText: '新展览主题和全部标题文字',
+    language: 'zh',
+  });
+  assert.match(String(contentSwap[0].content), /彻底替换原提示词的语义内容/);
+  assert.match(String(contentSwap[1].content), /新展览主题和全部标题文字/);
 });
 
 test('web image editor route, sidebar permission entry and shared-library actions are wired', () => {
@@ -119,6 +125,9 @@ test('web image editor route, sidebar permission entry and shared-library action
   assert.match(page, /getGenerationHistoryItems\(\{ kind: 'image' \}\)/);
   assert.match(page, /addResourceItem\(\{/);
   assert.match(page, /runConfiguredImageGeneration\(\{/);
+  assert.match(page, /buildPromptReverseContentSwapMessages/);
+  assert.match(page, /cleanPromptReverseContentSwapOutput/);
+  assert.match(page, /useState<PromptReverseStrength>\('extreme'\)/);
   assert.match(page, /useState\(\(\) => fhlAllowed \? 'fhl' : 'standard'\)/);
   assert.match(page, /createFhlJob\(\{/);
   assert.match(page, /advancedProvidersForNode\(settings\.advancedProviders, 'image'\)/);
