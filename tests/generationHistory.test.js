@@ -221,6 +221,82 @@ test('admin can filter history by user and model while regular users cannot wide
   assert.deepEqual(regular.map((item) => item.url), ['/files/output/a.png']);
 }));
 
+test('web image editor results are grouped in an owner-only virtual history project', () => withTempData(() => {
+  writeCanvases([
+    { id: 'c1', name: 'Shared canvas', ownerUserId: 'u1', sharedWith: [{ userId: 'u2', permission: 'view' }] },
+  ]);
+  const alice = { id: 'u1', username: 'alice', name: 'Alice', role: 'designer' };
+  const bob = { id: 'u2', username: 'bob', name: 'Bob', role: 'designer' };
+  history.addHistoryItems([{ url: '/files/output/canvas.png', kind: 'image' }], { canvasId: 'c1', sourceNodeType: 'image' }, alice);
+  const [webItem] = history.addHistoryItems(
+    [{ url: '/files/output/web.png', kind: 'image' }],
+    { canvasId: history.imageEditorProjectId('u1'), sourceNodeType: 'image-editor' },
+    alice,
+  );
+
+  const webProjectId = history.imageEditorProjectId('u1');
+  assert.equal(webItem.canvasId, webProjectId);
+  assert.equal(history.listVisibleItems(alice, { canvasId: webProjectId }).map((item) => item.url)[0], '/files/output/web.png');
+  assert.deepEqual(history.listVisibleItems(alice, { canvasId: 'c1' }).map((item) => item.url), ['/files/output/canvas.png']);
+  assert.deepEqual(history.listVisibleItems(bob, { canvasId: webProjectId }), []);
+  assert.deepEqual(history.listVisibleItems(bob).map((item) => item.url), ['/files/output/canvas.png']);
+
+  const projects = history.listProjects(alice);
+  const webProject = projects.find((project) => project.id === webProjectId);
+  assert.ok(webProject);
+  assert.equal(webProject.name, 'Alice · 网页版生图');
+  assert.equal(webProject.counts.image, 1);
+}));
+
+test('legacy web image editor results move to the creator virtual project without migration', () => withTempData(() => {
+  writeCanvases([{ id: 'c1', name: 'Old canvas', ownerUserId: 'u1' }]);
+  const alice = { id: 'u1', username: 'alice', name: 'Alice', role: 'designer' };
+  history.addHistoryItems(
+    [{ url: '/files/output/legacy-web.png', kind: 'image' }],
+    { canvasId: 'c1', sourceNodeType: 'image-editor' },
+    alice,
+  );
+  const db = history.readDb();
+  db.items[0].canvasId = 'c1';
+  history.writeDb(db);
+
+  const webProjectId = history.imageEditorProjectId('u1');
+  assert.deepEqual(history.listVisibleItems(alice, { canvasId: webProjectId }).map((item) => item.url), ['/files/output/legacy-web.png']);
+  assert.deepEqual(history.listVisibleItems(alice, { canvasId: 'c1' }), []);
+  assert.equal(history.listProjects(alice).find((project) => project.id === webProjectId)?.counts.total, 1);
+}));
+
+test('web image editor virtual projects are separated by user and manager can manage all results', () => withTempData(() => {
+  writeCanvases([]);
+  const alice = { id: 'u1', username: 'alice', name: 'Alice', role: 'designer' };
+  const bob = { id: 'u2', username: 'bob', name: 'Bob', role: 'designer' };
+  const manager = { id: 'admin', role: 'manager' };
+  const [aliceItem] = history.addHistoryItems(
+    [{ url: '/files/output/alice-web.png', kind: 'image' }],
+    { canvasId: history.imageEditorProjectId('u2'), sourceNodeType: 'image-editor' },
+    alice,
+  );
+  const [bobItem] = history.addHistoryItems(
+    [{ url: '/files/output/bob-web.png', kind: 'image' }],
+    { canvasId: history.imageEditorProjectId('u2'), sourceNodeType: 'image-editor' },
+    bob,
+  );
+
+  assert.equal(aliceItem.canvasId, history.imageEditorProjectId('u1'));
+  assert.deepEqual(history.listVisibleItems(alice).map((item) => item.url), ['/files/output/alice-web.png']);
+  assert.deepEqual(history.listVisibleItems(bob, { canvasId: history.imageEditorProjectId('u1') }), []);
+  const managerProjects = history.listProjects(manager);
+  assert.ok(managerProjects.some((project) => project.id === history.imageEditorProjectId('u1')));
+  assert.ok(managerProjects.some((project) => project.id === history.imageEditorProjectId('u2')));
+  assert.equal(history.updateHistoryItem(bob, aliceItem.id, { favorite: true }).status, 403);
+  assert.equal(history.updateHistoryItem(manager, aliceItem.id, { favorite: true }).status, 200);
+  assert.equal(history.deleteHistoryItem(manager, bobItem.id, 'hide').status, 200);
+  assert.deepEqual(
+    history.listVisibleItems(manager, { canvasId: history.imageEditorProjectId('u2'), includeHidden: true }).map((item) => item.url),
+    ['/files/output/bob-web.png'],
+  );
+}));
+
 test('history item listing supports bounded pagination', () => withTempData(() => {
   writeCanvases([{ id: 'c1', ownerUserId: 'u1' }]);
   for (let i = 0; i < 5; i += 1) {

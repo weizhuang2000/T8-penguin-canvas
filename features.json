@@ -11,10 +11,12 @@
       "支持资源分类、标题或提示词搜索、12/24/48/96分页、跨页选择与按用户保存每页数量",
       "本地上传图片会先加入共享资源库；个人生成图可一键加入成品分类供其他登录用户使用",
       "资源项通过 sourceUrls 兼容旧 sourceUrl 并累计哈希去重后的多个生成来源，可靠显示是否已入库",
-      "反推提示词可展开编辑并仅重试生图，新生成结果不会改变原参考图选择"
+      "反推提示词可展开编辑并仅重试生图，新生成结果不会改变原参考图选择",
+      "网页版改图结果会在历史生成中按“用户名 · 网页版生图”独立归档；旧结果兼容回溯，普通用户仅能查看和管理自己的结果"
     ],
     "verification": [
       "node --experimental-strip-types --test tests/imageEditorGallery.test.ts tests/resourceLibrarySourceUrls.test.ts",
+      "node --test tests/generationHistory.test.js",
       "npm run type-check",
       "npm run build"
     ]

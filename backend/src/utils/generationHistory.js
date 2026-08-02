@@ -22,6 +22,7 @@ const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.a
 const VIDEO_EXT = new Set(['.mp4', '.webm', '.mov', '.m4v', '.mkv', '.avi']);
 const AUDIO_EXT = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.aac']);
 const UNARCHIVED_PROJECT_ID = '__unarchived__';
+const IMAGE_EDITOR_PROJECT_PREFIX = '__image_editor_user__:';
 const MAX_LIST_LIMIT = 200;
 let mergedItemsCache = null;
 
@@ -230,15 +231,48 @@ function seedFromCanvasNode(canvasData) {
   };
 }
 
+function imageEditorProjectId(userId) {
+  const id = safeText(userId);
+  return id ? `${IMAGE_EDITOR_PROJECT_PREFIX}${id}` : '';
+}
+
+function imageEditorProjectUserId(canvasId) {
+  const value = safeText(canvasId);
+  if (!value.startsWith(IMAGE_EDITOR_PROJECT_PREFIX)) return '';
+  return value.slice(IMAGE_EDITOR_PROJECT_PREFIX.length);
+}
+
+function isImageEditorHistoryItem(item) {
+  return String(item?.sourceNodeType || '').trim().toLowerCase() === 'image-editor';
+}
+
+function imageEditorOwnerId(item) {
+  return safeText(item?.createdByUserId) || imageEditorProjectUserId(item?.canvasId);
+}
+
+function canViewImageEditorItem(user, item) {
+  if (isAdminRole(user?.role)) return true;
+  const ownerId = imageEditorOwnerId(item);
+  return !!ownerId && user?.id != null && ownerId === String(user.id);
+}
+
 function canViewProject(user, canvasId, canvases) {
+  const imageEditorUserId = imageEditorProjectUserId(canvasId);
+  if (imageEditorUserId) return isAdminRole(user?.role) || (user?.id != null && imageEditorUserId === String(user.id));
   if (!canvasId || canvasId === UNARCHIVED_PROJECT_ID) return isAdminRole(user?.role);
   const canvas = findCanvas(canvasId, canvases);
   return canvas ? canViewCanvas(user, canvas) : isAdminRole(user?.role);
 }
 
+function canViewHistoryItem(user, item, canvases) {
+  if (isImageEditorHistoryItem(item)) return canViewImageEditorItem(user, item);
+  return canViewProject(user, item?.canvasId, canvases);
+}
+
 function canManageHistoryItem(user, item, canvases) {
   if (!user || !item) return false;
   if (isAdminRole(user.role)) return true;
+  if (isImageEditorHistoryItem(item)) return canViewImageEditorItem(user, item);
   if (!item.canvasId || item.canvasId === UNARCHIVED_PROJECT_ID) return false;
   const canvas = findCanvas(item.canvasId, canvases);
   if (!canvas) return false;
@@ -383,7 +417,7 @@ function findOrMaterializeItem(db, id) {
 function decorateItem(item, user, canvases, seedReaderCache = null) {
   const canManage = canManageHistoryItem(user, item, canvases);
   let fallbackSeed = item.seed;
-  if (!fallbackSeed && item.canvasId && item.canvasId !== UNARCHIVED_PROJECT_ID) {
+  if (!fallbackSeed && !isImageEditorHistoryItem(item) && item.canvasId && item.canvasId !== UNARCHIVED_PROJECT_ID) {
     let seedReader = seedReaderCache?.get(item.canvasId);
     if (!seedReader) {
       seedReader = seedFromCanvasNode(loadCanvasData(item.canvasId));
@@ -413,18 +447,27 @@ function decorateItem(item, user, canvases, seedReaderCache = null) {
   };
 }
 
-function normalizeHistoryContext(context = {}) {
-  return {
+function normalizeHistoryContext(context = {}, user = null) {
+  const normalized = {
     canvasId: safeText(context.canvasId),
     sourceNodeId: safeText(context.sourceNodeId),
     sourceNodeType: safeText(context.sourceNodeType),
     nodeTitle: safeText(context.nodeTitle),
     outputTitle: safeText(context.outputTitle),
   };
+  const requestedImageEditorUserId = imageEditorProjectUserId(normalized.canvasId);
+  if (isImageEditorHistoryItem(normalized)) {
+    normalized.canvasId = imageEditorProjectId(user?.id) || normalized.canvasId;
+  } else if (requestedImageEditorUserId) {
+    // Virtual projects are reserved for the web image editor. Do not allow a
+    // caller to place an arbitrary generation in another user's namespace.
+    normalized.canvasId = '';
+  }
+  return normalized;
 }
 
 function addHistoryItems(items, context = {}, user = null) {
-  const normalizedContext = normalizeHistoryContext(context);
+  const normalizedContext = normalizeHistoryContext(context, user);
   const db = readDb();
   const byUrl = new Map(db.items.map((item) => [item.url, item]));
   const out = [];
@@ -602,6 +645,7 @@ function listVisibleItems(user, params = {}) {
   const includeHidden = params.includeHidden === true || params.includeHidden === '1' || params.includeHidden === 'true';
   const favoriteOnly = params.favorite === true || params.favorite === '1' || params.favorite === 'true';
   const canvasId = safeText(params.canvasId);
+  const selectedImageEditorUserId = imageEditorProjectUserId(canvasId);
   const userId = admin ? safeText(params.userId) : '';
   const role = admin ? safeText(params.role).toLowerCase() : '';
   const provider = admin ? safeText(params.provider).toLowerCase() : '';
@@ -615,13 +659,17 @@ function listVisibleItems(user, params = {}) {
       if (!includeHidden && item.hidden) return false;
       if (kind && item.kind !== kind) return false;
       if (favoriteOnly && !item.favorite) return false;
-      if (canvasId && item.canvasId !== canvasId) return false;
+      if (selectedImageEditorUserId) {
+        if (!isImageEditorHistoryItem(item) || imageEditorOwnerId(item) !== selectedImageEditorUserId) return false;
+      } else if (canvasId) {
+        if (isImageEditorHistoryItem(item) || item.canvasId !== canvasId) return false;
+      }
       if (userId && item.createdByUserId !== userId) return false;
       if (role && String(item.createdByUserRole || '').toLowerCase() !== role) return false;
       if (provider && !String(item.provider || '').toLowerCase().includes(provider)) return false;
       if (model && !String(item.model || '').toLowerCase().includes(model)) return false;
       if (sourceNodeType && String(item.sourceNodeType || '').toLowerCase() !== sourceNodeType) return false;
-      if (!canViewProject(user, item.canvasId, canvases)) return false;
+      if (!canViewHistoryItem(user, item, canvases)) return false;
       if (q) {
         const haystack = `${item.title} ${item.fileName} ${item.prompt} ${item.provider} ${item.model} ${item.seed || ''} ${item.tags.join(' ')} ${item.createdByUserName} ${item.createdByUserRole} ${item.sourceNodeType}`.toLowerCase();
         if (!haystack.includes(q)) return false;
@@ -676,9 +724,26 @@ function listProjects(user) {
   const canvases = loadCanvasList();
   const items = collectMergedItems();
   const counts = new Map();
+  const imageEditorProjects = new Map();
   for (const item of items) {
     if (item.hidden || item.deletedAt) continue;
-    if (!canViewProject(user, item.canvasId, canvases)) continue;
+    if (!canViewHistoryItem(user, item, canvases)) continue;
+    if (isImageEditorHistoryItem(item)) {
+      const userId = imageEditorOwnerId(item);
+      if (!userId) continue;
+      const current = imageEditorProjects.get(userId) || {
+        userId,
+        name: item.createdByUserName || userId,
+        counts: { image: 0, video: 0, audio: 0, total: 0 },
+        updatedAt: 0,
+      };
+      current.counts[item.kind] += 1;
+      current.counts.total += 1;
+      current.updatedAt = Math.max(current.updatedAt, Number(item.createdAt) || 0);
+      if (item.createdByUserName) current.name = item.createdByUserName;
+      imageEditorProjects.set(userId, current);
+      continue;
+    }
     const key = item.canvasId || UNARCHIVED_PROJECT_ID;
     const current = counts.get(key) || { image: 0, video: 0, audio: 0, total: 0 };
     current[item.kind] += 1;
@@ -696,6 +761,16 @@ function listProjects(user) {
       updatedAt: Number(canvas.updatedAt) || 0,
     }))
     .sort((a, b) => b.updatedAt - a.updatedAt);
+  projects.push(...Array.from(imageEditorProjects.values())
+    .map((project) => ({
+      id: imageEditorProjectId(project.userId),
+      name: `${project.name} · 网页版生图`,
+      ownerUserId: project.userId,
+      readonly: false,
+      counts: project.counts,
+      updatedAt: project.updatedAt,
+    }))
+    .sort((a, b) => b.updatedAt - a.updatedAt));
   if (isAdminRole(user?.role)) {
     projects.push({
       id: UNARCHIVED_PROJECT_ID,
@@ -714,7 +789,7 @@ function updateHistoryItem(user, id, patch = {}) {
   const db = readDb();
   const item = findOrMaterializeItem(db, id);
   if (!item) return { status: 404, error: 'History item not found' };
-  if (!canViewProject(user, item.canvasId, canvases)) return { status: 403, error: 'No permission to access this history item' };
+  if (!canViewHistoryItem(user, item, canvases)) return { status: 403, error: 'No permission to access this history item' };
   if (!canManageHistoryItem(user, item, canvases)) return { status: 403, error: 'No permission to manage this history item' };
   if (patch.title != null) item.title = safeText(patch.title, item.title).slice(0, 200) || item.title;
   if (patch.favorite != null) item.favorite = !!patch.favorite;
@@ -729,7 +804,7 @@ function deleteHistoryItem(user, id, mode = 'hide') {
   const db = readDb();
   const item = findOrMaterializeItem(db, id);
   if (!item) return { status: 404, error: 'History item not found' };
-  if (!canViewProject(user, item.canvasId, canvases)) return { status: 403, error: 'No permission to access this history item' };
+  if (!canViewHistoryItem(user, item, canvases)) return { status: 403, error: 'No permission to access this history item' };
   if (mode === 'delete-file') {
     if (!isAdminRole(user?.role)) return { status: 403, error: 'Only admin or manager can delete files' };
     const key = item.storageKey || keyFromOutputUrl(item.url);
@@ -760,10 +835,12 @@ function deleteHistoryItem(user, id, mode = 'hide') {
 }
 
 module.exports = {
+  IMAGE_EDITOR_PROJECT_PREFIX,
   UNARCHIVED_PROJECT_ID,
   addHistoryItems,
   deleteHistoryItem,
   kindFromUrl,
+  imageEditorProjectId,
   listHistoryUsers,
   listProjects,
   listVisibleItems,

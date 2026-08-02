@@ -123,4 +123,7 @@ test('web image editor route, sidebar permission entry and shared-library action
   assert.match(page, /createFhlJob\(\{/);
   assert.match(page, /advancedProvidersForNode\(settings\.advancedProviders, 'image'\)/);
   assert.match(page, /mode: externalProvider \? 'external' : 'standard'/);
+  assert.match(page, /title="放大预览"/);
+  assert.match(page, /title="下载图片"/);
+  assert.match(page, /const downloadAsset =/);
 });

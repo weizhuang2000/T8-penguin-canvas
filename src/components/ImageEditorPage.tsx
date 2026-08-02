@@ -7,11 +7,13 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Download,
   ImagePlus,
   Images,
   Library,
   LibraryBig,
   Loader2,
+  Maximize2,
   RefreshCw,
   Search,
   Sparkles,
@@ -61,6 +63,7 @@ const MAX_REFERENCES = 9;
 const FHL_TERMINAL = new Set(['completed', 'partial', 'failed', 'cancelled', 'interrupted']);
 const FHL_EDIT_2K_RATIOS = ['1:1', '3:2', '2:3', '4:3', '3:4', '5:4', '4:5', '16:9', '9:16', '2:1', '1:2', '3:1', '1:3', '7:4', '4:7'];
 const FHL_4K_RATIOS = ['1:1', '3:2', '2:3', '16:9', '9:16', '2:1', '1:2', '3:1', '1:3', '7:4', '4:7'];
+const IMAGE_EDITOR_PROJECT_PREFIX = '__image_editor_user__:';
 
 type RunStage = 'idle' | 'reversing' | 'generating' | 'success' | 'error';
 
@@ -86,6 +89,10 @@ function readPageSize(userId: string): number {
   }
 }
 
+function imageEditorHistoryProjectId(userId: string) {
+  return `${IMAGE_EDITOR_PROJECT_PREFIX}${userId}`;
+}
+
 export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) {
   const { theme, style } = useThemeStore();
   const isDark = theme === 'dark';
@@ -97,6 +104,7 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
   const [resources, setResources] = useState<ResourceItem[]>([]);
   const [history, setHistory] = useState<GenerationHistoryItem[]>([]);
   const [categories, setCategories] = useState<ResourceCategory[]>([]);
+  const [previewAsset, setPreviewAsset] = useState<ImageEditorGalleryAsset | null>(null);
   const [loadingGallery, setLoadingGallery] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [publishingId, setPublishingId] = useState('');
@@ -208,6 +216,15 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
   }, [loadCanvases, user.id]);
 
   useEffect(() => {
+    if (!previewAsset) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPreviewAsset(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [previewAsset]);
+
+  useEffect(() => {
     const onChanged = () => void reloadGallery();
     window.addEventListener('penguin:resources-changed', onChanged);
     window.addEventListener('penguin:generation-history-changed', onChanged);
@@ -246,6 +263,21 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
     const next = toggleImageEditorSelection(selectedIds, asset.id, MAX_REFERENCES);
     if (next === selectedIds) setMessage(`最多选择 ${MAX_REFERENCES} 张参考图`);
     setSelectedIds(next);
+  };
+
+  const downloadAsset = (asset: ImageEditorGalleryAsset) => {
+    const url = String(asset.url || '').trim();
+    if (!url) return;
+    const suffix = url.split(/[?#]/)[0].split('/').pop() || 'image';
+    const title = String(asset.title || '').trim().replace(/[\\/:*?"<>|]/g, '_');
+    const hasExtension = /\.[a-z0-9]{2,8}$/i.test(title);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = hasExtension ? title : `${title || 'image'}${/\.[a-z0-9]{2,8}$/i.test(suffix) ? suffix.slice(suffix.lastIndexOf('.')) : ''}`;
+    anchor.style.display = 'none';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
   };
 
   const finishedCategoryId = useMemo(
@@ -319,7 +351,7 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
       count,
       concurrency: Math.max(1, Math.min(10, count)),
       historyContext: {
-        canvasId: activeId,
+        canvasId: imageEditorHistoryProjectId(user.id),
         sourceNodeId: `web-image-editor-${user.id}`,
         sourceNodeType: 'image-editor',
         nodeTitle: '网页版改图 · FHL',
@@ -364,7 +396,7 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
             size: externalImageSizeFor(aspectRatio, sizeLevel),
           } : undefined,
           historyContext: {
-            canvasId: activeId,
+            canvasId: imageEditorHistoryProjectId(user.id),
             sourceNodeId: `web-image-editor-${user.id}`,
             sourceNodeType: 'image-editor',
             nodeTitle: externalProvider ? `网页版改图 · ${externalProvider.label}` : '网页版改图 · GPT Image 2',
@@ -382,7 +414,7 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
         url,
         fileName: url.split('/').pop() || `网页版改图-${index + 1}.jpg`,
         title: `网页版改图 ${new Date().toLocaleString()}`,
-        canvasId: activeId || '',
+        canvasId: imageEditorHistoryProjectId(user.id),
         sourceNodeId: `web-image-editor-${user.id}`,
         sourceNodeType: 'image-editor',
         prompt,
@@ -587,15 +619,19 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
                       <div className="relative aspect-[4/3] overflow-hidden bg-black/80">
                         <SmartImage src={asset.previewUrl} alt={asset.title} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]" thumbSize={520} />
                         <span className={`absolute left-2 top-2 flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-xs font-black ${selectionIndex >= 0 ? 'bg-emerald-500 text-black' : 'bg-black/60 text-white'}`}>{selectionIndex >= 0 ? selectionIndex + 1 : <Check size={14} className="opacity-45" />}</span>
-                        <button
-                          type="button"
-                          disabled={asset.inResourceLibrary || publishingId === asset.id}
-                          onClick={(event) => { event.stopPropagation(); void publishAsset(asset); }}
-                          className={`absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full ${asset.inResourceLibrary ? 'bg-cyan-500 text-black' : 'bg-black/65 text-white hover:bg-cyan-500 hover:text-black'} disabled:cursor-default`}
-                          title={asset.inResourceLibrary ? '已在共享资源图库' : '加入共享资源图库'}
-                        >
-                          {publishingId === asset.id ? <Loader2 size={15} className="animate-spin" /> : <Library size={15} fill={asset.inResourceLibrary ? 'currentColor' : 'none'} />}
-                        </button>
+                        <div className="absolute right-2 top-2 flex flex-col gap-1">
+                          <button type="button" onClick={(event) => { event.stopPropagation(); setPreviewAsset(asset); }} className="flex h-8 w-8 items-center justify-center rounded-full bg-black/65 text-white hover:bg-emerald-500 hover:text-black" title="放大预览"><Maximize2 size={15} /></button>
+                          <button type="button" onClick={(event) => { event.stopPropagation(); downloadAsset(asset); }} className="flex h-8 w-8 items-center justify-center rounded-full bg-black/65 text-white hover:bg-sky-500 hover:text-black" title="下载图片"><Download size={15} /></button>
+                          <button
+                            type="button"
+                            disabled={asset.inResourceLibrary || publishingId === asset.id}
+                            onClick={(event) => { event.stopPropagation(); void publishAsset(asset); }}
+                            className={`flex h-8 w-8 items-center justify-center rounded-full ${asset.inResourceLibrary ? 'bg-cyan-500 text-black' : 'bg-black/65 text-white hover:bg-cyan-500 hover:text-black'} disabled:cursor-default`}
+                            title={asset.inResourceLibrary ? '已在共享资源图库' : '加入共享资源图库'}
+                          >
+                            {publishingId === asset.id ? <Loader2 size={15} className="animate-spin" /> : <Library size={15} fill={asset.inResourceLibrary ? 'currentColor' : 'none'} />}
+                          </button>
+                        </div>
                         <div className="absolute bottom-2 left-2 flex gap-1">{asset.inResourceLibrary && <span className="rounded bg-black/65 px-2 py-1 text-[10px] text-white">资源图库</span>}{asset.fromMyGeneration && <span className="rounded bg-black/65 px-2 py-1 text-[10px] text-white">我的生成</span>}</div>
                       </div>
                       <div className="p-3"><div className="truncate text-sm font-bold" title={asset.title}>{asset.title}</div><div className="mt-1 flex items-center justify-between text-[10px] opacity-50"><span>{asset.width && asset.height ? `${asset.width} × ${asset.height}` : '图片素材'}</span><span>{new Date(asset.createdAt).toLocaleDateString()}</span></div></div>
@@ -612,6 +648,20 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
           </div>
         </section>
       </div>
+      {previewAsset && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-4" role="dialog" aria-modal="true" aria-label="图片放大预览" onMouseDown={() => setPreviewAsset(null)}>
+          <div className={`relative flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-2xl border shadow-2xl ${surface}`} onMouseDown={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 border-b border-current/10 px-4 py-3">
+              <div className="min-w-0 truncate text-sm font-bold">{previewAsset.title}</div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button type="button" onClick={() => downloadAsset(previewAsset)} className={`${field} flex items-center gap-1 py-1.5 text-xs font-bold`} title="下载图片"><Download size={14} /> 下载</button>
+                <button type="button" onClick={() => setPreviewAsset(null)} className={`${field} flex h-8 w-8 items-center justify-center p-0`} title="关闭预览"><X size={15} /></button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto bg-black/80 p-4"><img src={previewAsset.url} alt={previewAsset.title} className="mx-auto max-h-[78vh] max-w-full object-contain" /></div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
