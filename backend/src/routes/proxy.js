@@ -571,12 +571,17 @@ async function refToBananaImage(ref) {
   if (typeof ref !== 'string' || !ref) return null;
   if (ref.startsWith('data:')) return ref;
   if (ref.startsWith('http://') || ref.startsWith('https://')) return ref;
+  const resolved = await resolveMediaRef(ref, {
+    target: 'data-url',
+    baseUrl: `http://127.0.0.1:${config.PORT}`,
+  }).catch(() => null);
+  if (resolved?.dataUrl) return resolved.dataUrl;
   const local = await bufferFromAvailableMediaRef(ref);
   if (local) return `data:${local.mime};base64,${local.buf.toString('base64')}`;
-  if (ref.startsWith('/files/')) {
+  if (resolved?.url || ref.startsWith('/files/')) {
     // 本地资源 → 转 base64
     try {
-      const r = await fetch(`http://127.0.0.1:${config.PORT}${ref}`);
+      const r = await fetch(resolved?.url || `http://127.0.0.1:${config.PORT}${ref}`);
       if (!r.ok) return null;
       const ct = r.headers.get('content-type') || 'image/png';
       const buf = Buffer.from(await r.arrayBuffer());
@@ -728,7 +733,7 @@ async function saveImageItemsFromResult(result, format = 'jpg') {
 //   上游 LLM 服务(百达工坊)无法访问本地 /files/* 路径,需提前转成 base64 dataURL inline。
 //   - data: 保留
 //   - http(s):// 保留(上游可访问)
-//   - /files/* → 本地拉 buffer 转 base64 dataURL
+//   - 站内相对图片（/files/*、/api/resources/file/* 等）→ 本地读取后转 base64 dataURL
 //   对齐 gpt-image-2-web chat 模式处理参考图的思路。
 //   零破坏:对于 content 为字符串的普通文本消息不动;仅处理 content 为数组且含 image_url 部分。
 async function normalizeLlmMessageImages(messages) {
@@ -741,17 +746,18 @@ async function normalizeLlmMessageImages(messages) {
       if (typeof url !== 'string' || !url) continue;
       // 已是 base64 或外网 URL→不动
       if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://')) continue;
-      // 本地路径→转 base64 dataURL
-      if (url.startsWith('/files/')) {
+      // 任意站内相对图片都不能直接交给上游。统一通过媒体解析器读取，
+      // 既覆盖 /files/*，也覆盖网页版图库使用的 /api/resources/file/*。
+      if (url.startsWith('/')) {
         const dataUrl = await refToBananaImage(url);
-        if (dataUrl) {
+        if (dataUrl && dataUrl.startsWith('data:image/')) {
           part.image_url.url = dataUrl;
         } else {
-          // 转换失败:报一个明确错误,避免上游 'base64:/files/...' 这种误导报错
+          // 转换失败:在本地返回明确错误，避免把无效相对 URL 交给上游。
           throw new Error(`本地图片读取失败: ${url}`);
         }
       }
-      // 其它未知前缀:保留原值,让上游报真错误
+      // 其它未知前缀:保留原值，让上游报真错误
     }
   }
   return messages;

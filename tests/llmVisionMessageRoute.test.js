@@ -14,7 +14,7 @@ async function listen(app) {
   });
 }
 
-test('proxy llm normalizes image message parts for local refs', async (t) => {
+test('proxy llm normalizes multiple file and resource-library image message parts', async (t) => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 't8-llm-vision-'));
   t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
 
@@ -36,6 +36,17 @@ test('proxy llm normalizes image message parts for local refs', async (t) => {
   config.DEFAULT_THEME_TEMPLATE_DIR = path.join(tmpDir, 'themes');
   fs.mkdirSync(config.INPUT_DIR, { recursive: true });
   fs.writeFileSync(path.join(config.INPUT_DIR, 'tiny.png'), Buffer.from('iVBORw0KGgo=', 'base64'));
+  fs.mkdirSync(path.join(config.DEFAULT_RESOURCE_LIBRARY_DIR, 'files'), { recursive: true });
+  fs.writeFileSync(path.join(config.DEFAULT_RESOURCE_LIBRARY_DIR, 'files', 'resource.png'), Buffer.from('iVBORw0KGgo=', 'base64'));
+  fs.writeFileSync(path.join(config.DEFAULT_RESOURCE_LIBRARY_DIR, 'resource_library.json'), JSON.stringify({
+    schema: 't8-resource-library',
+    items: [{
+      id: 'resource-image',
+      kind: 'image',
+      fileRel: 'files/resource.png',
+      mime: 'image/png',
+    }],
+  }));
 
   const upstreamApp = express();
   upstreamApp.use(express.json({ limit: '4mb' }));
@@ -86,15 +97,18 @@ test('proxy llm normalizes image message parts for local refs', async (t) => {
         content: [
           { type: 'text', text: '识别展品' },
           { type: 'image', image_url: { url: '/files/input/tiny.png' } },
+          { type: 'image_url', image_url: { url: '/api/resources/file/resource-image' } },
         ],
       }],
     }),
   }).then((res) => res.json());
 
-  assert.equal(llm.success, true);
+  assert.equal(llm.success, true, llm.error || JSON.stringify(llm));
   assert.equal(llm.data.content, '红色陶器');
   assert.equal(upstreamCalls[0].messages[0].content[1].type, 'image');
   assert.match(upstreamCalls[0].messages[0].content[1].image_url.url, /^data:image\/png;base64,/);
+  assert.equal(upstreamCalls[0].messages[0].content[2].type, 'image_url');
+  assert.match(upstreamCalls[0].messages[0].content[2].image_url.url, /^data:image\/png;base64,/);
   assert.equal(JSON.stringify(llm).includes('sk-vision-secret'), false);
 });
 
