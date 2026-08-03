@@ -1580,6 +1580,16 @@ export interface ResourceCategory {
   createdAt: number;
 }
 
+export type ResourceImageAnalysisStrength = 'concise' | 'standard' | 'detailed' | 'extreme';
+export type ResourceImageAnalysisLanguage = 'zh' | 'en';
+
+export interface ResourceImageAnalysis {
+  version: 1;
+  secondaryTags: string[];
+  reversePrompts: Partial<Record<ResourceImageAnalysisStrength, Partial<Record<ResourceImageAnalysisLanguage, string>>>>;
+  classifiedAt: number;
+}
+
 export interface ResourceItem {
   id: string;
   kind: ResourceKind;
@@ -1599,6 +1609,7 @@ export interface ResourceItem {
   sourceUrls?: string[];
   sourceNodeId?: string;
   sourceCanvasId?: string;
+  imageAnalysis?: ResourceImageAnalysis | null;
   materialSetKind?: ResourceMaterialSetKind;
   materialSetItems?: Array<{
     id: string;
@@ -1650,6 +1661,7 @@ export interface AddResourcePayload {
   sourceNodeId?: string;
   sourceCanvasId?: string;
   favorite?: boolean;
+  imageAnalysis?: ResourceImageAnalysis;
 }
 
 export interface AddResourcePosePayload {
@@ -1740,7 +1752,7 @@ export function addResourceWorkflow(payload: AddResourceWorkflowPayload) {
   });
 }
 
-export function updateResourceItem(id: string, patch: Partial<Pick<ResourceItem, 'title' | 'categoryId' | 'tags' | 'favorite'>> & { touch?: boolean }) {
+export function updateResourceItem(id: string, patch: Partial<Pick<ResourceItem, 'title' | 'categoryId' | 'tags' | 'favorite' | 'imageAnalysis'>> & { touch?: boolean }) {
   return safeRequest<ResourceItem>(`${BASE}/resources/items/${encodeURIComponent(id)}`, {
     method: 'PUT',
     body: JSON.stringify(patch),

@@ -8,6 +8,8 @@ import {
   ChevronRight,
   ChevronUp,
   Download,
+  ClipboardCopy,
+  FileText,
   ImagePlus,
   Images,
   Library,
@@ -25,7 +27,7 @@ import { generateLlm, uploadFile } from '../services/generation';
 import { runConfiguredImageGeneration } from '../services/imageGenerationRunner';
 import { createFhlJob, getFhlJob } from '../services/fhlImage';
 import * as api from '../services/api';
-import type { AuthUser, GenerationHistoryItem, ResourceCategory, ResourceItem } from '../services/api';
+import type { AuthUser, GenerationHistoryItem, ResourceCategory, ResourceImageAnalysis, ResourceItem } from '../services/api';
 import { useApiKeysStore } from '../stores/apiKeys';
 import { useCanvasStore } from '../stores/canvas';
 import { logBus } from '../stores/logs';
@@ -46,7 +48,6 @@ import {
   type ImageEditorGallerySource,
 } from '../utils/imageEditorGallery';
 import {
-  buildImageEditorReverseMessages,
   buildPromptReverseContentSwapMessages,
   cleanPromptReverseContentSwapOutput,
   cleanPromptReverseOutput,
@@ -56,6 +57,13 @@ import {
   type PromptReverseLanguage,
   type PromptReverseStrength,
 } from '../utils/promptReverse';
+import {
+  buildImageEditorAnalysisMessages,
+  buildImageEditorCachedPromptMergeMessages,
+  getImageEditorCachedPrompt,
+  mergeImageEditorAnalysis,
+  parseImageEditorAnalysisOutput,
+} from '../utils/imageEditorAnalysis';
 import SmartImage from './SmartImage';
 
 const GPT_IMAGE = IMAGE_MODELS.find((item) => item.id === 'gpt-image-2') || IMAGE_MODELS[0];
@@ -109,6 +117,20 @@ function imageEditorHistoryProjectId(userId: string) {
   return `${IMAGE_EDITOR_PROJECT_PREFIX}${userId}`;
 }
 
+async function mapWithConcurrency<T, R>(items: T[], limit: number, worker: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(Math.max(1, limit), Math.max(1, items.length)) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await worker(items[index], index);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
 export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) {
   const { theme, style } = useThemeStore();
   const isDark = theme === 'dark';
@@ -121,6 +143,9 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
   const [history, setHistory] = useState<GenerationHistoryItem[]>([]);
   const [categories, setCategories] = useState<ResourceCategory[]>([]);
   const [previewAsset, setPreviewAsset] = useState<ImageEditorGalleryAsset | null>(null);
+  const [analysisAsset, setAnalysisAsset] = useState<ImageEditorGalleryAsset | null>(null);
+  const [analysisModalStrength, setAnalysisModalStrength] = useState<PromptReverseStrength>('extreme');
+  const [analysisModalLanguage, setAnalysisModalLanguage] = useState<PromptReverseLanguage>('zh');
   const [loadingGallery, setLoadingGallery] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [publishingId, setPublishingId] = useState('');
@@ -147,7 +172,7 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
   const [generationSource, setGenerationSource] = useState(() => fhlAllowed ? 'fhl' : 'standard');
   const [apiModel, setApiModel] = useState('gpt-image-2-all');
   const [externalProviderModel, setExternalProviderModel] = useState('');
-  const [aspectRatio, setAspectRatio] = useState('Auto');
+  const [aspectRatio, setAspectRatio] = useState('16:9');
   const [sizeLevel, setSizeLevel] = useState('2K');
   const [count, setCount] = useState(1);
   const [outputFormat, setOutputFormat] = useState<'jpg' | 'png'>('jpg');
@@ -239,13 +264,16 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
   }, [loadCanvases, user.id]);
 
   useEffect(() => {
-    if (!previewAsset) return undefined;
+    if (!previewAsset && !analysisAsset) return undefined;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setPreviewAsset(null);
+      if (event.key === 'Escape') {
+        setPreviewAsset(null);
+        setAnalysisAsset(null);
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [previewAsset]);
+  }, [analysisAsset, previewAsset]);
 
   useEffect(() => {
     const onChanged = () => void reloadGallery();
@@ -313,6 +341,88 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
     () => categories.find((item) => item.kind === 'image' && item.name === '成品')?.id || 'image_uncategorized',
     [categories],
   );
+  const uncategorizedCategoryId = useMemo(
+    () => categories.find((item) => item.kind === 'image' && item.id === 'image_uncategorized')?.id || 'image_uncategorized',
+    [categories],
+  );
+
+  const persistAssetAnalysis = async (
+    asset: ImageEditorGalleryAsset,
+    imageAnalysis: ResourceImageAnalysis,
+    nextCategoryId?: string,
+  ) => {
+    if (asset.resourceId) {
+      const result = await api.updateResourceItem(asset.resourceId, {
+        imageAnalysis,
+        ...(nextCategoryId ? { categoryId: nextCategoryId } : {}),
+      });
+      if (!result.success) throw new Error(result.error || '保存反推提示词失败');
+      setResources((current) => current.map((item) => item.id === result.data.id ? result.data : item));
+      return result.data;
+    }
+    const result = await api.addResourceItem({
+      url: asset.url,
+      kind: 'image',
+      categoryId: nextCategoryId || uncategorizedCategoryId,
+      title: asset.title,
+      tags: ['网页版改图'],
+      sourceNodeId: 'web-image-editor-analysis',
+      sourceCanvasId: activeId || undefined,
+      imageAnalysis,
+    });
+    if (!result.success) throw new Error(result.error || '自动加入资源库失败');
+    setResources((current) => [result.data, ...current.filter((item) => item.id !== result.data.id)]);
+    setSelectedIds((ids) => replaceImageEditorSelectionId(ids, asset.id, `resource:${result.data.id}`));
+    window.dispatchEvent(new CustomEvent('penguin:resources-changed'));
+    return result.data;
+  };
+
+  const resolveAssetReversePrompt = async (asset: ImageEditorGalleryAsset): Promise<string> => {
+    const normalizedStrength = normalizePromptReverseStrength(strength);
+    const normalizedLanguage = normalizePromptReverseLanguage(language);
+    const cached = getImageEditorCachedPrompt(asset.imageAnalysis, normalizedStrength, normalizedLanguage);
+    if (cached) return cached;
+
+    const isFirstAnalysis = !asset.imageAnalysis?.classifiedAt;
+    const detail = PROMPT_REVERSE_STRENGTHS.find((item) => item.value === normalizedStrength)!;
+    const response = await generateLlm({
+      model: llmModel,
+      llmKeyId: activeLlm?.id && activeLlm.id !== 'default' ? activeLlm.id : undefined,
+      sourceNodeType: 'prompt-reverse',
+      temperature: 0.2,
+      max_tokens: detail.maxTokens,
+      messages: buildImageEditorAnalysisMessages({
+        imageUrl: asset.url,
+        strength: normalizedStrength,
+        language: normalizedLanguage,
+        categories,
+        includeClassification: isFirstAnalysis,
+      }),
+    });
+    const parsed = parseImageEditorAnalysisOutput(
+      response.content,
+      categories,
+      asset.resourceId ? (asset.categoryId || uncategorizedCategoryId) : uncategorizedCategoryId,
+    );
+    if (!parsed) throw new Error(`“${asset.title}”未返回有效的反推分析结果`);
+    const imageAnalysis = mergeImageEditorAnalysis(asset.imageAnalysis, {
+      strength: normalizedStrength,
+      language: normalizedLanguage,
+      prompt: parsed.prompt,
+      ...(isFirstAnalysis ? {
+        secondaryTags: parsed.secondaryTags,
+        classifiedAt: Date.now(),
+      } : {}),
+    });
+    try {
+      await persistAssetAnalysis(asset, imageAnalysis, isFirstAnalysis ? parsed.categoryId : undefined);
+    } catch (error: any) {
+      const warning = `“${asset.title}”反推已完成，但缓存保存失败：${error?.message || '未知错误'}`;
+      logBus.warn(warning, '网页版改图');
+      setMessage(warning);
+    }
+    return parsed.prompt;
+  };
 
   const addFilesToLibrary = async (files: FileList | null) => {
     const images = Array.from(files || []).filter((file) => file.type.startsWith('image/'));
@@ -475,23 +585,34 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
     logBus.info(`开始网页版改图 · ${selectedAssets.length} 张参考图`, '网页版改图');
     try {
       const detail = PROMPT_REVERSE_STRENGTHS.find((item) => item.value === strength)!;
-      const response = await generateLlm({
-        model: llmModel,
-        llmKeyId: activeLlm?.id && activeLlm.id !== 'default' ? activeLlm.id : undefined,
-        sourceNodeType: 'prompt-reverse',
-        temperature: 0.2,
-        max_tokens: detail.maxTokens,
-        messages: buildImageEditorReverseMessages({
-          imageUrls: selectedAssets.map((asset) => asset.url),
-          strength: normalizePromptReverseStrength(strength),
-          language: normalizePromptReverseLanguage(language),
-        }),
+      let resolvedCount = 0;
+      const reversePrompts = await mapWithConcurrency(selectedAssets, 2, async (asset) => {
+        const prompt = await resolveAssetReversePrompt(asset);
+        resolvedCount += 1;
+        setProgress(`正在准备提示词 ${resolvedCount}/${selectedAssets.length}`);
+        return prompt;
       });
-      const reversePrompt = cleanPromptReverseOutput(response.content);
-      if (!reversePrompt) throw new Error('识图模型未返回有效提示词');
-      let prompt = reversePrompt;
+      let prompt = reversePrompts[0];
       const contentText = instruction.trim();
-      if (contentText) {
+      if (reversePrompts.length > 1) {
+        setProgress(contentText ? '正在合并参考并替换内容' : '正在合并多图提示词');
+        const merged = await generateLlm({
+          model: llmModel,
+          llmKeyId: activeLlm?.id && activeLlm.id !== 'default' ? activeLlm.id : undefined,
+          sourceNodeType: 'prompt-reverse',
+          temperature: 0.2,
+          max_tokens: detail.maxTokens,
+          messages: buildImageEditorCachedPromptMergeMessages({
+            prompts: reversePrompts,
+            contentText,
+            language: normalizePromptReverseLanguage(language),
+          }),
+        });
+        prompt = contentText
+          ? cleanPromptReverseContentSwapOutput(merged.content)
+          : cleanPromptReverseOutput(merged.content);
+        if (!prompt) throw new Error('识图模型未返回有效的多图合成提示词');
+      } else if (contentText) {
         setProgress('正在替换内容');
         logBus.info(`反推完成，开始替换内容 · ${contentText.length} 字`, '网页版改图');
         const swapped = await generateLlm({
@@ -501,7 +622,7 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
           temperature: 0.2,
           max_tokens: detail.maxTokens,
           messages: buildPromptReverseContentSwapMessages({
-            prompt: reversePrompt,
+            prompt: reversePrompts[0],
             contentText,
             language: normalizePromptReverseLanguage(language),
           }),
@@ -548,6 +669,31 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
     ? 'px-input'
     : `rounded-lg border px-3 py-2 outline-none ${isDark ? 'border-white/10 bg-black/20 text-white' : 'border-black/10 bg-white text-zinc-900'}`;
   const busy = stage === 'reversing' || stage === 'generating';
+  const displayedAnalysisAsset = analysisAsset
+    ? (assetsById.get(analysisAsset.id) || analysisAsset)
+    : null;
+  const displayedAnalysisPrompt = displayedAnalysisAsset
+    ? getImageEditorCachedPrompt(displayedAnalysisAsset.imageAnalysis, analysisModalStrength, analysisModalLanguage)
+    : '';
+  const displayedAnalysisCategory = displayedAnalysisAsset
+    ? categories.find((item) => item.id === displayedAnalysisAsset.categoryId)?.name || '未分类'
+    : '未分类';
+
+  const openAnalysisPrompt = (asset: ImageEditorGalleryAsset) => {
+    setAnalysisAsset(asset);
+    setAnalysisModalStrength(normalizePromptReverseStrength(strength));
+    setAnalysisModalLanguage(normalizePromptReverseLanguage(language));
+  };
+
+  const copyDisplayedAnalysisPrompt = async () => {
+    if (!displayedAnalysisPrompt) return;
+    try {
+      await navigator.clipboard.writeText(displayedAnalysisPrompt);
+      setMessage('已复制反推提示词');
+    } catch {
+      setMessage('复制失败，请在弹窗中手动选择文本');
+    }
+  };
 
   return (
     <main className={`flex-1 overflow-y-auto ${isDark ? 'bg-zinc-950 text-white' : 'bg-[#f5f2ed] text-zinc-900'}`}>
@@ -673,7 +819,8 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
                       <div className="relative aspect-[4/3] overflow-hidden bg-black/80">
                         <SmartImage src={asset.previewUrl} alt={asset.title} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]" thumbSize={360} />
                         <span className={`absolute left-2 top-2 flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-xs font-black ${selectionIndex >= 0 ? 'bg-emerald-500 text-black' : 'bg-black/60 text-white'}`}>{selectionIndex >= 0 ? selectionIndex + 1 : <Check size={14} className="opacity-45" />}</span>
-                        <div className="absolute right-2 top-2 flex flex-col gap-1">
+                        <div className="absolute right-2 top-2 grid grid-cols-2 gap-1">
+                          <button type="button" onClick={(event) => { event.stopPropagation(); openAnalysisPrompt(asset); }} className="flex h-8 w-8 items-center justify-center rounded-full bg-black/65 text-white hover:bg-violet-500" title="查看反推提示词"><FileText size={15} /></button>
                           <button type="button" onClick={(event) => { event.stopPropagation(); setPreviewAsset(asset); }} className="flex h-8 w-8 items-center justify-center rounded-full bg-black/65 text-white hover:bg-emerald-500 hover:text-black" title="放大预览"><Maximize2 size={15} /></button>
                           <button type="button" onClick={(event) => { event.stopPropagation(); downloadAsset(asset); }} className="flex h-8 w-8 items-center justify-center rounded-full bg-black/65 text-white hover:bg-sky-500 hover:text-black" title="下载图片"><Download size={15} /></button>
                           <button
@@ -713,6 +860,35 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-auto bg-black/80 p-4"><img src={previewAsset.url} alt={previewAsset.title} className="mx-auto max-h-[78vh] max-w-full object-contain" /></div>
+          </div>
+        </div>
+      )}
+      {displayedAnalysisAsset && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-4" role="dialog" aria-modal="true" aria-label="查看反推提示词" onMouseDown={() => setAnalysisAsset(null)}>
+          <div className={`relative flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-2xl border shadow-2xl ${surface}`} onMouseDown={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 border-b border-current/10 px-4 py-3">
+              <div className="min-w-0"><div className="truncate text-sm font-bold">{displayedAnalysisAsset.title}</div><div className="mt-1 text-[11px] opacity-55">已保存的逐图反推提示词</div></div>
+              <button type="button" onClick={() => setAnalysisAsset(null)} className={`${field} flex h-8 w-8 items-center justify-center p-0`} title="关闭"><X size={15} /></button>
+            </div>
+            <div className="min-h-0 flex-1 space-y-4 overflow-auto p-4">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="rounded-full bg-cyan-500/15 px-3 py-1 font-bold text-cyan-400">主标签 · {displayedAnalysisCategory}</span>
+                {(displayedAnalysisAsset.imageAnalysis?.secondaryTags || []).map((tag) => <span key={tag} className="rounded-full bg-current/5 px-3 py-1 opacity-75">{tag}</span>)}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {PROMPT_REVERSE_STRENGTHS.map((item) => <button key={item.value} type="button" onClick={() => setAnalysisModalStrength(item.value)} className={`rounded-lg px-3 py-2 text-xs font-bold ${analysisModalStrength === item.value ? 'bg-violet-500 text-white' : 'bg-current/5'}`}>{item.label}</button>)}
+                <span className="mx-1 w-px bg-current/10" />
+                {(['zh', 'en'] as const).map((item) => <button key={item} type="button" onClick={() => setAnalysisModalLanguage(item)} className={`rounded-lg px-3 py-2 text-xs font-bold ${analysisModalLanguage === item ? 'bg-sky-500 text-black' : 'bg-current/5'}`}>{item === 'zh' ? '简体中文' : 'English'}</button>)}
+              </div>
+              {displayedAnalysisPrompt ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between"><span className="text-xs font-bold">缓存提示词</span><button type="button" onClick={() => void copyDisplayedAnalysisPrompt()} className={`${field} flex items-center gap-1 py-1.5 text-xs font-bold`}><ClipboardCopy size={14} />复制</button></div>
+                  <textarea readOnly value={displayedAnalysisPrompt} rows={12} className={`${field} w-full resize-y text-xs leading-relaxed`} />
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-current/20 px-4 py-12 text-center text-sm opacity-55">该强度和语言尚未保存提示词；选择这张图片首次运行后会自动生成。</div>
+              )}
+            </div>
           </div>
         </div>
       )}

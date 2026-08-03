@@ -64,18 +64,53 @@ test('resource library migrates sourceUrl and accumulates duplicate sourceUrls',
 
   const before = await fetch(`${base}/api/resources/items?kind=image`).then((res) => res.json());
   assert.deepEqual(before.data[0].sourceUrls, ['/files/output/old.png']);
+  const categories = await fetch(`${base}/api/resources/categories?kind=image`).then((res) => res.json());
+  const roleCategory = categories.data.find((item: any) => item.name === '角色');
+  assert.ok(roleCategory?.id);
 
   const duplicate = await fetch(`${base}/api/resources/items/add`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: '/files/input/same.png', kind: 'image' }),
+    body: JSON.stringify({
+      url: '/files/input/same.png',
+      kind: 'image',
+      categoryId: roleCategory.id,
+      imageAnalysis: {
+        version: 1,
+        secondaryTags: ['企鹅', '蓝色背景', '企鹅', '插画'],
+        reversePrompts: { extreme: { zh: '极致中文反推提示词' } },
+        classifiedAt: 123,
+      },
+    }),
   }).then((res) => res.json());
   assert.equal(duplicate.success, true);
   assert.equal(duplicate.duplicate, true);
   assert.deepEqual(duplicate.data.sourceUrls, ['/files/output/old.png', '/files/input/same.png']);
+  assert.equal(duplicate.data.categoryId, roleCategory.id);
+  assert.deepEqual(duplicate.data.imageAnalysis.secondaryTags, ['企鹅', '蓝色背景', '插画']);
+  assert.equal(duplicate.data.imageAnalysis.reversePrompts.extreme.zh, '极致中文反推提示词');
+
+  const updated = await fetch(`${base}/api/resources/items/existing`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      imageAnalysis: {
+        version: 1,
+        reversePrompts: { detailed: { en: 'Detailed English reverse prompt' } },
+      },
+    }),
+  }).then((res) => res.json());
+  assert.equal(updated.success, true);
+  assert.deepEqual(updated.data.imageAnalysis.secondaryTags, ['企鹅', '蓝色背景', '插画']);
+  assert.equal(updated.data.imageAnalysis.reversePrompts.extreme.zh, '极致中文反推提示词');
+  assert.equal(updated.data.imageAnalysis.reversePrompts.detailed.en, 'Detailed English reverse prompt');
+
+  const searched = await fetch(`${base}/api/resources/items?kind=image&q=${encodeURIComponent('蓝色背景')}`).then((res) => res.json());
+  assert.equal(searched.data.length, 1);
+  assert.equal(searched.data[0].id, 'existing');
 
   const stored = JSON.parse(fs.readFileSync(path.join(resourcesDir, 'resource_library.json'), 'utf8'));
-  assert.equal(stored.version, 2);
+  assert.equal(stored.version, 3);
   assert.equal(stored.items.length, 1);
   assert.deepEqual(stored.items[0].sourceUrls, ['/files/output/old.png', '/files/input/same.png']);
 });

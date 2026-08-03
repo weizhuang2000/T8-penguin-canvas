@@ -29,7 +29,7 @@ function history(id: string, url: string, userId = 'u1'): GenerationHistoryItem 
   };
 }
 
-function resource(id: string, sourceUrls: string[] = []): ResourceItem {
+function resource(id: string, sourceUrls: string[] = [], secondaryTags: string[] = []): ResourceItem {
   return {
     id,
     kind: 'image',
@@ -42,6 +42,12 @@ function resource(id: string, sourceUrls: string[] = []): ResourceItem {
     favorite: false,
     sourceUrl: sourceUrls[0],
     sourceUrls,
+    imageAnalysis: secondaryTags.length ? {
+      version: 1,
+      secondaryTags,
+      reversePrompts: { extreme: { zh: `${id} cached prompt` } },
+      classifiedAt: 1,
+    } : undefined,
     createdAt: 1,
     updatedAt: 1,
   };
@@ -65,7 +71,7 @@ test('unified image editor gallery merges resource membership and only includes 
 
 test('gallery filtering, pagination and selection keep deterministic behavior', () => {
   const assets = mergeImageEditorGallery(
-    Array.from({ length: 13 }, (_, index) => resource(`r${index + 1}`)),
+    Array.from({ length: 13 }, (_, index) => resource(`r${index + 1}`, [], index === 0 ? ['蓝色企鹅'] : [])),
     Array.from({ length: 13 }, (_, index) => history(`h${index + 1}`, `/files/output/h${index + 1}.png`)),
     'u1',
   );
@@ -75,6 +81,9 @@ test('gallery filtering, pagination and selection keep deterministic behavior', 
   assert.equal(firstPage.pageCount, 3);
   assert.equal(minePage.total, 13);
   assert.equal(minePage.items.length, 1);
+  const tagPage = paginateImageEditorGallery(assets, { source: 'all', keyword: '蓝色企鹅', page: 1, pageSize: 12 });
+  assert.equal(tagPage.total, 1);
+  assert.equal(tagPage.items[0].id, 'resource:r1');
 
   let selection: string[] = [];
   for (let index = 0; index < 10; index += 1) selection = toggleImageEditorSelection(selection, `asset-${index}`);
@@ -128,6 +137,7 @@ test('web image editor route, sidebar permission entry and shared-library action
   assert.match(page, /buildPromptReverseContentSwapMessages/);
   assert.match(page, /cleanPromptReverseContentSwapOutput/);
   assert.match(page, /useState<PromptReverseStrength>\('extreme'\)/);
+  assert.match(page, /const \[aspectRatio, setAspectRatio\] = useState\('16:9'\)/);
   assert.match(page, /useState\(\(\) => fhlAllowed \? 'fhl' : 'standard'\)/);
   assert.match(page, /createFhlJob\(\{/);
   assert.match(page, /advancedProvidersForNode\(settings\.advancedProviders, 'image'\)/);
@@ -141,4 +151,9 @@ test('web image editor route, sidebar permission entry and shared-library action
   assert.match(page, /gridTemplateColumns: `repeat\(\$\{galleryColumnCount\}, minmax\(0, 1fr\)\)`/);
   assert.match(page, /data-gallery-columns=\{galleryColumnCount\}/);
   assert.match(page, /SmartImage[\s\S]*thumbSize=\{360\}/);
+  assert.match(page, /title="查看反推提示词"/);
+  assert.match(page, /buildImageEditorAnalysisMessages/);
+  assert.match(page, /mapWithConcurrency\(selectedAssets, 2/);
+  assert.match(page, /buildImageEditorCachedPromptMergeMessages/);
+  assert.match(page, /aria-label="查看反推提示词"/);
 });

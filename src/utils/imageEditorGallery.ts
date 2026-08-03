@@ -1,4 +1,4 @@
-import type { GenerationHistoryItem, ResourceItem } from '../services/api';
+import type { GenerationHistoryItem, ResourceImageAnalysis, ResourceItem } from '../services/api';
 
 export type ImageEditorGallerySource = 'all' | 'resources' | 'mine';
 
@@ -17,6 +17,7 @@ export interface ImageEditorGalleryAsset {
   height?: number;
   sourceUrls: string[];
   fromMyGeneration: boolean;
+  imageAnalysis?: ResourceImageAnalysis | null;
 }
 
 export interface ImageEditorGalleryQuery {
@@ -118,6 +119,7 @@ export function mergeImageEditorGallery(
       height: resource.height || matchedHistory?.height,
       sourceUrls,
       fromMyGeneration: !!matchedHistory,
+      imageAnalysis: resource.imageAnalysis,
     });
   }
 
@@ -152,7 +154,7 @@ export function paginateImageEditorGallery(
     if (query.source === 'resources' && !asset.inResourceLibrary) return false;
     if (query.source === 'mine' && !asset.fromMyGeneration) return false;
     if (query.categoryId && query.categoryId !== 'all' && asset.categoryId !== query.categoryId) return false;
-    if (keyword && !`${asset.title} ${asset.prompt || ''}`.toLowerCase().includes(keyword)) return false;
+    if (keyword && !`${asset.title} ${asset.prompt || ''} ${(asset.imageAnalysis?.secondaryTags || []).join(' ')}`.toLowerCase().includes(keyword)) return false;
     return true;
   });
   const pageSize = [12, 24, 48, 96].includes(query.pageSize) ? query.pageSize : 24;

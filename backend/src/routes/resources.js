@@ -19,6 +19,9 @@ const DB_FILE = 'resource_library.json';
 const THUMB_DIR = '_thumbs';
 const REMOTE_FETCH_TIMEOUT_MS = 30_000;
 const REMOTE_MAX_BYTES = 512 * 1024 * 1024;
+const IMAGE_ANALYSIS_STRENGTHS = ['concise', 'standard', 'detailed', 'extreme'];
+const IMAGE_ANALYSIS_LANGUAGES = ['zh', 'en'];
+const IMAGE_ANALYSIS_PROMPT_MAX_LENGTH = 20_000;
 
 const DEFAULT_CATEGORY_NAMES = {
   image: ['未分类', '角色', '场景', '风格参考', '成品'],
@@ -73,6 +76,58 @@ function normalizeSourceUrls(value, fallback = '') {
   const legacy = safeText(fallback);
   if (legacy) normalized.unshift(legacy);
   return [...new Set(normalized)].slice(0, 500);
+}
+
+function normalizeImageAnalysis(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const reversePrompts = {};
+  const sourcePrompts = value.reversePrompts && typeof value.reversePrompts === 'object'
+    ? value.reversePrompts
+    : {};
+  for (const strength of IMAGE_ANALYSIS_STRENGTHS) {
+    const sourceLanguages = sourcePrompts[strength];
+    if (!sourceLanguages || typeof sourceLanguages !== 'object' || Array.isArray(sourceLanguages)) continue;
+    const languages = {};
+    for (const language of IMAGE_ANALYSIS_LANGUAGES) {
+      const prompt = typeof sourceLanguages[language] === 'string'
+        ? sourceLanguages[language].trim().slice(0, IMAGE_ANALYSIS_PROMPT_MAX_LENGTH)
+        : '';
+      if (prompt) languages[language] = prompt;
+    }
+    if (Object.keys(languages).length) reversePrompts[strength] = languages;
+  }
+  const secondaryTags = Array.isArray(value.secondaryTags)
+    ? [...new Set(value.secondaryTags.map((tag) => safeText(tag)).filter(Boolean))].slice(0, 3)
+    : [];
+  if (!Object.keys(reversePrompts).length && !secondaryTags.length && !Number(value.classifiedAt)) return null;
+  return {
+    version: 1,
+    secondaryTags,
+    reversePrompts,
+    classifiedAt: Math.max(0, Number(value.classifiedAt) || 0),
+  };
+}
+
+function mergeImageAnalysis(currentValue, nextValue) {
+  const current = normalizeImageAnalysis(currentValue);
+  const next = normalizeImageAnalysis(nextValue);
+  if (!next) return current;
+  const reversePrompts = { ...(current?.reversePrompts || {}) };
+  for (const strength of IMAGE_ANALYSIS_STRENGTHS) {
+    if (!next.reversePrompts[strength]) continue;
+    reversePrompts[strength] = {
+      ...(reversePrompts[strength] || {}),
+      ...next.reversePrompts[strength],
+    };
+  }
+  return normalizeImageAnalysis({
+    version: 1,
+    secondaryTags: Array.isArray(nextValue?.secondaryTags)
+      ? next.secondaryTags
+      : (current?.secondaryTags || []),
+    reversePrompts,
+    classifiedAt: next.classifiedAt || current?.classifiedAt || 0,
+  });
 }
 
 function safeFilename(value, fallback = 'asset') {
@@ -431,6 +486,7 @@ function normalizeDb(raw) {
       sourceUrls: normalizeSourceUrls(item?.sourceUrls, item?.sourceUrl),
       sourceNodeId: safeText(item?.sourceNodeId, ''),
       sourceCanvasId: safeText(item?.sourceCanvasId, ''),
+      imageAnalysis: kind === 'image' ? normalizeImageAnalysis(item?.imageAnalysis) : null,
       materialSetKind,
       materialSetItems,
       workflowNodeCount,
@@ -450,7 +506,7 @@ function normalizeDb(raw) {
 
   return {
     schema: 't8-resource-library',
-    version: 2,
+    version: 3,
     updatedAt: safeText(db.updatedAt, new Date().toISOString()),
     categories: finalCategories,
     items: normalizedItems,
@@ -795,7 +851,13 @@ router.get('/items', (req, res) => {
     if (favorite) list = list.filter((item) => item.favorite);
     if (q) {
       list = list.filter((item) => {
-        const hay = [item.title, item.originalName, item.tags.join(' '), item.mime].join(' ').toLowerCase();
+        const hay = [
+          item.title,
+          item.originalName,
+          item.tags.join(' '),
+          item.imageAnalysis?.secondaryTags?.join(' ') || '',
+          item.mime,
+        ].join(' ').toLowerCase();
         return hay.includes(q);
       });
     }
@@ -830,6 +892,9 @@ router.post('/items/add', express.json({ limit: '4mb' }), async (req, res) => {
     const categoryOk = db.categories.some((c) => c.id === requestedCat && c.kind === kind);
     if (existing) {
       if (categoryOk) existing.categoryId = requestedCat;
+      if (kind === 'image' && req.body?.imageAnalysis) {
+        existing.imageAnalysis = mergeImageAnalysis(existing.imageAnalysis, req.body.imageAnalysis);
+      }
       existing.sourceUrls = normalizeSourceUrls([...(existing.sourceUrls || []), url], existing.sourceUrl);
       existing.updatedAt = now();
       existing.lastUsedAt = now();
@@ -864,6 +929,7 @@ router.post('/items/add', express.json({ limit: '4mb' }), async (req, res) => {
       sourceUrls: [url],
       sourceNodeId: safeText(req.body?.sourceNodeId),
       sourceCanvasId: safeText(req.body?.sourceCanvasId),
+      imageAnalysis: kind === 'image' ? normalizeImageAnalysis(req.body?.imageAnalysis) : null,
       createdAt: now(),
       updatedAt: now(),
       lastUsedAt: 0,
@@ -1157,6 +1223,9 @@ router.put('/items/:id', express.json({ limit: '1mb' }), (req, res) => {
     if (typeof req.body?.title === 'string') item.title = safeText(req.body.title, item.title);
     if (typeof req.body?.favorite !== 'undefined') item.favorite = !!req.body.favorite;
     if (Array.isArray(req.body?.tags)) item.tags = req.body.tags.map((t) => safeText(t)).filter(Boolean).slice(0, 20);
+    if (item.kind === 'image' && req.body?.imageAnalysis) {
+      item.imageAnalysis = mergeImageAnalysis(item.imageAnalysis, req.body.imageAnalysis);
+    }
     const categoryId = safeText(req.body?.categoryId);
     if (categoryId && db.categories.some((c) => c.id === categoryId && c.kind === item.kind)) item.categoryId = categoryId;
     item.updatedAt = now();
