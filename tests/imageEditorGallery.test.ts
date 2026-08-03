@@ -135,4 +135,10 @@ test('web image editor route, sidebar permission entry and shared-library action
   assert.match(page, /title="放大预览"/);
   assert.match(page, /title="下载图片"/);
   assert.match(page, /const downloadAsset =/);
+  assert.match(page, /const GALLERY_COLUMN_COUNTS = \[3, 4, 5, 6, 7, 8\] as const/);
+  assert.match(page, /t8pc:image-editor:gallery-columns:v1:/);
+  assert.match(page, /aria-label="图库每行列数"/);
+  assert.match(page, /gridTemplateColumns: `repeat\(\$\{galleryColumnCount\}, minmax\(0, 1fr\)\)`/);
+  assert.match(page, /data-gallery-columns=\{galleryColumnCount\}/);
+  assert.match(page, /SmartImage[\s\S]*thumbSize=\{360\}/);
 });

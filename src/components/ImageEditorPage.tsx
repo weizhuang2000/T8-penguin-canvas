@@ -61,6 +61,7 @@ import SmartImage from './SmartImage';
 const GPT_IMAGE = IMAGE_MODELS.find((item) => item.id === 'gpt-image-2') || IMAGE_MODELS[0];
 const GPT_VARIANTS = GPT_IMAGE.apiModelOptions.filter((item) => !item.value.toLowerCase().includes('fal'));
 const PAGE_SIZES = [12, 24, 48, 96] as const;
+const GALLERY_COLUMN_COUNTS = [3, 4, 5, 6, 7, 8] as const;
 const MAX_REFERENCES = 9;
 const FHL_TERMINAL = new Set(['completed', 'partial', 'failed', 'cancelled', 'interrupted']);
 const FHL_EDIT_2K_RATIOS = ['1:1', '3:2', '2:3', '4:3', '3:4', '5:4', '4:5', '16:9', '9:16', '2:1', '1:2', '3:1', '1:3', '7:4', '4:7'];
@@ -91,6 +92,19 @@ function readPageSize(userId: string): number {
   }
 }
 
+function galleryColumnCountStorageKey(userId: string) {
+  return `t8pc:image-editor:gallery-columns:v1:${encodeURIComponent(userId)}`;
+}
+
+function readGalleryColumnCount(userId: string): number {
+  try {
+    const value = Number(window.localStorage.getItem(galleryColumnCountStorageKey(userId)) || 3);
+    return GALLERY_COLUMN_COUNTS.includes(value as (typeof GALLERY_COLUMN_COUNTS)[number]) ? value : 3;
+  } catch {
+    return 3;
+  }
+}
+
 function imageEditorHistoryProjectId(userId: string) {
   return `${IMAGE_EDITOR_PROJECT_PREFIX}${userId}`;
 }
@@ -116,6 +130,7 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
   const [categoryId, setCategoryId] = useState('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(() => readPageSize(user.id));
+  const [galleryColumnCount, setGalleryColumnCount] = useState(() => readGalleryColumnCount(user.id));
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [instruction, setInstruction] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -179,6 +194,12 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
     if (generationSource !== 'fhl' || sizeOptions.includes(sizeLevel)) return;
     setSizeLevel('2K');
   }, [generationSource, sizeLevel, sizeOptions]);
+
+  useEffect(() => {
+    setPageSize(readPageSize(user.id));
+    setGalleryColumnCount(readGalleryColumnCount(user.id));
+    setPage(1);
+  }, [user.id]);
 
   const reloadGallery = async () => {
     const [resourceResult, categoryResult, historyResult] = await Promise.all([
@@ -259,6 +280,12 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
     setPageSize(next);
     setPage(1);
     try { window.localStorage.setItem(pageSizeStorageKey(user.id), String(next)); } catch { /* ignore */ }
+  };
+
+  const setGalleryColumnCountPreference = (next: number) => {
+    const safeNext = GALLERY_COLUMN_COUNTS.includes(next as (typeof GALLERY_COLUMN_COUNTS)[number]) ? next : 3;
+    setGalleryColumnCount(safeNext);
+    try { window.localStorage.setItem(galleryColumnCountStorageKey(user.id), String(safeNext)); } catch { /* ignore */ }
   };
 
   const selectAsset = (asset: ImageEditorGalleryAsset) => {
@@ -622,6 +649,7 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
               ] as const).map(([value, label, Icon]) => <button key={value} type="button" onClick={() => { setSource(value); setPage(1); }} className={`flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-bold ${source === value ? 'bg-cyan-500 text-black' : 'bg-current/5'}`}><Icon size={14} />{label}</button>)}
               <div className={`${field} flex min-w-[190px] flex-1 items-center gap-2 py-1.5`}><Search size={14} className="opacity-50" /><input value={keyword} onChange={(event) => { setKeyword(event.target.value); setPage(1); }} placeholder="搜索标题或提示词" className="min-w-0 flex-1 bg-transparent text-xs outline-none" /></div>
               {source !== 'mine' && <select value={categoryId} onChange={(event) => { setCategoryId(event.target.value); setPage(1); }} className={`${field} text-xs`}><option value="all">全部分类</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
+              <select aria-label="图库每行列数" value={galleryColumnCount} onChange={(event) => setGalleryColumnCountPreference(Number(event.target.value))} className={`${field} text-xs`}>{GALLERY_COLUMN_COUNTS.map((value) => <option key={value} value={value}>每行 {value} 张</option>)}</select>
               <select value={pageSize} onChange={(event) => setPageSizePreference(Number(event.target.value))} className={`${field} text-xs`}>{PAGE_SIZES.map((value) => <option key={value} value={value}>每页 {value}</option>)}</select>
             </div>
             {message && <div className="rounded-lg bg-cyan-500/10 px-3 py-2 text-xs text-cyan-400">{message}</div>}
@@ -633,13 +661,17 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
             ) : galleryPage.items.length === 0 ? (
               <div className="flex min-h-52 flex-col items-center justify-center gap-3 text-sm opacity-60"><Images size={36} /><span>没有符合条件的图片</span></div>
             ) : (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div
+                className="grid gap-4"
+                data-gallery-columns={galleryColumnCount}
+                style={{ gridTemplateColumns: `repeat(${galleryColumnCount}, minmax(0, 1fr))` }}
+              >
                 {galleryPage.items.map((asset) => {
                   const selectionIndex = selectedIds.indexOf(asset.id);
                   return (
                     <article key={asset.id} onClick={() => selectAsset(asset)} className={`group cursor-pointer overflow-hidden rounded-xl border transition ${selectionIndex >= 0 ? 'border-emerald-400 ring-2 ring-emerald-400/40' : isDark ? 'border-white/10 bg-white/[0.03] hover:border-white/25' : 'border-black/10 bg-white hover:border-black/25'}`}>
                       <div className="relative aspect-[4/3] overflow-hidden bg-black/80">
-                        <SmartImage src={asset.previewUrl} alt={asset.title} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]" thumbSize={520} />
+                        <SmartImage src={asset.previewUrl} alt={asset.title} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]" thumbSize={360} />
                         <span className={`absolute left-2 top-2 flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-xs font-black ${selectionIndex >= 0 ? 'bg-emerald-500 text-black' : 'bg-black/60 text-white'}`}>{selectionIndex >= 0 ? selectionIndex + 1 : <Check size={14} className="opacity-45" />}</span>
                         <div className="absolute right-2 top-2 flex flex-col gap-1">
                           <button type="button" onClick={(event) => { event.stopPropagation(); setPreviewAsset(asset); }} className="flex h-8 w-8 items-center justify-center rounded-full bg-black/65 text-white hover:bg-emerald-500 hover:text-black" title="放大预览"><Maximize2 size={15} /></button>
