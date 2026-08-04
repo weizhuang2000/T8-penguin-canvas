@@ -4,6 +4,7 @@ import type { ResourceCategory } from '../src/services/api.ts';
 import {
   buildImageEditorAnalysisMessages,
   buildImageEditorCachedPromptMergeMessages,
+  buildPromptReverseCachedCompositionMessages,
   getImageEditorCachedPrompt,
   mergeImageEditorAnalysis,
   parseImageEditorAnalysisOutput,
@@ -82,4 +83,17 @@ test('multi-image cached prompt merge keeps first prompt as the primary image', 
   assert.match(String(messages[1].content), /主体构图提示词/);
   assert.match(String(messages[1].content), /补充材质提示词/);
   assert.match(String(messages[1].content), /新的企鹅展览主题/);
+});
+
+test('canvas prompt reverse composition keeps instructions outside the shared image cache', () => {
+  const messages = buildPromptReverseCachedCompositionMessages({
+    prompts: ['图一主体构图', '图二材质补充'],
+    instruction: '强调低机位和清晰标题文字',
+    language: 'zh',
+  });
+  assert.match(String(messages[0].content), /图 1 是主体画面/);
+  assert.match(String(messages[1].content), /图一主体构图/);
+  assert.match(String(messages[1].content), /图二材质补充/);
+  assert.match(String(messages[1].content), /强调低机位和清晰标题文字/);
+  assert.doesNotMatch(String(messages[1].content), /image_url/);
 });

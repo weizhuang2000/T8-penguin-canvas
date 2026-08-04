@@ -9,7 +9,7 @@ test('prompt reverse node is registered as an executable image-to-text node', ()
   assert.match(read('src/config/nodeRegistry.ts'), /type: 'prompt-reverse'[^\n]*label: '提示词反推'/);
   assert.match(read('src/config/portTypes.ts'), /'prompt-reverse': \{ inputs: \['image', 'text'\], outputs: \['text'\] \}/);
   assert.match(read('src/components/Canvas.tsx'), /'prompt-reverse': PromptReverseNode/);
-  assert.match(read('src/components/Canvas.tsx'), /'llm', 'prompt-reverse', 'remotion-animation'/);
+  assert.match(read('src/components/Canvas.tsx'), /EXECUTABLE_NODE_TYPES[\s\S]*'prompt-reverse'/);
   assert.match(read('backend/src/auth/toolPermissions.js'), /'prompt-reverse'/);
 });
 
@@ -20,10 +20,19 @@ test('prompt reverse node strictly uses independent LLM configs and multimodal c
   assert.match(node, /sourceNodeType: 'prompt-reverse'/);
   assert.match(node, /generateLlm\(\{/);
   assert.match(node, /buildPromptReverseMessages\(\{ imageUrls, strength, language, instruction \}\)/);
+  assert.match(node, /getResourceCategories\('image'\)/);
+  assert.match(node, /getResourceItems\(\{ kind: 'image' \}\)/);
+  assert.match(node, /mapPromptReverseWithConcurrency\(materials, 2/);
+  assert.match(node, /buildImageEditorAnalysisMessages\(\{/);
+  assert.match(node, /buildPromptReverseCachedCompositionMessages\(\{/);
+  assert.match(node, /requestLegacyReverse\(imageUrls\)/);
+  assert.match(node, /uploadDataUrl\(url, 'reverse-cache'\)/);
+  assert.match(node, /uploadFileBlob\(blob,/);
+  assert.match(node, /new CustomEvent\('penguin:resources-changed'\)/);
   assert.match(node, /buildPromptReverseContentSwapMessages\(\{/);
   assert.match(node, /cleanPromptReverseContentSwapOutput\(response\.content\)/);
   assert.doesNotMatch(node, /advancedProviders|generateExternalLlm/);
-  assert.match(read('backend/src/routes/proxy.js'), /requireNodePermission\(\['llm', 'prompt-reverse'\]\)/);
+  assert.match(read('backend/src/routes/proxy.js'), /requireNodePermission\(\[[^\]]*'prompt-reverse'[^\]]*\]\)/);
 });
 
 test('content text input can manually or automatically replace reversed prompt semantics', () => {

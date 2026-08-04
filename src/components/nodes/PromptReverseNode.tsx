@@ -3,7 +3,11 @@ import { Handle, Position, useNodeConnections, type NodeProps } from '@xyflow/re
 import { BrainCircuit, Copy, ImagePlus, Loader2, RefreshCw, RotateCcw, Sparkles } from 'lucide-react';
 import { DEFAULT_LLM_MODEL } from '../../providers/models';
 import { fileToDataUrl, generateLlm } from '../../services/generation';
+import { uploadDataUrl, uploadFileBlob } from '../../services/imageOps';
+import * as api from '../../services/api';
+import type { ResourceCategory, ResourceItem, ResourceImageAnalysis } from '../../services/api';
 import { useApiKeysStore } from '../../stores/apiKeys';
+import { useCanvasStore } from '../../stores/canvas';
 import { logBus } from '../../stores/logs';
 import { taskCompletionSound } from '../../stores/taskCompletionSound';
 import { PORT_COLOR } from '../../config/portTypes';
@@ -20,6 +24,14 @@ import {
   type PromptReverseLanguage,
   type PromptReverseStrength,
 } from '../../utils/promptReverse';
+import {
+  buildImageEditorAnalysisMessages,
+  buildPromptReverseCachedCompositionMessages,
+  getImageEditorCachedPrompt,
+  mergeImageEditorAnalysis,
+  parseImageEditorAnalysisOutput,
+} from '../../utils/imageEditorAnalysis';
+import { findPromptReverseResourceByUrl, mapPromptReverseWithConcurrency } from '../../utils/promptReverseCache';
 import PromptTextarea from '../PromptTextarea';
 import MaterialPreviewSection from './MaterialPreviewSection';
 import NodeHelpButton from './NodeHelpButton';
@@ -30,6 +42,19 @@ import { useUpstreamMaterials, type Material } from './useUpstreamMaterials';
 const FIELD = 'nodrag w-full rounded border border-white/10 bg-black/25 px-2 py-1.5 text-[11px] text-[var(--t8-text-main)] outline-none focus:border-emerald-400/60 disabled:opacity-50';
 type RunningAction = 'reverse' | 'swap' | null;
 
+interface PromptReverseResourceContext {
+  categories: ResourceCategory[];
+  resources: ResourceItem[];
+  uncategorizedCategoryId: string;
+  changed: boolean;
+}
+
+interface PreparedPromptReverseMaterial {
+  analysisUrl: string;
+  resourceUrl?: string;
+  persistenceAllowed: boolean;
+}
+
 const PromptReverseNode = ({ id, data, selected }: NodeProps) => {
   const update = useUpdateNodeData(id);
   const d = data as any;
@@ -37,8 +62,10 @@ const PromptReverseNode = ({ id, data, selected }: NodeProps) => {
   const [localImages, setLocalImages] = useState<Array<{ name: string; dataUrl: string }>>([]);
   const [copyLabel, setCopyLabel] = useState('复制');
   const [runningAction, setRunningAction] = useState<RunningAction>(null);
+  const analysisResourceBindingsRef = useRef(new Map<string, ResourceItem>());
   const configuredModel = useApiKeysStore((state) => state.settings.llmModel)?.trim() || DEFAULT_LLM_MODEL;
   const llmConfigs = useApiKeysStore((state) => state.settings.llmConfigs || state.settings.llmApiKeys) || [];
+  const activeCanvasId = useCanvasStore((state) => state.activeId);
   const { theme, style } = useThemeStore();
   const upstream = useUpstreamMaterials(id);
   const inputConnections = useNodeConnections({ id, handleType: 'target' });
@@ -122,6 +149,196 @@ const PromptReverseNode = ({ id, data, selected }: NodeProps) => {
     if (fileRef.current) fileRef.current.value = '';
   };
 
+  const loadResourceContext = async (): Promise<PromptReverseResourceContext> => {
+    const [categoryResult, resourceResult] = await Promise.all([
+      api.getResourceCategories('image'),
+      api.getResourceItems({ kind: 'image' }),
+    ]);
+    if (!categoryResult.success) throw new Error(categoryResult.error || '读取图像分类失败');
+    if (!resourceResult.success) throw new Error(resourceResult.error || '读取共享资源失败');
+    const categories = categoryResult.data.filter((item) => item.kind === 'image');
+    const uncategorizedCategoryId = categories.find((item) => item.id === 'image_uncategorized')?.id
+      || categories.find((item) => item.name === '未分类')?.id
+      || '';
+    if (!categories.length || !uncategorizedCategoryId) throw new Error('图像分类尚未初始化');
+    return {
+      categories,
+      resources: resourceResult.data.filter((item) => item.kind === 'image'),
+      uncategorizedCategoryId,
+      changed: false,
+    };
+  };
+
+  const blobToDataUrl = (blob: Blob): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('读取 Blob 图片失败'));
+    reader.readAsDataURL(blob);
+  });
+
+  const prepareUnstoredMaterial = async (material: Material): Promise<PreparedPromptReverseMaterial> => {
+    const url = String(material.url || '').trim();
+    if (/^data:image\//i.test(url)) {
+      try {
+        const resourceUrl = await uploadDataUrl(url, 'reverse-cache');
+        return { analysisUrl: resourceUrl, resourceUrl, persistenceAllowed: true };
+      } catch (error) {
+        console.warn('[prompt-reverse-cache] Data URL 落地失败，本次仅执行反推。', error);
+        return { analysisUrl: url, persistenceAllowed: false };
+      }
+    }
+    if (/^blob:/i.test(url)) {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`读取 Blob 图片失败：HTTP ${response.status}`);
+      const blob = await response.blob();
+      const analysisUrl = await blobToDataUrl(blob);
+      try {
+        const resourceUrl = await uploadFileBlob(blob, material.label || `prompt-reverse-${Date.now()}.png`);
+        return { analysisUrl: resourceUrl, resourceUrl, persistenceAllowed: true };
+      } catch (error) {
+        console.warn('[prompt-reverse-cache] Blob 图片落地失败，本次仅执行反推。', error);
+        return { analysisUrl, persistenceAllowed: false };
+      }
+    }
+    return { analysisUrl: url, resourceUrl: url, persistenceAllowed: true };
+  };
+
+  const persistMaterialAnalysis = async (
+    material: Material,
+    resource: ResourceItem | undefined,
+    imageAnalysis: ResourceImageAnalysis,
+    nextCategoryId: string | undefined,
+    context: PromptReverseResourceContext,
+    prepared: PreparedPromptReverseMaterial,
+  ) => {
+    try {
+      let saved: api.Result<ResourceItem>;
+      if (resource) {
+        saved = await api.updateResourceItem(resource.id, {
+          imageAnalysis,
+          ...(nextCategoryId ? { categoryId: nextCategoryId } : {}),
+        });
+      } else {
+        if (!prepared.persistenceAllowed) return;
+        const resourceUrl = String(prepared.resourceUrl || '').trim();
+        if (!resourceUrl) throw new Error('图片地址为空');
+        saved = await api.addResourceItem({
+          url: resourceUrl,
+          kind: 'image',
+          categoryId: nextCategoryId || context.uncategorizedCategoryId,
+          title: material.label || '提示词反推图片',
+          tags: ['提示词反推'],
+          sourceNodeId: id,
+          sourceCanvasId: activeCanvasId || undefined,
+          imageAnalysis,
+        });
+      }
+      if (!saved.success) throw new Error(saved.error || '保存图像分析缓存失败');
+      analysisResourceBindingsRef.current.set(material.url, saved.data);
+      const index = context.resources.findIndex((item) => item.id === saved.data.id);
+      if (index >= 0) context.resources[index] = saved.data;
+      else context.resources.push(saved.data);
+      context.changed = true;
+    } catch (error) {
+      console.warn('[prompt-reverse-cache] 缓存或资源入库失败，已静默忽略。', error);
+    }
+  };
+
+  const resolveMaterialReversePrompt = async (
+    material: Material,
+    context: PromptReverseResourceContext,
+  ): Promise<string> => {
+    const resource = analysisResourceBindingsRef.current.get(material.url)
+      || findPromptReverseResourceByUrl(context.resources, material.url, window.location.origin);
+    const cached = getImageEditorCachedPrompt(resource?.imageAnalysis, strength, language);
+    if (cached) return cached;
+
+    const prepared: PreparedPromptReverseMaterial = resource
+      ? { analysisUrl: material.url, persistenceAllowed: true }
+      : await prepareUnstoredMaterial(material);
+    const isFirstAnalysis = !resource?.imageAnalysis?.classifiedAt;
+    const response = await generateLlm({
+      model,
+      llmKeyId: activeConfig?.id && activeConfig.id !== 'default' ? activeConfig.id : undefined,
+      sourceNodeType: 'prompt-reverse',
+      temperature: 0.2,
+      max_tokens: strengthConfig.maxTokens,
+      messages: buildImageEditorAnalysisMessages({
+        imageUrl: prepared.analysisUrl,
+        strength,
+        language,
+        categories: context.categories,
+        includeClassification: isFirstAnalysis,
+      }),
+    });
+    const parsed = parseImageEditorAnalysisOutput(
+      response.content,
+      context.categories,
+      resource?.categoryId || context.uncategorizedCategoryId,
+    );
+    if (!parsed) throw new Error('识图模型未返回有效的缓存分析结果');
+    const imageAnalysis = mergeImageEditorAnalysis(resource?.imageAnalysis, {
+      strength,
+      language,
+      prompt: parsed.prompt,
+      ...(isFirstAnalysis ? {
+        secondaryTags: parsed.secondaryTags,
+        classifiedAt: Date.now(),
+      } : {}),
+    });
+    await persistMaterialAnalysis(
+      material,
+      resource,
+      imageAnalysis,
+      isFirstAnalysis ? parsed.categoryId : undefined,
+      context,
+      prepared,
+    );
+    return parsed.prompt;
+  };
+
+  const requestCachedReverse = async (materials: Material[]): Promise<string> => {
+    const context = await loadResourceContext();
+    let prompts: string[] = [];
+    try {
+      prompts = await mapPromptReverseWithConcurrency(materials, 2, (material) => (
+        resolveMaterialReversePrompt(material, context)
+      ));
+    } finally {
+      if (context.changed) window.dispatchEvent(new CustomEvent('penguin:resources-changed'));
+    }
+    if (prompts.length === 1 && !instruction.trim()) return prompts[0];
+    const response = await generateLlm({
+      model,
+      llmKeyId: activeConfig?.id && activeConfig.id !== 'default' ? activeConfig.id : undefined,
+      sourceNodeType: 'prompt-reverse',
+      temperature: 0.2,
+      max_tokens: strengthConfig.maxTokens,
+      messages: buildPromptReverseCachedCompositionMessages({
+        prompts,
+        instruction,
+        language,
+      }),
+    });
+    const prompt = cleanPromptReverseOutput(response.content);
+    if (!prompt) throw new Error('识图模型未返回有效的缓存合成提示词');
+    return prompt;
+  };
+
+  const requestLegacyReverse = async (imageUrls: string[]): Promise<string> => {
+    const response = await generateLlm({
+      model,
+      llmKeyId: activeConfig?.id && activeConfig.id !== 'default' ? activeConfig.id : undefined,
+      sourceNodeType: 'prompt-reverse',
+      temperature: 0.2,
+      max_tokens: strengthConfig.maxTokens,
+      messages: buildPromptReverseMessages({ imageUrls, strength, language, instruction }),
+    });
+    const prompt = cleanPromptReverseOutput(response.content);
+    if (!prompt) throw new Error('识图模型未返回有效提示词。');
+    return prompt;
+  };
+
   const runReverse = async (rethrow = false) => {
     if (busy) return;
     const imageUrls = orderedImages.map((item) => item.url).filter(Boolean).slice(0, 10);
@@ -139,16 +356,12 @@ const PromptReverseNode = ({ id, data, selected }: NodeProps) => {
     logBus.info(`开始反推 · ${strengthConfig.label} · ${imageUrls.length} 图`, src);
     let reversePrompt = '';
     try {
-      const response = await generateLlm({
-        model,
-        llmKeyId: activeConfig?.id && activeConfig.id !== 'default' ? activeConfig.id : undefined,
-        sourceNodeType: 'prompt-reverse',
-        temperature: 0.2,
-        max_tokens: strengthConfig.maxTokens,
-        messages: buildPromptReverseMessages({ imageUrls, strength, language, instruction }),
-      });
-      reversePrompt = cleanPromptReverseOutput(response.content);
-      if (!reversePrompt) throw new Error('识图模型未返回有效提示词。');
+      try {
+        reversePrompt = await requestCachedReverse(orderedImages.slice(0, 10));
+      } catch (cacheError) {
+        console.warn('[prompt-reverse-cache] 缓存流程不可用，已回退原反推流程。', cacheError);
+        reversePrompt = await requestLegacyReverse(imageUrls);
+      }
       let prompt = reversePrompt;
       if (contentSwapEnabled) {
         setRunningAction('swap');

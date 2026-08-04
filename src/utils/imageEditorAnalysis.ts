@@ -167,3 +167,38 @@ export function buildImageEditorCachedPromptMergeMessages(options: {
     },
   ];
 }
+
+export function buildPromptReverseCachedCompositionMessages(options: {
+  prompts: string[];
+  instruction?: string;
+  language: PromptReverseLanguage;
+}): LlmMessage[] {
+  const prompts = options.prompts.map((prompt) => String(prompt || '').trim()).filter(Boolean);
+  const instruction = String(options.instruction || '').trim();
+  const language = normalizeLanguage(options.language);
+  const languageRule = language === 'en'
+    ? 'Write the final prompt in English, except visible text that must retain another language.'
+    : '最终提示词使用自然、准确的简体中文；必须保留的外文可见文字使用原文并加引号。';
+  return [
+    {
+      role: 'system',
+      content: [
+        '你是面向 GPT Image 2 的缓存提示词合成器。输入是按图片顺序排列的纯图像反推提示词，不需要再次查看图片。',
+        '图 1 是主体画面；其余图片只补充风格、材质、造型或构图信息。输出一条连贯、无冲突、可直接生图的自然语言提示词。',
+        instruction
+          ? '用户补充要求只用于调整本次最终提示词，不得把它描述成分析过程，也不得削弱没有要求修改的视觉信息。'
+          : '没有补充要求时，保持图 1 的主体语义，并吸收其它图片的互补视觉信息。',
+        languageRule,
+        '不要输出 JSON、Markdown、标题、解释、负面提示词列表或参数；只输出最终提示词。',
+      ].join('\n'),
+    },
+    {
+      role: 'user',
+      content: [
+        `按图片顺序排列的缓存提示词：${JSON.stringify(prompts)}`,
+        instruction ? `本次反推补充要求：${JSON.stringify(instruction)}` : '本次反推补充要求：无',
+        '直接输出合成后的最终 GPT Image 2 提示词。',
+      ].join('\n'),
+    },
+  ];
+}
