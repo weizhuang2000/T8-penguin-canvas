@@ -643,8 +643,8 @@ function App() {
           {imageEditorVisible && (
             <button
               type="button"
-              onClick={() => navigateApp('/image-editor')}
-              disabled={!imageEditorAvailable}
+              onClick={() => navigateApp(imageEditorRoute ? '/' : '/image-editor')}
+              disabled={!imageEditorRoute && !imageEditorAvailable}
               className={
                 isPixel
                   ? 'px-btn px-btn--sm px-btn--mint'
@@ -658,10 +658,10 @@ function App() {
                           : 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
                     }`
               }
-              title={imageEditorAvailable ? '打开网页版改图' : '需要提示词反推与图像节点权限'}
+              title={imageEditorRoute ? '返回无限画布' : imageEditorAvailable ? '打开网页版改图' : '需要提示词反推与图像节点权限'}
             >
               <Wand2 size={14} />
-              <span className="text-[11px]">网页版改图</span>
+              <span className="text-[11px]">{imageEditorRoute ? '无限画布' : '网页版改图'}</span>
             </button>
           )}
           {/* 主题模板 */}
@@ -814,7 +814,7 @@ function App() {
           imageEditorAvailable ? (
             <ErrorBoundary fallbackTitle="网页版改图渲染出错了，已被错误边界捕获">
               <Suspense fallback={<InfiniteCanvasBootLoading />}>
-                <ImageEditorPage user={authUser} onBack={() => navigateApp('/')} />
+                <ImageEditorPage user={authUser} />
               </Suspense>
             </ErrorBoundary>
           ) : (

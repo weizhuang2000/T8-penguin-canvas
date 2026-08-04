@@ -128,6 +128,8 @@ test('web image editor route, sidebar permission entry and shared-library action
   const page = fs.readFileSync(new URL('../src/components/ImageEditorPage.tsx', import.meta.url), 'utf8');
   assert.match(app, /appPath === '\/image-editor'/);
   assert.match(app, /visibleNodeTypes\.includes\('prompt-reverse'\).*visibleNodeTypes\.includes\('image'\)/s);
+  assert.match(app, /navigateApp\(imageEditorRoute \? '\/' : '\/image-editor'\)/);
+  assert.match(app, /imageEditorRoute \? '无限画布' : '网页版改图'/);
   assert.doesNotMatch(sidebar, /网页版改图/);
   assert.match(app, /网页版改图[\s\S]*\{\/\* 主题模板 \*\/\}/);
   assert.match(page, /getResourceItems\(\{ kind: 'image' \}\)/);
@@ -156,4 +158,9 @@ test('web image editor route, sidebar permission entry and shared-library action
   assert.match(page, /mapWithConcurrency\(selectedAssets, 2/);
   assert.match(page, /buildImageEditorCachedPromptMergeMessages/);
   assert.match(page, /aria-label="查看反推提示词"/);
+  assert.match(page, /const IMAGE_EDITOR_TOOL_SLOTS = \[/);
+  assert.match(page, /label: '反推生图', available: true/);
+  assert.equal((page.match(/label: '功能预留 [1-5]', available: false/g) || []).length, 5);
+  assert.match(page, /aria-label="网页版改图功能导航"/);
+  assert.doesNotMatch(page, /参考图反推生图/);
 });

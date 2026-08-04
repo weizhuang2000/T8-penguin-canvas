@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowLeft,
   BrainCircuit,
   Check,
   ChevronDown,
@@ -80,8 +79,16 @@ type RunStage = 'idle' | 'reversing' | 'generating' | 'success' | 'error';
 
 interface ImageEditorPageProps {
   user: AuthUser;
-  onBack: () => void;
 }
+
+const IMAGE_EDITOR_TOOL_SLOTS = [
+  { id: 'reverse-generate', label: '反推生图', available: true },
+  { id: 'reserved-1', label: '功能预留 1', available: false },
+  { id: 'reserved-2', label: '功能预留 2', available: false },
+  { id: 'reserved-3', label: '功能预留 3', available: false },
+  { id: 'reserved-4', label: '功能预留 4', available: false },
+  { id: 'reserved-5', label: '功能预留 5', available: false },
+] as const;
 
 function resultList<T>(result: api.Result<unknown>, keys: string[]): T[] | null {
   return result.success ? coerceImageEditorList<T>(result.data, keys) : null;
@@ -131,7 +138,7 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, worker: (item
   return results;
 }
 
-export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) {
+export default function ImageEditorPage({ user }: ImageEditorPageProps) {
   const { theme, style } = useThemeStore();
   const isDark = theme === 'dark';
   const isPixel = style === 'pixel';
@@ -699,22 +706,29 @@ export default function ImageEditorPage({ user, onBack }: ImageEditorPageProps) 
     <main className={`flex-1 overflow-y-auto ${isDark ? 'bg-zinc-950 text-white' : 'bg-[#f5f2ed] text-zinc-900'}`}>
       <input ref={uploadRef} type="file" accept="image/*" multiple hidden onChange={(event) => void addFilesToLibrary(event.target.files)} />
       <div className="mx-auto w-full max-w-[1320px] px-4 py-5 sm:px-6 lg:px-8">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <button type="button" onClick={onBack} className={`${field} flex items-center gap-2 text-sm font-semibold`}><ArrowLeft size={16} /> 返回无限画布</button>
-          <div className="text-right">
-            <h2 className="text-lg font-black">网页版改图</h2>
-            <p className="text-xs opacity-55">共享资源参考 · 提示词反推 · FHL / 扩展平台生图</p>
-          </div>
-        </div>
-
         <section className={`mb-4 overflow-hidden rounded-2xl border shadow-sm ${surface}`}>
-          <div className="flex items-center gap-3 border-b border-current/10 px-4 py-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400"><BrainCircuit size={20} /></span>
-            <div>
-              <div className="font-bold">参考图反推生图</div>
-              <div className="text-xs opacity-55">选择共享资源或自己的生成图，输入内容文本后一键运行</div>
+          <nav aria-label="网页版改图功能导航" className="overflow-x-auto border-b border-current/10 p-3">
+            <div className="flex min-w-max gap-2">
+              {IMAGE_EDITOR_TOOL_SLOTS.map((tool, index) => (
+                <button
+                  key={tool.id}
+                  type="button"
+                  disabled={!tool.available}
+                  aria-current={tool.available ? 'page' : undefined}
+                  className={`flex min-w-[150px] flex-1 items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold transition ${
+                    tool.available
+                      ? 'border-emerald-400/60 bg-emerald-500/15 text-emerald-400 shadow-sm'
+                      : 'cursor-not-allowed border-dashed border-current/15 bg-current/[0.025] opacity-45'
+                  }`}
+                  title={tool.available ? '当前功能：反推提示词并生成图片' : `${tool.label}，敬请期待`}
+                >
+                  {index === 0 ? <BrainCircuit size={18} /> : <span className="text-xs opacity-60">{index + 1}</span>}
+                  <span>{tool.label}</span>
+                  {!tool.available && <span className="text-[10px] font-medium opacity-60">敬请期待</span>}
+                </button>
+              ))}
             </div>
-          </div>
+          </nav>
           <div className="bg-gradient-to-r from-emerald-500/15 via-cyan-500/10 to-sky-500/15 p-4 sm:p-5">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
               <textarea
