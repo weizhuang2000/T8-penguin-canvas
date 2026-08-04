@@ -150,6 +150,9 @@ test('web image editor route, sidebar permission entry and shared-library action
   assert.match(page, /const GALLERY_COLUMN_COUNTS = \[3, 4, 5, 6, 7, 8\] as const/);
   assert.match(page, /t8pc:image-editor:gallery-columns:v1:/);
   assert.match(page, /aria-label="图库每行列数"/);
+  assert.match(page, /aria-label="参考图库工具栏"/);
+  assert.match(page, /className="flex min-w-\[1180px\] items-center gap-2 p-3"/);
+  assert.doesNotMatch(page, /共享资源与我的历史生成/);
   assert.match(page, /gridTemplateColumns: `repeat\(\$\{galleryColumnCount\}, minmax\(0, 1fr\)\)`/);
   assert.match(page, /data-gallery-columns=\{galleryColumnCount\}/);
   assert.match(page, /SmartImage[\s\S]*thumbSize=\{360\}/);

@@ -793,26 +793,24 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
         )}
 
         <section className={`rounded-2xl border shadow-sm ${surface}`}>
-          <div className="space-y-3 border-b border-current/10 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2"><LibraryBig size={18} className="text-cyan-400" /><div><div className="font-bold">参考图片库</div><div className="text-[11px] opacity-50">共享资源与我的历史生成</div></div></div>
-              <div className="flex items-center gap-2">
-                <button type="button" disabled={loadingGallery} onClick={() => { setLoadingGallery(true); void reloadGallery().finally(() => setLoadingGallery(false)); }} className="flex items-center gap-2 rounded-lg bg-current/5 px-3 py-2 text-xs font-bold disabled:opacity-45"><RefreshCw size={14} className={loadingGallery ? 'animate-spin' : ''} /> 刷新图库</button>
-                <button type="button" disabled={uploading} onClick={() => uploadRef.current?.click()} className="flex items-center gap-2 rounded-lg bg-cyan-500/15 px-3 py-2 text-xs font-bold text-cyan-400 disabled:opacity-45">{uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} 上传并共享</button>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="border-b border-current/10">
+            <div className="overflow-x-auto">
+              <div aria-label="参考图库工具栏" className="flex min-w-[1180px] items-center gap-2 p-3">
+              <div className="flex shrink-0 items-center gap-2 px-1"><LibraryBig size={18} className="text-cyan-400" /><span className="text-sm font-bold">参考图库</span></div>
               {([
                 ['all', '全部', Images],
                 ['resources', '资源图库', Library],
                 ['mine', '我的生成', ImagePlus],
-              ] as const).map(([value, label, Icon]) => <button key={value} type="button" onClick={() => { setSource(value); setPage(1); }} className={`flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-bold ${source === value ? 'bg-cyan-500 text-black' : 'bg-current/5'}`}><Icon size={14} />{label}</button>)}
-              <div className={`${field} flex min-w-[190px] flex-1 items-center gap-2 py-1.5`}><Search size={14} className="opacity-50" /><input value={keyword} onChange={(event) => { setKeyword(event.target.value); setPage(1); }} placeholder="搜索标题或提示词" className="min-w-0 flex-1 bg-transparent text-xs outline-none" /></div>
-              {source !== 'mine' && <select value={categoryId} onChange={(event) => { setCategoryId(event.target.value); setPage(1); }} className={`${field} text-xs`}><option value="all">全部分类</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
-              <select aria-label="图库每行列数" value={galleryColumnCount} onChange={(event) => setGalleryColumnCountPreference(Number(event.target.value))} className={`${field} text-xs`}>{GALLERY_COLUMN_COUNTS.map((value) => <option key={value} value={value}>每行 {value} 张</option>)}</select>
-              <select value={pageSize} onChange={(event) => setPageSizePreference(Number(event.target.value))} className={`${field} text-xs`}>{PAGE_SIZES.map((value) => <option key={value} value={value}>每页 {value}</option>)}</select>
+              ] as const).map(([value, label, Icon]) => <button key={value} type="button" onClick={() => { setSource(value); setPage(1); }} className={`flex shrink-0 items-center gap-1 rounded-lg px-3 py-2 text-xs font-bold ${source === value ? 'bg-cyan-500 text-black' : 'bg-current/5'}`}><Icon size={14} />{label}</button>)}
+              <div className={`${field} flex min-w-[240px] flex-1 items-center gap-2 py-1.5`}><Search size={14} className="shrink-0 opacity-50" /><input value={keyword} onChange={(event) => { setKeyword(event.target.value); setPage(1); }} placeholder="搜索标题或提示词" className="min-w-0 flex-1 bg-transparent text-xs outline-none" /></div>
+              {source !== 'mine' && <select value={categoryId} onChange={(event) => { setCategoryId(event.target.value); setPage(1); }} className={`${field} shrink-0 text-xs`}><option value="all">全部分类</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
+              <select aria-label="图库每行列数" value={galleryColumnCount} onChange={(event) => setGalleryColumnCountPreference(Number(event.target.value))} className={`${field} shrink-0 text-xs`}>{GALLERY_COLUMN_COUNTS.map((value) => <option key={value} value={value}>每行 {value} 张</option>)}</select>
+              <select value={pageSize} onChange={(event) => setPageSizePreference(Number(event.target.value))} className={`${field} shrink-0 text-xs`}>{PAGE_SIZES.map((value) => <option key={value} value={value}>每页 {value}</option>)}</select>
+              <button type="button" disabled={loadingGallery} onClick={() => { setLoadingGallery(true); void reloadGallery().finally(() => setLoadingGallery(false)); }} className="flex shrink-0 items-center gap-1.5 rounded-lg bg-current/5 px-3 py-2 text-xs font-bold disabled:opacity-45"><RefreshCw size={14} className={loadingGallery ? 'animate-spin' : ''} />刷新</button>
+              <button type="button" disabled={uploading} onClick={() => uploadRef.current?.click()} className="flex shrink-0 items-center gap-1.5 rounded-lg bg-cyan-500/15 px-3 py-2 text-xs font-bold text-cyan-400 disabled:opacity-45">{uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}上传共享</button>
+              </div>
             </div>
-            {message && <div className="rounded-lg bg-cyan-500/10 px-3 py-2 text-xs text-cyan-400">{message}</div>}
+            {message && <div className="mx-3 mb-3 rounded-lg bg-cyan-500/10 px-3 py-2 text-xs text-cyan-400">{message}</div>}
           </div>
 
           <div className="p-4">
