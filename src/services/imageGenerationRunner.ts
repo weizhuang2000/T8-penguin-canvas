@@ -2,6 +2,14 @@ import { buildMjPrompt, createGenerationRunId, generateExternalImage, queryExter
 
 const IMAGE_POLL_TIMEOUT_MS = 60 * 60 * 1000;
 
+export function detectImagePromptLanguage(prompt: string): 'zh' | 'en' {
+  const text = String(prompt || '').trim();
+  const cjkCount = (text.match(/\p{Script=Han}/gu) || []).length;
+  const latinWordCount = (text.match(/[A-Za-z]+(?:['’-][A-Za-z]+)*/g) || []).length;
+  if (!cjkCount && !latinWordCount) return 'zh';
+  return cjkCount > 0 && cjkCount >= latinWordCount ? 'zh' : 'en';
+}
+
 export type ImageGenerationMode = 'standard' | 'fal' | 'mj' | 'external';
 
 export interface ImageGenerationProgress {
@@ -205,6 +213,7 @@ async function runMidjourney(options: ImageGenerationRunOptions): Promise<ImageG
     srefUrls: mj.srefUrls || [],
     orefUrls: mj.orefUrls || [],
   });
+  const historyContext = { ...(options.historyContext || {}), prompt: fullPrompt };
   const submitted = await submitMjImagine({
     prompt: fullPrompt,
     ar: mj.aspectRatio,
@@ -218,14 +227,14 @@ async function runMidjourney(options: ImageGenerationRunOptions): Promise<ImageG
     speed: mj.speed,
     base64Array,
     remix: true,
-    historyContext: options.historyContext,
+    historyContext,
   });
   const interval = Math.max(1, Math.min(30, mj.pollIntervalSeconds || 3)) * 1000;
   const maxPolls = Math.max(10, pollCount(interval), Math.min(3600, mj.maxPolls || 1200));
   options.onProgress?.({ progress: '15%', taskId: submitted.taskId });
   for (let index = 0; index < maxPolls; index += 1) {
     await delay(interval, options.signal);
-    const result = await queryMjTask(submitted.taskId, mj.speed, options.historyContext);
+    const result = await queryMjTask(submitted.taskId, mj.speed, historyContext);
     if (result.status === 'FAILURE') throw new Error(`MJ 失败: ${result.failReason || '未知错误'}`);
     if (result.progress) {
       const percent = Number.parseInt(String(result.progress), 10) || 0;
@@ -359,11 +368,21 @@ export async function runConfiguredImageGeneration(options: ImageGenerationRunOp
     prompt,
     historyContext: {
       ...(options.historyContext || {}),
+      prompt,
+      promptLanguage: options.historyContext?.promptLanguage || detectImagePromptLanguage(prompt),
       generationRunId: options.historyContext?.generationRunId || createGenerationRunId(),
     },
   };
-  if (options.mode === 'external') return runExternal(normalized);
-  if (options.mode === 'mj') return runMidjourney(normalized);
-  if (options.mode === 'fal') return runFal(normalized);
-  return runStandard(normalized);
+  const result = options.mode === 'external'
+    ? await runExternal(normalized)
+    : options.mode === 'mj'
+      ? await runMidjourney(normalized)
+      : options.mode === 'fal'
+        ? await runFal(normalized)
+        : await runStandard(normalized);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('penguin:generation-history-changed'));
+    window.dispatchEvent(new CustomEvent('penguin:resources-changed'));
+  }
+  return result;
 }

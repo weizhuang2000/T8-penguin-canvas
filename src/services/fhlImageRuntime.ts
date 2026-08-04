@@ -47,6 +47,10 @@ export async function runFhlImageRuntimeGeneration(input: {
     if (TERMINAL.has(job.status)) {
       const urls = job.outputUrls || [];
       if (!urls.length) throw new Error(job.error || job.tasks.find((task) => task.error)?.error || `FHL 任务${job.status}`);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('penguin:generation-history-changed'));
+        window.dispatchEvent(new CustomEvent('penguin:resources-changed'));
+      }
       return { jobId: job.id, urls };
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));

@@ -8,7 +8,7 @@ const path = require('path');
 const config = require('../config');
 const { isAdminRole, requireAdmin } = require('../auth/middleware');
 const settingsRouter = require('./settings');
-const { addHistoryItems } = require('../utils/generationHistory');
+const { addGeneratedHistoryItems } = require('../utils/generationHistory');
 const { storageEntryForUrl } = require('../outputStorage/manager');
 const { createRunId, finishRun, startRun } = require('../utils/monitoringMetrics');
 const {
@@ -321,10 +321,17 @@ async function incompleteTasks(tasks) {
   return out;
 }
 
-function rememberHistory(job, user) {
-  const urls = job.tasks.filter((task) => task.status === 'success').map((task) => ({ url: task.outputUrl, kind: 'image', taskId: job.id }));
+async function rememberHistory(job, user) {
+  const urls = job.tasks
+    .filter((task) => task.status === 'success')
+    .map((task) => ({
+      url: task.outputUrl,
+      kind: 'image',
+      taskId: job.id,
+      prompt: task.prompt || job.request.prompt,
+    }));
   if (!urls.length) return;
-  try { addHistoryItems(urls, { ...job.request.historyContext, prompt: job.request.prompt, provider: 'FHL Images', model: 'gpt-image-2', taskId: job.id }, user); }
+  try { await addGeneratedHistoryItems(urls, { ...job.request.historyContext, prompt: job.request.prompt, provider: 'FHL Images', model: 'gpt-image-2', taskId: job.id }, user); }
   catch (error) { console.warn('[fhl-image] generation history failed:', error?.message || error); }
   const outputCount = Math.max(0, urls.length - Number(job.monitoringBaselineSuccess || 0));
   if (job.monitoringRunId && outputCount > 0) finishRun(job.monitoringRunId, { outcome: 'success', outputCount });
@@ -373,8 +380,10 @@ async function executeJob(job, user, resume = false) {
         if (controller.signal.aborted) break;
       }
     }
-    job.status = controller.signal.aborted ? 'cancelled' : (job.tasks.some((task) => task.status === 'failed') ? 'partial' : 'completed');
-    writeArtifacts(job); rememberHistory(job, user); persist(job);
+    const terminalStatus = controller.signal.aborted ? 'cancelled' : (job.tasks.some((task) => task.status === 'failed') ? 'partial' : 'completed');
+    await rememberHistory(job, user);
+    job.status = terminalStatus;
+    writeArtifacts(job); persist(job);
     if (job.monitoringRunId && controller.signal.aborted) finishRun(job.monitoringRunId, { outcome: 'cancelled' });
     if (job.monitoringRunId && !job.tasks.some((task) => task.status === 'success')) finishRun(job.monitoringRunId, { outcome: 'upstream_failure' });
   } catch (error) {

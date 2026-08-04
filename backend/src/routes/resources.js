@@ -130,6 +130,30 @@ function mergeImageAnalysis(currentValue, nextValue) {
   });
 }
 
+function fillMissingImageAnalysis(currentValue, nextValue) {
+  const current = normalizeImageAnalysis(currentValue);
+  const next = normalizeImageAnalysis(nextValue);
+  if (!next) return current;
+  if (!current) return next;
+  const reversePrompts = { ...(current.reversePrompts || {}) };
+  for (const strength of IMAGE_ANALYSIS_STRENGTHS) {
+    const nextLanguages = next.reversePrompts[strength];
+    if (!nextLanguages) continue;
+    const currentLanguages = reversePrompts[strength] || {};
+    const filled = { ...currentLanguages };
+    for (const language of IMAGE_ANALYSIS_LANGUAGES) {
+      if (!filled[language] && nextLanguages[language]) filled[language] = nextLanguages[language];
+    }
+    if (Object.keys(filled).length) reversePrompts[strength] = filled;
+  }
+  return normalizeImageAnalysis({
+    version: 1,
+    secondaryTags: current.secondaryTags || [],
+    reversePrompts,
+    classifiedAt: current.classifiedAt || 0,
+  });
+}
+
 function safeFilename(value, fallback = 'asset') {
   const cleaned = String(value || fallback)
     .replace(/[\\/:*?"<>|]/g, '_')
@@ -868,77 +892,97 @@ router.get('/items', (req, res) => {
   }
 });
 
+async function upsertResourceItem(payload, options = {}) {
+  const url = safeText(payload?.url, '');
+  if (!url) {
+    const error = new Error('缺少 url');
+    error.statusCode = 400;
+    throw error;
+  }
+  const { root, db } = readDb();
+  const src = await readSource(url, root, db);
+  const ext = normalizeExt(path.extname(src.originalName)) || extFromMime(src.mime) || 'bin';
+  const detectedKind = kindFromExt(ext) || kindFromExt(extFromMime(src.mime));
+  const kind = normalizeKind(payload?.kind) || detectedKind;
+  if (!kind || !ADD_RESOURCE_KINDS.has(kind)) {
+    const error = new Error('资源类型仅支持图像 / 视频 / 音频 / 全景');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (kind === 'panorama' && detectedKind !== 'image') {
+    const error = new Error('全景资源只能保存图像文件');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (kind !== 'panorama' && detectedKind && detectedKind !== kind) {
+    const error = new Error(`素材类型不匹配：需要 ${kind}`);
+    error.statusCode = 400;
+    throw error;
+  }
+  const sha256 = crypto.createHash('sha256').update(src.buffer).digest('hex');
+  const existing = db.items.find((item) => item.kind === kind && item.sha256 === sha256);
+  const preferredCategory = safeText(options.categoryName)
+    ? db.categories.find((category) => category.kind === kind && category.name === safeText(options.categoryName))
+    : null;
+  const requestedCat = safeText(payload?.categoryId || preferredCategory?.id);
+  const categoryOk = db.categories.some((category) => category.id === requestedCat && category.kind === kind);
+  if (existing) {
+    if (categoryOk && !options.preserveExistingCategory) existing.categoryId = requestedCat;
+    if (kind === 'image' && payload?.imageAnalysis) {
+      existing.imageAnalysis = options.fillMissingImageAnalysis
+        ? fillMissingImageAnalysis(existing.imageAnalysis, payload.imageAnalysis)
+        : mergeImageAnalysis(existing.imageAnalysis, payload.imageAnalysis);
+    }
+    existing.sourceUrls = normalizeSourceUrls([...(existing.sourceUrls || []), url], existing.sourceUrl);
+    existing.updatedAt = now();
+    existing.lastUsedAt = now();
+    writeDb(root, db);
+    return { duplicate: true, data: decorateItem(existing) };
+  }
+
+  const id = genId('res');
+  const safeOriginal = safeFilename(src.originalName, `${kind}.${ext}`);
+  const fileRel = path.join(kind, `${id}.${ext}`).replace(/\\/g, '/');
+  const target = assertInside(root, path.join(root, fileRel));
+  fs.writeFileSync(target, src.buffer);
+  const thumbRel = kind === 'image' || kind === 'panorama' ? await makeImageThumb(src.buffer, root, id) : '';
+  const imageSize = kind === 'image' || kind === 'panorama' ? await readImageSize(src.buffer) : { width: 0, height: 0 };
+  const fallbackCat = `${kind}_uncategorized`;
+  const item = {
+    id,
+    kind,
+    categoryId: categoryOk ? requestedCat : fallbackCat,
+    title: safeText(payload?.title, path.parse(safeOriginal).name),
+    originalName: safeOriginal,
+    fileRel,
+    thumbRel,
+    mime: safeText(src.mime, mimeFromExt(ext)),
+    size: src.buffer.length,
+    width: imageSize.width,
+    height: imageSize.height,
+    sha256,
+    tags: Array.isArray(payload?.tags) ? payload.tags.map((tag) => safeText(tag)).filter(Boolean).slice(0, 20) : [],
+    favorite: !!payload?.favorite,
+    sourceUrl: url,
+    sourceUrls: [url],
+    sourceNodeId: safeText(payload?.sourceNodeId),
+    sourceCanvasId: safeText(payload?.sourceCanvasId),
+    imageAnalysis: kind === 'image' ? normalizeImageAnalysis(payload?.imageAnalysis) : null,
+    createdAt: now(),
+    updatedAt: now(),
+    lastUsedAt: 0,
+  };
+  db.items.push(item);
+  writeDb(root, db);
+  return { duplicate: false, data: decorateItem(item) };
+}
+
 router.post('/items/add', express.json({ limit: '4mb' }), async (req, res) => {
   try {
-    const url = safeText(req.body?.url, '');
-    if (!url) return res.status(400).json({ success: false, error: '缺少 url' });
-    const { root, db } = readDb();
-    const src = await readSource(url, root, db);
-    const ext = normalizeExt(path.extname(src.originalName)) || extFromMime(src.mime) || 'bin';
-    const detectedKind = kindFromExt(ext) || kindFromExt(extFromMime(src.mime));
-    const kind = normalizeKind(req.body?.kind) || detectedKind;
-    if (!kind || !ADD_RESOURCE_KINDS.has(kind)) {
-      return res.status(400).json({ success: false, error: '资源类型仅支持图像 / 视频 / 音频 / 全景' });
-    }
-    if (kind === 'panorama' && detectedKind !== 'image') {
-      return res.status(400).json({ success: false, error: '全景资源只能保存图像文件' });
-    }
-    if (kind !== 'panorama' && detectedKind && detectedKind !== kind) {
-      return res.status(400).json({ success: false, error: `素材类型不匹配：需要 ${kind}` });
-    }
-    const sha256 = crypto.createHash('sha256').update(src.buffer).digest('hex');
-    const existing = db.items.find((item) => item.kind === kind && item.sha256 === sha256);
-    const requestedCat = safeText(req.body?.categoryId);
-    const categoryOk = db.categories.some((c) => c.id === requestedCat && c.kind === kind);
-    if (existing) {
-      if (categoryOk) existing.categoryId = requestedCat;
-      if (kind === 'image' && req.body?.imageAnalysis) {
-        existing.imageAnalysis = mergeImageAnalysis(existing.imageAnalysis, req.body.imageAnalysis);
-      }
-      existing.sourceUrls = normalizeSourceUrls([...(existing.sourceUrls || []), url], existing.sourceUrl);
-      existing.updatedAt = now();
-      existing.lastUsedAt = now();
-      writeDb(root, db);
-      return res.json({ success: true, duplicate: true, data: decorateItem(existing) });
-    }
-
-    const id = genId('res');
-    const safeOriginal = safeFilename(src.originalName, `${kind}.${ext}`);
-    const fileRel = path.join(kind, `${id}.${ext}`).replace(/\\/g, '/');
-    const target = assertInside(root, path.join(root, fileRel));
-    fs.writeFileSync(target, src.buffer);
-    const thumbRel = kind === 'image' || kind === 'panorama' ? await makeImageThumb(src.buffer, root, id) : '';
-    const imageSize = kind === 'image' || kind === 'panorama' ? await readImageSize(src.buffer) : { width: 0, height: 0 };
-    const fallbackCat = `${kind}_uncategorized`;
-    const item = {
-      id,
-      kind,
-      categoryId: categoryOk ? requestedCat : fallbackCat,
-      title: safeText(req.body?.title, path.parse(safeOriginal).name),
-      originalName: safeOriginal,
-      fileRel,
-      thumbRel,
-      mime: safeText(src.mime, mimeFromExt(ext)),
-      size: src.buffer.length,
-      width: imageSize.width,
-      height: imageSize.height,
-      sha256,
-      tags: Array.isArray(req.body?.tags) ? req.body.tags.map((t) => safeText(t)).filter(Boolean).slice(0, 20) : [],
-      favorite: !!req.body?.favorite,
-      sourceUrl: url,
-      sourceUrls: [url],
-      sourceNodeId: safeText(req.body?.sourceNodeId),
-      sourceCanvasId: safeText(req.body?.sourceCanvasId),
-      imageAnalysis: kind === 'image' ? normalizeImageAnalysis(req.body?.imageAnalysis) : null,
-      createdAt: now(),
-      updatedAt: now(),
-      lastUsedAt: 0,
-    };
-    db.items.push(item);
-    writeDb(root, db);
-    res.json({ success: true, duplicate: false, data: decorateItem(item) });
+    const result = await upsertResourceItem(req.body || {});
+    res.json({ success: true, ...result });
   } catch (e) {
-    res.status(500).json({ success: false, error: e?.message || String(e) });
+    res.status(Number(e?.statusCode) || 500).json({ success: false, error: e?.message || String(e) });
   }
 });
 
@@ -1323,6 +1367,7 @@ router.get('/thumb/:id', (req, res) => {
 });
 
 module.exports = router;
+module.exports.upsertResourceItem = upsertResourceItem;
 module.exports.resolveResourceFilePath = function resolveResourceFilePath(value) {
   const { root, db } = readDb();
   const local = resolveLocalSource(value, root, db);

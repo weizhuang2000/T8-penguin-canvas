@@ -2113,6 +2113,7 @@ export interface GenerationHistoryItem {
   sourceNodeId?: string;
   sourceNodeType?: string;
   prompt?: string;
+  promptLanguage?: 'zh' | 'en';
   provider?: string;
   model?: string;
   taskId?: string;

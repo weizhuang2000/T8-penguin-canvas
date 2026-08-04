@@ -383,6 +383,7 @@ export interface GenerationHistoryContextLike {
   sourceNodeType?: string;
   nodeTitle?: string;
   prompt?: string;
+  promptLanguage?: 'zh' | 'en';
 }
 
 export interface FhlTaskResult {

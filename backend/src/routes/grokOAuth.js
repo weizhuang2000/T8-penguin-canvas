@@ -6,7 +6,7 @@ const path = require('path');
 const crypto = require('crypto');
 const config = require('../config');
 const { runLocalHooks } = require('../extensions/runtimeHooks');
-const { addHistoryItems } = require('../utils/generationHistory');
+const { addGeneratedHistoryItems } = require('../utils/generationHistory');
 const { createRunId, finishRun, startRun } = require('../utils/monitoringMetrics');
 
 const router = express.Router();
@@ -455,8 +455,9 @@ router.post('/agent/stream', async (req, res) => {
       Object.assign(data, await normalizeMediaOutputs(data));
       const imageUrls = Array.isArray(data.imageUrls) ? data.imageUrls : (data.imageUrl ? [data.imageUrl] : []);
       if (imageUrls.length) {
-        addHistoryItems(imageUrls.map((url) => ({ url, kind: 'image' })), {
+        await addGeneratedHistoryItems(imageUrls.map((url) => ({ url, kind: 'image' })), {
           ...context,
+          prompt: body.prompt || context.prompt,
           provider: 'Grok OAuth',
           model: body.model || 'grok-image',
         }, req.user);
@@ -575,8 +576,9 @@ router.post('/image', async (req, res) => {
     const imageUrls = Array.isArray(mediaPatch.imageUrls) ? mediaPatch.imageUrls : [];
     const ok = result.success !== false && result.ok !== false;
     if (ok && imageUrls.length) {
-      addHistoryItems(imageUrls.map((url) => ({ url, kind: 'image' })), {
+      await addGeneratedHistoryItems(imageUrls.map((url) => ({ url, kind: 'image' })), {
         ...context,
+        prompt: req.body?.prompt || context.prompt,
         provider: 'Grok OAuth',
         model: req.body?.model || 'grok-image',
       }, req.user);

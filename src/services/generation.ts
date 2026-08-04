@@ -50,9 +50,38 @@ export interface GenerationHistoryContext {
   nodeTitle?: string;
   outputTitle?: string;
   prompt?: string;
+  promptLanguage?: 'zh' | 'en';
   seed?: number;
   /** 同一次用户生图任务在提交、轮询和自动重试期间保持不变。 */
   generationRunId?: string;
+}
+
+const pendingImageHistoryContexts = new Map<string, GenerationHistoryContext>();
+const pendingFalHistoryContexts = new Map<string, GenerationHistoryContext>();
+const pendingMjHistoryContexts = new Map<string, GenerationHistoryContext>();
+const pendingExternalImageHistoryContexts = new Map<string, GenerationHistoryContext>();
+
+function historyContextWithPrompt(context: GenerationHistoryContext | undefined, prompt: string): GenerationHistoryContext {
+  return { ...(context || {}), prompt: String(prompt || '').trim() };
+}
+
+function mergePendingHistoryContext(
+  pending: GenerationHistoryContext | undefined,
+  current: GenerationHistoryContext | undefined,
+): GenerationHistoryContext | undefined {
+  if (!pending && !current) return undefined;
+  return {
+    ...(pending || {}),
+    ...(current || {}),
+    prompt: current?.prompt || pending?.prompt,
+    promptLanguage: current?.promptLanguage || pending?.promptLanguage,
+  };
+}
+
+function notifyGeneratedImageCollectionsChanged() {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('penguin:generation-history-changed'));
+  window.dispatchEvent(new CustomEvent('penguin:resources-changed'));
 }
 
 export function createGenerationRunId(prefix = 'image'): string {
@@ -79,6 +108,7 @@ export async function generateImage(req: GenerateImageRequest): Promise<Generate
   if (!r.ok || !data.success) {
     throw new Error(data?.error || `HTTP ${r.status}`);
   }
+  notifyGeneratedImageCollectionsChanged();
   return data.data;
 }
 
@@ -123,19 +153,20 @@ export interface GenerateExternalImageResult {
 }
 
 export async function generateExternalImage(req: GenerateExternalImageRequest): Promise<GenerateExternalImageResult> {
-  const fhl = await runFhlImageRuntimeGeneration({ prompt: req.prompt || '', images: req.images, historyContext: req.historyContext });
+  const historyContext = historyContextWithPrompt(req.historyContext, req.prompt || '');
+  const fhl = await runFhlImageRuntimeGeneration({ prompt: req.prompt || '', images: req.images, historyContext });
   if (fhl) return { imageUrls: fhl.urls, taskId: fhl.jobId, status: 'completed', code: 'completed', raw: { fhlJobId: fhl.jobId } };
   const r = await fetch('/api/proxy/external/image', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(req),
+    body: JSON.stringify({ ...req, historyContext }),
   });
   const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) {
     throw new Error(data?.error || `HTTP ${r.status}`);
   }
   const payload = data.data || {};
-  return {
+  const result = {
     imageUrls: Array.isArray(payload.imageUrls) ? payload.imageUrls : [],
     remoteImageUrls: Array.isArray(payload.remoteImageUrls) ? payload.remoteImageUrls : undefined,
     videoUrls: Array.isArray(payload.videoUrls) ? payload.videoUrls : undefined,
@@ -148,6 +179,9 @@ export async function generateExternalImage(req: GenerateExternalImageRequest): 
     raw: payload.raw,
     provider: payload.provider,
   };
+  if (!result.imageUrls.length && result.taskId) pendingExternalImageHistoryContexts.set(result.taskId, historyContext);
+  if (result.imageUrls.length) notifyGeneratedImageCollectionsChanged();
+  return result;
 }
 
 export interface QueryExternalImageStatusRequest {
@@ -164,7 +198,8 @@ export async function queryExternalImageStatus(req: QueryExternalImageStatusRequ
   if (!isLocalJob && req.providerId) qs.set('providerId', req.providerId);
   if (!isLocalJob && req.providerModel) qs.set('providerModel', req.providerModel);
   if (req.outputFormat) qs.set('outputFormat', req.outputFormat);
-  if (!isLocalJob && req.historyContext) qs.set('historyContext', JSON.stringify(req.historyContext));
+  const historyContext = mergePendingHistoryContext(pendingExternalImageHistoryContexts.get(req.taskId), req.historyContext);
+  if (!isLocalJob && historyContext) qs.set('historyContext', JSON.stringify(historyContext));
   const query = qs.toString();
   const r = await fetch(`/api/proxy/external/image/status/${encodeURIComponent(req.taskId)}${query ? `?${query}` : ''}`);
   const data = await parseJsonResponse(r);
@@ -172,7 +207,7 @@ export async function queryExternalImageStatus(req: QueryExternalImageStatusRequ
     throw new Error(data?.error || `HTTP ${r.status}`);
   }
   const payload = data.data || {};
-  return {
+  const result = {
     imageUrls: Array.isArray(payload.imageUrls) ? payload.imageUrls : [],
     remoteImageUrls: Array.isArray(payload.remoteImageUrls) ? payload.remoteImageUrls : undefined,
     taskId: payload.taskId || req.taskId,
@@ -182,6 +217,11 @@ export async function queryExternalImageStatus(req: QueryExternalImageStatusRequ
     raw: payload.raw,
     provider: payload.provider,
   };
+  if (result.imageUrls.length || (result.code && result.code !== 'running')) {
+    pendingExternalImageHistoryContexts.delete(req.taskId);
+  }
+  if (result.imageUrls.length) notifyGeneratedImageCollectionsChanged();
+  return result;
 }
 
 export interface GenerateExternalMusicRequest {
@@ -304,16 +344,21 @@ export interface ImageSubmitResult {
 }
 
 export async function submitImageAsync(req: GenerateImageRequest): Promise<ImageSubmitResult> {
-  const fhl = await runFhlImageRuntimeGeneration({ prompt: req.prompt, images: req.images || (req.image ? [req.image] : []), historyContext: req.historyContext });
+  const historyContext = historyContextWithPrompt(req.historyContext, req.prompt);
+  const normalizedRequest = { ...req, historyContext };
+  const fhl = await runFhlImageRuntimeGeneration({ prompt: req.prompt, images: req.images || (req.image ? [req.image] : []), historyContext });
   if (fhl) return { sync: true, taskId: fhl.jobId, urls: fhl.urls, status: 'completed', progress: '100%', raw: { fhlJobId: fhl.jobId } };
   const r = await fetch('/api/proxy/image/submit', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(req),
+    body: JSON.stringify(normalizedRequest),
   });
   const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
-  return data.data;
+  const result = data.data as ImageSubmitResult;
+  if (!result.sync && result.taskId) pendingImageHistoryContexts.set(result.taskId, historyContext);
+  if (result.sync && result.urls?.length) notifyGeneratedImageCollectionsChanged();
+  return result;
 }
 
 export interface ImageQueryResult {
@@ -329,13 +374,21 @@ export async function queryImageStatus(taskId: string, apiModel?: string, output
   const qs = new URLSearchParams();
   if (apiModel) qs.set('model', apiModel);
   if (outputFormat) qs.set('outputFormat', outputFormat);
-  if (historyContext) qs.set('historyContext', JSON.stringify(historyContext));
+  const resolvedHistoryContext = mergePendingHistoryContext(pendingImageHistoryContexts.get(taskId), historyContext);
+  if (resolvedHistoryContext) qs.set('historyContext', JSON.stringify(resolvedHistoryContext));
   const query = qs.toString() ? `?${qs.toString()}` : '';
   const r = await fetch(`/api/proxy/image/status/${encodeURIComponent(taskId)}${query}`);
   const data = await parseJsonResponse(r);
   if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
   // 澶辫触鐘舵€佷笅 success=false 浣嗚繑鍥?body 涓粛鍖呭惈 status:'failed'
-  return data.data || { status: data.success ? 'pending' : 'failed', progress: '0%', error: data?.error };
+  const result = data.data || { status: data.success ? 'pending' : 'failed', progress: '0%', error: data?.error };
+  if (['completed', 'success', 'done', 'failed', 'failure', 'error'].includes(String(result.status || '').toLowerCase())) {
+    pendingImageHistoryContexts.delete(taskId);
+  }
+  if (result.urls?.length && ['completed', 'success', 'done'].includes(String(result.status || '').toLowerCase())) {
+    notifyGeneratedImageCollectionsChanged();
+  }
+  return result;
 }
 
 // ========================================================================
@@ -394,14 +447,18 @@ export interface FalSubmitResult {
 }
 
 export async function submitImageFal(req: FalSubmitRequest): Promise<FalSubmitResult> {
+  const historyContext = historyContextWithPrompt(req.historyContext, req.prompt);
   const r = await fetch('/api/proxy/image/fal/submit', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(req),
+    body: JSON.stringify({ ...req, historyContext }),
   });
   const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
-  return data.data;
+  const result = data.data as FalSubmitResult;
+  if (!result.sync && result.requestId) pendingFalHistoryContexts.set(result.requestId, historyContext);
+  if (result.sync && result.urls?.length) notifyGeneratedImageCollectionsChanged();
+  return result;
 }
 
 export interface FalQueryResult {
@@ -412,14 +469,24 @@ export interface FalQueryResult {
 }
 
 export async function queryImageFal(params: { responseUrl?: string; endpoint?: string; requestId?: string; outputFormat?: 'jpg' | 'png'; historyContext?: GenerationHistoryContext }): Promise<FalQueryResult> {
+  const historyContext = params.requestId
+    ? mergePendingHistoryContext(pendingFalHistoryContexts.get(params.requestId), params.historyContext)
+    : params.historyContext;
   const r = await fetch('/api/proxy/image/fal/query', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+    body: JSON.stringify({ ...params, historyContext }),
   });
   const data = await parseJsonResponse(r);
   // 鍚庣鍦?FAILED 鏃朵細 success=false 浣?data.status='failed',杩欓噷杩斿洖缁撴灉渚涗笂灞傚垽鏂?  if (!r.ok && !data.data) throw new Error(data?.error || `HTTP ${r.status}`);
-  return data.data || { status: 'failed', error: data?.error || 'unknown' };
+  const result = data.data || { status: 'failed', error: data?.error || 'unknown' };
+  if (params.requestId && ['completed', 'failed'].includes(String(result.status || '').toLowerCase())) {
+    pendingFalHistoryContexts.delete(params.requestId);
+  }
+  if (result.urls?.length && String(result.status || '').toLowerCase() === 'completed') {
+    notifyGeneratedImageCollectionsChanged();
+  }
+  return result;
 }
 
 // ========== Midjourney (涓ユ牸瀵归綈 gpt-image-2-web/index.html runMJ L4437~L4694 + uploadMJImage L4407) ==========
@@ -482,10 +549,11 @@ export interface MjImagineResult {
 }
 
 export async function submitMjImagine(req: MjImagineRequest): Promise<MjImagineResult> {
+  const historyContext = historyContextWithPrompt(req.historyContext, req.prompt);
   const r = await fetch('/api/proxy/mj/imagine', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(req),
+    body: JSON.stringify({ ...req, historyContext }),
   });
   const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
@@ -496,6 +564,7 @@ export async function submitMjImagine(req: MjImagineRequest): Promise<MjImagineR
   }
   const taskId = String(upstream.result || upstream.task_id || '');
   if (!taskId) throw new Error('鏈嬁鍒?MJ taskId: ' + JSON.stringify(upstream).slice(0, 200));
+  pendingMjHistoryContexts.set(taskId, historyContext);
   return { taskId, raw: upstream };
 }
 
@@ -510,7 +579,8 @@ export interface MjTaskResult {
 
 export async function queryMjTask(taskId: string, speed: MjSpeed = 'fast', historyContext?: GenerationHistoryContext): Promise<MjTaskResult> {
   const qs = new URLSearchParams({ speed });
-  if (historyContext) qs.set('historyContext', JSON.stringify(historyContext));
+  const resolvedHistoryContext = mergePendingHistoryContext(pendingMjHistoryContexts.get(taskId), historyContext);
+  if (resolvedHistoryContext) qs.set('historyContext', JSON.stringify(resolvedHistoryContext));
   const r = await fetch(`/api/proxy/mj/task/${encodeURIComponent(taskId)}?${qs.toString()}`);
   const data = await parseJsonResponse(r);
   if (!r.ok || !data.success) throw new Error(data?.error || `HTTP ${r.status}`);
@@ -530,7 +600,7 @@ export async function queryMjTask(taskId: string, speed: MjSpeed = 'fast', histo
         .filter((u: any): u is string => typeof u === 'string' && !!u);
     }
   }
-  return {
+  const result: MjTaskResult = {
     status: d.status || 'IN_PROGRESS',
     progress: d.progress,
     imageUrl: d.image_url || d.imageUrl,
@@ -538,6 +608,9 @@ export async function queryMjTask(taskId: string, speed: MjSpeed = 'fast', histo
     failReason: d.fail_reason || d.failReason,
     raw: d,
   };
+  if (result.status === 'SUCCESS' || result.status === 'FAILURE') pendingMjHistoryContexts.delete(taskId);
+  if (result.status === 'SUCCESS' && (result.imageUrls?.length || result.imageUrl)) notifyGeneratedImageCollectionsChanged();
+  return result;
 }
 
 /** 涓婁紶鍙傝€冨浘(sref/oref)骞跺彇 URL 鈥?瀵瑰簲涓婚」鐩?uploadMJImage L4407 */

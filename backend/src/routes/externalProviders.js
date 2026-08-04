@@ -14,7 +14,7 @@ const {
   queryImageTaskWithProvider,
   testProviderConnection,
 } = require('../providers/adapters');
-const { addHistoryItems } = require('../utils/generationHistory');
+const { addGeneratedHistoryItems } = require('../utils/generationHistory');
 const { correlateRun, createRunId, findRunId, finishRun, startRun } = require('../utils/monitoringMetrics');
 
 const router = express.Router();
@@ -227,16 +227,17 @@ function externalFailureOutcome(result) {
   return 'excluded';
 }
 
-function rememberExternalOutputs(req, urls, kind, provider, extra = {}) {
+async function rememberExternalOutputs(req, urls, kind, provider, extra = {}) {
   const source = req.body && Object.keys(req.body).length ? req.body : (req.query || {});
+  const historyContext = parseHistoryContext(source?.historyContext);
   const list = (Array.isArray(urls) ? urls : [])
     .filter((url) => typeof url === 'string' && url)
     .map((url) => ({ url, kind, ...extra }));
   if (!list.length) return;
   try {
-    addHistoryItems(list, {
-      ...parseHistoryContext(source?.historyContext),
-      prompt: source?.prompt,
+    await addGeneratedHistoryItems(list, {
+      ...historyContext,
+      prompt: source?.prompt ?? historyContext.prompt,
       provider: provider?.label || provider?.id || '',
       model: source?.providerModel || source?.model || '',
       taskId: extra.taskId || req.body?.taskId || '',
@@ -246,9 +247,8 @@ function rememberExternalOutputs(req, urls, kind, provider, extra = {}) {
     console.warn('[generation-history] external record failed:', e?.message || e);
   }
   if (kind === 'image') {
-    const context = parseHistoryContext(source?.historyContext);
     const correlationKey = extra.taskId ? `external:${extra.taskId}` : '';
-    const runId = req.monitoringRunId || context.generationRunId || (correlationKey ? findRunId(correlationKey) : '');
+    const runId = req.monitoringRunId || historyContext.generationRunId || (correlationKey ? findRunId(correlationKey) : '');
     if (runId) finishRun(runId, { outcome: 'success', outputCount: list.length });
   }
 }
@@ -354,7 +354,7 @@ async function generateExternalImageInternal(body = {}, options = {}) {
 
   const remoteImageUrls = result.imageUrls;
   const imageUrls = await saveImageOutputs(remoteImageUrls, { outputFormat: body.outputFormat });
-  rememberExternalOutputs(
+  await rememberExternalOutputs(
     { body, user: options.user || null, monitoringRunId },
     imageUrls,
     'image',
@@ -426,7 +426,7 @@ async function setLocalImageJobCompleted(job, result) {
     raw: result.raw,
     updatedAt: Date.now(),
   });
-  rememberExternalOutputs({ body: job.body, user: job.user, monitoringRunId: job.monitoringRunId }, imageUrls, 'image', job.provider, { taskId: job.upstreamTaskId || result.taskId || job.id });
+  await rememberExternalOutputs({ body: job.body, user: job.user, monitoringRunId: job.monitoringRunId }, imageUrls, 'image', job.provider, { taskId: job.upstreamTaskId || result.taskId || job.id });
 }
 
 async function runLocalImageJob(job) {
@@ -614,7 +614,7 @@ router.post('/image', async (req, res) => {
     }
     const remoteImageUrls = Array.isArray(result.imageUrls) ? result.imageUrls : [];
     const imageUrls = await saveImageOutputs(remoteImageUrls, { outputFormat: req.body?.outputFormat });
-    rememberExternalOutputs(req, imageUrls, 'image', resolved.provider, { taskId: result.taskId });
+    await rememberExternalOutputs(req, imageUrls, 'image', resolved.provider, { taskId: result.taskId });
     return resultResponse(res, result, resolved.provider, {
       remoteImageUrls,
       imageUrls,
@@ -679,7 +679,7 @@ router.get('/image/status/:taskId', async (req, res) => {
     const remoteImageUrls = Array.isArray(result.imageUrls) ? result.imageUrls : [];
     const imageUrls = remoteImageUrls.length ? await saveImageOutputs(remoteImageUrls, { outputFormat: req.query?.outputFormat }) : [];
     if (imageUrls.length) {
-      rememberExternalOutputs(req, imageUrls, 'image', resolved.provider, { taskId: result.taskId || req.params.taskId });
+      await rememberExternalOutputs(req, imageUrls, 'image', resolved.provider, { taskId: result.taskId || req.params.taskId });
     }
     return resultResponse(res, result, resolved.provider, {
       remoteImageUrls,
@@ -748,7 +748,7 @@ router.post('/music', async (req, res) => {
     if (!result.ok) return resultResponse(res, result, resolved.provider);
     const remoteAudioUrls = Array.isArray(result.audioUrls) ? result.audioUrls : [];
     const audioUrls = await saveAudioOutputs(remoteAudioUrls);
-    rememberExternalOutputs(req, audioUrls, 'audio', resolved.provider, { taskId: result.taskId });
+    await rememberExternalOutputs(req, audioUrls, 'audio', resolved.provider, { taskId: result.taskId });
     return resultResponse(res, result, resolved.provider, {
       remoteAudioUrls,
       audioUrls,

@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const config = require('../config');
+const { upsertResourceItem } = require('../routes/resources');
 const { canManageCanvasSharing, canViewCanvas, isCanvasOwner } = require('../auth/canvasAccess');
 const { isAdminRole } = require('../auth/middleware');
 const { findUserById } = require('../auth/designTeamDb');
@@ -36,6 +37,21 @@ function safeText(value, fallback = '') {
 
 function safePrompt(value, fallback = '') {
   return String(value ?? fallback).trim();
+}
+
+function normalizePromptLanguage(value) {
+  const language = String(value || '').trim().toLowerCase();
+  return language === 'zh' || language === 'en' ? language : '';
+}
+
+function detectPromptLanguage(prompt, explicitLanguage = '') {
+  const explicit = normalizePromptLanguage(explicitLanguage);
+  if (explicit) return explicit;
+  const text = safePrompt(prompt);
+  const cjkCount = (text.match(/\p{Script=Han}/gu) || []).length;
+  const latinWordCount = (text.match(/[A-Za-z]+(?:['’-][A-Za-z]+)*/g) || []).length;
+  if (!cjkCount && !latinWordCount) return 'zh';
+  return cjkCount > 0 && cjkCount >= latinWordCount ? 'zh' : 'en';
 }
 
 function normalizeSeed(value) {
@@ -144,6 +160,7 @@ function normalizeItem(raw) {
     sourceNodeId: safeText(raw.sourceNodeId),
     sourceNodeType: safeText(raw.sourceNodeType),
     prompt: safePrompt(raw.prompt),
+    promptLanguage: normalizePromptLanguage(raw.promptLanguage),
     provider: safeText(raw.provider),
     model: safeText(raw.model),
     taskId: safeText(raw.taskId),
@@ -454,6 +471,7 @@ function normalizeHistoryContext(context = {}, user = null) {
     sourceNodeType: safeText(context.sourceNodeType),
     nodeTitle: safeText(context.nodeTitle),
     outputTitle: safeText(context.outputTitle),
+    promptLanguage: normalizePromptLanguage(context.promptLanguage),
   };
   const requestedImageEditorUserId = imageEditorProjectUserId(normalized.canvasId);
   if (isImageEditorHistoryItem(normalized)) {
@@ -487,6 +505,7 @@ function addHistoryItems(items, context = {}, user = null) {
       sourceNodeId: normalizedContext.sourceNodeId,
       sourceNodeType: normalizedContext.sourceNodeType,
       prompt: safePrompt(raw?.prompt || context.prompt),
+      promptLanguage: normalizePromptLanguage(raw?.promptLanguage || normalizedContext.promptLanguage),
       provider: safeText(raw?.provider || context.provider),
       model: safeText(raw?.model || context.model),
       taskId: safeText(raw?.taskId || context.taskId),
@@ -524,6 +543,45 @@ function addHistoryItems(items, context = {}, user = null) {
   return out;
 }
 
+async function cacheGeneratedImageResources(items) {
+  let saved = 0;
+  for (const item of Array.isArray(items) ? items : []) {
+    const prompt = item?.kind === 'image' ? safePrompt(item.prompt) : '';
+    if (!prompt) continue;
+    const language = detectPromptLanguage(prompt, item.promptLanguage);
+    try {
+      await upsertResourceItem({
+        url: item.url,
+        kind: 'image',
+        title: item.title || item.fileName || '生成图片',
+        tags: ['生图', isImageEditorHistoryItem(item) ? '网页版改图' : '无限画布'],
+        sourceNodeId: item.sourceNodeId,
+        sourceCanvasId: item.canvasId,
+        imageAnalysis: {
+          version: 1,
+          secondaryTags: [],
+          reversePrompts: { extreme: { [language]: prompt } },
+          classifiedAt: 0,
+        },
+      }, {
+        categoryName: '成品',
+        preserveExistingCategory: true,
+        fillMissingImageAnalysis: true,
+      });
+      saved += 1;
+    } catch (error) {
+      console.warn('[generation-history] generated image prompt cache failed:', error?.message || error);
+    }
+  }
+  return saved;
+}
+
+async function addGeneratedHistoryItems(items, context = {}, user = null) {
+  const added = addHistoryItems(items, context, user);
+  await cacheGeneratedImageResources(added);
+  return added;
+}
+
 function scanOutputItems() {
   if (!fs.existsSync(config.OUTPUT_DIR)) return [];
   const entries = [];
@@ -559,6 +617,7 @@ function scanOutputItems() {
 
 function scanIndexedOutputItems() {
   const entries = [];
+  if (path.resolve(path.dirname(OUTPUT_STORAGE_INDEX_FILE)) !== path.resolve(config.DATA_DIR)) return entries;
   const index = loadStorageIndex();
   for (const entry of Object.values(index.items || {})) {
     const key = String(entry?.key || '').trim();
@@ -837,8 +896,11 @@ function deleteHistoryItem(user, id, mode = 'hide') {
 module.exports = {
   IMAGE_EDITOR_PROJECT_PREFIX,
   UNARCHIVED_PROJECT_ID,
+  addGeneratedHistoryItems,
   addHistoryItems,
+  cacheGeneratedImageResources,
   deleteHistoryItem,
+  detectPromptLanguage,
   kindFromUrl,
   imageEditorProjectId,
   listHistoryUsers,

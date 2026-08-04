@@ -502,6 +502,7 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
         sourceNodeType: 'image-editor',
         nodeTitle: '网页版改图 · FHL',
         prompt,
+        promptLanguage: normalizePromptReverseLanguage(language),
       },
     });
     setProgress(`${Math.max(0, Math.min(100, created.progress || 0))}%`);
@@ -547,6 +548,7 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
             sourceNodeType: 'image-editor',
             nodeTitle: externalProvider ? `网页版改图 · ${externalProvider.label}` : '网页版改图 · GPT Image 2',
             prompt,
+            promptLanguage: normalizePromptReverseLanguage(language),
           },
           onProgress: ({ progress: next }) => setProgress(next),
           onWarning: (warning) => logBus.warn(warning, '网页版改图'),
@@ -564,6 +566,7 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
         sourceNodeId: `web-image-editor-${user.id}`,
         sourceNodeType: 'image-editor',
         prompt,
+        promptLanguage: normalizePromptReverseLanguage(language),
         model: generationSource === 'fhl' ? 'FHL Images · gpt-image-2' : (externalProvider ? activeExternalModel : apiModel),
         createdAt: Date.now() + index,
         createdByUserId: user.id,
@@ -576,6 +579,7 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
     if (optimistic.length) setHistory((current) => [...optimistic, ...current]);
     void reloadGallery();
     window.dispatchEvent(new CustomEvent('penguin:generation-history-changed'));
+    window.dispatchEvent(new CustomEvent('penguin:resources-changed'));
     return result;
   };
 

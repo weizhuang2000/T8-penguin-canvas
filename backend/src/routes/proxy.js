@@ -12,7 +12,7 @@ const config = require('../config');
 const { getWhitePng } = require('../utils/whitePng');
 const { tryDecodeDuckPayload } = require('../utils/duckPayload');
 const { normalizeImageOutputFormat, writeImageOutput } = require('../utils/imageOutput');
-const { addHistoryItems, kindFromUrl } = require('../utils/generationHistory');
+const { addGeneratedHistoryItems, kindFromUrl } = require('../utils/generationHistory');
 const {
   correlateRun,
   createRunId,
@@ -440,13 +440,13 @@ function upstreamOutcomeForHttp(status) {
   return 'excluded';
 }
 
-function rememberGeneratedUrls(req, urls, extra = {}) {
+async function rememberGeneratedUrls(req, urls, extra = {}) {
   const list = (Array.isArray(urls) ? urls : [])
     .filter((url) => typeof url === 'string' && url)
     .map((url) => ({ url, kind: extra.kind || kindFromUrl(url), ...extra }));
   if (!list.length) return;
   try {
-    addHistoryItems(list, historyContextFromBody({ ...(req.query || {}), ...(req.body || {}) }, extra), req.user);
+    await addGeneratedHistoryItems(list, historyContextFromBody({ ...(req.query || {}), ...(req.body || {}) }, extra), req.user);
   } catch (e) {
     console.warn('[generation-history] record failed:', e?.message || e);
   }
@@ -924,7 +924,7 @@ router.post('/image', requireNodePermission(['image', 'storyboard-grid', 'intera
       return res.status(500).json({ success: false, error: norm.error || '上游图像任务失败', raw: data });
     }
     if (norm.kind === 'sync') {
-      rememberGeneratedUrls(req, norm.urls, { kind: 'image', prompt, provider: 'zhenzhen', model: finalApiModel });
+      await rememberGeneratedUrls(req, norm.urls, { kind: 'image', prompt, provider: 'zhenzhen', model: finalApiModel });
       return res.json({ success: true, data: { urls: norm.urls, raw: data, model: finalApiModel, prompt } });
     }
     if (norm.kind === 'async') {
@@ -934,7 +934,7 @@ router.post('/image', requireNodePermission(['image', 'storyboard-grid', 'intera
         finishImageRun(req, 'excluded');
         return res.status(500).json({ success: false, error: '异步任务轮询超时/失败', taskId: norm.taskId });
       }
-      rememberGeneratedUrls(req, [url], { kind: 'image', prompt, provider: 'zhenzhen', model: finalApiModel, taskId: norm.taskId });
+      await rememberGeneratedUrls(req, [url], { kind: 'image', prompt, provider: 'zhenzhen', model: finalApiModel, taskId: norm.taskId });
       return res.json({ success: true, data: { urls: [url], raw: data, taskId: norm.taskId, model: finalApiModel, prompt } });
     }
     return res.status(500).json({ success: false, error: '上游未返回图片也未返 task_id: ' + JSON.stringify(data).slice(0, 300) });
@@ -986,7 +986,7 @@ router.post('/image/submit', requireNodePermission(['image', 'storyboard-grid', 
       return res.status(500).json({ success: false, error: norm.error || '上游图像任务失败', raw: data });
     }
     if (norm.kind === 'sync') {
-      rememberGeneratedUrls(req, norm.urls, { kind: 'image', prompt, provider: 'zhenzhen', model: finalApiModel });
+      await rememberGeneratedUrls(req, norm.urls, { kind: 'image', prompt, provider: 'zhenzhen', model: finalApiModel });
       return res.json({ success: true, data: { sync: true, status: 'completed', progress: '100%', urls: norm.urls, raw: data } });
     }
     if (norm.kind === 'async') {
@@ -1039,7 +1039,7 @@ router.get('/image/status/:tid', requireNodePermission(['image', 'storyboard-gri
     const FAILURE = ['failure', 'failed', 'error', 'cancelled', 'canceled'];
     const urls = await saveImageItemsFromResult(data, imageOutputFormat);
     if (SUCCESS.includes(status) || urls.length) {
-      rememberGeneratedUrls(req, urls, { kind: 'image', provider: 'zhenzhen', model: String(req.query.model || ''), taskId: tid });
+      await rememberGeneratedUrls(req, urls, { kind: 'image', provider: 'zhenzhen', model: String(req.query.model || ''), taskId: tid });
       return res.json({ success: true, data: { status: 'completed', progress: '100%', urls, raw: data } });
     }
     if (FAILURE.includes(status)) {
@@ -1283,7 +1283,7 @@ router.post('/image/fal/submit', requireNodePermission(['image', 'storyboard-gri
           urls.push(local);
         }
       }
-      rememberGeneratedUrls(req, urls, { kind: 'image', prompt, provider: 'fal', model: apiModel });
+      await rememberGeneratedUrls(req, urls, { kind: 'image', prompt, provider: 'fal', model: apiModel });
       return res.json({ success: true, data: { sync: true, urls, endpoint, raw: data } });
     }
 
@@ -1350,7 +1350,7 @@ router.post('/image/fal/query', requireNodePermission(['image', 'storyboard-grid
           urls.push(local);
         }
       }
-      rememberGeneratedUrls(req, urls, { kind: 'image', provider: 'fal', model: endpoint, taskId: requestId });
+      await rememberGeneratedUrls(req, urls, { kind: 'image', provider: 'fal', model: endpoint, taskId: requestId });
       return res.json({ success: true, data: { status: 'completed', urls, raw: data } });
     }
     const st = String(data.status || '').toUpperCase();
@@ -1486,7 +1486,7 @@ router.get('/mj/task/:id', requireNodePermission(['image', 'storyboard-grid', 'i
           const local = /^https?:\/\//i.test(imageUrl) ? await saveRemoteImage(imageUrl, 'jpg') : imageUrl;
           if (local) localUrls.push(local);
         }
-        rememberGeneratedUrls(req, localUrls, { kind: 'image', provider: 'mj', model: speedSeg, taskId });
+        await rememberGeneratedUrls(req, localUrls, { kind: 'image', provider: 'mj', model: speedSeg, taskId });
         if (localUrls.length) {
           data.image_urls = localUrls;
           data.image_url = localUrls[0];
@@ -2047,7 +2047,7 @@ router.post('/video/fal/query', requireNodePermission('video'), async (req, res)
     const finishedVideoUrl = getFalVideoUrl(data);
     if (finishedVideoUrl) {
       const local = await saveRemoteVideo(finishedVideoUrl);
-      rememberGeneratedUrls(req, [local], { kind: 'video', provider: 'fal', model: endpoint, taskId: requestId });
+      await rememberGeneratedUrls(req, [local], { kind: 'video', provider: 'fal', model: endpoint, taskId: requestId });
       return res.json({ success: true, data: { status: 'completed', videoUrl: local, raw: data } });
     }
     const st = String(data.status || '').toUpperCase();
@@ -2198,7 +2198,7 @@ router.get('/video/query', requireNodePermission('video'), async (req, res) => {
       }
     }
     if (st === 'SUCCESS' && videoUrl) {
-      rememberGeneratedUrls(req, [videoUrl], { kind: 'video', provider: 'zhenzhen', model: String(req.query.model || ''), taskId: req.query.taskId });
+      await rememberGeneratedUrls(req, [videoUrl], { kind: 'video', provider: 'zhenzhen', model: String(req.query.model || ''), taskId: req.query.taskId });
     }
     res.json({
       success: true,
@@ -2407,7 +2407,7 @@ router.get('/seedance/query', requireNodePermission(['seedance', 'director-story
     }
 
     if ((st === 'succeeded' || st === 'success' || st === 'completed' || st === 'done') && videoUrl) {
-      rememberGeneratedUrls(req, [videoUrl], { kind: 'video', provider: 'seedance', model: String(req.query.model || ''), taskId: req.query.taskId });
+      await rememberGeneratedUrls(req, [videoUrl], { kind: 'video', provider: 'seedance', model: String(req.query.model || ''), taskId: req.query.taskId });
     }
     return res.json({
       success: true,
@@ -2546,7 +2546,7 @@ router.get('/audio/query', requireNodePermission('audio'), async (req, res) => {
     }
     const allDone = clips.length > 0 && tracks.length === clips.length;
     if (allDone) {
-      rememberGeneratedUrls(
+      await rememberGeneratedUrls(
         req,
         tracks.map((track) => track.audioUrl),
         { kind: 'audio', provider: 'suno', model: 'suno', taskId: ids },
@@ -2868,7 +2868,7 @@ router.post('/runninghub/video/query', requireNodePermission(['video', 'runningh
       }
     }
     if (status === 'SUCCESS' && videoUrl) {
-      rememberGeneratedUrls(req, [videoUrl], {
+      await rememberGeneratedUrls(req, [videoUrl], {
         kind: 'video', provider: 'runninghub', model: queryModel.id, taskId,
       });
     }
@@ -3013,7 +3013,7 @@ router.get('/runninghub/query', requireNodePermission(['runninghub', 'runninghub
       }
     }
     if (status === 'SUCCESS' && urls.length) {
-      rememberGeneratedUrls(req, urls, { provider: 'runninghub', taskId });
+      await rememberGeneratedUrls(req, urls, { provider: 'runninghub', taskId });
     }
     if (status === 'FAILED') finishImageRun(req, 'upstream_failure', 0, `runninghub:${taskId}`);
     if (status === 'SUCCESS' && !urls.some((url) => kindFromUrl(url) === 'image')) {
