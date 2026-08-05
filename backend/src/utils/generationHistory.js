@@ -4,7 +4,6 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const config = require('../config');
-const { upsertResourceItem } = require('../routes/resources');
 const { canManageCanvasSharing, canViewCanvas, isCanvasOwner } = require('../auth/canvasAccess');
 const { isAdminRole } = require('../auth/middleware');
 const { findUserById } = require('../auth/designTeamDb');
@@ -25,6 +24,9 @@ const AUDIO_EXT = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.aac']);
 const UNARCHIVED_PROJECT_ID = '__unarchived__';
 const IMAGE_EDITOR_PROJECT_PREFIX = '__image_editor_user__:';
 const MAX_LIST_LIMIT = 200;
+const IMAGE_ANALYSIS_STRENGTHS = ['concise', 'standard', 'detailed', 'extreme'];
+const IMAGE_ANALYSIS_LANGUAGES = ['zh', 'en'];
+const IMAGE_ANALYSIS_PROMPT_MAX_LENGTH = 20_000;
 let mergedItemsCache = null;
 
 function now() {
@@ -52,6 +54,56 @@ function detectPromptLanguage(prompt, explicitLanguage = '') {
   const latinWordCount = (text.match(/[A-Za-z]+(?:['’-][A-Za-z]+)*/g) || []).length;
   if (!cjkCount && !latinWordCount) return 'zh';
   return cjkCount > 0 && cjkCount >= latinWordCount ? 'zh' : 'en';
+}
+
+function normalizeHistoryImageAnalysis(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const reversePrompts = {};
+  const sourcePrompts = value.reversePrompts && typeof value.reversePrompts === 'object' ? value.reversePrompts : {};
+  for (const strength of IMAGE_ANALYSIS_STRENGTHS) {
+    const sourceLanguages = sourcePrompts[strength];
+    if (!sourceLanguages || typeof sourceLanguages !== 'object' || Array.isArray(sourceLanguages)) continue;
+    const languages = {};
+    for (const language of IMAGE_ANALYSIS_LANGUAGES) {
+      const prompt = typeof sourceLanguages[language] === 'string'
+        ? sourceLanguages[language].trim().slice(0, IMAGE_ANALYSIS_PROMPT_MAX_LENGTH)
+        : '';
+      if (prompt) languages[language] = prompt;
+    }
+    if (Object.keys(languages).length) reversePrompts[strength] = languages;
+  }
+  return {
+    version: 1,
+    secondaryTags: Array.isArray(value.secondaryTags)
+      ? [...new Set(value.secondaryTags.map((tag) => safeText(tag)).filter(Boolean))].slice(0, 3)
+      : [],
+    reversePrompts,
+    classifiedAt: Math.max(0, Number(value.classifiedAt) || 0),
+  };
+}
+
+function mergeHistoryImageAnalysis(currentValue, nextValue, fillMissing = false) {
+  const current = normalizeHistoryImageAnalysis(currentValue);
+  const next = normalizeHistoryImageAnalysis(nextValue);
+  if (!next) return current;
+  if (!current) return next;
+  const reversePrompts = { ...(current.reversePrompts || {}) };
+  for (const strength of IMAGE_ANALYSIS_STRENGTHS) {
+    const nextLanguages = next.reversePrompts[strength];
+    if (!nextLanguages) continue;
+    const mergedLanguages = { ...(reversePrompts[strength] || {}) };
+    for (const language of IMAGE_ANALYSIS_LANGUAGES) {
+      if (!nextLanguages[language]) continue;
+      if (!fillMissing || !mergedLanguages[language]) mergedLanguages[language] = nextLanguages[language];
+    }
+    if (Object.keys(mergedLanguages).length) reversePrompts[strength] = mergedLanguages;
+  }
+  return normalizeHistoryImageAnalysis({
+    version: 1,
+    secondaryTags: next.secondaryTags.length ? next.secondaryTags : current.secondaryTags,
+    reversePrompts,
+    classifiedAt: next.classifiedAt || current.classifiedAt,
+  });
 }
 
 function normalizeSeed(value) {
@@ -161,6 +213,7 @@ function normalizeItem(raw) {
     sourceNodeType: safeText(raw.sourceNodeType),
     prompt: safePrompt(raw.prompt),
     promptLanguage: normalizePromptLanguage(raw.promptLanguage),
+    imageAnalysis: kind === 'image' ? normalizeHistoryImageAnalysis(raw.imageAnalysis) : null,
     provider: safeText(raw.provider),
     model: safeText(raw.model),
     taskId: safeText(raw.taskId),
@@ -517,6 +570,15 @@ function addHistoryItems(items, context = {}, user = null) {
       createdByUserRole: safeText(user?.role),
       ...storageMetadataForUrl(url),
     };
+    if (kind === 'image' && patch.prompt) {
+      const language = detectPromptLanguage(patch.prompt, patch.promptLanguage);
+      patch.imageAnalysis = mergeHistoryImageAnalysis(existing?.imageAnalysis, {
+        version: 1,
+        secondaryTags: [],
+        reversePrompts: { extreme: { [language]: patch.prompt } },
+        classifiedAt: 0,
+      }, true);
+    }
     if (existing) {
       Object.assign(existing, Object.fromEntries(Object.entries(patch).filter(([key, value]) => value !== '' && (key !== 'seed' || value > 0))));
       if (existing.kind === 'image' && (!existing.width || !existing.height)) {
@@ -543,43 +605,8 @@ function addHistoryItems(items, context = {}, user = null) {
   return out;
 }
 
-async function cacheGeneratedImageResources(items) {
-  let saved = 0;
-  for (const item of Array.isArray(items) ? items : []) {
-    const prompt = item?.kind === 'image' ? safePrompt(item.prompt) : '';
-    if (!prompt) continue;
-    const language = detectPromptLanguage(prompt, item.promptLanguage);
-    try {
-      await upsertResourceItem({
-        url: item.url,
-        kind: 'image',
-        title: item.title || item.fileName || '生成图片',
-        tags: ['生图', isImageEditorHistoryItem(item) ? '网页版改图' : '无限画布'],
-        sourceNodeId: item.sourceNodeId,
-        sourceCanvasId: item.canvasId,
-        imageAnalysis: {
-          version: 1,
-          secondaryTags: [],
-          reversePrompts: { extreme: { [language]: prompt } },
-          classifiedAt: 0,
-        },
-      }, {
-        categoryName: '成品',
-        preserveExistingCategory: true,
-        fillMissingImageAnalysis: true,
-      });
-      saved += 1;
-    } catch (error) {
-      console.warn('[generation-history] generated image prompt cache failed:', error?.message || error);
-    }
-  }
-  return saved;
-}
-
 async function addGeneratedHistoryItems(items, context = {}, user = null) {
-  const added = addHistoryItems(items, context, user);
-  await cacheGeneratedImageResources(added);
-  return added;
+  return addHistoryItems(items, context, user);
 }
 
 function scanOutputItems() {
@@ -854,6 +881,9 @@ function updateHistoryItem(user, id, patch = {}) {
   if (patch.favorite != null) item.favorite = !!patch.favorite;
   if (patch.hidden != null) item.hidden = !!patch.hidden;
   if (patch.tags != null) item.tags = normalizeTags(patch.tags);
+  if (item.kind === 'image' && patch.imageAnalysis != null) {
+    item.imageAnalysis = mergeHistoryImageAnalysis(item.imageAnalysis, patch.imageAnalysis);
+  }
   writeDb(db);
   return { status: 200, item: decorateItem(item, user, canvases) };
 }
@@ -898,9 +928,9 @@ module.exports = {
   UNARCHIVED_PROJECT_ID,
   addGeneratedHistoryItems,
   addHistoryItems,
-  cacheGeneratedImageResources,
   deleteHistoryItem,
   detectPromptLanguage,
+  mergeHistoryImageAnalysis,
   kindFromUrl,
   imageEditorProjectId,
   listHistoryUsers,

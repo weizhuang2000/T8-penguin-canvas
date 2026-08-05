@@ -19,6 +19,7 @@ import {
   Search,
   Sparkles,
   Upload,
+  Users,
   X,
 } from 'lucide-react';
 import { IMAGE_MODELS, DEFAULT_LLM_MODEL, gptImage2ZhenzhenVariantSize } from '../providers/models';
@@ -184,6 +185,7 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
   const [count, setCount] = useState(1);
   const [preparedImagePrompts, setPreparedImagePrompts] = useState<Array<{ assetId: string; prompt: string }>>([]);
   const [outputFormat, setOutputFormat] = useState<'jpg' | 'png'>('jpg');
+  const isSystemAdmin = user.role === 'admin';
 
   const llmConfigs = useMemo(() => {
     const configured = coerceImageEditorList<any>(settings.llmConfigs || settings.llmApiKeys, ['items', 'configs']);
@@ -295,15 +297,15 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
   }, []);
 
   const assets = useMemo(
-    () => mergeImageEditorGallery(resources, history, user.id),
-    [history, resources, user.id],
+    () => mergeImageEditorGallery(resources, history, user.id, isSystemAdmin),
+    [history, isSystemAdmin, resources, user.id],
   );
   const assetsById = useMemo(() => new Map(assets.map((asset) => [asset.id, asset])), [assets]);
   const selectedAssets = selectedIds.map((id) => assetsById.get(id)).filter(Boolean) as ImageEditorGalleryAsset[];
   const galleryPage = useMemo(() => paginateImageEditorGallery(assets, {
     source,
     keyword,
-    categoryId: source === 'mine' ? 'all' : categoryId,
+    categoryId: source === 'mine' || source === 'all-generated' ? 'all' : categoryId,
     page,
     pageSize,
   }), [assets, categoryId, keyword, page, pageSize, source]);
@@ -368,20 +370,10 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
       setResources((current) => current.map((item) => item.id === result.data.id ? result.data : item));
       return result.data;
     }
-    const result = await api.addResourceItem({
-      url: asset.url,
-      kind: 'image',
-      categoryId: nextCategoryId || uncategorizedCategoryId,
-      title: asset.title,
-      tags: ['网页版改图'],
-      sourceNodeId: 'web-image-editor-analysis',
-      sourceCanvasId: activeId || undefined,
-      imageAnalysis,
-    });
-    if (!result.success) throw new Error(result.error || '自动加入资源库失败');
-    setResources((current) => [result.data, ...current.filter((item) => item.id !== result.data.id)]);
-    setSelectedIds((ids) => replaceImageEditorSelectionId(ids, asset.id, `resource:${result.data.id}`));
-    window.dispatchEvent(new CustomEvent('penguin:resources-changed'));
+    if (!asset.historyId) throw new Error('当前图片无法保存反推缓存');
+    const result = await api.updateGenerationHistoryItem(asset.historyId, { imageAnalysis });
+    if (!result.success) throw new Error(result.error || '保存生成图反推缓存失败');
+    setHistory((current) => current.map((item) => item.id === result.data.id ? result.data : item));
     return result.data;
   };
 
@@ -463,28 +455,36 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
     if (uploadRef.current) uploadRef.current.value = '';
   };
 
-  const publishAsset = async (asset: ImageEditorGalleryAsset) => {
-    if (asset.inResourceLibrary || publishingId) return;
+  const canManageAssetSharing = (asset: ImageEditorGalleryAsset) => (
+    !!asset.historyId && (isSystemAdmin || asset.createdByUserId === user.id)
+  );
+
+  const toggleAssetSharing = async (asset: ImageEditorGalleryAsset) => {
+    if (!asset.historyId || publishingId || !canManageAssetSharing(asset)) return;
     setPublishingId(asset.id);
     setMessage('');
-    const result = await api.addResourceItem({
-      url: asset.url,
-      kind: 'image',
-      categoryId: finishedCategoryId,
-      title: asset.title,
-      tags: ['网页版改图'],
-      sourceNodeId: 'web-image-editor',
-      sourceCanvasId: activeId || undefined,
-    });
-    if (result.success) {
-      setResources((current) => [result.data, ...current.filter((item) => item.id !== result.data.id)]);
-      setSelectedIds((ids) => replaceImageEditorSelectionId(ids, asset.id, `resource:${result.data.id}`));
-      setMessage(result.data.duplicate ? '该图片已在资源图库中' : '已加入共享资源图库');
+    try {
+      if (asset.inResourceLibrary) {
+        const result = await api.removeGenerationHistoryItemFromResources(asset.historyId);
+        if (!result.success) throw new Error(result.error || '退出共享资源图库失败');
+        setSelectedIds((ids) => replaceImageEditorSelectionId(ids, asset.id, `history:${asset.historyId}`));
+        setMessage('已退出共享资源图库');
+      } else {
+        const result = await api.addGenerationHistoryItemToResources(asset.historyId, {
+          title: asset.title,
+          categoryId: finishedCategoryId,
+        });
+        if (!result.success) throw new Error(result.error || '加入共享资源图库失败');
+        setSelectedIds((ids) => replaceImageEditorSelectionId(ids, asset.id, `resource:${result.data.id}`));
+        setMessage('已加入共享资源图库');
+      }
+      await reloadGallery();
       window.dispatchEvent(new CustomEvent('penguin:resources-changed'));
-    } else {
-      setMessage(result.error || '加入资源库失败');
+    } catch (error: any) {
+      setMessage(error?.message || '更新共享状态失败');
+    } finally {
+      setPublishingId('');
     }
-    setPublishingId('');
   };
 
   const runFhlGeneration = async (
@@ -853,8 +853,9 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
                 ['resources', '资源图库', Library],
                 ['mine', '我的生成', ImagePlus],
               ] as const).map(([value, label, Icon]) => <button key={value} type="button" onClick={() => { setSource(value); setPage(1); }} className={`flex shrink-0 items-center gap-1 rounded-lg px-3 py-2 text-xs font-bold ${source === value ? 'bg-cyan-500 text-black' : 'bg-current/5'}`}><Icon size={14} />{label}</button>)}
+              {isSystemAdmin && <button type="button" onClick={() => { setSource('all-generated'); setPage(1); }} className={`flex shrink-0 items-center gap-1 rounded-lg px-3 py-2 text-xs font-bold ${source === 'all-generated' ? 'bg-cyan-500 text-black' : 'bg-current/5'}`}><Users size={14} />全部生成</button>}
               <div className={`${field} flex min-w-[240px] flex-1 items-center gap-2 py-1.5`}><Search size={14} className="shrink-0 opacity-50" /><input value={keyword} onChange={(event) => { setKeyword(event.target.value); setPage(1); }} placeholder="搜索标题或提示词" className="min-w-0 flex-1 bg-transparent text-xs outline-none" /></div>
-              {source !== 'mine' && <select value={categoryId} onChange={(event) => { setCategoryId(event.target.value); setPage(1); }} className={`${field} shrink-0 text-xs`}><option value="all">全部分类</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
+              {source !== 'mine' && source !== 'all-generated' && <select value={categoryId} onChange={(event) => { setCategoryId(event.target.value); setPage(1); }} className={`${field} shrink-0 text-xs`}><option value="all">全部分类</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
               <select aria-label="图库每行列数" value={galleryColumnCount} onChange={(event) => setGalleryColumnCountPreference(Number(event.target.value))} className={`${field} shrink-0 text-xs`}>{GALLERY_COLUMN_COUNTS.map((value) => <option key={value} value={value}>每行 {value} 张</option>)}</select>
               <select value={pageSize} onChange={(event) => setPageSizePreference(Number(event.target.value))} className={`${field} shrink-0 text-xs`}>{PAGE_SIZES.map((value) => <option key={value} value={value}>每页 {value}</option>)}</select>
               <button type="button" disabled={loadingGallery} onClick={() => { setLoadingGallery(true); void reloadGallery().finally(() => setLoadingGallery(false)); }} className="flex shrink-0 items-center gap-1.5 rounded-lg bg-current/5 px-3 py-2 text-xs font-bold disabled:opacity-45"><RefreshCw size={14} className={loadingGallery ? 'animate-spin' : ''} />刷新</button>
@@ -888,15 +889,15 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
                           <button type="button" onClick={(event) => { event.stopPropagation(); downloadAsset(asset); }} className="flex h-8 w-8 items-center justify-center rounded-full bg-black/65 text-white hover:bg-sky-500 hover:text-black" title="下载图片"><Download size={15} /></button>
                           <button
                             type="button"
-                            disabled={asset.inResourceLibrary || publishingId === asset.id}
-                            onClick={(event) => { event.stopPropagation(); void publishAsset(asset); }}
-                            className={`flex h-8 w-8 items-center justify-center rounded-full ${asset.inResourceLibrary ? 'bg-cyan-500 text-black' : 'bg-black/65 text-white hover:bg-cyan-500 hover:text-black'} disabled:cursor-default`}
-                            title={asset.inResourceLibrary ? '已在共享资源图库' : '加入共享资源图库'}
+                            disabled={!canManageAssetSharing(asset) || publishingId === asset.id}
+                            onClick={(event) => { event.stopPropagation(); void toggleAssetSharing(asset); }}
+                            className={`flex h-8 w-8 items-center justify-center rounded-full ${asset.inResourceLibrary ? 'bg-cyan-500 text-black hover:bg-rose-500 hover:text-white' : 'bg-black/65 text-white hover:bg-cyan-500 hover:text-black'} disabled:cursor-not-allowed disabled:opacity-35`}
+                            title={!canManageAssetSharing(asset) ? '仅生成用户或系统管理员可操作共享状态' : asset.inResourceLibrary ? '退出共享资源图库' : '加入共享资源图库'}
                           >
                             {publishingId === asset.id ? <Loader2 size={15} className="animate-spin" /> : <Library size={15} fill={asset.inResourceLibrary ? 'currentColor' : 'none'} />}
                           </button>
                         </div>
-                        <div className="absolute bottom-2 left-2 flex gap-1">{asset.inResourceLibrary && <span className="rounded bg-black/65 px-2 py-1 text-[10px] text-white">资源图库</span>}{asset.fromMyGeneration && <span className="rounded bg-black/65 px-2 py-1 text-[10px] text-white">我的生成</span>}</div>
+                        <div className="absolute bottom-2 left-2 flex gap-1">{asset.inResourceLibrary && <span className="rounded bg-black/65 px-2 py-1 text-[10px] text-white">资源图库</span>}{asset.fromMyGeneration && <span className="rounded bg-black/65 px-2 py-1 text-[10px] text-white">我的生成</span>}{source === 'all-generated' && <span className="rounded bg-black/65 px-2 py-1 text-[10px] text-white">{asset.createdByUserName || asset.createdByUserId || '未知用户'}</span>}</div>
                       </div>
                       <div className="p-3"><div className="truncate text-sm font-bold" title={asset.title}>{asset.title}</div><div className="mt-1 flex items-center justify-between text-[10px] opacity-50"><span>{asset.width && asset.height ? `${asset.width} × ${asset.height}` : '图片素材'}</span><span>{new Date(asset.createdAt).toLocaleDateString()}</span></div></div>
                     </article>

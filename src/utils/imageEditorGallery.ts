@@ -1,6 +1,6 @@
 import type { GenerationHistoryItem, ResourceImageAnalysis, ResourceItem } from '../services/api';
 
-export type ImageEditorGallerySource = 'all' | 'resources' | 'mine';
+export type ImageEditorGallerySource = 'all' | 'resources' | 'mine' | 'all-generated';
 
 export interface ImageEditorGalleryAsset {
   id: string;
@@ -17,6 +17,10 @@ export interface ImageEditorGalleryAsset {
   height?: number;
   sourceUrls: string[];
   fromMyGeneration: boolean;
+  fromGeneration: boolean;
+  generationViewOnly: boolean;
+  createdByUserId?: string;
+  createdByUserName?: string;
   imageAnalysis?: ResourceImageAnalysis | null;
 }
 
@@ -80,15 +84,16 @@ export function mergeImageEditorGallery(
   resources: ResourceItem[],
   history: GenerationHistoryItem[],
   currentUserId: string,
+  includeAllGenerations = false,
 ): ImageEditorGalleryAsset[] {
   const safeResources = coerceImageEditorList<ResourceItem>(resources);
   const safeHistory = coerceImageEditorList<GenerationHistoryItem>(history);
-  const myHistory = safeHistory.filter((item) => (
+  const visibleHistory = safeHistory.filter((item) => (
     item.kind === 'image'
-    && item.createdByUserId === currentUserId
+    && (includeAllGenerations || item.createdByUserId === currentUserId)
     && normalizeUrl(item.url)
   ));
-  const historyByUrl = new Map(myHistory.map((item) => [normalizeUrl(item.url), item]));
+  const historyByUrl = new Map(visibleHistory.map((item) => [normalizeUrl(item.url), item]));
   const matchedHistoryIds = new Set<string>();
   const merged: ImageEditorGalleryAsset[] = [];
 
@@ -118,12 +123,41 @@ export function mergeImageEditorGallery(
       width: resource.width || matchedHistory?.width,
       height: resource.height || matchedHistory?.height,
       sourceUrls,
-      fromMyGeneration: !!matchedHistory,
-      imageAnalysis: resource.imageAnalysis,
+      fromMyGeneration: matchedHistory?.createdByUserId === currentUserId,
+      fromGeneration: !!matchedHistory,
+      generationViewOnly: false,
+      createdByUserId: matchedHistory?.createdByUserId,
+      createdByUserName: matchedHistory?.createdByUserName,
+      imageAnalysis: resource.imageAnalysis || matchedHistory?.imageAnalysis,
     });
+
+    for (const item of matchedHistories.slice(1)) {
+      const historyUrl = normalizeImageEditorHistoryUrl(item.url);
+      merged.push({
+        id: `history:${item.id}`,
+        title: item.title || item.fileName || '我的生成',
+        url: historyUrl,
+        previewUrl: thumbUrl,
+        createdAt: item.createdAt || 0,
+        inResourceLibrary: true,
+        resourceId: resource.id,
+        historyId: item.id,
+        categoryId: resource.categoryId,
+        prompt: item.prompt,
+        width: resource.width || item.width,
+        height: resource.height || item.height,
+        sourceUrls: [item.url],
+        fromMyGeneration: item.createdByUserId === currentUserId,
+        fromGeneration: true,
+        generationViewOnly: true,
+        createdByUserId: item.createdByUserId,
+        createdByUserName: item.createdByUserName,
+        imageAnalysis: resource.imageAnalysis || item.imageAnalysis,
+      });
+    }
   }
 
-  for (const item of myHistory) {
+  for (const item of visibleHistory) {
     if (matchedHistoryIds.has(item.id)) continue;
     const historyUrl = normalizeImageEditorHistoryUrl(item.url);
     merged.push({
@@ -138,7 +172,12 @@ export function mergeImageEditorGallery(
       width: item.width,
       height: item.height,
       sourceUrls: [item.url],
-      fromMyGeneration: true,
+      fromMyGeneration: item.createdByUserId === currentUserId,
+      fromGeneration: true,
+      generationViewOnly: false,
+      createdByUserId: item.createdByUserId,
+      createdByUserName: item.createdByUserName,
+      imageAnalysis: item.imageAnalysis,
     });
   }
 
@@ -151,8 +190,10 @@ export function paginateImageEditorGallery(
 ): ImageEditorGalleryPage {
   const keyword = String(query.keyword || '').trim().toLowerCase();
   const filtered = coerceImageEditorList<ImageEditorGalleryAsset>(assets).filter((asset) => {
+    if ((query.source === 'all' || query.source === 'resources') && asset.generationViewOnly) return false;
     if (query.source === 'resources' && !asset.inResourceLibrary) return false;
     if (query.source === 'mine' && !asset.fromMyGeneration) return false;
+    if (query.source === 'all-generated' && !asset.fromGeneration) return false;
     if (query.categoryId && query.categoryId !== 'all' && asset.categoryId !== query.categoryId) return false;
     if (keyword && !`${asset.title} ${asset.prompt || ''} ${(asset.imageAnalysis?.secondaryTags || []).join(' ')}`.toLowerCase().includes(keyword)) return false;
     return true;

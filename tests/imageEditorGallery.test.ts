@@ -42,8 +42,8 @@ function resource(id: string, sourceUrls: string[] = [], secondaryTags: string[]
     tags: [],
     favorite: false,
     sourceUrl: sourceUrls[0],
-    sourceUrls,
-    imageAnalysis: secondaryTags.length ? {
+      sourceUrls,
+      imageAnalysis: secondaryTags.length ? {
       version: 1,
       secondaryTags,
       reversePrompts: { extreme: { zh: `${id} cached prompt` } },
@@ -61,13 +61,44 @@ test('unified image editor gallery merges resource membership and only includes 
     'u1',
   );
 
-  assert.equal(items.length, 3);
+  assert.equal(items.length, 4);
   const shared = items.find((item) => item.resourceId === 'shared');
   assert.equal(shared?.inResourceLibrary, true);
   assert.equal(shared?.fromMyGeneration, true);
   assert.equal(shared?.historyId, 'h4');
   assert.equal(items.some((item) => item.historyId === 'h3'), false);
   assert.equal(items.some((item) => ['h1', 'h4'].includes(item.historyId || '') && !item.inResourceLibrary), false);
+  assert.equal(paginateImageEditorGallery(items, { source: 'all', page: 1, pageSize: 12 }).total, 3);
+  assert.equal(paginateImageEditorGallery(items, { source: 'mine', page: 1, pageSize: 12 }).total, 3);
+});
+
+test('system admin gallery can include and filter every users generated images', () => {
+  const items = mergeImageEditorGallery(
+    [],
+    [history('h1', '/files/output/a.png', 'u1'), history('h2', '/files/output/b.png', 'u2')],
+    'admin',
+    true,
+  );
+  assert.equal(items.length, 2);
+  assert.equal(items.every((item) => item.fromGeneration), true);
+  assert.equal(items.some((item) => item.fromMyGeneration), false);
+  const page = paginateImageEditorGallery(items, { source: 'all-generated', page: 1, pageSize: 12 });
+  assert.equal(page.total, 2);
+});
+
+test('all-generated keeps every history source when duplicate images share one resource', () => {
+  const items = mergeImageEditorGallery(
+    [resource('shared', ['/files/output/a.png', '/files/output/b.png'])],
+    [history('h1', '/files/output/a.png', 'u1'), history('h2', '/files/output/b.png', 'u2')],
+    'admin',
+    true,
+  );
+  const generated = paginateImageEditorGallery(items, { source: 'all-generated', page: 1, pageSize: 12 });
+  const resources = paginateImageEditorGallery(items, { source: 'resources', page: 1, pageSize: 12 });
+  assert.equal(generated.total, 2);
+  assert.deepEqual(new Set(generated.items.map((item) => item.historyId)), new Set(['h1', 'h2']));
+  assert.equal(generated.items.every((item) => item.inResourceLibrary), true);
+  assert.equal(resources.total, 1);
 });
 
 test('web image editor creates one independent generation task per reference image', () => {
@@ -149,6 +180,12 @@ test('web image editor route, sidebar permission entry and shared-library action
   assert.match(app, /网页版改图[\s\S]*\{\/\* 主题模板 \*\/\}/);
   assert.match(page, /getResourceItems\(\{ kind: 'image' \}\)/);
   assert.match(page, /getGenerationHistoryItems\(\{ kind: 'image' \}\)/);
+  assert.match(page, /const isSystemAdmin = user\.role === 'admin'/);
+  assert.match(page, /setSource\('all-generated'\)/);
+  assert.match(page, />全部生成<\/button>/);
+  assert.match(page, /removeGenerationHistoryItemFromResources\(asset\.historyId\)/);
+  assert.match(page, /addGenerationHistoryItemToResources\(asset\.historyId/);
+  assert.match(page, /退出共享资源图库/);
   assert.match(page, /addResourceItem\(\{/);
   assert.match(page, /runConfiguredImageGeneration\(\{/);
   assert.match(page, /buildPromptReverseContentSwapMessages/);

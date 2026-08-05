@@ -5,7 +5,7 @@ import { DEFAULT_LLM_MODEL } from '../../providers/models';
 import { fileToDataUrl, generateLlm } from '../../services/generation';
 import { uploadDataUrl, uploadFileBlob } from '../../services/imageOps';
 import * as api from '../../services/api';
-import type { ResourceCategory, ResourceItem, ResourceImageAnalysis } from '../../services/api';
+import type { GenerationHistoryItem, ResourceCategory, ResourceItem, ResourceImageAnalysis } from '../../services/api';
 import { useApiKeysStore } from '../../stores/apiKeys';
 import { useCanvasStore } from '../../stores/canvas';
 import { logBus } from '../../stores/logs';
@@ -45,6 +45,7 @@ type RunningAction = 'reverse' | 'swap' | null;
 interface PromptReverseResourceContext {
   categories: ResourceCategory[];
   resources: ResourceItem[];
+  history: GenerationHistoryItem[];
   uncategorizedCategoryId: string;
   changed: boolean;
 }
@@ -150,12 +151,14 @@ const PromptReverseNode = ({ id, data, selected }: NodeProps) => {
   };
 
   const loadResourceContext = async (): Promise<PromptReverseResourceContext> => {
-    const [categoryResult, resourceResult] = await Promise.all([
+    const [categoryResult, resourceResult, historyResult] = await Promise.all([
       api.getResourceCategories('image'),
       api.getResourceItems({ kind: 'image' }),
+      api.getGenerationHistoryItems({ kind: 'image' }),
     ]);
     if (!categoryResult.success) throw new Error(categoryResult.error || '读取图像分类失败');
     if (!resourceResult.success) throw new Error(resourceResult.error || '读取共享资源失败');
+    if (!historyResult.success) throw new Error(historyResult.error || '读取生成历史失败');
     const categories = categoryResult.data.filter((item) => item.kind === 'image');
     const uncategorizedCategoryId = categories.find((item) => item.id === 'image_uncategorized')?.id
       || categories.find((item) => item.name === '未分类')?.id
@@ -164,6 +167,7 @@ const PromptReverseNode = ({ id, data, selected }: NodeProps) => {
     return {
       categories,
       resources: resourceResult.data.filter((item) => item.kind === 'image'),
+      history: historyResult.data.filter((item) => item.kind === 'image'),
       uncategorizedCategoryId,
       changed: false,
     };
@@ -206,6 +210,7 @@ const PromptReverseNode = ({ id, data, selected }: NodeProps) => {
   const persistMaterialAnalysis = async (
     material: Material,
     resource: ResourceItem | undefined,
+    historyItem: GenerationHistoryItem | undefined,
     imageAnalysis: ResourceImageAnalysis,
     nextCategoryId: string | undefined,
     context: PromptReverseResourceContext,
@@ -218,7 +223,17 @@ const PromptReverseNode = ({ id, data, selected }: NodeProps) => {
           imageAnalysis,
           ...(nextCategoryId ? { categoryId: nextCategoryId } : {}),
         });
+      } else if (historyItem) {
+        const historySaved = await api.updateGenerationHistoryItem(historyItem.id, { imageAnalysis });
+        if (!historySaved.success) throw new Error(historySaved.error || '保存生成图反推缓存失败');
+        const index = context.history.findIndex((item) => item.id === historySaved.data.id);
+        if (index >= 0) context.history[index] = historySaved.data;
+        window.dispatchEvent(new CustomEvent('penguin:generation-history-changed'));
+        return;
       } else {
+        let isGeneratedOutput = false;
+        try { isGeneratedOutput = new URL(material.url, window.location.origin).pathname.startsWith('/files/output/'); } catch { /* ignore invalid URL */ }
+        if (isGeneratedOutput) return;
         if (!prepared.persistenceAllowed) return;
         const resourceUrl = String(prepared.resourceUrl || '').trim();
         if (!resourceUrl) throw new Error('图片地址为空');
@@ -250,13 +265,22 @@ const PromptReverseNode = ({ id, data, selected }: NodeProps) => {
   ): Promise<string> => {
     const resource = analysisResourceBindingsRef.current.get(material.url)
       || findPromptReverseResourceByUrl(context.resources, material.url, window.location.origin);
-    const cached = getImageEditorCachedPrompt(resource?.imageAnalysis, strength, language);
+    const materialPath = (() => {
+      try { return new URL(material.url, window.location.origin).pathname; } catch { return material.url; }
+    })();
+    const historyItem = !resource && materialPath.startsWith('/files/output/')
+      ? context.history.find((item) => {
+          try { return new URL(item.url, window.location.origin).pathname === materialPath; } catch { return item.url === material.url; }
+        })
+      : undefined;
+    const existingAnalysis = resource?.imageAnalysis || historyItem?.imageAnalysis;
+    const cached = getImageEditorCachedPrompt(existingAnalysis, strength, language);
     if (cached) return cached;
 
     const prepared: PreparedPromptReverseMaterial = resource
       ? { analysisUrl: material.url, persistenceAllowed: true }
       : await prepareUnstoredMaterial(material);
-    const isFirstAnalysis = !resource?.imageAnalysis?.classifiedAt;
+    const isFirstAnalysis = !existingAnalysis?.classifiedAt;
     const response = await generateLlm({
       model,
       llmKeyId: activeConfig?.id && activeConfig.id !== 'default' ? activeConfig.id : undefined,
@@ -277,7 +301,7 @@ const PromptReverseNode = ({ id, data, selected }: NodeProps) => {
       resource?.categoryId || context.uncategorizedCategoryId,
     );
     if (!parsed) throw new Error('识图模型未返回有效的缓存分析结果');
-    const imageAnalysis = mergeImageEditorAnalysis(resource?.imageAnalysis, {
+    const imageAnalysis = mergeImageEditorAnalysis(existingAnalysis, {
       strength,
       language,
       prompt: parsed.prompt,
@@ -289,6 +313,7 @@ const PromptReverseNode = ({ id, data, selected }: NodeProps) => {
     await persistMaterialAnalysis(
       material,
       resource,
+      historyItem,
       imageAnalysis,
       isFirstAnalysis ? parsed.categoryId : undefined,
       context,

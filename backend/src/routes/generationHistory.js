@@ -1,15 +1,25 @@
 'use strict';
 
 const express = require('express');
-const config = require('../config');
 const {
   deleteHistoryItem,
   listProjects,
   listVisibleItems,
   updateHistoryItem,
 } = require('../utils/generationHistory');
+const { detachResourceSourceUrl, upsertResourceItem } = require('./resources');
 
 const router = express.Router();
+
+function canManageGeneratedSharing(user, item) {
+  if (!user || !item) return false;
+  if (user.role === 'admin') return true;
+  return !!item.createdByUserId && String(item.createdByUserId) === String(user.id);
+}
+
+function generatedHistoryItem(req) {
+  return listVisibleItems(req.user, { includeHidden: true }).find((entry) => entry.id === req.params.id) || null;
+}
 
 router.get('/projects', (req, res) => {
   try {
@@ -54,33 +64,50 @@ router.delete('/items/:id', async (req, res) => {
 
 router.post('/items/:id/add-to-resources', express.json({ limit: '1mb' }), async (req, res) => {
   try {
-    const item = listVisibleItems(req.user, { includeHidden: true }).find((entry) => entry.id === req.params.id);
+    const item = generatedHistoryItem(req);
     if (!item) return res.status(404).json({ success: false, error: 'History item not found' });
+    if (!canManageGeneratedSharing(req.user, item)) {
+      return res.status(403).json({ success: false, error: 'No permission to manage generated image sharing' });
+    }
+    if (item.kind !== 'image') return res.status(400).json({ success: false, error: 'Only generated images can be shared here' });
     const payload = {
       url: item.url,
       kind: item.kind,
       title: req.body?.title || item.title,
-      tags: Array.isArray(req.body?.tags) ? req.body.tags : item.tags,
+      tags: [
+        '生图',
+        item.sourceNodeType === 'image-editor' ? '网页版改图' : '无限画布',
+        ...(Array.isArray(req.body?.tags) ? req.body.tags : []),
+      ],
       sourceNodeId: item.sourceNodeId,
       sourceCanvasId: item.canvasId,
       favorite: !!req.body?.favorite,
-      categoryId: req.body?.categoryId,
+      imageAnalysis: item.imageAnalysis,
     };
-    const headers = {
-      'Content-Type': 'application/json',
-      ...(req.headers.cookie ? { Cookie: req.headers.cookie } : {}),
-      ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {}),
-    };
-    const upstream = await fetch(`http://127.0.0.1:${config.PORT}/api/resources/items/add`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
+    const result = await upsertResourceItem(payload, {
+      categoryName: '成品',
+      preserveExistingCategory: true,
+      fillMissingImageAnalysis: true,
     });
-    const data = await upstream.json().catch(() => ({}));
-    return res.status(upstream.status).json(data);
+    return res.json({ success: true, ...result });
   } catch (e) {
     res.status(500).json({ success: false, error: e?.message || String(e) });
   }
 });
 
+router.delete('/items/:id/resources', (req, res) => {
+  try {
+    const item = generatedHistoryItem(req);
+    if (!item) return res.status(404).json({ success: false, error: 'History item not found' });
+    if (!canManageGeneratedSharing(req.user, item)) {
+      return res.status(403).json({ success: false, error: 'No permission to manage generated image sharing' });
+    }
+    const result = detachResourceSourceUrl(item.url);
+    return res.json({ success: true, data: result });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e?.message || String(e) });
+  }
+});
+
 module.exports = router;
+module.exports.canManageGeneratedSharing = canManageGeneratedSharing;

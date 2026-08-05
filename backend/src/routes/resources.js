@@ -977,6 +977,36 @@ async function upsertResourceItem(payload, options = {}) {
   return { duplicate: false, data: decorateItem(item) };
 }
 
+function removeResourceItemFiles(root, item) {
+  for (const rel of [item.fileRel, item.thumbRel]) {
+    if (!rel) continue;
+    try {
+      const fp = assertInside(root, path.join(root, rel));
+      if (fs.existsSync(fp)) fs.unlinkSync(fp);
+    } catch { /* ignore file cleanup */ }
+  }
+}
+
+function detachResourceSourceUrl(sourceUrl) {
+  const target = safeText(sourceUrl);
+  if (!target) return { found: false, removed: false, data: null };
+  const { root, db } = readDb();
+  const item = db.items.find((entry) => normalizeSourceUrls(entry.sourceUrls, entry.sourceUrl).includes(target));
+  if (!item) return { found: false, removed: false, data: null };
+  const remaining = normalizeSourceUrls(item.sourceUrls, item.sourceUrl).filter((url) => url !== target);
+  if (remaining.length) {
+    item.sourceUrls = remaining;
+    item.sourceUrl = remaining[0];
+    item.updatedAt = now();
+    writeDb(root, db);
+    return { found: true, removed: false, data: decorateItem(item) };
+  }
+  removeResourceItemFiles(root, item);
+  db.items = db.items.filter((entry) => entry.id !== item.id);
+  writeDb(root, db);
+  return { found: true, removed: true, data: null };
+}
+
 router.post('/items/add', express.json({ limit: '4mb' }), async (req, res) => {
   try {
     const result = await upsertResourceItem(req.body || {});
@@ -1286,13 +1316,7 @@ router.delete('/items/:id', (req, res) => {
     const { root, db } = readDb();
     const item = findItem(db, req.params.id);
     if (!item) return res.status(404).json({ success: false, error: '资源不存在' });
-    for (const rel of [item.fileRel, item.thumbRel]) {
-      if (!rel) continue;
-      try {
-        const fp = assertInside(root, path.join(root, rel));
-        if (fs.existsSync(fp)) fs.unlinkSync(fp);
-      } catch { /* ignore file cleanup */ }
-    }
+    removeResourceItemFiles(root, item);
     if (item.kind === 'set' && Array.isArray(item.materialSetItems)) {
       for (const child of item.materialSetItems) {
         if (!child?.fileRel) continue;
@@ -1367,6 +1391,7 @@ router.get('/thumb/:id', (req, res) => {
 });
 
 module.exports = router;
+module.exports.detachResourceSourceUrl = detachResourceSourceUrl;
 module.exports.upsertResourceItem = upsertResourceItem;
 module.exports.resolveResourceFilePath = function resolveResourceFilePath(value) {
   const { root, db } = readDb();

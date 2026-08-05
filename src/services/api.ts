@@ -2114,6 +2114,7 @@ export interface GenerationHistoryItem {
   sourceNodeType?: string;
   prompt?: string;
   promptLanguage?: 'zh' | 'en';
+  imageAnalysis?: ResourceImageAnalysis | null;
   provider?: string;
   model?: string;
   taskId?: string;
@@ -2264,7 +2265,7 @@ export function getGenerationHistoryUsers() {
 
 export function updateGenerationHistoryItem(
   id: string,
-  patch: Partial<Pick<GenerationHistoryItem, 'title' | 'favorite' | 'hidden' | 'tags'>>,
+  patch: Partial<Pick<GenerationHistoryItem, 'title' | 'favorite' | 'hidden' | 'tags' | 'imageAnalysis'>>,
 ) {
   return safeRequest<GenerationHistoryItem>(`${BASE}/generation-history/items/${encodeURIComponent(id)}`, {
     method: 'PATCH',
@@ -2290,6 +2291,13 @@ export function addGenerationHistoryItemToResources(id: string, payload: {
       method: 'POST',
       body: JSON.stringify(payload),
     },
+  );
+}
+
+export function removeGenerationHistoryItemFromResources(id: string) {
+  return safeRequest<{ found: boolean; removed: boolean; data: ResourceItem | null }>(
+    `${BASE}/generation-history/items/${encodeURIComponent(id)}/resources`,
+    { method: 'DELETE' },
   );
 }
 
