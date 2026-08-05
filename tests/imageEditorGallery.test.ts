@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import type { GenerationHistoryItem, ResourceItem } from '../src/services/api.ts';
 import {
+  buildImageEditorPerAssetGenerationPlan,
   coerceImageEditorList,
   mergeImageEditorGallery,
   normalizeImageEditorHistoryUrl,
   normalizeImageEditorResourceUrl,
   paginateImageEditorGallery,
   replaceImageEditorSelectionId,
-  resolveImageEditorGenerationCount,
   toggleImageEditorSelection,
 } from '../src/utils/imageEditorGallery.ts';
 import { buildImageEditorReverseMessages, buildPromptReverseContentSwapMessages } from '../src/utils/promptReverse.ts';
@@ -70,12 +70,18 @@ test('unified image editor gallery merges resource membership and only includes 
   assert.equal(items.some((item) => ['h1', 'h4'].includes(item.historyId || '') && !item.inResourceLibrary), false);
 });
 
-test('web image editor defaults output count to selected references and keeps manual count bounded', () => {
-  assert.equal(resolveImageEditorGenerationCount(1, 0), 1);
-  assert.equal(resolveImageEditorGenerationCount(3, 0), 3);
-  assert.equal(resolveImageEditorGenerationCount(9, 0), 9);
-  assert.equal(resolveImageEditorGenerationCount(7, 2), 2);
-  assert.equal(resolveImageEditorGenerationCount(7, 99), 4);
+test('web image editor creates one independent generation task per reference image', () => {
+  const plan = buildImageEditorPerAssetGenerationPlan(
+    [{ id: 'a', url: '/a.png' }, { id: 'b', url: '/b.png' }, { id: 'c', url: '/c.png' }],
+    ['prompt a', 'prompt b', 'prompt c'],
+    2,
+  );
+  assert.deepEqual(plan.map((item) => [item.asset.url, item.prompt, item.outputCount]), [
+    ['/a.png', 'prompt a', 2],
+    ['/b.png', 'prompt b', 2],
+    ['/c.png', 'prompt c', 2],
+  ]);
+  assert.equal(plan.reduce((total, item) => total + item.outputCount, 0), 6);
 });
 
 test('gallery filtering, pagination and selection keep deterministic behavior', () => {
@@ -168,10 +174,12 @@ test('web image editor route, sidebar permission entry and shared-library action
   assert.match(page, /title="查看反推提示词"/);
   assert.match(page, /buildImageEditorAnalysisMessages/);
   assert.match(page, /mapWithConcurrency\(selectedAssets, 2/);
-  assert.match(page, /const \[count, setCount\] = useState\(0\)/);
-  assert.match(page, /resolveImageEditorGenerationCount\(refs\.length, count\)/);
+  assert.match(page, /const \[count, setCount\] = useState\(1\)/);
+  assert.match(page, /generateForAsset\(job\.prompt, job\.asset\.url, job\.outputCount/);
+  assert.match(page, /images: \[referenceUrl\]/);
+  assert.match(page, /buildImageEditorPerAssetGenerationPlan\(selectedAssets, finalPrompts, count\)/);
   assert.match(page, /while \(generatedUrls\.length < targetCount/);
-  assert.match(page, /buildImageEditorCachedPromptMergeMessages/);
+  assert.doesNotMatch(page, /buildImageEditorCachedPromptMergeMessages/);
   assert.match(page, /aria-label="查看反推提示词"/);
   assert.match(page, /const IMAGE_EDITOR_TOOL_SLOTS = \[/);
   assert.match(page, /label: '反推生图', available: true/);

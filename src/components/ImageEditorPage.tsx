@@ -38,11 +38,11 @@ import {
   externalImageSizeFor,
 } from '../utils/advancedProviders';
 import {
+  buildImageEditorPerAssetGenerationPlan,
   coerceImageEditorList,
   mergeImageEditorGallery,
   paginateImageEditorGallery,
   replaceImageEditorSelectionId,
-  resolveImageEditorGenerationCount,
   toggleImageEditorSelection,
   type ImageEditorGalleryAsset,
   type ImageEditorGallerySource,
@@ -59,7 +59,6 @@ import {
 } from '../utils/promptReverse';
 import {
   buildImageEditorAnalysisMessages,
-  buildImageEditorCachedPromptMergeMessages,
   getImageEditorCachedPrompt,
   mergeImageEditorAnalysis,
   parseImageEditorAnalysisOutput,
@@ -182,7 +181,8 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
   const [externalProviderModel, setExternalProviderModel] = useState('');
   const [aspectRatio, setAspectRatio] = useState('16:9');
   const [sizeLevel, setSizeLevel] = useState('2K');
-  const [count, setCount] = useState(0);
+  const [count, setCount] = useState(1);
+  const [preparedImagePrompts, setPreparedImagePrompts] = useState<Array<{ assetId: string; prompt: string }>>([]);
   const [outputFormat, setOutputFormat] = useState<'jpg' | 'png'>('jpg');
 
   const llmConfigs = useMemo(() => {
@@ -525,11 +525,14 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
     }
   };
 
-  const generateFromPrompt = async (prompt: string) => {
-    const refs = selectedAssets.map((asset) => asset.url).slice(0, MAX_REFERENCES);
-    if (!refs.length) throw new Error('请至少选择一张参考图');
+  const generateForAsset = async (
+    prompt: string,
+    referenceUrl: string,
+    outputCount: number,
+    onAssetProgress: (progress: number) => void,
+  ) => {
     const forcedSize = gptImage2ZhenzhenVariantSize(apiModel);
-    const targetCount = resolveImageEditorGenerationCount(refs.length, count);
+    const targetCount = Math.max(1, Math.min(4, Math.floor(outputCount) || 1));
     const generatedUrls: string[] = [];
     let lastTaskId = '';
     let attempts = 0;
@@ -539,15 +542,15 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
       const updateBatchProgress = (batchProgress: number) => {
         const normalized = Math.max(0, Math.min(100, batchProgress));
         const overall = Math.min(99, Math.floor(((completedBeforeBatch + (batchCount * normalized) / 100) / targetCount) * 100));
-        setProgress(`${overall}%`);
+        onAssetProgress(overall);
       };
       attempts += 1;
       const batchResult = generationSource === 'fhl'
-        ? await runFhlGeneration(prompt, refs, batchCount, updateBatchProgress)
+        ? await runFhlGeneration(prompt, [referenceUrl], batchCount, updateBatchProgress)
         : await runConfiguredImageGeneration({
           mode: externalProvider ? 'external' : 'standard',
           prompt,
-          images: refs,
+          images: [referenceUrl],
           outputFormat,
           model: GPT_IMAGE.id,
           apiModel,
@@ -575,29 +578,42 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
       if (!batchResult.urls.length) throw new Error('生图平台完成但未返回图片');
       generatedUrls.push(...batchResult.urls);
       lastTaskId = batchResult.taskId || lastTaskId;
-      setProgress(`${Math.min(99, Math.floor((generatedUrls.length / targetCount) * 100))}%`);
+      onAssetProgress(Math.min(99, Math.floor((generatedUrls.length / targetCount) * 100)));
     }
     if (generatedUrls.length < targetCount) {
       throw new Error(`生图平台仅返回 ${generatedUrls.length}/${targetCount} 张图片`);
     }
-    const result = {
+    return {
       primaryUrl: generatedUrls[0],
       urls: generatedUrls,
       taskId: lastTaskId || undefined,
     };
+  };
+
+  const generateFromPreparedPrompts = async (jobs: Array<{ asset: ImageEditorGalleryAsset; prompt: string; outputCount: number }>) => {
+    if (!jobs.length) throw new Error('请至少选择一张参考图');
+    const generated: Array<{ url: string; prompt: string }> = [];
+    for (let assetIndex = 0; assetIndex < jobs.length; assetIndex += 1) {
+      const job = jobs[assetIndex];
+      const result = await generateForAsset(job.prompt, job.asset.url, job.outputCount, (assetProgress) => {
+        const overall = Math.min(99, Math.floor(((assetIndex + assetProgress / 100) / jobs.length) * 100));
+        setProgress(`${overall}% · 图 ${assetIndex + 1}/${jobs.length}`);
+      });
+      generated.push(...result.urls.map((url) => ({ url, prompt: job.prompt })));
+    }
     const existingUrls = new Set(history.map((item) => item.url));
-    const optimistic: GenerationHistoryItem[] = result.urls
-      .filter((url) => !existingUrls.has(url))
-      .map((url, index) => ({
+    const optimistic: GenerationHistoryItem[] = generated
+      .filter((item) => !existingUrls.has(item.url))
+      .map((item, index) => ({
         id: `image-editor-local-${Date.now()}-${index}`,
         kind: 'image',
-        url,
-        fileName: url.split('/').pop() || `网页版改图-${index + 1}.jpg`,
+        url: item.url,
+        fileName: item.url.split('/').pop() || `网页版改图-${index + 1}.jpg`,
         title: `网页版改图 ${new Date().toLocaleString()}`,
         canvasId: imageEditorHistoryProjectId(user.id),
         sourceNodeId: `web-image-editor-${user.id}`,
         sourceNodeType: 'image-editor',
-        prompt,
+        prompt: item.prompt,
         promptLanguage: normalizePromptReverseLanguage(language),
         model: generationSource === 'fhl' ? 'FHL Images · gpt-image-2' : (externalProvider ? activeExternalModel : apiModel),
         createdAt: Date.now() + index,
@@ -612,7 +628,7 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
     void reloadGallery();
     window.dispatchEvent(new CustomEvent('penguin:generation-history-changed'));
     window.dispatchEvent(new CustomEvent('penguin:resources-changed'));
-    return result;
+    return { primaryUrl: generated[0].url, urls: generated.map((item) => item.url) };
   };
 
   const runWorkflow = async () => {
@@ -635,48 +651,41 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
         setProgress(`正在准备提示词 ${resolvedCount}/${selectedAssets.length}`);
         return prompt;
       });
-      let prompt = reversePrompts[0];
       const contentText = instruction.trim();
-      if (reversePrompts.length > 1) {
-        setProgress(contentText ? '正在合并参考并替换内容' : '正在合并多图提示词');
-        const merged = await generateLlm({
-          model: llmModel,
-          llmKeyId: activeLlm?.id && activeLlm.id !== 'default' ? activeLlm.id : undefined,
-          sourceNodeType: 'prompt-reverse',
-          temperature: 0.2,
-          max_tokens: detail.maxTokens,
-          messages: buildImageEditorCachedPromptMergeMessages({
-            prompts: reversePrompts,
-            contentText,
-            language: normalizePromptReverseLanguage(language),
-          }),
+      let finalPrompts = reversePrompts;
+      if (contentText) {
+        let swappedCount = 0;
+        logBus.info(`反推完成，开始逐图替换内容 · ${contentText.length} 字`, '网页版改图');
+        finalPrompts = await mapWithConcurrency(reversePrompts, 2, async (reversePrompt) => {
+          const swapped = await generateLlm({
+            model: llmModel,
+            llmKeyId: activeLlm?.id && activeLlm.id !== 'default' ? activeLlm.id : undefined,
+            sourceNodeType: 'prompt-reverse',
+            temperature: 0.2,
+            max_tokens: detail.maxTokens,
+            messages: buildPromptReverseContentSwapMessages({
+              prompt: reversePrompt,
+              contentText,
+              language: normalizePromptReverseLanguage(language),
+            }),
+          });
+          const prompt = cleanPromptReverseContentSwapOutput(swapped.content);
+          if (!prompt) throw new Error('识图模型未返回有效的换内容提示词');
+          swappedCount += 1;
+          setProgress(`正在逐图替换内容 ${swappedCount}/${reversePrompts.length}`);
+          return prompt;
         });
-        prompt = contentText
-          ? cleanPromptReverseContentSwapOutput(merged.content)
-          : cleanPromptReverseOutput(merged.content);
-        if (!prompt) throw new Error('识图模型未返回有效的多图合成提示词');
-      } else if (contentText) {
-        setProgress('正在替换内容');
-        logBus.info(`反推完成，开始替换内容 · ${contentText.length} 字`, '网页版改图');
-        const swapped = await generateLlm({
-          model: llmModel,
-          llmKeyId: activeLlm?.id && activeLlm.id !== 'default' ? activeLlm.id : undefined,
-          sourceNodeType: 'prompt-reverse',
-          temperature: 0.2,
-          max_tokens: detail.maxTokens,
-          messages: buildPromptReverseContentSwapMessages({
-            prompt: reversePrompts[0],
-            contentText,
-            language: normalizePromptReverseLanguage(language),
-          }),
-        });
-        prompt = cleanPromptReverseContentSwapOutput(swapped.content);
-        if (!prompt) throw new Error('识图模型未返回有效的换内容提示词');
       }
-      setReversedPrompt(prompt);
+      const prepared = selectedAssets.map((asset, index) => ({ assetId: asset.id, prompt: finalPrompts[index] }));
+      const generationPlan = buildImageEditorPerAssetGenerationPlan(selectedAssets, finalPrompts, count);
+      if (generationPlan.some((item) => !item.prompt)) throw new Error('部分参考图缺少有效提示词');
+      setPreparedImagePrompts(prepared);
+      setReversedPrompt(finalPrompts.length === 1
+        ? finalPrompts[0]
+        : finalPrompts.map((prompt, index) => `【图片 ${index + 1}】\n${prompt}`).join('\n\n'));
       setStage('generating');
       setProgress('0%');
-      await generateFromPrompt(prompt);
+      await generateFromPreparedPrompts(generationPlan);
       setStage('success');
       setProgress('100%');
       logBus.success('网页版改图完成', '网页版改图');
@@ -695,7 +704,13 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
     setStage('generating');
     setProgress('0%');
     try {
-      await generateFromPrompt(reversedPrompt.trim());
+      const promptByAssetId = new Map(preparedImagePrompts.map((item) => [item.assetId, item.prompt]));
+      const retryPrompts = selectedAssets.map((asset) => (
+        selectedAssets.length === 1 ? reversedPrompt.trim() : (promptByAssetId.get(asset.id) || '')
+      ));
+      const retryJobs = buildImageEditorPerAssetGenerationPlan(selectedAssets, retryPrompts, count);
+      if (retryJobs.some((item) => !item.prompt)) throw new Error('参考图已变化，请重新运行反推流程');
+      await generateFromPreparedPrompts(retryJobs);
       setStage('success');
       setProgress('100%');
       taskCompletionSound.notifyComplete('web-image-editor', 'image');
@@ -804,7 +819,7 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
                 <label className="col-span-2 text-xs">生图模型{generationSource === 'fhl' ? <select className={`${field} mt-1 w-full text-xs`} value="fhl-gpt-image-2" disabled><option value="fhl-gpt-image-2">FHL · gpt-image-2</option></select> : externalProvider ? <select className={`${field} mt-1 w-full text-xs`} value={activeExternalModel} onChange={(event) => setExternalProviderModel(event.target.value)}>{externalModels.map((item) => <option key={item} value={item}>{item}</option>)}</select> : <select className={`${field} mt-1 w-full text-xs`} value={apiModel} onChange={(event) => setApiModel(event.target.value)}>{GPT_VARIANTS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>}</label>
                 <label className="text-xs">比例<select className={`${field} mt-1 w-full text-xs`} value={aspectOptions.includes(aspectRatio) ? aspectRatio : aspectOptions[0]} onChange={(event) => setAspectRatio(event.target.value)}>{aspectOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
                 <label className="text-xs">尺寸<select className={`${field} mt-1 w-full text-xs`} value={sizeOptions.includes(sizeLevel) ? sizeLevel : sizeOptions[0]} disabled={generationSource === 'standard' && !!gptImage2ZhenzhenVariantSize(apiModel)} onChange={(event) => setSizeLevel(event.target.value)}>{sizeOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-                <label className="text-xs">数量<select className={`${field} mt-1 w-full text-xs`} value={count} onChange={(event) => setCount(Math.max(0, Math.min(4, Number(event.target.value))))}><option value={0}>自动（{Math.max(1, selectedAssets.length)} 张）</option>{[1, 2, 3, 4].map((item) => <option key={item} value={item}>{item} 张</option>)}</select></label>
+                <label className="text-xs">每张参考图生成<select className={`${field} mt-1 w-full text-xs`} value={count} onChange={(event) => setCount(Math.max(1, Math.min(4, Number(event.target.value))))}>{[1, 2, 3, 4].map((item) => <option key={item} value={item}>{item} 张</option>)}</select></label>
                 <label className="text-xs">格式<select className={`${field} mt-1 w-full text-xs`} value={outputFormat} onChange={(event) => setOutputFormat(event.target.value === 'png' ? 'png' : 'jpg')}><option value="jpg">JPG</option><option value="png">PNG</option></select></label>
               </div>
             )}
@@ -816,7 +831,7 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
                 <button type="button" disabled={!reversedPrompt.trim() || busy} onClick={() => void retryGeneration()} className="rounded-lg bg-sky-500/15 px-3 py-1.5 text-xs font-bold text-sky-400 disabled:opacity-40">仅重试生图</button>
               </div>
               {runError && <div className="mt-2 rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-400">{runError}</div>}
-              {promptOpen && <textarea value={reversedPrompt} onChange={(event) => setReversedPrompt(event.target.value)} rows={6} className={`${field} mt-2 w-full resize-y text-xs leading-relaxed`} />}
+              {promptOpen && <textarea value={reversedPrompt} readOnly={preparedImagePrompts.length > 1} onChange={(event) => setReversedPrompt(event.target.value)} rows={6} title={preparedImagePrompts.length > 1 ? '多图提示词按图片分别保存，请重新运行反推流程进行修改' : undefined} className={`${field} mt-2 w-full resize-y text-xs leading-relaxed`} />}
             </div>
           )}
         </section>

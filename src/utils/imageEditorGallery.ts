@@ -182,8 +182,15 @@ export function replaceImageEditorSelectionId(ids: string[], previousId: string,
     .filter((id, index, list) => list.indexOf(id) === index);
 }
 
-export function resolveImageEditorGenerationCount(referenceCount: number, configuredCount: number): number {
-  const references = Math.max(1, Math.min(9, Math.floor(Number(referenceCount) || 0)));
-  const configured = Math.floor(Number(configuredCount) || 0);
-  return configured > 0 ? Math.max(1, Math.min(4, configured)) : references;
+export function buildImageEditorPerAssetGenerationPlan<T>(
+  assets: T[],
+  prompts: string[],
+  outputCount: number,
+): Array<{ asset: T; prompt: string; outputCount: number }> {
+  const count = Math.max(1, Math.min(4, Math.floor(Number(outputCount) || 1)));
+  return assets.slice(0, 9).map((asset, index) => ({
+    asset,
+    prompt: String(prompts[index] || '').trim(),
+    outputCount: count,
+  }));
 }
