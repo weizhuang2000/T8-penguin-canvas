@@ -146,6 +146,7 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
   const settings = useApiKeysStore((state) => state.settings);
   const { activeId, loadCanvases } = useCanvasStore();
   const uploadRef = useRef<HTMLInputElement>(null);
+  const galleryReloadSequenceRef = useRef(0);
 
   const [resources, setResources] = useState<ResourceItem[]>([]);
   const [history, setHistory] = useState<GenerationHistoryItem[]>([]);
@@ -156,7 +157,8 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
   const [analysisModalLanguage, setAnalysisModalLanguage] = useState<PromptReverseLanguage>('zh');
   const [loadingGallery, setLoadingGallery] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [publishingId, setPublishingId] = useState('');
+  const publishingIdsRef = useRef(new Set<string>());
+  const [publishingIds, setPublishingIds] = useState<Set<string>>(() => new Set());
   const [message, setMessage] = useState('');
   const [source, setSource] = useState<ImageEditorGallerySource>('all');
   const [keyword, setKeyword] = useState('');
@@ -237,6 +239,7 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
   }, [user.id]);
 
   const reloadGallery = async () => {
+    const reloadSequence = ++galleryReloadSequenceRef.current;
     const [resourceResult, categoryResult, historyResult] = await Promise.all([
       api.getResourceItems({ kind: 'image' }),
       api.getResourceCategories('image'),
@@ -245,6 +248,9 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
     const nextResources = resultList<ResourceItem>(resourceResult, ['items', 'resources']);
     const nextCategories = resultList<ResourceCategory>(categoryResult, ['items', 'categories']);
     const nextHistory = resultList<GenerationHistoryItem>(historyResult, ['items', 'history']);
+    if (reloadSequence !== galleryReloadSequenceRef.current) {
+      return { resources: nextResources || resources, history: nextHistory || history };
+    }
     if (nextResources) setResources(nextResources);
     if (nextCategories) setCategories(nextCategories);
     if (nextHistory) {
@@ -460,13 +466,21 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
   );
 
   const toggleAssetSharing = async (asset: ImageEditorGalleryAsset) => {
-    if (!asset.historyId || publishingId || !canManageAssetSharing(asset)) return;
-    setPublishingId(asset.id);
+    if (!asset.historyId || publishingIdsRef.current.has(asset.id) || !canManageAssetSharing(asset)) return;
+    publishingIdsRef.current.add(asset.id);
+    setPublishingIds(new Set(publishingIdsRef.current));
     setMessage('');
     try {
       if (asset.inResourceLibrary) {
         const result = await api.removeGenerationHistoryItemFromResources(asset.historyId);
         if (!result.success) throw new Error(result.error || '退出共享资源图库失败');
+        if (asset.resourceId) {
+          setResources((current) => result.data.removed
+            ? current.filter((item) => item.id !== asset.resourceId)
+            : result.data.data
+              ? current.map((item) => item.id === asset.resourceId ? result.data.data! : item)
+              : current);
+        }
         setSelectedIds((ids) => replaceImageEditorSelectionId(ids, asset.id, `history:${asset.historyId}`));
         setMessage('已退出共享资源图库');
       } else {
@@ -475,15 +489,16 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
           categoryId: finishedCategoryId,
         });
         if (!result.success) throw new Error(result.error || '加入共享资源图库失败');
+        setResources((current) => [result.data, ...current.filter((item) => item.id !== result.data.id)]);
         setSelectedIds((ids) => replaceImageEditorSelectionId(ids, asset.id, `resource:${result.data.id}`));
         setMessage('已加入共享资源图库');
       }
-      await reloadGallery();
       window.dispatchEvent(new CustomEvent('penguin:resources-changed'));
     } catch (error: any) {
       setMessage(error?.message || '更新共享状态失败');
     } finally {
-      setPublishingId('');
+      publishingIdsRef.current.delete(asset.id);
+      setPublishingIds(new Set(publishingIdsRef.current));
     }
   };
 
@@ -889,12 +904,12 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
                           <button type="button" onClick={(event) => { event.stopPropagation(); downloadAsset(asset); }} className="flex h-8 w-8 items-center justify-center rounded-full bg-black/65 text-white hover:bg-sky-500 hover:text-black" title="下载图片"><Download size={15} /></button>
                           <button
                             type="button"
-                            disabled={!canManageAssetSharing(asset) || publishingId === asset.id}
+                            disabled={!canManageAssetSharing(asset) || publishingIds.has(asset.id)}
                             onClick={(event) => { event.stopPropagation(); void toggleAssetSharing(asset); }}
                             className={`flex h-8 w-8 items-center justify-center rounded-full ${asset.inResourceLibrary ? 'bg-cyan-500 text-black hover:bg-rose-500 hover:text-white' : 'bg-black/65 text-white hover:bg-cyan-500 hover:text-black'} disabled:cursor-not-allowed disabled:opacity-35`}
                             title={!canManageAssetSharing(asset) ? '仅生成用户或系统管理员可操作共享状态' : asset.inResourceLibrary ? '退出共享资源图库' : '加入共享资源图库'}
                           >
-                            {publishingId === asset.id ? <Loader2 size={15} className="animate-spin" /> : <Library size={15} fill={asset.inResourceLibrary ? 'currentColor' : 'none'} />}
+                            {publishingIds.has(asset.id) ? <Loader2 size={15} className="animate-spin" /> : <Library size={15} fill={asset.inResourceLibrary ? 'currentColor' : 'none'} />}
                           </button>
                         </div>
                         <div className="absolute bottom-2 left-2 flex gap-1">{asset.inResourceLibrary && <span className="rounded bg-black/65 px-2 py-1 text-[10px] text-white">资源图库</span>}{asset.fromMyGeneration && <span className="rounded bg-black/65 px-2 py-1 text-[10px] text-white">我的生成</span>}{source === 'all-generated' && <span className="rounded bg-black/65 px-2 py-1 text-[10px] text-white">{asset.createdByUserName || asset.createdByUserId || '未知用户'}</span>}</div>
