@@ -131,6 +131,7 @@ const outputStorageRouter = require('./routes/outputStorage');
 const notificationsRouter = require('./routes/notifications');
 const fhlImageRouter = require('./routes/fhlImage');
 const monitoringRouter = require('./routes/monitoring');
+const seedvr2Router = require('./routes/seedvr2');
 const { registerLocalExtensions } = require('./extensions/localExtensions');
 const localHooks = require('./extensions/runtimeHooks');
 
@@ -171,6 +172,7 @@ app.use('/api/output-storage', outputStorageRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/fhl-image', fhlImageRouter);
 app.use('/api/monitoring', monitoringRouter);
+app.use('/api/seedvr2', seedvr2Router);
 registerLocalExtensions(app, { config, express, logger: console, hooks: localHooks });
 
 // ========== 前端静态资源(仅打包模式) ==========

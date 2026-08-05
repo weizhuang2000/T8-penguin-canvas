@@ -423,6 +423,7 @@ function main() {
   checkFile(path.join(RES, 'backend-enc', 'routes', 'parseHub.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'routes', 'achievements.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'routes', 'topaz.t8c'));
+  checkFile(path.join(RES, 'backend-enc', 'routes', 'seedvr2.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'achievements', 'media.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'achievements', 'store.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'cloudUploads', 'settings.t8c'));
@@ -436,6 +437,7 @@ function main() {
   checkFile(path.join(RES, 'backend-enc', 'providers', 'mediaResolver.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'providers', 'adapters.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'providers', 'openaiCompatible.t8c'));
+  checkFile(path.join(RES, 'backend-enc', 'providers', 'seedvr2.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'providers', 'fhlImages.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'providers', 'llmMedia.t8c'));
   checkFile(path.join(RES, 'backend-enc', 'providers', 'llmClient.t8c'));

@@ -96,6 +96,7 @@ export type NodeType =
   | 'pose-master'
   | 'aggregate-parser'
   | 'batch-processor'
+  | 'seedvr2-upscale'
   | 'topaz-image-upscale'
   | 'topaz-video-upscale'
   // 3D (1)
@@ -582,6 +583,8 @@ export interface ApiSettings {
   zhenzhenBaseUrl: string; // 默认 https://ai.t8star.org，可在设置中调整
   rhApiKey: string;
   rhBaseUrl: string; // https://www.runninghub.cn
+  seedvr2ApiKey: string;
+  seedvr2BaseUrl: string; // 默认 https://api2.65535.space
   llmApiKey: string;
   llmApiKeys?: LlmConfig[];
   llmConfigs?: LlmConfig[];

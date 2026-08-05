@@ -147,6 +147,7 @@ import CinemaAuditoriumDesignNode from './nodes/CinemaAuditoriumDesignNode';
 import ArtistStyleMasterNode from './nodes/ArtistStyleMasterNode';
 import AnimeTagMasterNode from './nodes/AnimeTagMasterNode';
 import BatchProcessorNode from './nodes/BatchProcessorNode';
+import Seedvr2UpscaleNode from './nodes/Seedvr2UpscaleNode';
 import PortraitMasterNode from './nodes/PortraitMasterNode';
 import PoseMasterNode from './nodes/PoseMasterNode';
 import IdeaNode from './nodes/IdeaNode';
@@ -272,6 +273,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'artist-style-master': ArtistStyleMasterNode,
   'anime-tag-master': AnimeTagMasterNode,
   'batch-processor': BatchProcessorNode,
+  'seedvr2-upscale': Seedvr2UpscaleNode,
   'multi-angle-visual': ToolboxParamNode,
   'portrait-master': PortraitMasterNode,
   'pose-master': PoseMasterNode,
@@ -688,6 +690,19 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     fhlAdaptive: true,
     fhlFixedImages: [],
     fhlItemImages: [],
+  },
+  'seedvr2-upscale': {
+    seedvr2SizeMode: 'scale',
+    seedvr2Scale: 2,
+    seedvr2Seed: 42,
+    seedvr2ColorCorrection: 'wavelet',
+    seedvr2ResizeMethod: 'lanczos',
+    seedvr2Prompt: 'Upscale this image',
+    status: 'idle',
+    imageUrl: '',
+    imageUrls: [],
+    urls: [],
+    error: '',
   },
   edit: { mode: 'edit', model: 'gpt-image-2', aspectRatio: '1:1', sizeLevel: '1K', referenceImages: [] },
   'image-edit': { imageEditDrafts: {}, status: 'idle', denoiseThresholdPx: 4 },
@@ -1868,7 +1883,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'video', 'runninghub-video', 'seedance', 'audio', 'llm', 'storyboard-grid', 'interactive-game-script', 'prompt-reverse', 'remotion-animation', 'runninghub', 'runninghub-wallet',
   // v1.2.10.1: rh-tools 与 RunningHub 同质，同样可被批量运行调起
   'rh-tools', 'rh-toolbox',
-  'resize', 'upscale', 'grid-crop', 'mark', 'remove-bg', 'combine', 'image-compare', 'drawing-board',
+  'resize', 'upscale', 'seedvr2-upscale', 'grid-crop', 'mark', 'remove-bg', 'combine', 'image-compare', 'drawing-board',
   'frame-extractor', 'frame-pair',
   'upload',
   // v1.2.8 工具节点 (循环器 / 从合集获取)

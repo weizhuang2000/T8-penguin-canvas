@@ -53,6 +53,7 @@ interface ApiSettingsModalProps {
 type KeyField =
   | 'zhenzhenApiKey'
   | 'rhApiKey'
+  | 'seedvr2ApiKey'
   | 'llmApiKey'
   | 'gptImageApiKey'
   | 'nanoBananaApiKey'
@@ -77,6 +78,13 @@ const COMMON_KEYS: KeySpec[] = [
   { field: 'llmApiKey', label: 'LLM 独立 API Key', desc: '· 额度隔离 · 用于 LLM/Vision', bullet: 'bg-emerald-400' },
 ];
 
+const SEEDVR2_KEY: KeySpec = {
+  field: 'seedvr2ApiKey',
+  label: 'SeedVR2 API Key',
+  desc: '· SeedVR2 图像超分专用',
+  bullet: 'bg-cyan-400',
+};
+
 const CLASSIFIED_KEYS: KeySpec[] = [
   { field: 'gptImageApiKey', label: 'gpt-image 系列', desc: 'GPT2 / gpt-image-1 等图像任务专用', bullet: 'bg-pink-400' },
   { field: 'nanoBananaApiKey', label: 'nano-banana 系列', desc: 'nano-banana / nano-banana-pro 专用', bullet: 'bg-yellow-400' },
@@ -91,6 +99,7 @@ const CLASSIFIED_KEYS: KeySpec[] = [
 
 const ALL_FIELDS: KeyField[] = [
   ...COMMON_KEYS.map((k) => k.field),
+  SEEDVR2_KEY.field,
   ...CLASSIFIED_KEYS.map((k) => k.field),
 ];
 
@@ -100,6 +109,7 @@ const PATH_FIELDS = [
   'resourceLibraryPath',
   'themeTemplatePath',
   'eagleApiBase',
+  'seedvr2BaseUrl',
 ] as const;
 
 const SETTINGS_BACKUP_SCHEMA = 't8-penguin-canvas-settings';
@@ -301,12 +311,12 @@ function AdvancedProviderFormBlock({
 }
 
 const emptyMap = (): Record<KeyField, string> => ({
-  zhenzhenApiKey: '', rhApiKey: '', llmApiKey: '',
+  zhenzhenApiKey: '', rhApiKey: '', seedvr2ApiKey: '', llmApiKey: '',
   gptImageApiKey: '', nanoBananaApiKey: '', mjApiKey: '', veoApiKey: '',
   soraApiKey: '', grokApiKey: '', seedanceApiKey: '', sunoApiKey: '', giteeMusicApiKey: '',
 });
 const emptyShow = (): Record<KeyField, boolean> => ({
-  zhenzhenApiKey: false, rhApiKey: false, llmApiKey: false,
+  zhenzhenApiKey: false, rhApiKey: false, seedvr2ApiKey: false, llmApiKey: false,
   gptImageApiKey: false, nanoBananaApiKey: false, mjApiKey: false, veoApiKey: false,
   soraApiKey: false, grokApiKey: false, seedanceApiKey: false, sunoApiKey: false, giteeMusicApiKey: false,
 });
@@ -410,6 +420,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   const [themeTemplatePathInput, setThemeTemplatePathInput] = useState<string>('');
   // 本地 Eagle API 地址
   const [eagleApiBaseInput, setEagleApiBaseInput] = useState<string>('');
+  const [seedvr2BaseUrlInput, setSeedvr2BaseUrlInput] = useState<string>('https://api2.65535.space');
   // 分类独立 Key 区块折叠状态（新手友好：默认折叠，点击展开）
   const [classifiedOpen, setClassifiedOpen] = useState(false);
   const [llmConfigsOpen, setLlmConfigsOpen] = useState(false);
@@ -519,6 +530,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       setResourceLibraryPathInput((settings as any)?.resourceLibraryPath || '');
       setThemeTemplatePathInput((settings as any)?.themeTemplatePath || '');
       setEagleApiBaseInput((settings as any)?.eagleApiBase || '');
+      setSeedvr2BaseUrlInput((settings as any)?.seedvr2BaseUrl || 'https://api2.65535.space');
       setZhenzhenEnabled((settings as any)?.enableZhenzhenFallback !== false);
     }
   }, [open, settings]);
@@ -605,6 +617,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
   const getCurrentEditableSettings = (): Partial<ApiSettings> => ({
     zhenzhenApiKey: inputs.zhenzhenApiKey.trim(),
     rhApiKey: inputs.rhApiKey.trim(),
+    seedvr2ApiKey: inputs.seedvr2ApiKey.trim(),
     llmApiKey: inputs.llmApiKey.trim(),
     gptImageApiKey: inputs.gptImageApiKey.trim(),
     nanoBananaApiKey: inputs.nanoBananaApiKey.trim(),
@@ -620,6 +633,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     resourceLibraryPath: resourceLibraryPathInput.trim(),
     themeTemplatePath: themeTemplatePathInput.trim(),
     eagleApiBase: eagleApiBaseInput.trim(),
+    seedvr2BaseUrl: seedvr2BaseUrlInput.trim(),
     ...(llmConfigsDirty ? { llmConfigs: llmConfigsInput } : {}),
     ...(advancedDirty ? { advancedProviders: advancedProvidersInput } : {}),
     ...(cloudUploadDirty ? { cloudUploadTargets: cloudUploadTargetsInput } : {}),
@@ -742,6 +756,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     if (typeof patch.resourceLibraryPath === 'string') setResourceLibraryPathInput(patch.resourceLibraryPath);
     if (typeof patch.themeTemplatePath === 'string') setThemeTemplatePathInput(patch.themeTemplatePath);
     if (typeof patch.eagleApiBase === 'string') setEagleApiBaseInput(patch.eagleApiBase);
+    if (typeof patch.seedvr2BaseUrl === 'string') setSeedvr2BaseUrlInput(patch.seedvr2BaseUrl);
     if (Array.isArray(patch.llmConfigs)) {
       setLlmConfigsInput(normalizeLlmConfigForms(patch.llmConfigs, patch));
       setLlmConfigsDirty(true);
@@ -878,6 +893,11 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     const oldEagleApiBase = (settings as any)?.eagleApiBase || '';
     if (newEagleApiBase && newEagleApiBase !== oldEagleApiBase) {
       (patch as any).eagleApiBase = newEagleApiBase;
+    }
+    const newSeedvr2BaseUrl = (seedvr2BaseUrlInput || '').trim();
+    const oldSeedvr2BaseUrl = (settings as any)?.seedvr2BaseUrl || 'https://api2.65535.space';
+    if (newSeedvr2BaseUrl && newSeedvr2BaseUrl !== oldSeedvr2BaseUrl) {
+      (patch as any).seedvr2BaseUrl = newSeedvr2BaseUrl;
     }
     if (llmConfigsDirty) {
       (patch as any).llmConfigs = llmConfigsInput;
@@ -3160,13 +3180,13 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
     );
   };
 
-  const renderKey = (spec: KeySpec, opts: { fallbackHint?: boolean; baseUrlNote?: string }) => {
+  const renderKey = (spec: KeySpec, opts: { fallbackHint?: boolean; baseUrlNote?: string; allowClear?: boolean }) => {
     const f = spec.field;
     const rawVal = (settings as any)[f] as string | undefined;
     const hasSaved = !!rawVal;
     const maskedDisplay = toMaskedDisplay(rawVal);
     const pendingClear = !!clearedFields[f];
-    const showClearButton = !!opts.fallbackHint;
+    const showClearButton = !!opts.fallbackHint || !!opts.allowClear;
     const clearDisabled = showClearButton && !pendingClear && !hasSaved && !inputs[f].trim();
     return (
       <div key={f} className="space-y-2">
@@ -3194,7 +3214,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
             type={shows[f] ? 'text' : 'password'}
             value={inputs[f]}
             onChange={(e) => setInputAt(f, e.target.value)}
-            placeholder={pendingClear ? '已标记清空，保存后回到通用 Key' : (hasSaved ? '留空保持不变 / 输入新值覆盖' : (opts.fallbackHint ? '留空则使用通用 Key / 输入独立 Key' : '请输入 sk-...'))}
+            placeholder={pendingClear ? (opts.fallbackHint ? '已标记清空，保存后回到通用 Key' : '已标记清空，保存后移除该 Key') : (hasSaved ? '留空保持不变 / 输入新值覆盖' : (opts.fallbackHint ? '留空则使用通用 Key / 输入独立 Key' : '请输入 sk-...'))}
             className={inputCls}
             autoComplete="off"
           />
@@ -3304,6 +3324,31 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
             onSaved={load}
           />
           {renderKey(COMMON_KEYS[1], { baseUrlNote: `Base URL: ${RH_BASE}` })}
+          <div className="t8-api-settings-divider space-y-3 border-t pt-4" data-seedvr2-settings>
+            {renderKey(SEEDVR2_KEY, { allowClear: true })}
+            <div className="space-y-1.5">
+              <label className={`text-xs font-bold ${labelCls}`}>SeedVR2 Base URL</label>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  className={inputCls}
+                  value={seedvr2BaseUrlInput}
+                  onChange={(event) => setSeedvr2BaseUrlInput(event.target.value)}
+                  placeholder="https://api2.65535.space"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <button
+                  type="button"
+                  onClick={() => openExternal('https://my.65535.space/')}
+                  className={linkBtnCls}
+                  title="打开 SeedVR2 API Key 管理页面"
+                >
+                  <ExternalLink size={11} /> 获取 API Key
+                </button>
+              </div>
+              <p className={`text-[11px] ${hintCls}`}>默认调用 Base URL 下的 /v1/images/edits，API Key 仅保存在后端本地。</p>
+            </div>
+          </div>
           {renderLlmConfigs()}
 
           {/* 分类独立 Key（默认折叠，点击展开 —— 新手友好） */}

@@ -187,6 +187,7 @@ export const NODE_PORTS: Record<string, NodePorts> = {
   // 批量素材处理: 只在节点内处理/归档/反馈，不对外输出素材，避免批量完成后自动铺满画布。
   'batch-processor': { inputs: ['image', 'video', 'audio', 'model3d'], outputs: [] },
   // Topaz 本地高清化: 仅调用用户本机已安装的 Topaz 软件，不内置第三方商业程序。
+  'seedvr2-upscale': { inputs: ['image'], outputs: ['image'] },
   'topaz-image-upscale': { inputs: ['image'], outputs: ['image'] },
   'topaz-video-upscale': { inputs: ['video'], outputs: ['video'] },
 

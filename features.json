@@ -5414,7 +5414,7 @@
     },
     "toolbox": {
       "label": "工具箱",
-      "count": 9,
+      "count": 10,
       "nodes": [
         {
           "type": "cinematic",
@@ -5450,6 +5450,11 @@
           "type": "batch-processor",
           "label": "批量素材处理",
           "description": "批量导入文件或文件夹，也可连接上游素材；在节点内执行原名/改名、去除上下黑边、批量抠图、扩图、高清放大和格式转换，完成后只显示节点内进度和结果，不自动生成输出素材节点"
+        },
+        {
+          "type": "seedvr2-upscale",
+          "label": "SeedVR2超分",
+          "description": "调用 seedvr2-7b 对单张上游图片做 AI 超分；支持 1x/2x/3x/4x 与严格等比例自定义尺寸、seed、wavelet/none 颜色校正和 lanczos/bicubic 缩放算法，目标上限 3400 万像素"
         },
         {
           "type": "topaz-image-upscale",
@@ -6099,6 +6104,7 @@
     "pose-master",
     "aggregate-parser",
     "batch-processor",
+    "seedvr2-upscale",
     "topaz-image-upscale",
     "topaz-video-upscale",
     "remove-ai-watermark"
@@ -6303,6 +6309,22 @@
     ],
     "verification": [
       "node --test tests\\panorama3d.test.ts",
+      "npm run type-check",
+      "npm run build"
+    ]
+  },
+  "seedvr2Upscale": {
+    "status": "implemented",
+    "nodeType": "seedvr2-upscale",
+    "label": "SeedVR2 图像超分",
+    "capabilities": [
+      "API 设置独立保存并脱敏 SeedVR2 API Key，Base URL 默认 https://api2.65535.space 且可配置",
+      "通过 OpenAI 兼容 /v1/images/edits multipart 接口调用固定模型 seedvr2-7b，输出 b64_json 落盘到 output/",
+      "严格单图输入，支持整数倍与等比例自定义目标尺寸，运行前校验比例和 3400 万像素上限",
+      "支持 seed、wavelet/none 颜色校正、lanczos/bicubic 缩放算法，并接入画布批量运行、快捷运行和循环器"
+    ],
+    "verification": [
+      "node --experimental-strip-types --test tests/seedvr2Upscale.test.ts tests/seedvr2Settings.test.ts",
       "npm run type-check",
       "npm run build"
     ]

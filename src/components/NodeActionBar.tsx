@@ -42,7 +42,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'cinematic', 'video-motion',
   'elevation-prompt', 'exhibition-img2img', 'exhibition-style-transfer', 'exhibition-recolor', 'exhibition-lighting-heatmap', 'exhibition-creative-image', 'exhibition-render-to-elevation', 'exhibition-text-image-loop', 'exhibition-outline-split', 'unit-panel-design', 'sculpture-relief-design', 'exhibition-wayfinding-design', 'exhibition-scene-design', 'science-exhibit-design', 'exhibition-floorplan-layout', 'showcase-interior-design', 'reverse-isometric-design', 'fusion-render-design', 'cinema-auditorium-design',
   'artist-style-master', 'anime-tag-master', 'portrait-master', 'pose-master', 'aggregate-parser', 'batch-processor',
-  'topaz-image-upscale', 'topaz-video-upscale',
+  'seedvr2-upscale', 'topaz-image-upscale', 'topaz-video-upscale',
   'remove-ai-watermark',
 ]);
 

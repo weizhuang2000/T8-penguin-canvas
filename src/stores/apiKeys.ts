@@ -8,6 +8,7 @@ import { createDefaultCanvasNodeMenuPreferences, normalizeCanvasNodeMenuPreferen
 export const DEFAULT_ZHENZHEN_BASE = 'https://ai.t8star.org';
 export const FIXED_ZHENZHEN_BASE = DEFAULT_ZHENZHEN_BASE;
 export const RH_BASE = 'https://www.runninghub.cn';
+export const SEEDVR2_BASE = 'https://api2.65535.space';
 
 interface ApiKeysState {
   settings: ApiSettings;
@@ -25,6 +26,8 @@ const DEFAULT: ApiSettings = {
   zhenzhenBaseUrl: FIXED_ZHENZHEN_BASE,
   rhApiKey: '',
   rhBaseUrl: RH_BASE,
+  seedvr2ApiKey: '',
+  seedvr2BaseUrl: SEEDVR2_BASE,
   llmApiKey: '',
   llmApiKeys: [],
   llmConfigs: [],

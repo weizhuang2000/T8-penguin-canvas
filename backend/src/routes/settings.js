@@ -11,6 +11,7 @@ const {
   summarizeAdvancedProviders,
 } = require('../providers/registry');
 const { normalizeLlmBaseUrl, normalizeLlmModelName } = require('../utils/llmBaseUrl');
+const { normalizeSeedvr2BaseUrl } = require('../providers/seedvr2');
 const {
   maskCloudUploadTargets,
   normalizeCloudUploadTargets,
@@ -34,6 +35,8 @@ const DEFAULT_SETTINGS = {
   zhenzhenBaseUrl: config.ZHENZHEN_BASE_URL, // 固定 https://ai.t8star.org
   rhApiKey: '',
   rhBaseUrl: config.RH_BASE_URL,
+  seedvr2ApiKey: '',
+  seedvr2BaseUrl: config.SEEDVR2_BASE_URL,
   // v1.2.9.16: 取消 rhWalletApiKey —— RH 钱包应用节点与普通 RunningHub 节点统一使用 rhApiKey
   llmApiKey: '',
   llmBaseUrl: config.ZHENZHEN_BASE_URL, // 默认同百达工坊，可单独设置
@@ -376,6 +379,7 @@ function loadSettings({ persistMigrations = true } = {}) {
       ...data,
       giteeMusicApiKey: String(data.giteeMusicApiKey || migratedGiteeMusicApiKey || '').trim(),
       zhenzhenBaseUrl: normalizeZhenzhenBaseUrl(data.zhenzhenBaseUrl) || config.ZHENZHEN_BASE_URL,
+      seedvr2BaseUrl: normalizeSeedvr2BaseUrl(data.seedvr2BaseUrl, config.SEEDVR2_BASE_URL) || config.SEEDVR2_BASE_URL,
       llmBaseUrl: normalizeLlmBaseUrl(data.llmBaseUrl, config.ZHENZHEN_BASE_URL) || config.ZHENZHEN_BASE_URL,
       llmModel: normalizeLlmModelName(data.llmModel, config.LLM_DEFAULT_MODEL) || config.LLM_DEFAULT_MODEL,
     };
@@ -439,6 +443,7 @@ router.get('/', (_req, res) => {
     ...settings,
     zhenzhenApiKey: maskKey(settings.zhenzhenApiKey),
     rhApiKey: maskKey(settings.rhApiKey),
+    seedvr2ApiKey: maskKey(settings.seedvr2ApiKey),
     llmApiKey: maskKey(settings.llmApiKey),
     llmConfigs: maskLlmConfigs(settings.llmConfigs),
     llmApiKeys: maskLlmConfigs(settings.llmConfigs),
@@ -621,6 +626,13 @@ router.post('/', requireAdmin, (req, res) => {
   if (!zhenzhenBaseUrl) {
     return res.status(400).json({ success: false, error: '百达工坊 Base URL 必须是有效的 http/https 地址' });
   }
+  const hasSeedvr2BaseUrl = Object.prototype.hasOwnProperty.call(incoming, 'seedvr2BaseUrl');
+  const seedvr2BaseUrl = hasSeedvr2BaseUrl
+    ? normalizeSeedvr2BaseUrl(incoming.seedvr2BaseUrl)
+    : normalizeSeedvr2BaseUrl(current.seedvr2BaseUrl, config.SEEDVR2_BASE_URL);
+  if (!seedvr2BaseUrl) {
+    return res.status(400).json({ success: false, error: 'SeedVR2 Base URL 必须是有效的 http/https 地址' });
+  }
   const hasLlmBaseUrl = Object.prototype.hasOwnProperty.call(incoming, 'llmBaseUrl');
   const llmBaseUrl = hasLlmBaseUrl
     ? normalizeLlmBaseUrl(incoming.llmBaseUrl, config.ZHENZHEN_BASE_URL)
@@ -640,6 +652,7 @@ router.post('/', requireAdmin, (req, res) => {
     ...incoming,
     // 百达工坊地址可配置；LLM 地址仍允许单独配置。
     zhenzhenBaseUrl,
+    seedvr2BaseUrl,
     llmBaseUrl,
     llmModel,
   };
@@ -1046,3 +1059,4 @@ module.exports.maskLlmApiKeys = maskLlmConfigs;
 module.exports.syncLegacyLlmConfig = syncLegacyLlmConfig;
 module.exports.syncLegacyLlmApiKey = syncLegacyLlmConfig;
 module.exports.normalizeZhenzhenBaseUrl = normalizeZhenzhenBaseUrl;
+module.exports.normalizeSeedvr2BaseUrl = normalizeSeedvr2BaseUrl;

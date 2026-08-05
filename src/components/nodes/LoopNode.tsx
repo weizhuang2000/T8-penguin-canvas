@@ -44,7 +44,7 @@ const EXEC_TYPES = new Set<string>([
   'frame-extractor', 'frame-pair',
   'upload',
   'artist-style-master', 'anime-tag-master', 'aggregate-parser', 'batch-processor',
-  'topaz-image-upscale', 'topaz-video-upscale',
+  'seedvr2-upscale', 'topaz-image-upscale', 'topaz-video-upscale',
 ]);
 
 // 自动计算型下游节点：没有 useRunTrigger，不应放入 EXEC_TYPES 等待 runBus，
