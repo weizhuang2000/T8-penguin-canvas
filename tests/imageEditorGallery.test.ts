@@ -9,6 +9,7 @@ import {
   normalizeImageEditorResourceUrl,
   paginateImageEditorGallery,
   replaceImageEditorSelectionId,
+  resolveImageEditorGenerationCount,
   toggleImageEditorSelection,
 } from '../src/utils/imageEditorGallery.ts';
 import { buildImageEditorReverseMessages, buildPromptReverseContentSwapMessages } from '../src/utils/promptReverse.ts';
@@ -67,6 +68,14 @@ test('unified image editor gallery merges resource membership and only includes 
   assert.equal(shared?.historyId, 'h4');
   assert.equal(items.some((item) => item.historyId === 'h3'), false);
   assert.equal(items.some((item) => ['h1', 'h4'].includes(item.historyId || '') && !item.inResourceLibrary), false);
+});
+
+test('web image editor defaults output count to selected references and keeps manual count bounded', () => {
+  assert.equal(resolveImageEditorGenerationCount(1, 0), 1);
+  assert.equal(resolveImageEditorGenerationCount(3, 0), 3);
+  assert.equal(resolveImageEditorGenerationCount(9, 0), 9);
+  assert.equal(resolveImageEditorGenerationCount(7, 2), 2);
+  assert.equal(resolveImageEditorGenerationCount(7, 99), 4);
 });
 
 test('gallery filtering, pagination and selection keep deterministic behavior', () => {
@@ -159,6 +168,9 @@ test('web image editor route, sidebar permission entry and shared-library action
   assert.match(page, /title="查看反推提示词"/);
   assert.match(page, /buildImageEditorAnalysisMessages/);
   assert.match(page, /mapWithConcurrency\(selectedAssets, 2/);
+  assert.match(page, /const \[count, setCount\] = useState\(0\)/);
+  assert.match(page, /resolveImageEditorGenerationCount\(refs\.length, count\)/);
+  assert.match(page, /while \(generatedUrls\.length < targetCount/);
   assert.match(page, /buildImageEditorCachedPromptMergeMessages/);
   assert.match(page, /aria-label="查看反推提示词"/);
   assert.match(page, /const IMAGE_EDITOR_TOOL_SLOTS = \[/);

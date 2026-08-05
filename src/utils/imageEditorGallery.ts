@@ -181,3 +181,9 @@ export function replaceImageEditorSelectionId(ids: string[], previousId: string,
     .map((id) => (id === previousId ? nextId : id))
     .filter((id, index, list) => list.indexOf(id) === index);
 }
+
+export function resolveImageEditorGenerationCount(referenceCount: number, configuredCount: number): number {
+  const references = Math.max(1, Math.min(9, Math.floor(Number(referenceCount) || 0)));
+  const configured = Math.floor(Number(configuredCount) || 0);
+  return configured > 0 ? Math.max(1, Math.min(4, configured)) : references;
+}

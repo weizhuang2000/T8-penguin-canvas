@@ -42,6 +42,7 @@ import {
   mergeImageEditorGallery,
   paginateImageEditorGallery,
   replaceImageEditorSelectionId,
+  resolveImageEditorGenerationCount,
   toggleImageEditorSelection,
   type ImageEditorGalleryAsset,
   type ImageEditorGallerySource,
@@ -181,7 +182,7 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
   const [externalProviderModel, setExternalProviderModel] = useState('');
   const [aspectRatio, setAspectRatio] = useState('16:9');
   const [sizeLevel, setSizeLevel] = useState('2K');
-  const [count, setCount] = useState(1);
+  const [count, setCount] = useState(0);
   const [outputFormat, setOutputFormat] = useState<'jpg' | 'png'>('jpg');
 
   const llmConfigs = useMemo(() => {
@@ -486,7 +487,12 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
     setPublishingId('');
   };
 
-  const runFhlGeneration = async (prompt: string, refs: string[]) => {
+  const runFhlGeneration = async (
+    prompt: string,
+    refs: string[],
+    outputCount: number,
+    onBatchProgress?: (progress: number) => void,
+  ) => {
     const created = await createFhlJob({
       mode: 'edit',
       prompt,
@@ -494,8 +500,8 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
       quality: sizeLevel === '4K' ? '4K' : '2K',
       aspect: aspectOptions.includes(aspectRatio) ? aspectRatio : aspectOptions[0],
       outputFormat,
-      count,
-      concurrency: Math.max(1, Math.min(10, count)),
+      count: outputCount,
+      concurrency: Math.max(1, Math.min(10, outputCount)),
       historyContext: {
         canvasId: imageEditorHistoryProjectId(user.id),
         sourceNodeId: `web-image-editor-${user.id}`,
@@ -505,10 +511,10 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
         promptLanguage: normalizePromptReverseLanguage(language),
       },
     });
-    setProgress(`${Math.max(0, Math.min(100, created.progress || 0))}%`);
+    onBatchProgress?.(Math.max(0, Math.min(100, created.progress || 0)));
     for (;;) {
       const job = await getFhlJob(created.id);
-      setProgress(`${Math.max(0, Math.min(100, job.progress || 0))}%`);
+      onBatchProgress?.(Math.max(0, Math.min(100, job.progress || 0)));
       if (FHL_TERMINAL.has(job.status)) {
         if (!job.outputUrls.length) {
           throw new Error(job.error || job.tasks.find((item) => item.error)?.error || `FHL 任务${job.status}`);
@@ -523,9 +529,22 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
     const refs = selectedAssets.map((asset) => asset.url).slice(0, MAX_REFERENCES);
     if (!refs.length) throw new Error('请至少选择一张参考图');
     const forcedSize = gptImage2ZhenzhenVariantSize(apiModel);
-    const result = generationSource === 'fhl'
-      ? await runFhlGeneration(prompt, refs)
-      : await runConfiguredImageGeneration({
+    const targetCount = resolveImageEditorGenerationCount(refs.length, count);
+    const generatedUrls: string[] = [];
+    let lastTaskId = '';
+    let attempts = 0;
+    while (generatedUrls.length < targetCount && attempts < targetCount) {
+      const completedBeforeBatch = generatedUrls.length;
+      const batchCount = Math.min(4, targetCount - completedBeforeBatch);
+      const updateBatchProgress = (batchProgress: number) => {
+        const normalized = Math.max(0, Math.min(100, batchProgress));
+        const overall = Math.min(99, Math.floor(((completedBeforeBatch + (batchCount * normalized) / 100) / targetCount) * 100));
+        setProgress(`${overall}%`);
+      };
+      attempts += 1;
+      const batchResult = generationSource === 'fhl'
+        ? await runFhlGeneration(prompt, refs, batchCount, updateBatchProgress)
+        : await runConfiguredImageGeneration({
           mode: externalProvider ? 'external' : 'standard',
           prompt,
           images: refs,
@@ -535,7 +554,7 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
           paramKind: GPT_IMAGE.paramKind,
           aspectRatio,
           sizeLevel: externalProvider ? sizeLevel : (forcedSize || sizeLevel),
-          n: count,
+          n: batchCount,
           providerParams: externalProvider ? {} : undefined,
           external: externalProvider ? {
             providerId: externalProvider.id,
@@ -550,9 +569,22 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
             prompt,
             promptLanguage: normalizePromptReverseLanguage(language),
           },
-          onProgress: ({ progress: next }) => setProgress(next),
+          onProgress: ({ progress: next }) => updateBatchProgress(Number.parseInt(next, 10) || 0),
           onWarning: (warning) => logBus.warn(warning, '网页版改图'),
         });
+      if (!batchResult.urls.length) throw new Error('生图平台完成但未返回图片');
+      generatedUrls.push(...batchResult.urls);
+      lastTaskId = batchResult.taskId || lastTaskId;
+      setProgress(`${Math.min(99, Math.floor((generatedUrls.length / targetCount) * 100))}%`);
+    }
+    if (generatedUrls.length < targetCount) {
+      throw new Error(`生图平台仅返回 ${generatedUrls.length}/${targetCount} 张图片`);
+    }
+    const result = {
+      primaryUrl: generatedUrls[0],
+      urls: generatedUrls,
+      taskId: lastTaskId || undefined,
+    };
     const existingUrls = new Set(history.map((item) => item.url));
     const optimistic: GenerationHistoryItem[] = result.urls
       .filter((url) => !existingUrls.has(url))
@@ -772,7 +804,7 @@ export default function ImageEditorPage({ user }: ImageEditorPageProps) {
                 <label className="col-span-2 text-xs">生图模型{generationSource === 'fhl' ? <select className={`${field} mt-1 w-full text-xs`} value="fhl-gpt-image-2" disabled><option value="fhl-gpt-image-2">FHL · gpt-image-2</option></select> : externalProvider ? <select className={`${field} mt-1 w-full text-xs`} value={activeExternalModel} onChange={(event) => setExternalProviderModel(event.target.value)}>{externalModels.map((item) => <option key={item} value={item}>{item}</option>)}</select> : <select className={`${field} mt-1 w-full text-xs`} value={apiModel} onChange={(event) => setApiModel(event.target.value)}>{GPT_VARIANTS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>}</label>
                 <label className="text-xs">比例<select className={`${field} mt-1 w-full text-xs`} value={aspectOptions.includes(aspectRatio) ? aspectRatio : aspectOptions[0]} onChange={(event) => setAspectRatio(event.target.value)}>{aspectOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
                 <label className="text-xs">尺寸<select className={`${field} mt-1 w-full text-xs`} value={sizeOptions.includes(sizeLevel) ? sizeLevel : sizeOptions[0]} disabled={generationSource === 'standard' && !!gptImage2ZhenzhenVariantSize(apiModel)} onChange={(event) => setSizeLevel(event.target.value)}>{sizeOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-                <label className="text-xs">数量<select className={`${field} mt-1 w-full text-xs`} value={count} onChange={(event) => setCount(Math.max(1, Math.min(4, Number(event.target.value))))}>{[1, 2, 3, 4].map((item) => <option key={item} value={item}>{item} 张</option>)}</select></label>
+                <label className="text-xs">数量<select className={`${field} mt-1 w-full text-xs`} value={count} onChange={(event) => setCount(Math.max(0, Math.min(4, Number(event.target.value))))}><option value={0}>自动（{Math.max(1, selectedAssets.length)} 张）</option>{[1, 2, 3, 4].map((item) => <option key={item} value={item}>{item} 张</option>)}</select></label>
                 <label className="text-xs">格式<select className={`${field} mt-1 w-full text-xs`} value={outputFormat} onChange={(event) => setOutputFormat(event.target.value === 'png' ? 'png' : 'jpg')}><option value="jpg">JPG</option><option value="png">PNG</option></select></label>
               </div>
             )}
