@@ -42,6 +42,7 @@ import {
 } from '../../utils/imageCompare';
 import { collectMaterialSetBucketsFromData, valueOfMaterialSetItem } from '../../utils/materialSet';
 import { useCanvasRuntime } from './canvasRuntimeContext';
+import { insertAndRunSeedvr2Node } from '../../utils/seedvr2QuickAction';
 // v1.2.10.5: 节点落点防重叠 —— 双击编辑产出 N 节点 3 列宫格整组避让
 import { placeBatchNodes, defaultSizeOf, type Rect as PlacementRect } from '../../utils/nodePlacement';
 
@@ -988,6 +989,7 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
           isDark={isDark}
           onComplete={(result) => handleProduce(result.imageUrls, { type: 'rh-capability', label: result.tool.title })}
           onRunningChange={setRhCapabilityBusy}
+          onSeedvr2={() => insertAndRunSeedvr2Node(rf, id)}
         />
       )}
       {/* target handle (左侧) - 上游任意类型可连入 */}

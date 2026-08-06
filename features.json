@@ -5146,7 +5146,7 @@
     },
     "core": {
       "label": "核心节点",
-      "count": 9,
+      "count": 10,
       "nodes": [
         {
           "type": "text",
@@ -5192,6 +5192,11 @@
           "type": "interactive-game-script",
           "label": "互动游戏脚本",
           "description": "面向 16:9 大屏触控甲方演示：由 LLM 自动规划 4–8 个可编辑 UI 界面、状态变量、条件分支、反馈与跳转；逐界面并发生成高清效果图并自动拼接概览宫格，支持热点框选、节点内交互预览以及 PPTX/PDF/DOCX/离线原型 ZIP 导出"
+        },
+        {
+          "type": "seedvr2-upscale",
+          "label": "SeedVR2超分",
+          "description": "调用 seedvr2-7b 对单张上游图片做 AI 超分；支持 1x/2x/3x/4x 与严格等比例自定义尺寸、seed、wavelet/none 颜色校正和 lanczos/bicubic 缩放算法，目标上限 3400 万像素"
         }
       ]
     },
@@ -5414,7 +5419,7 @@
     },
     "toolbox": {
       "label": "工具箱",
-      "count": 10,
+      "count": 9,
       "nodes": [
         {
           "type": "cinematic",
@@ -5450,11 +5455,6 @@
           "type": "batch-processor",
           "label": "批量素材处理",
           "description": "批量导入文件或文件夹，也可连接上游素材；在节点内执行原名/改名、去除上下黑边、批量抠图、扩图、高清放大和格式转换，完成后只显示节点内进度和结果，不自动生成输出素材节点"
-        },
-        {
-          "type": "seedvr2-upscale",
-          "label": "SeedVR2超分",
-          "description": "调用 seedvr2-7b 对单张上游图片做 AI 超分；支持 1x/2x/3x/4x 与严格等比例自定义尺寸、seed、wavelet/none 颜色校正和 lanczos/bicubic 缩放算法，目标上限 3400 万像素"
         },
         {
           "type": "topaz-image-upscale",

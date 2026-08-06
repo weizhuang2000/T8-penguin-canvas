@@ -33,6 +33,7 @@ import SmartImage from '../SmartImage';
 import { decodeDuckFiles, type DuckDecodeFileItem } from '../../services/api';
 import { resolveThemeTemplate } from '../../theme/defaultTemplates';
 import { useCanvasRuntime } from './canvasRuntimeContext';
+import { insertAndRunSeedvr2Node } from '../../utils/seedvr2QuickAction';
 import {
   createEmptyUploadMediaData,
   createOutputDataFromItems,
@@ -662,6 +663,7 @@ const UploadNode = ({ id, data, selected, type }: NodeProps) => {
           onComplete={(result) => handleProduce(result.imageUrls, { type: 'rh-capability', label: result.tool.title })}
           onError={setError}
           onRunningChange={setRhCapabilityBusy}
+          onSeedvr2={() => insertAndRunSeedvr2Node(rf, id)}
         />
       )}
       {/* 仅有 source handle(上传节点不接收输入) */}
