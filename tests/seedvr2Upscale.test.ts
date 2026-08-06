@@ -74,7 +74,9 @@ test('SeedVR2 sends one multipart image with documented defaults and saves b64 o
   assert.equal(captured.init.body.getAll('image').length, 1);
   assert.equal(result.width, 4);
   assert.equal(result.height, 2);
+  assert.equal(result.outputFormat, 'jpg');
   assert.match(result.imageUrl, /^\/files\/output\/seedvr2_/);
+  assert.match(result.imageUrl, /\.jpg$/);
   assert.equal(fs.existsSync(path.join(temp, path.basename(result.imageUrl))), true);
 });
 
@@ -173,6 +175,7 @@ test('SeedVR2 frontend, canvas and packaged backend wiring stay registered', () 
   const server = read('backend/src/server.js');
   const permissions = read('backend/src/auth/toolPermissions.js');
   const route = read('backend/src/routes/seedvr2.js');
+  const node = read('src/components/nodes/Seedvr2UpscaleNode.tsx');
   const postBuild = read('electron/_post_build.cjs');
   const features = JSON.parse(read('features.json'));
 
@@ -185,6 +188,8 @@ test('SeedVR2 frontend, canvas and packaged backend wiring stay registered', () 
   assert.match(server, /app\.use\('\/api\/seedvr2', seedvr2Router\)/);
   assert.match(permissions, /'seedvr2-upscale'/);
   assert.match(route, /requireNodePermission\('seedvr2-upscale'\)/);
+  assert.match(route, /addGeneratedHistoryItems/);
+  assert.match(node, /seedvr2OutputFormat/);
   assert.match(postBuild, /routes', 'seedvr2\.t8c'/);
   assert.match(postBuild, /providers', 'seedvr2\.t8c'/);
   assert.equal(features.seedvr2Upscale.nodeType, 'seedvr2-upscale');

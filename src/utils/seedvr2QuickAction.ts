@@ -36,6 +36,7 @@ export function insertAndRunSeedvr2Node(
       seedvr2ColorCorrection: 'wavelet',
       seedvr2ResizeMethod: 'lanczos',
       seedvr2Prompt: 'Upscale this image',
+      seedvr2OutputFormat: 'jpg',
       status: 'idle',
       imageUrl: '',
       imageUrls: [],

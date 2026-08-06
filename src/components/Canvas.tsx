@@ -698,6 +698,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     seedvr2ColorCorrection: 'wavelet',
     seedvr2ResizeMethod: 'lanczos',
     seedvr2Prompt: 'Upscale this image',
+    seedvr2OutputFormat: 'jpg',
     status: 'idle',
     imageUrl: '',
     imageUrls: [],

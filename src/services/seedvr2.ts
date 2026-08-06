@@ -2,6 +2,7 @@ const BASE = '/api/seedvr2';
 
 export type Seedvr2ColorCorrection = 'wavelet' | 'none';
 export type Seedvr2ResizeMethod = 'lanczos' | 'bicubic';
+export type Seedvr2OutputFormat = 'jpg' | 'png';
 
 export interface Seedvr2UpscaleRequest {
   imageUrl: string;
@@ -11,6 +12,14 @@ export interface Seedvr2UpscaleRequest {
   colorCorrection?: Seedvr2ColorCorrection;
   resizeMethod?: Seedvr2ResizeMethod;
   prompt?: string;
+  outputFormat?: Seedvr2OutputFormat;
+  historyContext?: {
+    canvasId?: string | null;
+    sourceNodeId?: string;
+    sourceNodeType?: string;
+    nodeTitle?: string;
+    outputTitle?: string;
+  };
 }
 
 export interface Seedvr2UpscaleResult {
@@ -24,6 +33,7 @@ export interface Seedvr2UpscaleResult {
   seed: number;
   colorCorrection: Seedvr2ColorCorrection;
   resizeMethod: Seedvr2ResizeMethod;
+  outputFormat: Seedvr2OutputFormat;
   model: 'seedvr2-7b';
 }
 

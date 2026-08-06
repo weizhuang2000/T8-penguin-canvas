@@ -150,6 +150,33 @@ function outputExtension(format) {
   return 'png';
 }
 
+function normalizeOutputFormat(value) {
+  return String(value || '').trim().toLowerCase() === 'png' ? 'png' : 'jpg';
+}
+
+async function encodeOutput(buffer, format) {
+  if (format === 'png') {
+    return sharp(buffer, { limitInputPixels: false, animated: false })
+      .png({ compressionLevel: 6, effort: 8 })
+      .toBuffer();
+  }
+  // JPEG 没有标准的像素级无损模式；使用质量 100、4:4:4 且关闭 mozjpeg，避免额外的有损优化。
+  return sharp(buffer, { limitInputPixels: false, animated: false })
+    .rotate()
+    .flatten({ background: '#ffffff' })
+    .jpeg({ quality: 100, chromaSubsampling: '4:4:4', mozjpeg: false })
+    .toBuffer();
+}
+
+async function copyToConfiguredSavePath(filePath, filename, savePath) {
+  const targetDir = String(savePath || '').trim();
+  if (!targetDir) return '';
+  await fsp.mkdir(targetDir, { recursive: true });
+  const target = path.join(targetDir, filename);
+  if (!fs.existsSync(target)) await fsp.copyFile(filePath, target);
+  return target;
+}
+
 async function runSeedvr2Upscale(input, options = {}) {
   const apiKey = normalizeApiKey(options.apiKey);
   if (!apiKey) throw new Seedvr2Error('请先在 API Key 设置中填写 SeedVR2 API Key');
@@ -168,6 +195,7 @@ async function runSeedvr2Upscale(input, options = {}) {
   if (!COLOR_CORRECTIONS.has(colorCorrection)) throw new Seedvr2Error('colorCorrection 仅支持 wavelet 或 none');
   if (!RESIZE_METHODS.has(resizeMethod)) throw new Seedvr2Error('resizeMethod 仅支持 lanczos 或 bicubic');
   const prompt = String(input?.prompt || 'Upscale this image').trim().slice(0, 1000) || 'Upscale this image';
+  const outputFormat = normalizeOutputFormat(input?.outputFormat);
 
   const form = new FormData();
   const sourceExt = outputExtension(sourceMeta.format);
@@ -209,10 +237,13 @@ async function runSeedvr2Upscale(input, options = {}) {
   const base64 = String(json?.data?.[0]?.b64_json || json?.data?.b64_json || '').trim();
   if (!base64) throw new Seedvr2Error('SeedVR2 未返回 b64_json 图像', 502, 'empty_output');
 
-  const outputBuffer = Buffer.from(base64, 'base64');
+  const upstreamBuffer = Buffer.from(base64, 'base64');
+  const upstreamMeta = await sharp(upstreamBuffer).metadata().catch(() => null);
+  const outputBuffer = await encodeOutput(upstreamBuffer, outputFormat).catch(() => null);
+  if (!outputBuffer) throw new Seedvr2Error('SeedVR2 返回内容不是有效图片', 502, 'invalid_output');
   const outputMeta = await sharp(outputBuffer).metadata().catch(() => null);
   const outputSize = orientedDimensions(outputMeta);
-  if (!outputMeta?.format || !outputSize.width || !outputSize.height) {
+  if (!upstreamMeta?.format || !outputMeta?.format || !outputSize.width || !outputSize.height) {
     throw new Seedvr2Error('SeedVR2 返回的内容不是有效图片', 502, 'invalid_output');
   }
   if (outputSize.width * outputSize.height > MAX_PIXELS) {
@@ -220,8 +251,10 @@ async function runSeedvr2Upscale(input, options = {}) {
   }
 
   await fsp.mkdir(config.OUTPUT_DIR, { recursive: true });
-  const filename = `seedvr2_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${outputExtension(outputMeta.format)}`;
-  await fsp.writeFile(path.join(config.OUTPUT_DIR, filename), outputBuffer);
+  const filename = `seedvr2_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${outputFormat}`;
+  const outputPath = path.join(config.OUTPUT_DIR, filename);
+  await fsp.writeFile(outputPath, outputBuffer);
+  await copyToConfiguredSavePath(outputPath, filename, options.savePath).catch(() => undefined);
   return {
     imageUrl: `/files/output/${filename}`,
     width: outputSize.width,
@@ -233,6 +266,7 @@ async function runSeedvr2Upscale(input, options = {}) {
     seed,
     colorCorrection,
     resizeMethod,
+    outputFormat,
     model: MODEL,
   };
 }
@@ -243,6 +277,7 @@ module.exports = {
   MAX_PIXELS,
   MODEL,
   RESIZE_METHODS,
+  normalizeOutputFormat,
   Seedvr2Error,
   normalizeSeedvr2BaseUrl,
   resolveSeedvr2EditUrl,

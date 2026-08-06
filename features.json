@@ -5196,7 +5196,7 @@
         {
           "type": "seedvr2-upscale",
           "label": "SeedVR2超分",
-          "description": "调用 seedvr2-7b 对单张上游图片做 AI 超分；支持 1x/2x/3x/4x 与严格等比例自定义尺寸、seed、wavelet/none 颜色校正和 lanczos/bicubic 缩放算法，目标上限 3400 万像素"
+          "description": "调用 seedvr2-7b 对单张上游图片做 AI 超分；支持 1x/2x/3x/4x 与严格等比例自定义尺寸、seed、wavelet/none 颜色校正、lanczos/bicubic 缩放算法和 JPG/PNG 保存格式，目标上限 3400 万像素；结果写入 output、按文件自动保存路径复制并记录到历史生成"
         }
       ]
     },

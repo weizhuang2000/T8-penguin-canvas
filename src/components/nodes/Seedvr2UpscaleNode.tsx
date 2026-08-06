@@ -2,11 +2,12 @@ import { memo, useEffect, useMemo, useState } from 'react';
 import { Handle, Position, useEdges, useNodes } from '@xyflow/react';
 import { AlertCircle, CheckCircle2, ImageUp, Loader2, Sparkles } from 'lucide-react';
 import { getMediaItemsFromData } from '../../utils/mediaCollection';
-import { runSeedvr2Upscale, type Seedvr2ColorCorrection, type Seedvr2ResizeMethod } from '../../services/seedvr2';
+import { runSeedvr2Upscale, type Seedvr2ColorCorrection, type Seedvr2OutputFormat, type Seedvr2ResizeMethod } from '../../services/seedvr2';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useHasAutoOutput } from './useHasAutoOutput';
 import SmartImage from '../SmartImage';
+import { useCanvasRuntime } from './canvasRuntimeContext';
 
 const MAX_PIXELS = 34_000_000;
 const SCALE_OPTIONS = [1, 2, 3, 4] as const;
@@ -68,6 +69,7 @@ function Seedvr2UpscaleNode({ id, data, selected }: { id: string; data: any; sel
   const edges = useEdges();
   const nodes = useNodes();
   const hasAutoOutput = useHasAutoOutput(id);
+  const { loadedCanvasId } = useCanvasRuntime();
   const d = data || {};
   const [sourceSize, setSourceSize] = useState<Size | null>(null);
   const [sizeError, setSizeError] = useState('');
@@ -82,6 +84,7 @@ function Seedvr2UpscaleNode({ id, data, selected }: { id: string; data: any; sel
   const seed = Number.isSafeInteger(Number(d.seedvr2Seed)) ? Number(d.seedvr2Seed) : 42;
   const colorCorrection: Seedvr2ColorCorrection = d.seedvr2ColorCorrection === 'none' ? 'none' : 'wavelet';
   const resizeMethod: Seedvr2ResizeMethod = d.seedvr2ResizeMethod === 'bicubic' ? 'bicubic' : 'lanczos';
+  const outputFormat: Seedvr2OutputFormat = d.seedvr2OutputFormat === 'png' ? 'png' : 'jpg';
   const prompt = typeof d.seedvr2Prompt === 'string' ? d.seedvr2Prompt : 'Upscale this image';
   const status = d.status || 'idle';
   const outputUrl = typeof d.imageUrl === 'string' ? d.imageUrl : '';
@@ -195,6 +198,13 @@ function Seedvr2UpscaleNode({ id, data, selected }: { id: string; data: any; sel
         colorCorrection,
         resizeMethod,
         prompt: prompt.trim() || 'Upscale this image',
+        outputFormat,
+        historyContext: {
+          canvasId: loadedCanvasId,
+          sourceNodeId: id,
+          sourceNodeType: 'seedvr2-upscale',
+          nodeTitle: String(d.label || 'SeedVR2 超分'),
+        },
       });
       update({
         status: 'success',
@@ -264,6 +274,7 @@ function Seedvr2UpscaleNode({ id, data, selected }: { id: string; data: any; sel
           <div className="space-y-1"><FieldLabel>随机种子</FieldLabel><input className="t8-input nowheel w-full px-2 py-1 text-xs" type="number" step={1} value={seed} onChange={(event) => update({ seedvr2Seed: Math.trunc(Number(event.target.value) || 0) })} /></div>
           <div className="space-y-1"><FieldLabel>颜色校正</FieldLabel><select className="t8-select nowheel w-full px-2 py-1 text-xs" value={colorCorrection} onChange={(event) => update({ seedvr2ColorCorrection: event.target.value })}><option value="wavelet">wavelet</option><option value="none">none</option></select></div>
           <div className="col-span-2 space-y-1"><FieldLabel>缩放算法</FieldLabel><select className="t8-select nowheel w-full px-2 py-1 text-xs" value={resizeMethod} onChange={(event) => update({ seedvr2ResizeMethod: event.target.value })}><option value="lanczos">lanczos · 更锐利</option><option value="bicubic">bicubic · 更平滑</option></select></div>
+          <div className="col-span-2 space-y-1"><FieldLabel>保存格式</FieldLabel><select className="t8-select nowheel w-full px-2 py-1 text-xs" value={outputFormat} onChange={(event) => update({ seedvr2OutputFormat: event.target.value })}><option value="jpg">JPG · 高质量 100 / 4:4:4</option><option value="png">PNG · 无损</option></select></div>
         </div>
 
         <div className="space-y-1"><FieldLabel>处理指令</FieldLabel><textarea className="t8-input nowheel w-full resize-y px-2 py-1 text-xs" rows={2} value={prompt} onChange={(event) => update({ seedvr2Prompt: event.target.value })} /></div>
