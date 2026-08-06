@@ -205,6 +205,38 @@ test('tool permissions keep image-to-editable-document grants saved from user ma
   assert.equal(permissions.canUseNode({ id: 'u1', role: 'designer' }, 'image-to-editable-document', db), true);
 }));
 
+test('tool permissions keep SeedVR2 grants saved from user management', () => withTempData(() => {
+  permissions.writeDb({
+    defaultVisibleNodeTypes: ['text'],
+    roleRules: {
+      designer: { mode: 'custom', allowedNodeTypes: ['seedvr2-upscale'], deniedNodeTypes: [] },
+    },
+    userRules: {
+      u1: { mode: 'custom', allowedNodeTypes: ['seedvr2-upscale'], deniedNodeTypes: [] },
+    },
+  });
+
+  const db = permissions.readDb();
+  const resolved = permissions.resolveToolPermissions({ id: 'u1', role: 'designer' }, db);
+  assert.equal(permissions.ALL_NODE_TYPES.includes('seedvr2-upscale'), true);
+  assert.equal(permissions.DEFAULT_VISIBLE_NODE_TYPES.includes('seedvr2-upscale'), true);
+  assert.deepEqual(db.roleRules.designer.allowedNodeTypes, ['seedvr2-upscale']);
+  assert.deepEqual(db.userRules.u1.allowedNodeTypes, ['seedvr2-upscale']);
+  assert.equal(resolved.allowedNodeTypes.includes('seedvr2-upscale'), true);
+  assert.equal(permissions.canUseNode({ id: 'u1', role: 'designer' }, 'seedvr2-upscale', db), true);
+}));
+
+test('tool permissions migrate SeedVR2 into saved default visibility', () => withTempData(() => {
+  const oldDefaults = permissions.DEFAULT_VISIBLE_NODE_TYPES.filter((type) => type !== 'seedvr2-upscale');
+  permissions.writeDb({ defaultVisibleNodeTypes: oldDefaults, roleRules: {}, userRules: {} });
+
+  const db = permissions.readDb();
+  const resolved = permissions.resolveToolPermissions({ id: 'u2', role: 'designer' }, db);
+  assert.equal(db.defaultVisibleNodeTypes.includes('seedvr2-upscale'), true);
+  assert.equal(resolved.visibleNodeTypes.includes('seedvr2-upscale'), true);
+  assert.equal(permissions.canUseNode({ id: 'u2', role: 'designer' }, 'seedvr2-upscale', db), true);
+}));
+
 test('tool permissions migrate image-to-editable-document into saved default visibility', () => withTempData(() => {
   const oldDefaults = permissions.DEFAULT_VISIBLE_NODE_TYPES.filter((type) => type !== 'image-to-editable-document');
   permissions.writeDb({ defaultVisibleNodeTypes: oldDefaults, roleRules: {}, userRules: {} });

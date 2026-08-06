@@ -171,6 +171,8 @@ test('SeedVR2 frontend, canvas and packaged backend wiring stay registered', () 
   const loop = read('src/components/nodes/LoopNode.tsx');
   const actionBar = read('src/components/NodeActionBar.tsx');
   const server = read('backend/src/server.js');
+  const permissions = read('backend/src/auth/toolPermissions.js');
+  const route = read('backend/src/routes/seedvr2.js');
   const postBuild = read('electron/_post_build.cjs');
   const features = JSON.parse(read('features.json'));
 
@@ -181,6 +183,8 @@ test('SeedVR2 frontend, canvas and packaged backend wiring stay registered', () 
   assert.match(loop, /'seedvr2-upscale'/);
   assert.match(actionBar, /'seedvr2-upscale'/);
   assert.match(server, /app\.use\('\/api\/seedvr2', seedvr2Router\)/);
+  assert.match(permissions, /'seedvr2-upscale'/);
+  assert.match(route, /requireNodePermission\('seedvr2-upscale'\)/);
   assert.match(postBuild, /routes', 'seedvr2\.t8c'/);
   assert.match(postBuild, /providers', 'seedvr2\.t8c'/);
   assert.equal(features.seedvr2Upscale.nodeType, 'seedvr2-upscale');

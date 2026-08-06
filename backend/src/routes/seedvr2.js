@@ -4,10 +4,11 @@ const express = require('express');
 const config = require('../config');
 const settingsRouter = require('./settings');
 const { runSeedvr2Upscale } = require('../providers/seedvr2');
+const { requireNodePermission } = require('../auth/toolPermissions');
 
 const router = express.Router();
 
-router.post('/upscale', async (req, res) => {
+router.post('/upscale', requireNodePermission('seedvr2-upscale'), async (req, res) => {
   try {
     const settings = settingsRouter.loadSettings();
     const data = await runSeedvr2Upscale(req.body || {}, {
