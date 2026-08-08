@@ -103,6 +103,18 @@ async function putFile(cfg, remotePath, filePath, contentType = 'application/oct
     method: 'HEAD',
     headers: webdavAuthHeaders(cfg),
   });
+  if (!head.ok && [405, 501].includes(head.status)) {
+    // Some WebDAV gateways accept PUT but reject HEAD. PUT already completed,
+    // so keep the remote upload and skip optional metadata verification.
+    await head.text().catch(() => '');
+    return {
+      remotePath: joinRemotePath(remotePath),
+      size: stat.size,
+      sha256,
+      etag: '',
+      contentType,
+    };
+  }
   if (!head.ok) throw await responseError(head, `WebDAV 上传校验失败 HTTP ${head.status}`);
   const remoteSize = Number(head.headers.get('content-length') || 0);
   if (remoteSize > 0 && remoteSize !== stat.size) throw new Error(`WebDAV 上传校验失败：远端大小 ${remoteSize}，本地大小 ${stat.size}`);

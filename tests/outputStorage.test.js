@@ -43,7 +43,7 @@ test('enabled Baidu cloud target is derived as an output storage space', () => {
 function createMockWebdavServer() {
   const files = new Map();
   const directories = new Set(['/']);
-  const state = { failPuts: 0, getCounts: new Map(), getDelayMs: 0 };
+  const state = { failPuts: 0, headMethodNotAllowed: false, getCounts: new Map(), getDelayMs: 0 };
   const rootPrefix = '/dav/百度网盘';
   const remotePath = (url) => {
     const pathname = decodeURIComponent(new URL(url, 'http://localhost').pathname);
@@ -81,6 +81,7 @@ function createMockWebdavServer() {
       return;
     }
     if (req.method === 'HEAD') {
+      if (state.headMethodNotAllowed) { res.writeHead(405).end('Method Not Allowed'); return; }
       const body = files.get(key);
       if (!body) { res.writeHead(404).end(); return; }
       res.writeHead(200, { 'Content-Length': body.length, 'Content-Type': 'application/octet-stream', ETag: 'mock-etag' }).end();
@@ -124,6 +125,26 @@ function createMockWebdavServer() {
   });
   return { server, files, directories, state };
 }
+
+test('WebDAV upload succeeds when the gateway rejects HEAD verification', async (t) => {
+  const mock = createMockWebdavServer();
+  const server = await new Promise((resolve) => {
+    const instance = mock.server.listen(0, '127.0.0.1', () => resolve(instance));
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  mock.state.headMethodNotAllowed = true;
+
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 't8-webdav-head-405-'));
+  const local = path.join(temp, 'test.png');
+  fs.writeFileSync(local, Buffer.from('head-unsupported-payload'));
+  const webdav = require('../backend/src/outputStorage/webdav.js');
+  const webdavUrl = `http://127.0.0.1:${server.address().port}/dav/%E7%99%BE%E5%BA%A6%E7%BD%91%E7%9B%98`;
+  const result = await webdav.putFile({ webdavUrl, username: 'alist-user', password: 'alist-pass' }, '/T8PenguinCanvas/output/test.png', local, 'image/png');
+
+  assert.equal(result.size, Buffer.byteLength('head-unsupported-payload'));
+  assert.equal(result.etag, '');
+  assert.equal(mock.files.get('/T8PenguinCanvas/output/test.png').toString(), 'head-unsupported-payload');
+});
 
 test('storage node and manager upload, proxy metadata, reconcile and delete remote output', async (t) => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 't8-output-storage-'));
