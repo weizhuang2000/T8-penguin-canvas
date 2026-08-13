@@ -2741,7 +2741,7 @@ router.post('/runninghub/video/catalog/submit', requireNodePermission(['video', 
     const response = await fetch(`${config.RH_BASE_URL}${model.endpoint}`, {
       method: 'POST',
       headers: {
-        Host: 'www.runninghub.cn',
+        Host: 'www.runninghub.ai',
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
@@ -2783,7 +2783,7 @@ router.post('/runninghub/video/submit', requireNodePermission(['video', 'running
     const response = await fetch(`${config.RH_BASE_URL}${normalized.path}`, {
       method: 'POST',
       headers: {
-        Host: 'www.runninghub.cn',
+        Host: 'www.runninghub.ai',
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
@@ -2828,7 +2828,7 @@ router.post('/runninghub/video/query', requireNodePermission(['video', 'runningh
     const response = await fetch(`${config.RH_BASE_URL}/openapi/v2/query`, {
       method: 'POST',
       headers: {
-        Host: 'www.runninghub.cn',
+        Host: 'www.runninghub.ai',
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
@@ -2901,7 +2901,7 @@ router.post('/runninghub/submit', requireNodePermission(['runninghub', 'runningh
     if (monitorImage !== false) startImageRun(req, { provider: 'runninghub', model: `webapp:${webappId}`, nodeType: 'runninghub' });
     const r = await fetch(`${config.RH_BASE_URL}/task/openapi/ai-app/run`, {
       method: 'POST',
-      headers: { Host: 'www.runninghub.cn', 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      headers: { Host: 'www.runninghub.ai', 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify(body),
     });
     const data = await r.json();
@@ -2928,7 +2928,7 @@ router.get('/runninghub/query', requireNodePermission(['runninghub', 'runninghub
   try {
     const r = await fetch(`${config.RH_BASE_URL}/task/openapi/outputs`, {
       method: 'POST',
-      headers: { Host: 'www.runninghub.cn', 'Content-Type': 'application/json' },
+      headers: { Host: 'www.runninghub.ai', 'Content-Type': 'application/json' },
       body: JSON.stringify({ apiKey, taskId }),
     });
     const data = await r.json();
@@ -3098,7 +3098,7 @@ router.post('/runninghub/upload-asset', requireNodePermission(['runninghub', 'ru
     fd.append('file', blob, baseName);
     const r = await fetch(`${config.RH_BASE_URL}/task/openapi/upload`, {
       method: 'POST',
-      headers: { Host: 'www.runninghub.cn' },
+      headers: { Host: 'www.runninghub.ai' },
       body: fd,
     });
     const data = await r.json();
@@ -3122,7 +3122,7 @@ router.get('/runninghub/app-info', requireNodePermission(['runninghub', 'running
   if (!webappId) return res.status(400).json({ success: false, error: 'webappId 必填' });
   try {
     const url = `${config.RH_BASE_URL}/api/webapp/apiCallDemo?apiKey=${encodeURIComponent(apiKey)}&webappId=${encodeURIComponent(webappId)}`;
-    const r = await fetch(url, { method: 'GET', headers: { Host: 'www.runninghub.cn' } });
+    const r = await fetch(url, { method: 'GET', headers: { Host: 'www.runninghub.ai' } });
     const data = await r.json();
     if (data.code !== 0) return res.status(400).json({ success: false, error: data.msg || `RH 查询失败 code=${data.code}` });
     res.json({ success: true, data: data.data || {} });

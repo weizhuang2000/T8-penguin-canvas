@@ -7,7 +7,7 @@ import { createDefaultCanvasNodeMenuPreferences, normalizeCanvasNodeMenuPreferen
 // 百达工坊固定地址，也是 LLM 独立 Key 的默认地址
 export const DEFAULT_ZHENZHEN_BASE = 'https://ai.t8star.org';
 export const FIXED_ZHENZHEN_BASE = DEFAULT_ZHENZHEN_BASE;
-export const RH_BASE = 'https://www.runninghub.cn';
+export const RH_BASE = 'https://www.runninghub.ai';
 export const SEEDVR2_BASE = 'https://api2.65535.space';
 
 interface ApiKeysState {
