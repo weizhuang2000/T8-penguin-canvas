@@ -10,6 +10,8 @@
     "storage-node": "node src/storageNodeServer.js"
   },
   "dependencies": {
+    "@babel/parser": "7.28.4",
+    "@babel/traverse": "7.28.4",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "docx": "^9.7.1",
@@ -21,6 +23,7 @@
     "pdf-parse": "1.1.1",
     "pdfmake": "^0.3.11",
     "pptxgenjs": "^4.0.1",
-    "sharp": "^0.34.5"
+    "sharp": "^0.34.5",
+    "zod": "^4.4.3"
   }
 }
