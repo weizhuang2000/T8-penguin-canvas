@@ -105,6 +105,8 @@ backend/data/
 .env
 .env.local
 .env.*.local
+deploy/linux/.env.production
+migration-report*.json
 
 # OS
 Thumbs.db

@@ -1,0 +1,16 @@
+-- Run on the existing design_team_db server as a database administrator.
+-- Replace NEW_ECS_PRIVATE_IP and the password before execution; do not commit
+-- the filled file. Restrict the account to the new ECS security-group IP.
+
+CREATE USER IF NOT EXISTS 't8_canvas_linux'@'NEW_ECS_PRIVATE_IP'
+  IDENTIFIED BY 'REPLACE_WITH_RANDOM_PASSWORD';
+
+GRANT SELECT ON `design_team_db`.`users`
+  TO 't8_canvas_linux'@'NEW_ECS_PRIVATE_IP';
+
+-- The current adapter updates the real last-login column. Confirm the exact
+-- column name first; use lastLoginAt instead if that is the schema's spelling.
+GRANT UPDATE (`last_login_at`) ON `design_team_db`.`users`
+  TO 't8_canvas_linux'@'NEW_ECS_PRIVATE_IP';
+
+FLUSH PRIVILEGES;
