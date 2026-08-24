@@ -2,7 +2,7 @@ services:
   t8-penguin-canvas:
     build:
       context: ../..
-      dockerfile: Dockerfile.runtime
+      dockerfile: Dockerfile
     image: t8-penguin-canvas:production
     container_name: t8-penguin-canvas
     restart: unless-stopped
