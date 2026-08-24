@@ -27,6 +27,10 @@ test('local canvas image previews use cached backend thumbnails', () => {
   assert.match(mediaPreview, /const safeSize = 360/);
 
   assert.match(filesRoute, /router\.get\('\/thumbnail'/);
+  assert.match(filesRoute, /const hasLocalSource = Boolean\(sourcePath && fs\.existsSync\(sourcePath\)\)/);
+  assert.match(filesRoute, /const thumbnailEntry = hasLocalSource \? null : outputEntry/);
+  assert.match(filesRoute, /const stableRemoteTarget = !hasLocalSource && outputKey/);
+  assert.match(filesRoute, /ensureThumbnailForSource\(sourcePath, \{ size, outputKey, storageEntry: thumbnailEntry \}\)/);
   const thumbnailCache = read('../backend/src/utils/thumbnailCache.js');
   assert.match(filesRoute, /stableThumbnailCacheFile/);
   assert.match(filesRoute, /ensureThumbnailForSource/);

@@ -198,9 +198,8 @@ test('storage node and manager upload, proxy metadata, reconcile and delete remo
   await manager.scanAndPublishNewFiles();
   const entry = manager.storageEntryForKey(key);
   assert.equal(entry.storageSpaceId, 'ecs-secondary');
-  assert.equal(fs.existsSync(local), false);
+  assert.equal(fs.existsSync(local), true);
   assert.equal(fs.readFileSync(path.join(storageRoot, 'image', 'generated-test.png'), 'utf8'), 'png-test-payload');
-
   const range = await fetch(`${baseUrl}/v1/files/image/generated-test.png`, {
     headers: { ...auth, Range: 'bytes=0-2' },
   });
@@ -276,7 +275,7 @@ test('Baidu WebDAV works as active output storage and reconciles the whole T8 di
   assert.equal(entry.storageSpaceId, 'cloud-baidu-netdisk');
   assert.equal(entry.provider, 'baidu-netdisk');
   assert.equal(entry.remotePath, '/T8PenguinCanvas/output/image/baidu-generated.png');
-  assert.equal(fs.existsSync(local), false);
+  assert.equal(fs.existsSync(local), true);
   assert.equal(mock.files.get(entry.remotePath).toString(), 'baidu-generated-payload');
 
   const proxyApp = require('../backend/node_modules/express')();
@@ -298,7 +297,7 @@ test('Baidu WebDAV works as active output storage and reconciles the whole T8 di
   mock.state.getDelayMs = 0;
   assert.equal(new Set(materializedCopies).size, 1);
   assert.equal(fs.readFileSync(materializedCopies[0], 'utf8'), 'baidu-generated-payload');
-  assert.equal((mock.state.getCounts.get(entry.remotePath) || 0) - getCountBeforeMaterialize, 1);
+  assert.equal((mock.state.getCounts.get(entry.remotePath) || 0) - getCountBeforeMaterialize, 0);
 
   mock.directories.add('/T8PenguinCanvas/archive');
   mock.files.set('/T8PenguinCanvas/archive/manual-old.png', Buffer.from('manual-old'));
@@ -319,7 +318,7 @@ test('Baidu WebDAV works as active output storage and reconciles the whole T8 di
   assert.equal(mock.files.has('/T8PenguinCanvas/archive/manual-old.png'), false);
 });
 
-test('completed FHL outputs drain to Baidu, retry transient failures, and remove empty local folders', async (t) => {
+test('completed FHL outputs drain to Baidu and retain local folders until retention cleanup', async (t) => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 't8-fhl-output-storage-'));
   const mock = createMockWebdavServer();
   await new Promise((resolve) => mock.server.listen(0, '127.0.0.1', resolve));
@@ -376,6 +375,10 @@ test('completed FHL outputs drain to Baidu, retry transient failures, and remove
   assert.equal(published.storageSpaceId, 'cloud-baidu-netdisk');
   assert.equal(published.pendingRemoteRetry, false);
   assert.equal(mock.files.get(`/T8PenguinCanvas/output/fhl/${jobId}/001.png`).toString(), 'fhl-image-payload');
+  assert.equal(fs.existsSync(localFile), true);
+  assert.equal(fs.existsSync(localDir), true);
+  manager.upsertEntry(published.key, { sourceMtimeMs: Date.now() - 8 * 24 * 60 * 60_000 });
+  assert.equal(manager.cleanupPublishedLocalFiles().removed, 1);
   assert.equal(fs.existsSync(localFile), false);
   assert.equal(fs.existsSync(localDir), false);
 });

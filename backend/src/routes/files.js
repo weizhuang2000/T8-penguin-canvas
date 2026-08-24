@@ -342,7 +342,11 @@ router.get('/thumbnail', async (req, res) => {
     const outputEntry = outputKey ? storageEntryForKey(outputKey) : null;
     const size = canonicalThumbnailSize(req.query?.size);
     let sourcePath = resolveLocalFileUrl(url);
-    const stableRemoteTarget = outputKey && outputEntry && outputEntry.storageSpaceId !== 'primary'
+    // 本地 output/input 文件是首选来源。即使输出索引中仍保留百度网盘映射，
+    // 只要本地文件存在，也不能先返回旧的远程缩略图缓存。
+    const hasLocalSource = Boolean(sourcePath && fs.existsSync(sourcePath));
+    const thumbnailEntry = hasLocalSource ? null : outputEntry;
+    const stableRemoteTarget = !hasLocalSource && outputKey && outputEntry && outputEntry.storageSpaceId !== 'primary'
       ? stableThumbnailCacheFile({ outputKey, storageEntry: outputEntry, size })
       : '';
     if (stableRemoteTarget && fs.existsSync(stableRemoteTarget)) {
@@ -366,7 +370,7 @@ router.get('/thumbnail', async (req, res) => {
         return res.sendFile(fallback.file);
       }
     }
-    if (sourcePath && !fs.existsSync(sourcePath) && (url.startsWith('/files/output/') || url.startsWith('/output/'))) {
+    if (!hasLocalSource && sourcePath && !fs.existsSync(sourcePath) && (url.startsWith('/files/output/') || url.startsWith('/output/'))) {
       sourcePath = await materializeOutputUrl(url).catch(() => '');
     }
     if (!sourcePath) {
@@ -375,11 +379,11 @@ router.get('/thumbnail', async (req, res) => {
     if (!fs.existsSync(sourcePath)) {
       return res.status(404).json({ success: false, error: '源图片不存在' });
     }
-    const target = stableThumbnailCacheFile({ sourcePath, stat: fs.statSync(sourcePath), size, outputKey, storageEntry: outputEntry });
+    const target = stableThumbnailCacheFile({ sourcePath, stat: fs.statSync(sourcePath), size, outputKey, storageEntry: thumbnailEntry });
     if (!fs.existsSync(config.THUMBNAILS_DIR)) {
       fs.mkdirSync(config.THUMBNAILS_DIR, { recursive: true });
     }
-    await ensureThumbnailForSource(sourcePath, { size, outputKey, storageEntry: outputEntry });
+    await ensureThumbnailForSource(sourcePath, { size, outputKey, storageEntry: thumbnailEntry });
     res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
     res.type('image/webp');
     return res.sendFile(target);

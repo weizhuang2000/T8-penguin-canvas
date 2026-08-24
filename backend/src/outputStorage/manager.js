@@ -34,12 +34,18 @@ const UPLOAD_CONCURRENCY = Math.max(1, Math.min(4, Number(process.env.T8_OUTPUT_
 const MATERIALIZE_CONCURRENCY = Math.max(1, Math.min(4, Number(process.env.T8_OUTPUT_STORAGE_DOWNLOAD_CONCURRENCY) || 2));
 const REMOTE_RETRY_BASE_MS = Math.max(1000, Number(process.env.T8_OUTPUT_STORAGE_RETRY_BASE_MS) || 15_000);
 const REMOTE_RETRY_MAX_MS = Math.max(REMOTE_RETRY_BASE_MS, Number(process.env.T8_OUTPUT_STORAGE_RETRY_MAX_MS) || 15 * 60_000);
+const LOCAL_OUTPUT_RETENTION_MS = Math.max(
+  60 * 60_000,
+  Number(process.env.T8_OUTPUT_STORAGE_LOCAL_RETENTION_MS) || 7 * 24 * 60 * 60_000,
+);
+const LOCAL_OUTPUT_CLEANUP_HOUR = Math.min(23, Math.max(0, Number(process.env.T8_OUTPUT_STORAGE_CLEANUP_HOUR) || 4));
 const IMMUTABLE_PRIVATE_OUTPUT_CACHE = 'private, max-age=31536000, immutable';
 const stableFiles = new Map();
 let indexCache = null;
 let indexMtime = 0;
 let scanRunning = false;
 let timer = null;
+let cleanupTimer = null;
 const materializeInflight = new Map();
 const materializeQueue = [];
 let activeMaterializeJobs = 0;
@@ -307,11 +313,8 @@ async function publishLocalFile(file, activeSpace, storageSettings = getStorageS
     if (contentType.startsWith('image/')) {
       await prewarmThumbnailSources(file.filePath, { outputKey: file.key, storageEntry: entry });
     }
-    try {
-      if (!removePublishedLocalFile(file.filePath)) throw new Error('local output is still in use');
-    } catch (error) {
-      console.warn(`[output-storage] 远端上传成功，但无法删除暂存文件 ${file.key}:`, error?.message || error);
-    }
+    // Keep a local copy for the retention window. The daily cleanup task removes
+    // successfully published files after they have been local for seven days.
     return entry;
   } catch (error) {
     console.warn(`[output-storage] ${activeSpace.label || activeSpace.id} 写入失败，已回落当前服务器:`, error?.message || error);
@@ -372,10 +375,7 @@ async function scanAndPublishNewFiles() {
         const samePublishedFile = Number(entry.sourceMtimeMs) > 0
           && Number(entry.size) === Number(file.size)
           && Math.abs(Number(entry.sourceMtimeMs) - Number(file.mtimeMs)) < 2;
-        if (samePublishedFile) {
-          removePublishedLocalFile(file.filePath);
-          continue;
-        }
+        if (samePublishedFile) continue;
       }
       const fingerprint = `${file.size}:${file.mtimeMs}`;
       const previous = stableFiles.get(file.key);
@@ -397,6 +397,34 @@ async function scanAndPublishNewFiles() {
   }
 }
 
+function cleanupPublishedLocalFiles(nowMs = Date.now()) {
+  const index = loadIndex();
+  const cutoff = nowMs - LOCAL_OUTPUT_RETENTION_MS;
+  let removed = 0;
+  for (const file of listLocalFiles()) {
+    const entry = index.items[file.key];
+    if (!entry || entry.storageSpaceId === 'primary' || entry.pendingRemoteRetry) continue;
+    const localCreatedAt = Number(entry.sourceMtimeMs || entry.createdAt || file.mtimeMs || 0);
+    if (!localCreatedAt || localCreatedAt > cutoff) continue;
+    if (removePublishedLocalFile(file.filePath)) removed += 1;
+  }
+  if (removed > 0) console.log(`[output-storage] daily cleanup removed ${removed} published local output file(s)`);
+  return { removed, cutoff };
+}
+
+function scheduleNextLocalCleanup() {
+  if (cleanupTimer) clearTimeout(cleanupTimer);
+  const now = new Date();
+  const next = new Date(now);
+  next.setHours(LOCAL_OUTPUT_CLEANUP_HOUR, 0, 0, 0);
+  if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1);
+  cleanupTimer = setTimeout(() => {
+    cleanupPublishedLocalFiles();
+    scheduleNextLocalCleanup();
+  }, Math.max(1000, next.getTime() - now.getTime()));
+  cleanupTimer.unref?.();
+}
+
 function startOutputStorageManager() {
   const cacheDir = path.join(config.DATA_DIR, 'output-cache');
   try {
@@ -415,11 +443,14 @@ function startOutputStorageManager() {
   if (timer) return;
   timer = setInterval(() => void scanAndPublishNewFiles(), SCAN_INTERVAL_MS);
   timer.unref?.();
+  scheduleNextLocalCleanup();
 }
 
 function stopOutputStorageManager() {
   if (timer) clearInterval(timer);
   timer = null;
+  if (cleanupTimer) clearTimeout(cleanupTimer);
+  cleanupTimer = null;
 }
 
 async function serveOutputFile(req, res) {
@@ -638,6 +669,7 @@ module.exports = {
   registerExistingLocalFiles,
   safeKey,
   scanAndPublishNewFiles,
+  cleanupPublishedLocalFiles,
   serveOutputFile,
   startOutputStorageManager,
   stopOutputStorageManager,
