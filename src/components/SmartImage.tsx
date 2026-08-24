@@ -1,6 +1,28 @@
 import { useEffect, useMemo, useRef, useState, type ImgHTMLAttributes } from 'react';
 import { previewImageUrl } from '../utils/mediaPreview';
 
+const fullImageLoads = new Map<string, Promise<void>>();
+
+/** Start an independent, high-priority full-resolution load without waiting for other canvas images. */
+export function preloadFullImage(src: string): Promise<void> {
+  const url = String(src || '').trim();
+  if (!url) return Promise.reject(new Error('empty image url'));
+  const existing = fullImageLoads.get(url);
+  if (existing) return existing;
+  const promise = new Promise<void>((resolve, reject) => {
+    const image = new Image();
+    try { image.fetchPriority = 'high'; } catch { /* older browsers */ }
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error(`failed to load image: ${url}`));
+    image.src = url;
+  });
+  fullImageLoads.set(url, promise);
+  promise.catch(() => {
+    if (fullImageLoads.get(url) === promise) fullImageLoads.delete(url);
+  });
+  return promise;
+}
+
 type SmartImageProps = ImgHTMLAttributes<HTMLImageElement> & {
   src: string;
   thumbSize?: number;
@@ -11,6 +33,7 @@ export default function SmartImage({
   thumbSize = 360,
   loading = 'lazy',
   decoding = 'async',
+  onLoad,
   onError,
   ...props
 }: SmartImageProps) {
@@ -19,10 +42,14 @@ export default function SmartImage({
   const [fallback, setFallback] = useState(false);
   const [failed, setFailed] = useState(false);
   const [shouldLoad, setShouldLoad] = useState(loading !== 'lazy');
+  const [thumbnailLoaded, setThumbnailLoaded] = useState(false);
+  const [fullLoaded, setFullLoaded] = useState(false);
 
   useEffect(() => {
     setFallback(false);
     setFailed(false);
+    setThumbnailLoaded(false);
+    setFullLoaded(false);
     setShouldLoad(loading !== 'lazy');
   }, [previewSrc, loading]);
 
@@ -62,7 +89,20 @@ export default function SmartImage({
     return () => observer.disconnect();
   }, [previewSrc, loading, shouldLoad]);
 
-  const actualSrc = shouldLoad && !failed ? (fallback ? src : previewSrc) : undefined;
+  const hasSeparatePreview = previewSrc !== src;
+  const actualSrc = shouldLoad && !failed ? (fallback || !hasSeparatePreview || fullLoaded ? src : previewSrc) : undefined;
+
+  useEffect(() => {
+    if (!shouldLoad || fallback || failed || !hasSeparatePreview || !thumbnailLoaded || fullLoaded) return undefined;
+    let cancelled = false;
+    // The thumbnail remains visible while this image loads; each node advances independently.
+    void preloadFullImage(src).then(() => {
+      if (!cancelled) setFullLoaded(true);
+    }).catch(() => {
+      // Keep the thumbnail if the original is unavailable.
+    });
+    return () => { cancelled = true; };
+  }, [failed, fallback, fullLoaded, hasSeparatePreview, shouldLoad, src, thumbnailLoaded]);
 
   return (
     <img
@@ -71,8 +111,13 @@ export default function SmartImage({
       src={actualSrc}
       data-full-src={src}
       data-preview-src={previewSrc}
+      data-image-stage={hasSeparatePreview && !fallback && !fullLoaded ? 'thumbnail' : 'full'}
       loading={shouldLoad ? 'eager' : loading}
       decoding={decoding}
+      onLoad={(event) => {
+        if (actualSrc === previewSrc && hasSeparatePreview) setThumbnailLoaded(true);
+        onLoad?.(event);
+      }}
       onError={(event) => {
         if (!actualSrc) return;
         if (!fallback && actualSrc !== src) {

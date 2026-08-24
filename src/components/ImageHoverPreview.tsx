@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { Eye } from 'lucide-react';
+import { preloadFullImage } from './SmartImage';
 import {
   placeImagePreviewPanel,
   type ImagePreviewRect,
@@ -45,8 +46,10 @@ export default function ImageHoverPreview({
 
   const showPreview = useCallback(() => {
     updateAnchor();
+    // Promote the hovered original above the background canvas image loads.
+    void preloadFullImage(src).catch(() => {});
     setOpen(true);
-  }, [updateAnchor]);
+  }, [src, updateAnchor]);
 
   const hidePreview = useCallback(() => {
     setOpen(false);

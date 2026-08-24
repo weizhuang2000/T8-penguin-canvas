@@ -17,6 +17,10 @@ test('local canvas image previews use cached backend thumbnails', () => {
   assert.match(smartImage, /decoding = 'async'/);
   assert.match(smartImage, /data-full-src=\{src\}/);
   assert.match(smartImage, /IntersectionObserver/);
+  assert.match(smartImage, /preloadFullImage/);
+  assert.match(smartImage, /data-image-stage=\{/);
+  assert.match(smartImage, /thumbnailLoaded/);
+  assert.match(smartImage, /setFullLoaded\(true\)/);
   assert.match(smartImage, /rootMargin:\s*'160px 160px'/);
   assert.match(smartImage, /getBoundingClientRect\(\)/);
   assert.match(smartImage, /window\.innerWidth \+ margin/);
@@ -42,6 +46,9 @@ test('local canvas image previews use cached backend thumbnails', () => {
   assert.match(thumbnailCache, /outputRevision/);
   assert.match(filesRoute, /Cache-Control', 'private, max-age=31536000, immutable'/);
   assert.match(filesRoute, /THUMBNAILS_DIR/);
+
+  const hoverPreview = read('../src/components/ImageHoverPreview.tsx');
+  assert.match(hoverPreview, /preloadFullImage\(src\)/);
 });
 
 test('historical canvases restore their viewport before online refresh and reuse immutable media', () => {
