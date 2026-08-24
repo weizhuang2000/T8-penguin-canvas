@@ -8,6 +8,10 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:18766:18766"
+    # Allow the container to reach services running on the ECS host (AList).
+    # `host.docker.internal` is intentionally not exposed outside Docker.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file:
       - ./.env.production
     environment:

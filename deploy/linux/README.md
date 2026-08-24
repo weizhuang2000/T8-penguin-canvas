@@ -33,7 +33,7 @@ AList 完成同一百度账号授权、挂载 `/百度网盘` 和专用 WebDAV �
 docker compose -f docker-compose.production.yml --profile baidu up -d alist
 ```
 
-T8 的 WebDAV 地址使用 `http://127.0.0.1:5244/dav/百度网盘`。预发布阶段保持输出空间为 `primary`，只做读取验收。
+T8 运行在 Docker 容器内时，不能使用容器内的 `127.0.0.1` 访问宿主机 AList。宿主机 AList 应监听 Docker 网桥地址（或 `0.0.0.0` 并由安全组/防火墙限制），T8 的 WebDAV 地址使用 `http://host.docker.internal:5244/dav/百度网盘`。Compose 已为应用服务配置 `host.docker.internal:host-gateway`。预发布阶段保持输出空间为 `primary`，只做读取验收。
 
 ## 数据盘点与迁移
 
