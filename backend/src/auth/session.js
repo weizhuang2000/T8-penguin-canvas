@@ -124,6 +124,10 @@ function deleteSession(token) {
 function getTokenFromRequest(req) {
   const auth = req.headers.authorization || '';
   if (auth.startsWith('Bearer ')) return auth.slice(7).trim();
+  return getTokenFromCookie(req);
+}
+
+function getTokenFromCookie(req) {
   return parseCookies(req.headers.cookie)[COOKIE_NAME] || '';
 }
 
@@ -150,6 +154,7 @@ module.exports = {
   getSession,
   deleteSession,
   getTokenFromRequest,
+  getTokenFromCookie,
   setSessionCookie,
   clearSessionCookie,
   publicUser,

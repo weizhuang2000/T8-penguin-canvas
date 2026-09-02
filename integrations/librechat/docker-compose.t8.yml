@@ -1,0 +1,67 @@
+services:
+  librechat-storage-init:
+    image: t8-librechat:0.8.8-rc1
+    user: '0:0'
+    command:
+      - sh
+      - -lc
+      - >-
+        mkdir -p /app/uploads /app/data /app/api/logs /app/client/public/images &&
+        chown -R 1000:1000 /app/uploads /app/data /app/api/logs /app/client/public/images
+    restart: 'no'
+    volumes:
+      - ./storage/uploads:/app/uploads
+      - ./storage/data:/app/data
+      - ./storage/logs:/app/api/logs
+      - ./storage/images:/app/client/public/images
+
+  librechat:
+    build:
+      context: ./upstream
+      dockerfile: Dockerfile.multi
+      target: api-build
+    image: t8-librechat:0.8.8-rc1
+    restart: unless-stopped
+    depends_on:
+      librechat-storage-init:
+        condition: service_completed_successfully
+    ports:
+      - '${LIBRECHAT_BIND:-127.0.0.1}:${LIBRECHAT_PORT:-3081}:3080'
+    env_file:
+      - .env.t8
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3080
+      NODE_ENV: production
+      DOMAIN_CLIENT: ${DOMAIN_CLIENT:-http://localhost/codex}
+      DOMAIN_SERVER: ${DOMAIN_SERVER:-http://localhost/codex}
+      MONGO_URI: ${MONGO_URI:?set external MongoDB URI in .env.t8}
+      REDIS_URI: ${REDIS_URI:?set external Redis URI in .env.t8}
+      USE_REDIS: ${USE_REDIS:-true}
+      USE_REDIS_STREAMS: ${USE_REDIS_STREAMS:-true}
+      T8_CODEX_BRIDGE_SECRET: ${T8_CODEX_BRIDGE_SECRET:?set bridge secret in .env.t8}
+      T8_CODEX_UPSTREAM_URL: ${T8_CODEX_UPSTREAM_URL:?set T8 upstream URL in .env.t8}
+    volumes:
+      - ./librechat.t8.yaml:/app/librechat.yaml:ro
+      # Keep JWT-protected API routes compatible with the T8 bridge user.
+      - ./upstream/api/server/middleware/requireJwtAuth.js:/app/api/server/middleware/requireJwtAuth.js:ro
+      - ./storage/uploads:/app/uploads
+      - ./storage/data:/app/data
+      - ./storage/logs:/app/api/logs
+      - ./storage/images:/app/client/public/images
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:3080/health || exit 1']
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - default
+      - t8-external-services
+
+networks:
+  t8-external-services:
+    external: true
+    name: t8-external-services

@@ -8,7 +8,14 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const config = require('../config');
-const { keyFromOutputUrl, materializeOutputUrl, storageEntryForKey } = require('../outputStorage/manager');
+const {
+  keyFromOutputUrl,
+  keyFromInputUrl,
+  materializeOutputUrl,
+  materializeInputUrl,
+  storageEntryForKey,
+  storageEntryForInputKey,
+} = require('../outputStorage/manager');
 const {
   canonicalThumbnailSize,
   ensureThumbnailForSource,
@@ -320,7 +327,8 @@ function spawnOpenFolder(targetDir) {
 }
 
 function scheduleRemoteThumbnailUpgrade(url, outputKey, storageEntry, size) {
-  void materializeOutputUrl(url)
+  const materialize = keyFromInputUrl(url) ? materializeInputUrl : materializeOutputUrl;
+  void materialize(url)
     .then((sourcePath) => {
       if (!sourcePath) return null;
       return ensureThumbnailForSource(sourcePath, { size, outputKey, storageEntry });
@@ -339,15 +347,19 @@ router.get('/thumbnail', async (req, res) => {
       return res.status(400).json({ success: false, error: '不支持的图片预览地址' });
     }
     const outputKey = keyFromOutputUrl(url);
+    const inputKey = keyFromInputUrl(url);
     const outputEntry = outputKey ? storageEntryForKey(outputKey) : null;
+    const inputEntry = inputKey ? storageEntryForInputKey(inputKey) : null;
+    const logicalKey = outputKey || inputKey;
+    const storageEntry = outputEntry || inputEntry;
     const size = canonicalThumbnailSize(req.query?.size);
     let sourcePath = resolveLocalFileUrl(url);
     // 本地 output/input 文件是首选来源。即使输出索引中仍保留百度网盘映射，
     // 只要本地文件存在，也不能先返回旧的远程缩略图缓存。
     const hasLocalSource = Boolean(sourcePath && fs.existsSync(sourcePath));
-    const thumbnailEntry = hasLocalSource ? null : outputEntry;
-    const stableRemoteTarget = !hasLocalSource && outputKey && outputEntry && outputEntry.storageSpaceId !== 'primary'
-      ? stableThumbnailCacheFile({ outputKey, storageEntry: outputEntry, size })
+    const thumbnailEntry = hasLocalSource ? null : storageEntry;
+    const stableRemoteTarget = !hasLocalSource && logicalKey && storageEntry && storageEntry.storageSpaceId !== 'primary'
+      ? stableThumbnailCacheFile({ outputKey: (inputKey ? 'input:' : '') + logicalKey, storageEntry, size })
       : '';
     if (stableRemoteTarget && fs.existsSync(stableRemoteTarget)) {
       res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
@@ -359,31 +371,37 @@ router.get('/thumbnail', async (req, res) => {
       const fallback = fallbackSizes
         .map((fallbackSize) => ({
           size: fallbackSize,
-          file: stableThumbnailCacheFile({ outputKey, storageEntry: outputEntry, size: fallbackSize }),
+          file: stableThumbnailCacheFile({ outputKey: (inputKey ? 'input:' : '') + logicalKey, storageEntry, size: fallbackSize }),
         }))
         .find((item) => fs.existsSync(item.file));
       if (fallback) {
-        scheduleRemoteThumbnailUpgrade(url, outputKey, outputEntry, size);
+        scheduleRemoteThumbnailUpgrade(url, (inputKey ? 'input:' : '') + logicalKey, storageEntry, size);
         res.setHeader('Cache-Control', 'private, max-age=30, stale-while-revalidate=86400');
         res.setHeader('X-T8-Thumbnail-Fallback', String(fallback.size));
         res.type('image/webp');
         return res.sendFile(fallback.file);
       }
     }
-    if (!hasLocalSource && sourcePath && !fs.existsSync(sourcePath) && (url.startsWith('/files/output/') || url.startsWith('/output/'))) {
-      sourcePath = await materializeOutputUrl(url).catch(() => '');
+    if (!hasLocalSource && sourcePath && !fs.existsSync(sourcePath)) {
+      sourcePath = inputKey
+        ? await materializeInputUrl(url).catch(() => '')
+        : await materializeOutputUrl(url).catch(() => '');
     }
     if (!sourcePath) {
-      return res.status(400).json({ success: false, error: '只支持本地 input/output 图片缩略图' });
+      return res.status(400).json({ success: false, error: '只支持 input/output 图片缩略图' });
     }
     if (!fs.existsSync(sourcePath)) {
       return res.status(404).json({ success: false, error: '源图片不存在' });
     }
-    const target = stableThumbnailCacheFile({ sourcePath, stat: fs.statSync(sourcePath), size, outputKey, storageEntry: thumbnailEntry });
+    const target = stableThumbnailCacheFile({ sourcePath, stat: fs.statSync(sourcePath), size, outputKey: logicalKey ? (inputKey ? 'input:' : '') + logicalKey : '', storageEntry: thumbnailEntry });
     if (!fs.existsSync(config.THUMBNAILS_DIR)) {
       fs.mkdirSync(config.THUMBNAILS_DIR, { recursive: true });
     }
-    await ensureThumbnailForSource(sourcePath, { size, outputKey, storageEntry: thumbnailEntry });
+    await ensureThumbnailForSource(sourcePath, {
+      size,
+      outputKey: logicalKey ? (inputKey ? 'input:' : '') + logicalKey : '',
+      storageEntry: thumbnailEntry,
+    });
     res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
     res.type('image/webp');
     return res.sendFile(target);
@@ -476,8 +494,10 @@ router.post('/copy-to-output', express.json({ limit: '2mb' }), async (req, res) 
       return res.status(400).json({ success: false, error: '缺少 url' });
     }
     let src = resolveLocalFileUrl(url);
-    if (src && !fs.existsSync(src) && (url.startsWith('/files/output/') || url.startsWith('/output/'))) {
-      src = await materializeOutputUrl(url).catch(() => '');
+    if (src && !fs.existsSync(src)) {
+      src = keyFromInputUrl(url)
+        ? await materializeInputUrl(url).catch(() => '')
+        : await materializeOutputUrl(url).catch(() => '');
     }
     if (!src || !fs.existsSync(src)) {
       return res.status(404).json({ success: false, error: '只支持已落地的本地 input/output 文件' });
@@ -534,7 +554,7 @@ router.post('/open-output-folder', express.json({ limit: '64kb' }), async (req, 
   }
 });
 
-// v1.2.10.2: 全局生成素材自动保存到本地路径
+// 兼容旧版手动保存到本地路径的接口
 // POST /api/files/save-to-disk
 //   body: { url: string, filename?: string, kind?: 'image'|'video'|'audio' }
 //   url 支持:
@@ -598,7 +618,11 @@ router.post('/save-to-disk', express.json({ limit: '2mb' }), async (req, res) =>
     }
     if (url.startsWith('/files/input/')) {
       const rel = decodeURIComponent(url.replace('/files/input/', ''));
-      return localCopy(path.join(config.INPUT_DIR, rel));
+      const inputPath = path.join(config.INPUT_DIR, rel);
+      if (fs.existsSync(inputPath)) return localCopy(inputPath);
+      return materializeInputUrl(url).then((source) => localCopy(source)).catch((error) => (
+        res.status(404).json({ success: false, error: error?.message || '源文件不存在' })
+      ));
     }
 
     // 远端 http(s) → fetch 拉取

@@ -28,6 +28,11 @@ const IMAGE_ANALYSIS_STRENGTHS = ['concise', 'standard', 'detailed', 'extreme'];
 const IMAGE_ANALYSIS_LANGUAGES = ['zh', 'en'];
 const IMAGE_ANALYSIS_PROMPT_MAX_LENGTH = 20_000;
 let mergedItemsCache = null;
+let dimensionMigrationPromise = null;
+
+function outputStorageIndexFile() {
+  return path.join(config.DATA_DIR, 'output_storage_index.json');
+}
 
 function now() {
   return Date.now();
@@ -473,6 +478,28 @@ function readLocalImageSize(item) {
   }
 }
 
+async function readLocalImageSizeAsync(item) {
+  if (!item || item.kind !== 'image') return { width: 0, height: 0 };
+  const target = outputPathForItem(item);
+  if (!target) return { width: 0, height: 0 };
+  let handle = null;
+  try {
+    const stat = await fs.promises.stat(target);
+    const length = Math.min(Math.max(0, stat.size || 0), 1024 * 1024);
+    if (!length) return { width: 0, height: 0 };
+    const buffer = Buffer.alloc(length);
+    handle = await fs.promises.open(target, 'r');
+    const { bytesRead } = await handle.read(buffer, 0, length, 0);
+    return readImageSizeFromBuffer(bytesRead === length ? buffer : buffer.subarray(0, bytesRead));
+  } catch {
+    return { width: 0, height: 0 };
+  } finally {
+    if (handle) {
+      try { await handle.close(); } catch { /* ignore */ }
+    }
+  }
+}
+
 function findOrMaterializeItem(db, id) {
   let item = db.items.find((entry) => entry.id === id);
   if (item) return item;
@@ -497,7 +524,10 @@ function decorateItem(item, user, canvases, seedReaderCache = null) {
   }
   let width = item.width;
   let height = item.height;
-  if (item.kind === 'image' && (!width || !height)) {
+  // Compatibility for an uninitialized development data directory. Once the
+  // storage index exists, dimensions are supplied by the startup migration and
+  // this request path performs no image I/O.
+  if (config.NODE_ENV !== 'production' && (!width || !height) && !fs.existsSync(outputStorageIndexFile())) {
     const size = readLocalImageSize(item);
     width = size.width;
     height = size.height;
@@ -692,20 +722,55 @@ function collectMergedItems() {
       merged.push(item);
     }
   }
-  for (const item of scanOutputItems()) {
-    if (!seen.has(item.url)) {
-      seen.add(item.url);
-      merged.push(item);
-    }
-  }
   for (const item of scanIndexedOutputItems()) {
     if (!seen.has(item.url)) {
       seen.add(item.url);
       merged.push(item);
     }
   }
+  // Compatibility for a brand-new/old development data directory before the
+  // asynchronous output-storage registrar has created its index. Production
+  // installations keep this index, so normal history requests never scan the
+  // output mount.
+  if (config.NODE_ENV !== 'production' && !fs.existsSync(outputStorageIndexFile())) {
+    for (const item of scanOutputItems()) {
+      if (!seen.has(item.url)) {
+        seen.add(item.url);
+        merged.push(item);
+      }
+    }
+  }
   mergedItemsCache = { cacheKey, dbMtimeMs, outputMtimeMs, storageIndexMtimeMs, items: merged };
   return merged;
+}
+
+/**
+ * Backfill dimensions for imported/legacy history once at startup. This is
+ * deliberately asynchronous and writes the database at most once, keeping
+ * history list requests free of synchronous output-directory scans.
+ */
+function migrateLegacyImageDimensions() {
+  if (dimensionMigrationPromise) return dimensionMigrationPromise;
+  dimensionMigrationPromise = (async () => {
+    const db = readDb();
+    const candidates = db.items.filter((item) => item.kind === 'image' && (!item.width || !item.height));
+    if (!candidates.length) return 0;
+    let changed = 0;
+    await mapWithConcurrency(candidates, 4, async (item) => {
+      const size = await readLocalImageSizeAsync(item);
+      if (!size.width || !size.height) return;
+      item.width = size.width;
+      item.height = size.height;
+      changed += 1;
+    });
+    if (changed) writeDb(db);
+    return changed;
+  })().catch((error) => {
+    dimensionMigrationPromise = null;
+    console.warn('[generation-history] legacy dimension migration failed:', error?.message || error);
+    return 0;
+  });
+  return dimensionMigrationPromise;
 }
 
 async function mapWithConcurrency(items, limit, mapper) {
@@ -936,6 +1001,7 @@ module.exports = {
   listHistoryUsers,
   listProjects,
   listVisibleItems,
+  migrateLegacyImageDimensions,
   outputPathForItem,
   readDb,
   updateHistoryItem,

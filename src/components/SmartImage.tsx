@@ -26,11 +26,14 @@ export function preloadFullImage(src: string): Promise<void> {
 type SmartImageProps = ImgHTMLAttributes<HTMLImageElement> & {
   src: string;
   thumbSize?: number;
+  /** Whether to promote the thumbnail to the full-resolution source automatically. */
+  preloadFull?: boolean;
 };
 
 export default function SmartImage({
   src,
   thumbSize = 360,
+  preloadFull = true,
   loading = 'lazy',
   decoding = 'async',
   onLoad,
@@ -93,7 +96,7 @@ export default function SmartImage({
   const actualSrc = shouldLoad && !failed ? (fallback || !hasSeparatePreview || fullLoaded ? src : previewSrc) : undefined;
 
   useEffect(() => {
-    if (!shouldLoad || fallback || failed || !hasSeparatePreview || !thumbnailLoaded || fullLoaded) return undefined;
+    if (!preloadFull || !shouldLoad || fallback || failed || !hasSeparatePreview || !thumbnailLoaded || fullLoaded) return undefined;
     let cancelled = false;
     // The thumbnail remains visible while this image loads; each node advances independently.
     void preloadFullImage(src).then(() => {
@@ -102,7 +105,7 @@ export default function SmartImage({
       // Keep the thumbnail if the original is unavailable.
     });
     return () => { cancelled = true; };
-  }, [failed, fallback, fullLoaded, hasSeparatePreview, shouldLoad, src, thumbnailLoaded]);
+  }, [failed, fallback, fullLoaded, hasSeparatePreview, preloadFull, shouldLoad, src, thumbnailLoaded]);
 
   return (
     <img

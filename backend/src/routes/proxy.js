@@ -1547,12 +1547,12 @@ router.post('/mj/upload', requireNodePermission(['image', 'storyboard-grid', 'in
 //   - messages[i].content 支持 string 或 多模态数组 [{type:'text',text} | {type:'image_url',image_url:{url}}]
 //   - stream=true → 透传上游 SSE(text/event-stream) 到前端
 //   - 完全对齐 gpt-image-2-web _doSendChat (index.html L8128~L8305)
-router.post('/llm', requireNodePermission(['llm', 'prompt-reverse', 'storyboard-grid', 'interactive-game-script']), async (req, res) => {
+router.post('/llm', requireNodePermission(['llm', 'prompt-reverse', 'storyboard-grid', 'interactive-game-script', 'touch-screen']), async (req, res) => {
   const settings = loadRawSettings();
   if (!settings) {
     return res.status(400).json({ success: false, error: '未配置 LLM 独立 API Key' });
   }
-  const { model: requestedModel, messages, temperature, max_tokens, stream, llmKeyId } = req.body || {};
+  const { model: requestedModel, messages, temperature, max_tokens, stream, llmKeyId, web_search } = req.body || {};
   const selectedConfig = resolveLlmConfig(settings, llmKeyId);
   if (!selectedConfig || selectedConfig.error) {
     return res.status(400).json({ success: false, error: selectedConfig?.error || '未配置 LLM 独立 API Key' });
@@ -1580,6 +1580,7 @@ router.post('/llm', requireNodePermission(['llm', 'prompt-reverse', 'storyboard-
     max_tokens: max_tokens ?? 4096,
     stream: !!stream,
   };
+  if (web_search === true) payload.tools = [{ type: 'web_search' }];
 
   try {
     const r = await fetch(upstream, {

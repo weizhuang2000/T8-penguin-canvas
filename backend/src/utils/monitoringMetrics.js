@@ -15,6 +15,8 @@ const PENDING_RUN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 let cachedFile = '';
 let cachedDb = null;
+let heartbeatFlushTimer = null;
+let heartbeatDirty = false;
 
 function metricsFile() {
   return config.MONITORING_METRICS_FILE || path.join(config.DATA_DIR, 'monitoring_metrics.json');
@@ -136,6 +138,26 @@ function writeDb(db) {
   const tmp = `${file}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(db, null, 2), 'utf8');
   fs.renameSync(tmp, file);
+  heartbeatDirty = false;
+}
+
+function flushPendingWrites() {
+  if (!heartbeatDirty || !cachedDb) return false;
+  writeDb(cachedDb);
+  return true;
+}
+
+function scheduleHeartbeatFlush() {
+  heartbeatDirty = true;
+  if (heartbeatFlushTimer) return;
+  heartbeatFlushTimer = setTimeout(() => {
+    heartbeatFlushTimer = null;
+    try { flushPendingWrites(); } catch (error) {
+      console.warn('[monitoring] async heartbeat flush failed:', error?.message || error);
+      scheduleHeartbeatFlush();
+    }
+  }, 1000);
+  heartbeatFlushTimer.unref?.();
 }
 
 function generationHistoryFile() {
@@ -238,7 +260,7 @@ function recordHeartbeat(user, options = {}) {
   db.heartbeats[normalized.id] = { user: normalized, lastAt: at };
   const current = ensureBucketUser(db, at, normalized);
   current.lastActiveAt = Math.max(current.lastActiveAt, at);
-  writeDb(db);
+  scheduleHeartbeatFlush();
   return { creditedSeconds: creditedMs / 1000, lastActiveAt: at };
 }
 
@@ -479,6 +501,9 @@ function querySummary(params = {}, seedUsers = []) {
 }
 
 function resetForTests() {
+  if (heartbeatFlushTimer) clearTimeout(heartbeatFlushTimer);
+  heartbeatFlushTimer = null;
+  heartbeatDirty = false;
   cachedFile = '';
   cachedDb = null;
 }
@@ -492,6 +517,7 @@ module.exports = {
   ensureLoaded,
   findRunId,
   finishRun,
+  flushPendingWrites,
   querySummary,
   recordHeartbeat,
   resetForTests,

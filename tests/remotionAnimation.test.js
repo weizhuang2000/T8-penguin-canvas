@@ -12,7 +12,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const { normalizeProfile, validateDslSpec } = require('../backend/src/tools/remotion/schema');
 const { validateTsxSource } = require('../backend/src/tools/remotion/tsxValidator');
-const { assertSafeRemoteUrl, isPrivateAddress } = require('../backend/src/tools/remotion/assets');
+const { assertSafeRemoteUrl, isPrivateAddress, stageAssets } = require('../backend/src/tools/remotion/assets');
+const config = require('../backend/src/config');
 const manager = require('../backend/src/tools/remotion/jobManager');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -140,6 +141,29 @@ test('asset SSRF guard rejects loopback and recognizes private ranges', async ()
   assert.equal(isPrivateAddress('192.168.1.2'), true);
   assert.equal(isPrivateAddress('8.8.8.8'), false);
   await assert.rejects(() => assertSafeRemoteUrl('http://127.0.0.1/private.mp4'), /内网|本机/);
+});
+
+test('asset staging accepts managed output cache files but rejects unrelated paths', async () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 't8-remotion-assets-'));
+  const previous = { DATA_DIR: config.DATA_DIR };
+  config.DATA_DIR = path.join(temp, 'data');
+  const cacheFile = path.join(config.DATA_DIR, 'output-cache', 'cached.png');
+  const outsideFile = path.join(temp, 'outside.png');
+  fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
+  fs.writeFileSync(cacheFile, Buffer.from('managed-cache'));
+  fs.writeFileSync(outsideFile, Buffer.from('outside'));
+  try {
+    const publicDir = path.join(temp, 'public');
+    const staged = await stageAssets([{ id: 'cached', kind: 'image', url: cacheFile }], publicDir);
+    assert.equal(staged[0].id, 'cached');
+    await assert.rejects(
+      () => stageAssets([{ id: 'outside', kind: 'image', url: outsideFile }], path.join(temp, 'public-outside')),
+      /不在允许的本地目录中/,
+    );
+  } finally {
+    config.DATA_DIR = previous.DATA_DIR;
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
 });
 
 test('job ownership only permits creator or administrator', () => {

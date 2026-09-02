@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { LogOut, Moon, Settings, Sun, Wifi, WifiOff, Sparkles, Cloud, ExternalLink, Copy, Check, Gift, Heart, Youtube, PlayCircle, Bell, Wand2, Globe, MessageCircle, CalendarDays, Rocket, Key, Library, Palette, Skull, Sailboat, Clock3, UserCog, BarChart3 } from 'lucide-react';
+import { LogOut, Moon, Settings, Sun, Wifi, WifiOff, Sparkles, Cloud, ExternalLink, Copy, Check, Gift, Heart, Youtube, PlayCircle, Bell, Wand2, Globe, MessageCircle, CalendarDays, Rocket, Key, Library, Palette, Skull, Sailboat, Clock3, UserCog, BarChart3, Presentation, Bot } from 'lucide-react';
 import { useThemeStore } from './stores/theme';
 import { useApiKeysStore } from './stores/apiKeys';
 import { useShortcutStore } from './stores/shortcuts';
@@ -30,6 +30,8 @@ import { portraitResourceToNodeData } from './utils/portraitResource';
 
 const Canvas = lazy(() => import('./components/Canvas'));
 const ImageEditorPage = lazy(() => import('./components/ImageEditorPage'));
+const PptWebApp = lazy(() => import('../integrations/ppt-web/ui/src/App'));
+const CodexWorkspacePage = lazy(() => import('./components/CodexWorkspacePage'));
 const ApiSettingsModal = lazy(() => import('./components/ApiSettings'));
 const ResourceLibraryDrawer = lazy(() => import('./components/ResourceLibraryDrawer'));
 const ThemeTemplateManager = lazy(() => import('./components/ThemeTemplateManager'));
@@ -362,6 +364,8 @@ function App() {
   const imageEditorAvailable = !allowedNodeTypes
     || (allowedNodeTypes.includes('prompt-reverse') && allowedNodeTypes.includes('image'));
   const imageEditorRoute = appPath === '/image-editor' || appPath.startsWith('/image-editor/');
+  const pptRoute = appPath === '/ppt' || appPath.startsWith('/ppt/');
+  const codexRoute = appPath === '/codex' || appPath.startsWith('/codex/');
 
   const handleLogout = async () => {
     await api.logout().catch(() => {});
@@ -459,7 +463,7 @@ function App() {
               : 'bg-white border-black/10'
         }`}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
           {isOp ? (
             <div className="t8-op-brand flex items-center gap-2">
               <span className="t8-op-brand__mark">
@@ -639,7 +643,38 @@ function App() {
             </div>
           )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex max-w-[70vw] shrink-0 items-center gap-1 overflow-x-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <button
+            type="button"
+            data-testid="codex-nav-button"
+            onClick={() => navigateApp(codexRoute ? '/' : '/codex')}
+            className={isPixel ? 'px-btn px-btn--sm px-btn--mint min-w-[62px] shrink-0 whitespace-nowrap' : `flex min-w-[62px] shrink-0 items-center gap-1 whitespace-nowrap rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${codexRoute ? isDark ? 'border-emerald-400/55 bg-emerald-500/25 text-emerald-200' : 'border-emerald-400 bg-emerald-100 text-emerald-800' : isDark ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20' : 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
+            title={codexRoute ? '返回无限画布' : '打开 Codex 工作区'}
+          >
+            <Bot size={14} />
+            <span className="text-[11px]">codex</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => navigateApp(pptRoute ? '/' : '/ppt')}
+            className={
+              isPixel
+                ? 'px-btn px-btn--sm px-btn--mint shrink-0 whitespace-nowrap'
+                : `flex shrink-0 items-center gap-1 whitespace-nowrap px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors border ${
+                    pptRoute
+                      ? isDark
+                        ? 'bg-violet-500/25 border-violet-400/55 text-violet-200'
+                        : 'bg-violet-100 border-violet-400 text-violet-800'
+                      : isDark
+                        ? 'bg-violet-500/10 border-violet-500/30 text-violet-300 hover:bg-violet-500/20'
+                        : 'bg-violet-50 border-violet-300 text-violet-700 hover:bg-violet-100'
+                  }`
+            }
+            title={pptRoute ? '返回无限画布' : '打开 PPT 工作区'}
+          >
+            <Presentation size={14} />
+            <span className="text-[11px]">{pptRoute ? '无限画布' : 'PPT'}</span>
+          </button>
           {imageEditorVisible && (
             <button
               type="button"
@@ -810,7 +845,21 @@ function App() {
 
       {/* 主体两栏布局 */}
       <div className="flex-1 flex overflow-hidden">
-        {imageEditorRoute ? (
+        {codexRoute ? (
+          <ErrorBoundary fallbackTitle="Codex 工作区加载失败，已被错误边界捕获">
+            <Suspense fallback={<InfiniteCanvasBootLoading />}>
+              <CodexWorkspacePage onBack={() => navigateApp('/')} />
+            </Suspense>
+          </ErrorBoundary>
+        ) : pptRoute ? (
+          <ErrorBoundary fallbackTitle="PPT 工作区加载失败，已被错误边界捕获">
+            <Suspense fallback={<InfiniteCanvasBootLoading />}>
+              <div className="ppt-web-root flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+                <PptWebApp authUser={authUser} />
+              </div>
+            </Suspense>
+          </ErrorBoundary>
+        ) : imageEditorRoute ? (
           imageEditorAvailable ? (
             <ErrorBoundary fallbackTitle="网页版改图渲染出错了，已被错误边界捕获">
               <Suspense fallback={<InfiniteCanvasBootLoading />}>

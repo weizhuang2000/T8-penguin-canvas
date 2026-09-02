@@ -9,6 +9,8 @@ const {
   summarizeOutputStorageSpaces,
 } = require('../outputStorage/settings');
 const {
+  cleanupPublishedLocalFiles,
+  getLocalCleanupState,
   reconcileRemoteSpace,
   testStorageSpace,
 } = require('../outputStorage/manager');
@@ -64,8 +66,28 @@ router.get('/status', async (_req, res) => {
       spaces: maskOutputStorageSpaces(spaces),
       summary: summarizeOutputStorageSpaces(spaces, settings.activeOutputStorageSpaceId),
       statuses,
+      cleanup: getLocalCleanupState(),
     },
   });
+});
+
+router.post('/cleanup/preview', async (_req, res) => {
+  try {
+    return res.json({ success: true, data: await cleanupPublishedLocalFiles({ dryRun: true }) });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error?.message || String(error) });
+  }
+});
+
+router.post('/cleanup/run', async (req, res) => {
+  if (req.body?.confirm !== true) {
+    return res.status(400).json({ success: false, error: 'confirm=true is required' });
+  }
+  try {
+    return res.json({ success: true, data: await cleanupPublishedLocalFiles() });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error?.message || String(error) });
+  }
 });
 
 router.post('/test', async (req, res) => {

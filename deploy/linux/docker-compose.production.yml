@@ -12,19 +12,36 @@ services:
     # `host.docker.internal` is intentionally not exposed outside Docker.
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - t8-external-services
     env_file:
       - ./.env.production
     environment:
       HOST: 0.0.0.0
       PORT: 18766
       NODE_ENV: production
+      TZ: Asia/Shanghai
+      T8_OUTPUT_STORAGE_CLEANUP_HOUR: "4"
       T8PC_PACKAGED: "1"
       T8PC_FRONTEND_DIST: /app/dist
       T8PC_USER_DATA: /app/userdata
       HOME: /app/userdata
       T8PC_COOKIE_SECURE: "1"
+      T8_PPT_ENABLED: "1"
+      T8_PPT_PYTHON: /opt/ppt-venv/bin/python
+      # Keep the same absolute path inside the app container and on the host.
+      # Per-job runner containers receive bind mounts interpreted by the host daemon.
+      T8_PPT_DATA_DIR: /srv/t8-penguin-canvas/userdata/data/ppt-web
+      DOCKER_RUNNER_IMAGE: ${DOCKER_RUNNER_IMAGE:-ppt-runner:latest}
+      DOCKER_RUNNER_NETWORK: ${DOCKER_RUNNER_NETWORK:-ppt-isolated}
+      DOCKER_RUNNER_TIMEOUT_S: ${T8_PPT_CODEX_TIMEOUT_S:-3600}
+      DOCKER_API_VERSION: "1.44"
     volumes:
       - /srv/t8-penguin-canvas/userdata:/app/userdata
+      - /srv/t8-penguin-canvas/userdata/data/ppt-web:/srv/t8-penguin-canvas/userdata/data/ppt-web
+      # PPT jobs are isolated in short-lived runner containers.
+      - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test:
         - CMD
@@ -42,7 +59,19 @@ services:
     container_name: t8-alist
     profiles: ["baidu"]
     restart: unless-stopped
+    environment:
+      # Go 的 HTTPS 客户端显式使用宿主机 CA，避免百度网盘证书校验失败。
+      SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+      SSL_CERT_DIR: /etc/ssl/certs
     ports:
       - "127.0.0.1:5244:5244"
     volumes:
       - /srv/t8-alist:/opt/alist/data
+      # AList 镜像可能不自带完整 CA；只读挂载宿主机证书包。
+      - /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro
+      - /etc/ssl/certs:/etc/ssl/certs:ro
+
+networks:
+  t8-external-services:
+    external: true
+    name: t8-external-services

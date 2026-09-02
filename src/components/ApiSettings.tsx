@@ -5,7 +5,7 @@ import { useApiKeysStore, FIXED_ZHENZHEN_BASE, RH_BASE, normalizeApiSettings } f
 import { taskCompletionSound as taskCompletionSoundController } from '../stores/taskCompletionSound';
 import { useThemeStore } from '../stores/theme';
 import type { AdvancedProviderConfig, AdvancedProviderProtocol, ApiSettings, CloudUploadProvider, CloudUploadTargetConfig, FhlConfigSummary, LlmConfig, OutputStorageSpaceConfig } from '../types/canvas';
-import { getRawSettings, resetTaskCompletionSound, resetTaskFailureSound, testAdvancedProvider, testCloudUploadTarget, testOutputStorageSpace, reconcileOutputStorageSpace, uploadTaskCompletionSound, uploadTaskFailureSound, getNodeHelps, saveNodeHelp, deleteNodeHelp, exportNodeHelps, importNodeHelps, bulkReplaceNodeHelps, type NodeHelpMap } from '../services/api';
+import { getRawSettings, resetTaskCompletionSound, resetTaskFailureSound, testAdvancedProvider, testCloudUploadTarget, testOutputStorageSpace, reconcileOutputStorageSpace, previewOutputStorageCleanup, uploadTaskCompletionSound, uploadTaskFailureSound, getNodeHelps, saveNodeHelp, deleteNodeHelp, exportNodeHelps, importNodeHelps, bulkReplaceNodeHelps, type NodeHelpMap } from '../services/api';
 import { playTaskCompletionSound, playTaskFailureSound } from '../utils/taskCompletionSound';
 import { DEFAULT_LLM_MODEL } from '../providers/models';
 import { DEFAULT_NODE_HELPS } from '../config/nodeHelpDefaults';
@@ -1497,6 +1497,28 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
       setOutputStorageTestStatus((prev) => ({
         ...prev,
         [space.id]: { ok: false, message: e?.message || '对账失败' },
+      }));
+    }
+  };
+
+  const handlePreviewOutputStorageCleanup = async () => {
+    const key = '__cleanup_preview__';
+    setOutputStorageTestStatus((prev) => ({ ...prev, [key]: { loading: true } }));
+    try {
+      const result = await previewOutputStorageCleanup();
+      if (!result.success) throw new Error(result.error);
+      const data = result.data;
+      setOutputStorageTestStatus((prev) => ({
+        ...prev,
+        [key]: {
+          ok: true,
+          message: `预演完成：扫描 ${data.scanned} 个，符合清理条件 ${data.eligible} 个（${formatStorageBytes(data.eligibleBytes) || '0 B'}），主存储跳过 ${data.skipped.primaryOnly || 0} 个`,
+        },
+      }));
+    } catch (e: any) {
+      setOutputStorageTestStatus((prev) => ({
+        ...prev,
+        [key]: { ok: false, message: e?.message || '清理预演失败' },
       }));
     }
   };
@@ -3022,6 +3044,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
           hasApiKey: false,
           baseUrl: FIXED_ZHENZHEN_BASE,
           model: DEFAULT_LLM_MODEL,
+          availableModels: [DEFAULT_LLM_MODEL],
           isDefault: prev.length === 0,
         },
       ];
@@ -3136,6 +3159,17 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                         onChange={(e) => updateLlmConfig(item.id, { model: e.target.value })}
                         className={fieldInputCls}
                         placeholder={DEFAULT_LLM_MODEL}
+                      />
+                    </label>
+                    <label className="space-y-1 min-w-0 lg:col-span-2">
+                      <span className={`text-[11px] ${labelCls}`}>Codex 共享模型目录</span>
+                      <input
+                        value={(item.availableModels || []).join(', ')}
+                        onChange={(e) => updateLlmConfig(item.id, {
+                          availableModels: e.target.value.split(',').map((model) => model.trim()).filter(Boolean),
+                        })}
+                        className={fieldInputCls}
+                        placeholder="多个模型用逗号分隔；留空则仅使用上面的模型"
                       />
                     </label>
                     <label className="space-y-1 min-w-0 lg:col-span-2">
@@ -4206,15 +4240,30 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                 </div>
               );
             })}
-            <div className={`text-[11px] ${hintCls}`}>切换只影响新文件；第二台 ECS 写入失败时会回落当前服务器。Token 仅保存在第一台 ECS 后端。</div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                className={isPixel ? 'px-btn px-btn--ghost' : 'h-8 px-3 rounded-md border text-xs'}
+                disabled={outputStorageTestStatus.__cleanup_preview__?.loading}
+                onClick={() => void handlePreviewOutputStorageCleanup()}
+              >
+                {outputStorageTestStatus.__cleanup_preview__?.loading ? '正在预演...' : '预演本地清理'}
+              </button>
+              {outputStorageTestStatus.__cleanup_preview__?.message && (
+                <span className={`text-[11px] ${outputStorageTestStatus.__cleanup_preview__.ok ? 'text-emerald-500' : 'text-red-400'}`}>
+                  {outputStorageTestStatus.__cleanup_preview__.message}
+                </span>
+              )}
+            </div>
+            <div className={`text-[11px] ${hintCls}`}>切换到远端后会分批补传旧文件；远端确认成功并保留 7 天后，本地副本在北京时间每日 04:00 清理。写入失败时会回落当前服务器。</div>
           </div>
 
-          {/* v1.2.10.2: 文件自动保存路径 */}
+          {/* 保留路径字段以兼容旧配置和手动保存接口；生成结果不再自动复制。 */}
           <div className="t8-api-settings-divider pt-3 border-t">
             <label className={`text-sm font-medium flex items-center gap-2 flex-wrap ${labelCls}`}>
               <FolderOpen size={14} className="t8-api-settings-icon" />
-              文件自动保存路径
-              <span className={`text-[11px] font-normal ${hintCls}`}>· 所有可执行节点生成的图像/视频/音频均会自动复制一份到此路径</span>
+              本地手动保存路径
+              <span className={`text-[11px] font-normal ${hintCls}`}>· 生成结果默认只保存到服务器 output 目录，不再自动复制副本</span>
             </label>
             <div className="flex items-center gap-2 mt-2">
               <input
@@ -4229,7 +4278,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
             </div>
             <div className={`flex items-center gap-2 flex-wrap text-[11px] mt-1.5 ${hintCls}`}>
               <span className="flex items-center gap-1.5">
-                <Lock size={11} /> 仅保存在本地机, 不上传上游。同名文件不覆盖。
+                <Lock size={11} /> 仅供兼容手动保存接口使用；同名文件不覆盖。
               </span>
             </div>
           </div>

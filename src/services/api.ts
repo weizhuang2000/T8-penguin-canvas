@@ -1335,7 +1335,7 @@ export async function testAdvancedProvider(payload: {
   };
 }
 
-// ========== 文件自动保存到本地路径 (v1.2.10.2) ==========
+// ========== 手动保存文件到本地路径（兼容旧版接口） ==========
 // 静默失败(后端不可用/路径不存在/写入床夫败等) —— 仅返回布尔, 不抛
 // 以免阐业务外主生成链路(OutputNode 只负责 "心愿尝试保存")。
 export async function saveAssetToDisk(
@@ -1835,6 +1835,27 @@ export interface OutputStorageStatus {
     availableBytes?: number;
     error?: string;
   }>;
+  cleanup?: {
+    retentionMs: number;
+    timezone: string;
+    hour: number;
+    nextCleanupAt: number;
+    lastCleanupReport: LocalOutputCleanupReport | null;
+  };
+}
+
+export interface LocalOutputCleanupReport {
+  dryRun: boolean;
+  startedAt: number;
+  completedAt: number;
+  cutoff: number;
+  scanned: number;
+  eligible: number;
+  eligibleBytes: number;
+  removed: number;
+  removedBytes: number;
+  skipped: Record<string, number>;
+  sampleKeys: string[];
 }
 
 export function getOutputStorageStatus() {
@@ -1852,6 +1873,17 @@ export function reconcileOutputStorageSpace(spaceId: string) {
   return safeRequest<{ added: number; skipped?: number; scanned?: number }>(`${BASE}/output-storage/reconcile`, {
     method: 'POST',
     body: JSON.stringify({ spaceId }),
+  });
+}
+
+export function previewOutputStorageCleanup() {
+  return safeRequest<LocalOutputCleanupReport>(`${BASE}/output-storage/cleanup/preview`, { method: 'POST' });
+}
+
+export function runOutputStorageCleanup() {
+  return safeRequest<LocalOutputCleanupReport>(`${BASE}/output-storage/cleanup/run`, {
+    method: 'POST',
+    body: JSON.stringify({ confirm: true }),
   });
 }
 
@@ -2224,8 +2256,8 @@ export function getMonitoringSummary(params: {
   return safeRequest<MonitoringSummary>(`${BASE}/admin/monitoring?${query.toString()}`);
 }
 
-export function getGenerationHistoryProjects() {
-  return safeRequest<GenerationHistoryProject[]>(`${BASE}/generation-history/projects`);
+export function getGenerationHistoryProjects(signal?: AbortSignal) {
+  return safeRequest<GenerationHistoryProject[]>(`${BASE}/generation-history/projects`, { signal });
 }
 
 export function getGenerationHistoryItems(params: {
@@ -2241,6 +2273,7 @@ export function getGenerationHistoryItems(params: {
   sourceNodeType?: string;
   limit?: number;
   offset?: number;
+  signal?: AbortSignal;
 } = {}) {
   const sp = new URLSearchParams();
   if (params.canvasId) sp.set('canvasId', params.canvasId);
@@ -2256,11 +2289,11 @@ export function getGenerationHistoryItems(params: {
   if (params.limit && params.limit > 0) sp.set('limit', String(Math.floor(params.limit)));
   if (params.offset && params.offset > 0) sp.set('offset', String(Math.floor(params.offset)));
   const qs = sp.toString();
-  return safeRequest<GenerationHistoryItem[]>(`${BASE}/generation-history/items${qs ? `?${qs}` : ''}`);
+  return safeRequest<GenerationHistoryItem[]>(`${BASE}/generation-history/items${qs ? `?${qs}` : ''}`, { signal: params.signal });
 }
 
-export function getGenerationHistoryUsers() {
-  return safeRequest<GenerationHistoryUserSummary[]>(`${BASE}/admin/generation-history/users`);
+export function getGenerationHistoryUsers(signal?: AbortSignal) {
+  return safeRequest<GenerationHistoryUserSummary[]>(`${BASE}/admin/generation-history/users`, { signal });
 }
 
 export function updateGenerationHistoryItem(

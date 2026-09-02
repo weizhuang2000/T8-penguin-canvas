@@ -15,7 +15,6 @@ router.post('/upscale', requireNodePermission('seedvr2-upscale'), async (req, re
     const data = await runSeedvr2Upscale(req.body || {}, {
       apiKey: settings.seedvr2ApiKey,
       baseUrl: settings.seedvr2BaseUrl || config.SEEDVR2_BASE_URL,
-      savePath: settings.fileSavePath,
       localBaseUrl: `http://127.0.0.1:${config.PORT}`,
     });
     const historyContext = req.body?.historyContext && typeof req.body.historyContext === 'object'

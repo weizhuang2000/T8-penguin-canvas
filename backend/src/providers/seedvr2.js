@@ -168,15 +168,6 @@ async function encodeOutput(buffer, format) {
     .toBuffer();
 }
 
-async function copyToConfiguredSavePath(filePath, filename, savePath) {
-  const targetDir = String(savePath || '').trim();
-  if (!targetDir) return '';
-  await fsp.mkdir(targetDir, { recursive: true });
-  const target = path.join(targetDir, filename);
-  if (!fs.existsSync(target)) await fsp.copyFile(filePath, target);
-  return target;
-}
-
 async function runSeedvr2Upscale(input, options = {}) {
   const apiKey = normalizeApiKey(options.apiKey);
   if (!apiKey) throw new Seedvr2Error('请先在 API Key 设置中填写 SeedVR2 API Key');
@@ -254,7 +245,6 @@ async function runSeedvr2Upscale(input, options = {}) {
   const filename = `seedvr2_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${outputFormat}`;
   const outputPath = path.join(config.OUTPUT_DIR, filename);
   await fsp.writeFile(outputPath, outputBuffer);
-  await copyToConfiguredSavePath(outputPath, filename, options.savePath).catch(() => undefined);
   return {
     imageUrl: `/files/output/${filename}`,
     width: outputSize.width,

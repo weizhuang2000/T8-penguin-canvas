@@ -1,0 +1,23 @@
+# FastAPI service
+fastapi>=0.115
+uvicorn[standard]>=0.30
+sqlalchemy>=2.0
+pydantic>=2.0
+aiofiles>=24.0
+
+# Authentication compatibility and multipart uploads
+passlib[bcrypt]==1.7.4
+bcrypt<4.2
+python-jose[cryptography]==3.3.0
+python-multipart==0.0.12
+
+# Optional production database driver
+pymysql>=1.1
+
+# Source document extraction
+PyMuPDF>=1.23.0
+mammoth>=1.6.0
+python-pptx>=0.6.21
+openpyxl>=3.1.0
+markdownify>=0.11.6
+beautifulsoup4>=4.12.0

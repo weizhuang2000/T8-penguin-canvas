@@ -660,6 +660,8 @@ export interface GenerateLlmRequest {
   videoFrameCount?: number;
   /** 娴佸紡寮€鍏?榛樿 false(闈炴祦寮? */
   stream?: boolean;
+  /** 允许上游支持的联网检索工具参与需求/图片候选规划。 */
+  web_search?: boolean;
 }
 
 export interface GenerateLlmResult {

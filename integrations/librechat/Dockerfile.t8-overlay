@@ -1,0 +1,6 @@
+ARG LIBRECHAT_BASE_IMAGE=ghcr.nju.edu.cn/danny-avila/librechat:v0.8.8-rc1
+ARG LIBRECHAT_CLIENT_IMAGE=t8-librechat-client-build:0.8.8-rc1
+
+FROM ${LIBRECHAT_CLIENT_IMAGE} AS client-build
+FROM ${LIBRECHAT_BASE_IMAGE}
+COPY --from=client-build /app/client/dist /app/client/dist

@@ -1,6 +1,6 @@
 'use strict';
 
-const { getSession, getTokenFromRequest } = require('./session');
+const { getSession, getTokenFromRequest, getTokenFromCookie } = require('./session');
 
 function isAdminRole(role) {
   return role === 'admin' || role === 'manager';
@@ -13,6 +13,17 @@ function requireAuth(req, res, next) {
     return res.status(401).json({ success: false, error: '未登录或登录已过期' });
   }
   req.authToken = token;
+  req.user = session.user;
+  next();
+}
+
+// Embedded services can send their own Bearer token after bootstrapping. For
+// those mounts, authenticate T8 exclusively with its HttpOnly session cookie.
+function requireCookieAuth(req, res, next) {
+  const session = getSession(getTokenFromCookie(req));
+  if (!session?.user) {
+    return res.status(401).json({ success: false, error: '未登录或登录已过期' });
+  }
   req.user = session.user;
   next();
 }
@@ -33,6 +44,7 @@ function requireAdminOnly(req, res, next) {
 
 module.exports = {
   requireAuth,
+  requireCookieAuth,
   requireAdmin,
   requireAdminOnly,
   isAdminRole,

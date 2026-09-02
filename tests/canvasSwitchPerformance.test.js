@@ -23,13 +23,11 @@ test('large canvas cache persistence is deferred away from the interaction path'
   assert.match(api, /serialized\.length > MAX_PERSISTED_CANVAS_CACHE_CHARS/);
 });
 
-test('restored output nodes do not replay historical save-to-disk requests', () => {
+test('output nodes do not automatically save duplicate local copies', () => {
   const outputNode = read('src/components/nodes/OutputNode.tsx');
 
-  assert.match(
-    outputNode,
-    /if \(savedUrls === null\) \{[\s\S]*savedUrlsRef\.current = new Set\(all\);[\s\S]*return;[\s\S]*const fresh/,
-  );
+  assert.doesNotMatch(outputNode, /saveAssetToDisk/);
+  assert.doesNotMatch(outputNode, /自动保存到本地路径/);
 });
 
 test('canvas snapshot serialization happens after the autosave debounce', () => {

@@ -50,7 +50,7 @@ const DEFAULT_SETTINGS = {
   seedanceApiKey: '',
   sunoApiKey: '',
   giteeMusicApiKey: '',
-  // v1.2.10.2: 全局生成素材自动保存到本地的路径(可用户自定义)
+  // 兼容旧版手动保存接口的本地路径；生成结果不再自动复制
   fileSavePath: config.DEFAULT_LOCAL_SAVE_DIR,
   // v1.3.1: 画布自动保存导出路径(实际写入 <path>/T8-penguin-canvas/canvases)
   canvasAutoSavePath: config.DEFAULT_CANVAS_AUTO_SAVE_DIR,
@@ -300,12 +300,19 @@ function normalizeLlmConfigs(raw, current = [], legacy = {}) {
     const baseUrl = normalizeLlmBaseUrl(entry.baseUrl ?? previous?.baseUrl ?? legacy.baseUrl, config.ZHENZHEN_BASE_URL);
     const model = normalizeLlmModelName(entry.model ?? previous?.model ?? legacy.model, config.LLM_DEFAULT_MODEL);
     if (!baseUrl || !model) continue;
+    const availableModels = Array.from(new Set(
+      (Array.isArray(entry.availableModels) ? entry.availableModels : previous?.availableModels)
+        ?.map((item) => String(item || '').trim())
+        .filter((item) => /^[a-zA-Z0-9._:/-]{1,160}$/.test(item))
+        .slice(0, 100) || [],
+    ));
     items.push({
       id,
       label,
       apiKey,
       baseUrl,
       model,
+      availableModels,
       isDefault: entry.isDefault === true,
     });
   }

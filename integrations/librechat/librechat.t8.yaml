@@ -1,0 +1,16 @@
+# T8-only LibreChat configuration. Secrets are supplied through .env.t8.
+version: 1.2.8
+endpoints:
+  custom:
+    - name: 'T8 Shared LLM'
+      apiKey: 't8-internal'
+      baseURL: '${T8_CODEX_UPSTREAM_URL}'
+      headers:
+        X-T8-Codex-Internal: '${T8_CODEX_BRIDGE_SECRET}'
+      models:
+        default:
+          - '${T8_CODEX_DEFAULT_MODEL}'
+        fetch: true
+      titleConvo: false
+      modelDisplayLabel: 'T8 共享模型'
+      userProvide: false

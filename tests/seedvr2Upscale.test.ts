@@ -31,7 +31,7 @@ test('SeedVR2 validates exact aspect ratio and 34 MP limit', () => {
   assert.throws(() => seedvr2.validateTargetSize(1000, 1000, 0, 0), /正整数/);
 });
 
-test('SeedVR2 sends one multipart image with documented defaults and saves b64 output', async (t) => {
+test('SeedVR2 sends one multipart image with documented defaults and saves only the output', async (t) => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 't8-seedvr2-'));
   const previousOutputDir = config.OUTPUT_DIR;
   config.OUTPUT_DIR = temp;
@@ -59,6 +59,7 @@ test('SeedVR2 sends one multipart image with documented defaults and saves b64 o
   }, {
     apiKey: 'Bearer sk-seedvr2-secret',
     baseUrl: 'https://api2.65535.space/',
+    savePath: path.join(temp, 'legacy-save-path'),
     fetchImpl,
   });
 
@@ -78,6 +79,7 @@ test('SeedVR2 sends one multipart image with documented defaults and saves b64 o
   assert.match(result.imageUrl, /^\/files\/output\/seedvr2_/);
   assert.match(result.imageUrl, /\.jpg$/);
   assert.equal(fs.existsSync(path.join(temp, path.basename(result.imageUrl))), true);
+  assert.equal(fs.existsSync(path.join(temp, 'legacy-save-path', path.basename(result.imageUrl))), false);
 });
 
 test('SeedVR2 rejects invalid documented enum values before calling upstream', async () => {

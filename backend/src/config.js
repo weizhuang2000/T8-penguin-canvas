@@ -79,9 +79,7 @@ const config = {
   // 真正的任务提交、查询与素材上传仍使用 RH_BASE_URL。
   RH_CALL_API_BASE_URL: process.env.RH_CALL_API_BASE_URL || 'https://www.runninghub.ai/zh-cn/call-api',
 
-  // v1.2.10.2: 全局生成素材自动保存到本地的默认路径
-  //   用户可在「API 设置 → 文件自动保存路径」覆盖。
-  //   不存在时启动会自动创建; 写入失败仅 console.warn, 不阻断业务。
+  // 旧版手动保存接口使用的默认路径。生成结果不再自动复制到此目录。
   DEFAULT_LOCAL_SAVE_DIR: DEFAULT_ZHENZHEN_ROOT,
   // v1.3.1: 画布自动保存导出路径默认同本地素材保存路径。
   //   实际文件会写入 <path>/T8-penguin-canvas/canvases/*.json。
@@ -97,6 +95,19 @@ const config = {
   LEGACY_WINDOWS_DEFAULT_ROOT,
   WINDOWS_DEFAULT_ROOT,
   CAM_OUTPUT_ROOT: process.env.T8PC_CAM_OUTPUT_ROOT || DEFAULT_CAM_OUTPUT_ROOT,
+  PPT_ENABLED: process.env.T8_PPT_ENABLED !== '0',
+  PPT_SERVICE_URL: process.env.T8_PPT_SERVICE_URL || '',
+  PPT_PORT: Number(process.env.T8_PPT_PORT || 18767),
+  PPT_PYTHON: process.env.T8_PPT_PYTHON || (process.platform === 'win32' ? 'python' : 'python3'),
+  PPT_DATA_DIR: process.env.T8_PPT_DATA_DIR || path.join(DATA_ROOT, 'data', 'ppt-web'),
+  PPT_DB_URL: process.env.T8_PPT_DB_URL || '',
+  PPT_CODEX_CLI_PATH: process.env.T8_PPT_CODEX_CLI_PATH || process.env.T8_CODEX_CLI_PATH || '',
+  PPT_CODEX_HOME: process.env.T8_PPT_CODEX_HOME || '',
+  PPT_CODEX_API_KEY: process.env.T8_PPT_CODEX_API_KEY || '',
+  PPT_CODEX_MODEL: process.env.T8_PPT_CODEX_MODEL || '',
+  PPT_CODEX_TIMEOUT_S: Number(process.env.T8_PPT_CODEX_TIMEOUT_S || 3600),
+  CODEX_SERVICE_URL: process.env.T8_CODEX_SERVICE_URL || '',
+  CODEX_BRIDGE_SECRET: process.env.T8_CODEX_BRIDGE_SECRET || '',
 };
 
 // 提前创建打包后的数据目录(避免首次启动报错)

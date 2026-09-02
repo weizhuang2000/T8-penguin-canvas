@@ -16,9 +16,14 @@ chmod 600 deploy/linux/.env.production
 
 填写旧机 MySQL 私网地址、最小权限账户和与 `des.chinaemuseum.com` 相同的 `JWT_SECRET`。生产值不得写入 Compose、Git 或镜像。
 
+Codex/LibreChat 为外部服务：另外部署固定版本的 LibreChat、MongoDB 和 Redis，
+并在 `.env.production` 设置 `T8_CODEX_SERVICE_URL` 与随机的 `T8_CODEX_BRIDGE_SECRET`。
+LibreChat 必须关闭公开注册、个人 API Key/OAuth，并将 T8 的 `/api/codex` 配置为唯一
+OpenAI-compatible 上游；详见 `integrations/librechat/README.md`。
+
 ## 启动预发布实例
 
-先在宝塔创建 `canvas-new.chinaemuseum.com` 的 DNS/A 记录和证书，再把 `nginx/canvas-new.conf` 中的证书路径替换为宝塔实际路径：
+先在宝塔为 `canvas.chinaemuseum.com` 创建指向 `47.95.13.76` 的 DNS/A 记录并申请证书，再把 `nginx/canvas-new.conf` 中的证书路径替换为宝塔实际路径：
 
 ```bash
 cd /srv/t8-penguin-canvas/app/deploy/linux
@@ -33,7 +38,20 @@ AList 完成同一百度账号授权、挂载 `/百度网盘` 和专用 WebDAV �
 docker compose -f docker-compose.production.yml --profile baidu up -d alist
 ```
 
-T8 运行在 Docker 容器内时，不能使用容器内的 `127.0.0.1` 访问宿主机 AList。宿主机 AList 应监听 Docker 网桥地址（或 `0.0.0.0` 并由安全组/防火墙限制），T8 的 WebDAV 地址使用 `http://host.docker.internal:5244/dav/百度网盘`。Compose 已为应用服务配置 `host.docker.internal:host-gateway`。预发布阶段保持输出空间为 `primary`，只做读取验收。
+若添加百度网盘时出现 `x509: certificate signed by unknown authority`，先在新 ECS
+更新系统 CA 并重建 AList（不要关闭 TLS 校验）：
+
+```bash
+sudo apt-get update
+sudo apt-get install -y ca-certificates
+sudo update-ca-certificates
+docker compose -f docker-compose.production.yml --profile baidu up -d --force-recreate alist
+docker exec t8-alist sh -c 'test -s /etc/ssl/certs/ca-certificates.crt'
+```
+
+T8 运行在 Docker 容器内时，不能使用容器内的 `127.0.0.1` 访问 AList。若 AList 与 T8 位于同一 Docker 网络，优先使用内部服务名（例如
+`http://alist:5244/dav/百度网盘`），这样 AList 仍可只绑定宿主机 `127.0.0.1:5244`，不会暴露公网。
+只有 AList 运行在宿主机而非 Docker 网络中时，才使用 `host.docker.internal:5244`，并确保宿主机监听 Docker 网桥地址且由防火墙限制来源。预发布阶段保持输出空间为 `primary`，只做读取验收。
 
 ## 数据盘点与迁移
 

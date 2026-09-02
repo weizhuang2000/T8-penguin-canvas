@@ -377,10 +377,74 @@ test('completed FHL outputs drain to Baidu and retain local folders until retent
   assert.equal(mock.files.get(`/T8PenguinCanvas/output/fhl/${jobId}/001.png`).toString(), 'fhl-image-payload');
   assert.equal(fs.existsSync(localFile), true);
   assert.equal(fs.existsSync(localDir), true);
-  manager.upsertEntry(published.key, { sourceMtimeMs: Date.now() - 8 * 24 * 60 * 60_000 });
-  assert.equal(manager.cleanupPublishedLocalFiles().removed, 1);
+  manager.upsertEntry(published.key, {
+    sourceMtimeMs: Date.now() - 8 * 24 * 60 * 60_000,
+    localRetentionStartedAt: Date.now() - 8 * 24 * 60 * 60_000,
+  });
+  assert.equal((await manager.cleanupPublishedLocalFiles()).removed, 1);
   assert.equal(fs.existsSync(localFile), false);
   assert.equal(fs.existsSync(localDir), false);
+});
+
+test('legacy primary outputs migrate in bounded scans and start retention after remote verification', async (t) => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 't8-output-legacy-migration-'));
+  const mock = createMockWebdavServer();
+  await new Promise((resolve) => mock.server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => mock.server.close(resolve)));
+  const webdavUrl = `http://127.0.0.1:${mock.server.address().port}/dav/%E7%99%BE%E5%BA%A6%E7%BD%91%E7%9B%98`;
+
+  const config = require('../backend/src/config.js');
+  config.DATA_DIR = path.join(temp, 'data');
+  config.OUTPUT_DIR = path.join(temp, 'output');
+  config.SETTINGS_FILE = path.join(config.DATA_DIR, 'settings.json');
+  fs.mkdirSync(config.DATA_DIR, { recursive: true });
+  fs.mkdirSync(config.OUTPUT_DIR, { recursive: true });
+  fs.writeFileSync(config.SETTINGS_FILE, JSON.stringify({
+    activeOutputStorageSpaceId: 'cloud-baidu-netdisk',
+    outputStorageSpaces: [{ id: 'primary', type: 'local', label: 'Primary', enabled: true }],
+    cloudUploadTargets: [{
+      id: 'baidu-netdisk', provider: 'baidu-netdisk', label: 'Baidu', enabled: true,
+      baiduNetdisk: { webdavUrl, username: 'alist-user', password: 'alist-pass', folder: '/T8PenguinCanvas' },
+    }],
+  }));
+  const localFile = path.join(config.OUTPUT_DIR, 'legacy-old.png');
+  fs.writeFileSync(localFile, Buffer.from('legacy-output-payload'));
+  const old = new Date(Date.now() - 30 * 24 * 60 * 60_000);
+  fs.utimesSync(localFile, old, old);
+
+  const managerPath = require.resolve('../backend/src/outputStorage/manager.js');
+  delete require.cache[managerPath];
+  const manager = require(managerPath);
+  await manager.registerExistingLocalFilesAsync(manager.getStorageSettings());
+  assert.equal(manager.storageEntryForKey('legacy-old.png').storageSpaceId, 'primary');
+
+  await manager.scanAndPublishNewFiles();
+  await manager.scanAndPublishNewFiles();
+  await manager.scanAndPublishNewFiles();
+  const published = manager.storageEntryForKey('legacy-old.png');
+  assert.equal(published.storageSpaceId, 'cloud-baidu-netdisk');
+  assert.ok(published.remoteVerifiedAt > 0);
+  assert.ok(published.localRetentionStartedAt > old.getTime());
+  assert.equal(mock.files.get('/T8PenguinCanvas/output/legacy-old.png').toString(), 'legacy-output-payload');
+
+  const immediate = await manager.cleanupPublishedLocalFiles({ dryRun: true });
+  assert.equal(immediate.eligible, 0);
+  assert.equal(immediate.skipped.withinRetention, 1);
+  const afterRetention = published.localRetentionStartedAt + 8 * 24 * 60 * 60_000;
+  const preview = await manager.cleanupPublishedLocalFiles({ dryRun: true, nowMs: afterRetention });
+  assert.equal(preview.eligible, 1);
+  assert.equal(fs.existsSync(localFile), true);
+  const cleanup = await manager.cleanupPublishedLocalFiles({ nowMs: afterRetention });
+  assert.equal(cleanup.removed, 1);
+  assert.equal(fs.existsSync(localFile), false);
+});
+
+test('local cleanup scheduler targets 04:00 Asia/Shanghai', () => {
+  const manager = require('../backend/src/outputStorage/manager.js');
+  const before = Date.UTC(2026, 7, 30, 19, 0, 0); // 2026-08-31 03:00 Beijing
+  const after = Date.UTC(2026, 7, 30, 21, 0, 0); // 2026-08-31 05:00 Beijing
+  assert.equal(manager.nextBeijingCleanupTime(before), Date.UTC(2026, 7, 30, 20, 0, 0));
+  assert.equal(manager.nextBeijingCleanupTime(after), Date.UTC(2026, 7, 31, 20, 0, 0));
 });
 
 test('manager falls back to primary when remote storage is unavailable', async () => {

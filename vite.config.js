@@ -80,6 +80,8 @@ export default defineConfig({
             '/files': localBackendProxy('files'),
             '/output': localBackendProxy('output'),
             '/input': localBackendProxy('input'),
+            // 同源代理外部 LibreChat 工作区
+            '/codex': localBackendProxy('codex'),
         },
     },
     build: {

@@ -97,6 +97,7 @@ function normalizeLlmConfigs(value: unknown): LlmConfig[] {
       hasApiKey: !!item.hasApiKey,
       baseUrl: typeof item.baseUrl === 'string' ? item.baseUrl : FIXED_ZHENZHEN_BASE,
       model: typeof item.model === 'string' ? item.model : DEFAULT_LLM_MODEL,
+      availableModels: compactStringList(item.availableModels),
       isDefault: item.isDefault === true,
     }));
 }

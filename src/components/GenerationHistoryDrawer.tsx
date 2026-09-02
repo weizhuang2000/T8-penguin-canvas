@@ -341,6 +341,7 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
   const isAdmin = userRole === 'admin' || userRole === 'manager';
   const itemsRef = useRef<GenerationHistoryItem[]>([]);
   const projectsRef = useRef<GenerationHistoryProject[]>([]);
+  const loadAbortRef = useRef<AbortController | null>(null);
   const skipAutoProjectReloadRef = useRef('');
   const providerOptions = useMemo(() => buildHistoryProviderOptions(settings), [settings]);
   const modelOptions = useMemo(
@@ -381,26 +382,15 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
       skipAutoProjectReloadRef.current = '';
       return;
     }
+    loadAbortRef.current?.abort();
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
     setLoading(true);
     setMsg('');
     let projectRes: api.Result<GenerationHistoryProject[]> = { success: true, data: projectsRef.current };
     let nextProjects = projectsRef.current;
-    if (!append) {
-      projectRes = await api.getGenerationHistoryProjects();
-      nextProjects = resultData<GenerationHistoryProject[]>(projectRes) || [];
-      if (isAdmin) {
-        const usersRes = await api.getGenerationHistoryUsers();
-        if (usersRes.success) setHistoryUsers(usersRes.data || []);
-      }
-      setProjects(nextProjects);
-    }
-    const nextProjectId = projectId || nextProjects.find((project) => project.counts.total > 0)?.id || nextProjects[0]?.id || '';
-    if (!projectId && nextProjectId) {
-      skipAutoProjectReloadRef.current = nextProjectId;
-      setProjectId(nextProjectId);
-    }
-    const itemRes = await api.getGenerationHistoryItems({
-      canvasId: nextProjectId || undefined,
+    const itemParams = (canvasId?: string) => ({
+      canvasId: canvasId || undefined,
       kind,
       q: debouncedQ,
       favorite: favoriteOnly,
@@ -411,7 +401,33 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
       sourceNodeType: isAdmin ? sourceNodeType : undefined,
       limit: HISTORY_PAGE_SIZE,
       offset: append ? itemsRef.current.length : 0,
+      signal: controller.signal,
     });
+    // When the project is already known (the usual refresh/filter path), start
+    // the history request alongside the project/user metadata requests.
+    const parallelItemPromise = (append || projectId)
+      ? api.getGenerationHistoryItems(itemParams(projectId))
+      : null;
+    if (!append) {
+      const [loadedProjects, loadedUsers] = await Promise.all([
+        api.getGenerationHistoryProjects(controller.signal),
+        isAdmin ? api.getGenerationHistoryUsers(controller.signal) : Promise.resolve(null),
+      ]);
+      projectRes = loadedProjects;
+      if (controller.signal.aborted) return;
+      nextProjects = resultData<GenerationHistoryProject[]>(projectRes) || [];
+      if (loadedUsers?.success) setHistoryUsers(loadedUsers.data || []);
+      setProjects(nextProjects);
+    }
+    const nextProjectId = projectId || nextProjects.find((project) => project.counts.total > 0)?.id || nextProjects[0]?.id || '';
+    if (!projectId && nextProjectId) {
+      skipAutoProjectReloadRef.current = nextProjectId;
+      setProjectId(nextProjectId);
+    }
+    const itemRes = parallelItemPromise
+      ? await parallelItemPromise
+      : await api.getGenerationHistoryItems(itemParams(nextProjectId));
+    if (controller.signal.aborted) return;
     const nextItems = resultData<GenerationHistoryItem[]>(itemRes) || [];
     setHasMore(nextItems.length === HISTORY_PAGE_SIZE);
     if (itemRes.success) {
@@ -422,7 +438,10 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
       });
     }
     if (!projectRes.success || !itemRes.success) setMsg((projectRes as any).error || (itemRes as any).error || '加载历史失败');
-    setLoading(false);
+    if (loadAbortRef.current === controller) {
+      loadAbortRef.current = null;
+      setLoading(false);
+    }
   }, [debouncedQ, favoriteOnly, includeHidden, isAdmin, kind, model, open, projectId, provider, sourceNodeType, userId]);
 
   useEffect(() => {
@@ -435,6 +454,8 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
     window.addEventListener('penguin:generation-history-changed', onChanged);
     return () => window.removeEventListener('penguin:generation-history-changed', onChanged);
   }, [load, open]);
+
+  useEffect(() => () => loadAbortRef.current?.abort(), []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -918,6 +939,7 @@ export default function GenerationHistoryDrawer({ open, onClose, userRole }: Gen
                         className="h-full w-full object-cover"
                         draggable={false}
                         thumbSize={320}
+                        preloadFull={false}
                       />
                     )}
                     {item.kind === 'video' && <LoopingVideo src={item.url} muted className="h-full w-full object-cover" />}
